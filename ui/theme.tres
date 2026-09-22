@@ -1,0 +1,69 @@
+[gd_resource type="Theme" format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bar"]
+content_margin_left = 20.0
+content_margin_top = 10.0
+content_margin_right = 20.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.14, 0.18, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_popup"]
+content_margin_left = 14.0
+content_margin_top = 10.0
+content_margin_right = 14.0
+content_margin_bottom = 12.0
+bg_color = Color(0.15, 0.17, 0.21, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.5, 0.58, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+content_margin_left = 24.0
+content_margin_top = 20.0
+content_margin_right = 24.0
+content_margin_bottom = 20.0
+bg_color = Color(0.16, 0.18, 0.23, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_toast"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
+bg_color = Color(0.05, 0.06, 0.08, 0.9)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[resource]
+default_font_size = 18
+BarPanel/base_type = &"PanelContainer"
+BarPanel/styles/panel = SubResource("StyleBoxFlat_bar")
+CardPanel/base_type = &"PanelContainer"
+CardPanel/styles/panel = SubResource("StyleBoxFlat_card")
+HeaderLabel/base_type = &"Label"
+HeaderLabel/font_sizes/font_size = 26
+MapPopup/base_type = &"PanelContainer"
+MapPopup/styles/panel = SubResource("StyleBoxFlat_popup")
+MapView/colors/grid = Color(1, 1, 1, 0.06)
+MapView/colors/label = Color(1, 1, 1, 1)
+MapView/colors/land = Color(0.25, 0.65, 0.3, 1)
+MapView/colors/land_gray = Color(0.62, 0.62, 0.62, 1)
+MapView/colors/ocean = Color(0.12, 0.33, 0.58, 1)
+MapView/colors/ocean_gray = Color(0.32, 0.33, 0.35, 1)
+MapView/colors/outline = Color(0.1, 0.25, 0.12, 1)
+MapView/colors/outline_gray = Color(0.2, 0.2, 0.2, 1)
+TitleLabel/base_type = &"Label"
+TitleLabel/font_sizes/font_size = 56
+ToastPanel/base_type = &"PanelContainer"
+ToastPanel/styles/panel = SubResource("StyleBoxFlat_toast")

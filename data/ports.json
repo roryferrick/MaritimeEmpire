@@ -1,0 +1,8 @@
+{
+	"_comment": "World coordinates in nautical miles: x = east, y = north. Port C sits north of the A-B midpoint, 1,800 nm from each.",
+	"ports": [
+		{ "id": "A", "name": "Port A", "x": -450, "y": 0 },
+		{ "id": "B", "name": "Port B", "x": 450, "y": 0 },
+		{ "id": "C", "name": "Port C", "x": 0, "y": 1742.84 }
+	]
+}

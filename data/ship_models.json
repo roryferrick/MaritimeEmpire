@@ -1,0 +1,12 @@
+{
+	"models": [
+		{
+			"id": "model_1",
+			"name": "Model 1",
+			"price": 2500,
+			"speed_nm_per_s": 30,
+			"capacity": 10,
+			"range_nm": 2250
+		}
+	]
+}

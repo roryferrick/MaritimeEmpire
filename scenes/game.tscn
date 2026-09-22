@@ -1,0 +1,106 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+[ext_resource type="Script" path="res://scripts/ui/top_bar.gd" id="2_topbar"]
+[ext_resource type="PackedScene" path="res://scenes/screens/world_screen.tscn" id="3_world"]
+[ext_resource type="PackedScene" path="res://scenes/screens/ships_screen.tscn" id="4_ships"]
+[ext_resource type="PackedScene" path="res://scenes/screens/shop_screen.tscn" id="5_shop"]
+[ext_resource type="Script" path="res://scripts/ui/popup_host.gd" id="6_popuphost"]
+
+[node name="Game" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_game")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 0
+
+[node name="TopBar" type="PanelContainer" parent="Layout"]
+layout_mode = 2
+theme_type_variation = &"BarPanel"
+script = ExtResource("2_topbar")
+
+[node name="Row" type="HBoxContainer" parent="Layout/TopBar"]
+layout_mode = 2
+
+[node name="MoneyLabel" type="Label" parent="Layout/TopBar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "$0"
+
+[node name="Spacer" type="Control" parent="Layout/TopBar/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ContainersLabel" type="Label" parent="Layout/TopBar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Containers delivered: 0"
+
+[node name="Screens" type="Control" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="WorldScreen" parent="Layout/Screens" instance=ExtResource("3_world")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="ShipsScreen" parent="Layout/Screens" instance=ExtResource("4_ships")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+[node name="ShopScreen" parent="Layout/Screens" instance=ExtResource("5_shop")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+[node name="PopupHost" type="Control" parent="Layout/Screens"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_popuphost")
+
+[node name="BottomNav" type="PanelContainer" parent="Layout"]
+layout_mode = 2
+theme_type_variation = &"BarPanel"
+
+[node name="Buttons" type="HBoxContainer" parent="Layout/BottomNav"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="WorldButton" type="Button" parent="Layout/BottomNav/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "World"
+
+[node name="ShipsButton" type="Button" parent="Layout/BottomNav/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Ships"
+
+[node name="ShopButton" type="Button" parent="Layout/BottomNav/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Shop"
