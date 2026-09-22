@@ -31,8 +31,8 @@ func _suggest() -> void:
 
 func _validate() -> bool:
 	var error := GameState.ship_name_error(%NameEdit.text)
-	if error.is_empty() and GameState.money < _price:
-		error = "You can't afford this ship."
+	if error.is_empty():
+		error = GameState.buy_error(model_id)
 	%ErrorLabel.text = error
 	%BuyButton.disabled = not error.is_empty()
 	return error.is_empty()

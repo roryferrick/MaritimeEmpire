@@ -1,8 +1,8 @@
 {
-	"_comment": "World coordinates in nautical miles: x = east, y = north. Port C sits north of the A-B midpoint, 1,800 nm from each. A ship is paid on arrival: the higher leg_pay of the leg's two ports.",
+	"_comment": "World coordinates in nautical miles: x = east, y = north. Port C sits north of the A-B midpoint, 1,800 nm from each. On arrival a ship is paid per container it carries (its capacity), at the higher pay_per_container of the leg's two ports.",
 	"ports": [
-		{ "id": "A", "name": "Port A", "x": -450, "y": 0, "leg_pay": 1000 },
-		{ "id": "B", "name": "Port B", "x": 450, "y": 0, "leg_pay": 1000 },
-		{ "id": "C", "name": "Port C", "x": 0, "y": 1742.84, "leg_pay": 2000 }
+		{ "id": "A", "name": "Port A", "x": -450, "y": 0, "pay_per_container": 100 },
+		{ "id": "B", "name": "Port B", "x": 450, "y": 0, "pay_per_container": 100 },
+		{ "id": "C", "name": "Port C", "x": 0, "y": 1742.84, "pay_per_container": 200 }
 	]
 }

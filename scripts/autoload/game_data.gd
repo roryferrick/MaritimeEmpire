@@ -40,9 +40,11 @@ func route_text(route: Array[String]) -> String:
 	return " → ".join(PackedStringArray(route.map(port_name)))
 
 
-## Paid on arriving at the end of a leg: the higher leg_pay of its two ports.
-func leg_payment(from_port: String, to_port: String) -> int:
-	return int(maxf(get_port(from_port).get("leg_pay", 0), get_port(to_port).get("leg_pay", 0)))
+## Paid per container on arriving at the end of a leg: the higher
+## pay_per_container of its two ports.
+func pay_per_container(from_port: String, to_port: String) -> int:
+	return int(maxf(get_port(from_port).get("pay_per_container", 0),
+			get_port(to_port).get("pay_per_container", 0)))
 
 
 ## Port position in world nautical miles (x east, y north).

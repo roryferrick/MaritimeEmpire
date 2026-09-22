@@ -55,15 +55,29 @@ func _process(delta: float) -> void:
 
 func buy_ship(model_id: String, ship_name: String) -> Ship:
 	ship_name = ship_name.strip_edges()
-	var price := int(GameData.get_ship_model(model_id).get("price", 0))
-	if money < price or not ship_name_error(ship_name).is_empty():
+	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty():
 		return null
-	money -= price
+	money -= int(GameData.get_ship_model(model_id).get("price", 0))
 	var ship := Ship.new(ship_name, model_id, str(GameData.config.get("starting_port", "A")))
 	ships.append(ship)
 	ships_changed.emit()
 	save_game()
 	return ship
+
+
+func owned_count(model_id: String) -> int:
+	return ships.filter(func(ship: Ship) -> bool: return ship.model_id == model_id).size()
+
+
+## Why the player can't buy another of this model, or "" if they can.
+func buy_error(model_id: String) -> String:
+	var model := GameData.get_ship_model(model_id)
+	var limit := int(model.get("max_owned", 0))
+	if limit > 0 and owned_count(model_id) >= limit:
+		return "You already own the maximum of %d %s ships." % [limit, model.get("name", model_id)]
+	if money < int(model.get("price", 0)):
+		return "You can't afford this ship."
+	return ""
 
 
 ## Why a ship name can't be used, or "" if it's fine.
@@ -143,7 +157,7 @@ func _advance(ship: Ship, delta: float) -> void:
 
 func _arrive(ship: Ship) -> void:
 	var port := ship.to_port
-	var payment := GameData.leg_payment(ship.from_port, port)
+	var payment := GameData.pay_per_container(ship.from_port, port) * ship.capacity()
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""

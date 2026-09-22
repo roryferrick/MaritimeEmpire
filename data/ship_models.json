@@ -1,4 +1,5 @@
 {
+	"_comment": "max_owned is how many of each model the player can own at once.",
 	"models": [
 		{
 			"id": "model_1",
@@ -6,7 +7,26 @@
 			"price": 2500,
 			"speed_nm_per_s": 30,
 			"capacity": 10,
-			"range_nm": 2250
+			"range_nm": 2250,
+			"max_owned": 5
+		},
+		{
+			"id": "model_2",
+			"name": "Model 2",
+			"price": 25000,
+			"speed_nm_per_s": 20,
+			"capacity": 100,
+			"range_nm": 2250,
+			"max_owned": 5
+		},
+		{
+			"id": "model_3",
+			"name": "Model 3",
+			"price": 100000,
+			"speed_nm_per_s": 18,
+			"capacity": 200,
+			"range_nm": 2250,
+			"max_owned": 5
 		}
 	]
 }
