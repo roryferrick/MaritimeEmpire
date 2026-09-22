@@ -1,0 +1,13 @@
+{
+	"_comment": "Suggested names for new ships are a random word from each list.",
+	"first": [
+		"Sea", "Swift", "Northern", "Silver", "Iron", "Golden", "Brave", "Salty",
+		"Misty", "Coral", "Storm", "Harbor", "Lucky", "Crimson", "Quiet", "Wild",
+		"Amber", "Steady", "Bold", "Blue"
+	],
+	"second": [
+		"Otter", "Gull", "Tern", "Heron", "Dolphin", "Marlin", "Pelican", "Voyager",
+		"Star", "Wind", "Wave", "Mariner", "Albatross", "Puffin", "Seal", "Current",
+		"Anchor", "Compass", "Horizon", "Tide"
+	]
+}

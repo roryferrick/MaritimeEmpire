@@ -1,4 +1,5 @@
 {
 	"starting_money": 10000,
+	"starting_port": "A",
 	"autosave_seconds": 30
 }

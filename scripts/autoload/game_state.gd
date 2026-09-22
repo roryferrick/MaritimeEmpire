@@ -1,14 +1,21 @@
 extends Node
-## State of the running game session, plus saving and loading.
+## State of the running game session: money, ships and their movement, plus
+## saving and loading.
 ##
 ## The world only advances while a session is open. The game saves on quit
 ## and on a timer; nothing happens while the game is closed.
 
 signal money_changed(money: int)
 signal containers_changed(total: int)
+## A ship was bought.
+signal ships_changed
+## A ship docked, departed, was paused/resumed, or got a new route.
+signal ship_changed(ship: Ship)
+signal ship_arrived(ship: Ship, port_id: String, payment: int)
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 1
+const MAX_NAME_LENGTH := 24
 
 var money: int = 0:
 	set(value):
@@ -20,6 +27,7 @@ var containers_delivered: int = 0:
 		containers_delivered = value
 		containers_changed.emit(containers_delivered)
 
+var ships: Array[Ship] = []
 var in_session := false
 
 var _autosave_timer := Timer.new()
@@ -36,6 +44,134 @@ func _notification(what: int) -> void:
 		save_game()
 
 
+func _process(delta: float) -> void:
+	if not in_session:
+		return
+	for ship in ships:
+		_advance(ship, delta)
+
+
+# --- Ships ---------------------------------------------------------------
+
+func buy_ship(model_id: String, ship_name: String) -> Ship:
+	ship_name = ship_name.strip_edges()
+	var price := int(GameData.get_ship_model(model_id).get("price", 0))
+	if money < price or not ship_name_error(ship_name).is_empty():
+		return null
+	money -= price
+	var ship := Ship.new(ship_name, model_id, str(GameData.config.get("starting_port", "A")))
+	ships.append(ship)
+	ships_changed.emit()
+	save_game()
+	return ship
+
+
+## Why a ship name can't be used, or "" if it's fine.
+func ship_name_error(ship_name: String) -> String:
+	ship_name = ship_name.strip_edges()
+	if ship_name.is_empty():
+		return "Enter a name."
+	for ship in ships:
+		if ship.name.nocasecmp_to(ship_name) == 0:
+			return "You already have a ship called %s." % ship.name
+	return ""
+
+
+func suggest_ship_name() -> String:
+	var first: Array = GameData.ship_names.get("first", [])
+	var second: Array = GameData.ship_names.get("second", [])
+	if not first.is_empty() and not second.is_empty():
+		for attempt in 100:
+			var candidate := "%s %s" % [first.pick_random(), second.pick_random()]
+			if ship_name_error(candidate).is_empty():
+				return candidate
+	var n := ships.size() + 1
+	while not ship_name_error("Ship %d" % n).is_empty():
+		n += 1
+	return "Ship %d" % n
+
+
+## Why a route can't be accepted, or "" if it's valid. Routes loop, so the
+## last stop also can't be the same as the first.
+func route_error(route: Array[String]) -> String:
+	if route.size() < 2:
+		return "A route needs at least 2 ports."
+	for i in range(1, route.size()):
+		if route[i] == route[i - 1]:
+			return "A ship can't visit the same port twice in a row."
+	if route[-1] == route[0]:
+		return "The route loops back to %s, so it can't also end there." % GameData.port_name(route[0])
+	return ""
+
+
+## Gives a ship a new route and sets it running. A ship at sea finishes its
+## current leg first.
+func assign_route(ship: Ship, route: Array[String]) -> void:
+	if not route_error(route).is_empty():
+		return
+	ship.paused = false
+	if ship.is_docked():
+		ship.route = route.duplicate()
+		ship.pending_route.clear()
+		ship.route_index = ship.route.find(ship.docked_at)
+		_depart(ship)
+	else:
+		ship.pending_route = route.duplicate()
+	ship_changed.emit(ship)
+
+
+## A ship paused at sea carries on to its next port and waits there.
+func set_paused(ship: Ship, paused: bool) -> void:
+	if not ship.has_route():
+		return
+	ship.paused = paused
+	if not paused and ship.is_docked():
+		_depart(ship)
+	ship_changed.emit(ship)
+
+
+func _advance(ship: Ship, delta: float) -> void:
+	var budget := ship.speed() * delta
+	while budget > 0.0 and not ship.is_docked():
+		var remaining := ship.leg_length() - ship.traveled_nm
+		if budget < remaining:
+			ship.traveled_nm += budget
+			return
+		budget -= remaining
+		_arrive(ship)
+
+
+func _arrive(ship: Ship) -> void:
+	var port := ship.to_port
+	var payment := GameData.leg_payment(ship.from_port, port)
+	ship.docked_at = port
+	ship.from_port = ""
+	ship.to_port = ""
+	ship.traveled_nm = 0.0
+	if not ship.pending_route.is_empty():
+		ship.route = ship.pending_route.duplicate()
+		ship.pending_route.clear()
+		ship.route_index = ship.route.find(port)
+
+	money += payment
+	containers_delivered += ship.capacity()
+	ship_arrived.emit(ship, port, payment)
+	if ship.is_running():
+		_depart(ship)
+	ship_changed.emit(ship)
+
+
+func _depart(ship: Ship) -> void:
+	var next := ship.next_route_index()
+	ship.route_index = next
+	ship.from_port = ship.docked_at
+	ship.to_port = ship.route[next]
+	ship.traveled_nm = 0.0
+	ship.docked_at = ""
+
+
+# --- Saving --------------------------------------------------------------
+
 func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
@@ -43,6 +179,7 @@ func has_save() -> bool:
 func new_game() -> void:
 	money = int(GameData.config.get("starting_money", 10000))
 	containers_delivered = 0
+	ships.clear()
 	_begin_session()
 	save_game()
 
@@ -55,6 +192,9 @@ func continue_game() -> bool:
 		return false
 	money = int(data.get("money", 0))
 	containers_delivered = int(data.get("containers_delivered", 0))
+	ships.clear()
+	for ship_data: Dictionary in data.get("ships", []):
+		ships.append(Ship.from_dict(ship_data))
 	_begin_session()
 	return true
 
@@ -66,6 +206,7 @@ func save_game() -> void:
 		"version": SAVE_VERSION,
 		"money": money,
 		"containers_delivered": containers_delivered,
+		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:

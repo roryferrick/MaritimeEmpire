@@ -4,10 +4,13 @@ extends Node
 const CONFIG_PATH := "res://data/game_config.json"
 const PORTS_PATH := "res://data/ports.json"
 const SHIP_MODELS_PATH := "res://data/ship_models.json"
+const SHIP_NAMES_PATH := "res://data/ship_names.json"
 
 var config: Dictionary = {}
 var ports: Array[Dictionary] = []
 var ship_models: Array[Dictionary] = []
+## Word lists ("first", "second") combined to suggest names for new ships.
+var ship_names: Dictionary = {}
 
 var _ports_by_id: Dictionary = {}
 var _models_by_id: Dictionary = {}
@@ -21,10 +24,25 @@ func _ready() -> void:
 	for model: Dictionary in _load_json(SHIP_MODELS_PATH).get("models", []):
 		ship_models.append(model)
 		_models_by_id[model.id] = model
+	ship_names = _load_json(SHIP_NAMES_PATH)
 
 
 func get_port(id: String) -> Dictionary:
 	return _ports_by_id.get(id, {})
+
+
+func port_name(id: String) -> String:
+	return get_port(id).get("name", id)
+
+
+## "Port A → Port B → Port C"
+func route_text(route: Array[String]) -> String:
+	return " → ".join(PackedStringArray(route.map(port_name)))
+
+
+## Paid on arriving at the end of a leg: the higher leg_pay of its two ports.
+func leg_payment(from_port: String, to_port: String) -> int:
+	return int(maxf(get_port(from_port).get("leg_pay", 0), get_port(to_port).get("leg_pay", 0)))
 
 
 ## Port position in world nautical miles (x east, y north).

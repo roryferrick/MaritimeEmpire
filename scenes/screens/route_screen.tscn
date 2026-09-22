@@ -1,0 +1,103 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/route_screen.gd" id="1_route"]
+[ext_resource type="Script" path="res://scripts/ui/map_view.gd" id="2_map"]
+
+[node name="RouteScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_route")
+
+[node name="Row" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 0
+
+[node name="MapView" type="Control" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("2_map")
+gray_mode = true
+
+[node name="Side" type="PanelContainer" parent="Row"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+theme_type_variation = &"BarPanel"
+
+[node name="Content" type="VBoxContainer" parent="Row/Side"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="Row/Side/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HeaderLabel"
+text = "Route"
+text_overrun_behavior = 3
+
+[node name="CurrentLabel" type="Label" parent="Row/Side/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+autowrap_mode = 3
+
+[node name="Separator" type="HSeparator" parent="Row/Side/Content"]
+layout_mode = 2
+
+[node name="Scroll" type="ScrollContainer" parent="Row/Side/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="WaypointList" type="VBoxContainer" parent="Row/Side/Content/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Separator2" type="HSeparator" parent="Row/Side/Content"]
+layout_mode = 2
+
+[node name="TotalLabel" type="Label" parent="Row/Side/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="ErrorLabel" type="Label" parent="Row/Side/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ErrorLabel"
+autowrap_mode = 3
+
+[node name="Buttons" type="HBoxContainer" parent="Row/Side/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CancelButton" type="Button" parent="Row/Side/Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Cancel"
+
+[node name="UndoButton" type="Button" parent="Row/Side/Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Undo"
+
+[node name="AcceptButton" type="Button" parent="Row/Side/Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Accept"

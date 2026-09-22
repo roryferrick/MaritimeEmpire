@@ -6,6 +6,17 @@ static func money(amount: int) -> String:
 	return ("-$" if amount < 0 else "$") + thousands(absi(amount))
 
 
+## 45 -> "45 s", 90 -> "1 min 30 s"
+static func duration(seconds: float) -> String:
+	var total := roundi(seconds)
+	if total < 60:
+		return "%d s" % total
+	var minutes := floori(total / 60.0)
+	if total % 60 == 0:
+		return "%d min" % minutes
+	return "%d min %d s" % [minutes, total % 60]
+
+
 ## 12345 -> "12,345"
 static func thousands(n: int) -> String:
 	var digits := str(absi(n))

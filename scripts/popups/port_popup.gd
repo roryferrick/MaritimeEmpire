@@ -11,5 +11,28 @@ func _ready() -> void:
 	var port := GameData.get_port(port_id)
 	%TitleLabel.text = port.get("name", port_id)
 	%CloseButton.pressed.connect(queue_free)
-	# Docked ships get listed in ShipList once ships exist.
-	%NoShipsLabel.visible = %ShipList.get_child_count() == 0
+	GameState.ships_changed.connect(_refresh_ships)
+	GameState.ship_changed.connect(_refresh_ships.unbind(1))
+	_refresh_ships()
+
+
+func _refresh_ships() -> void:
+	for child in %ShipList.get_children():
+		%ShipList.remove_child(child)
+		child.queue_free()
+	var count := 0
+	for ship in GameState.ships:
+		if ship.docked_at != port_id:
+			continue
+		var button := Button.new()
+		button.text = ship.name
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.pressed.connect(_open_ship.bind(ship))
+		%ShipList.add_child(button)
+		count += 1
+	%NoShipsLabel.visible = count == 0
+	reset_size.call_deferred()
+
+
+func _open_ship(ship: Ship) -> void:
+	PopupHost.find(self).show_ship(ship, follow)

@@ -1,6 +1,8 @@
 extends Control
 ## Lists purchasable ship models from data/ship_models.json.
 
+const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
+
 var _buy_buttons: Dictionary = {}  # model id -> Button
 
 
@@ -58,5 +60,7 @@ func _update_buttons(money: int) -> void:
 		_buy_buttons[model_id].disabled = money < price
 
 
-func _on_buy_pressed(_model_id: String) -> void:
-	Toast.show_message("Buying ships comes in the next build.")
+func _on_buy_pressed(model_id: String) -> void:
+	var popup: NamePopup = NamePopupScene.instantiate()
+	popup.model_id = model_id
+	PopupHost.find(self).open(popup)

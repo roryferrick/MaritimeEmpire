@@ -1,0 +1,116 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/popups/ship_popup.gd" id="1_ship"]
+
+[node name="ShipPopup" type="PanelContainer"]
+custom_minimum_size = Vector2(320, 0)
+offset_right = 320.0
+offset_bottom = 200.0
+theme_type_variation = &"MapPopup"
+script = ExtResource("1_ship")
+
+[node name="Content" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Header" type="HBoxContainer" parent="Content"]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"HeaderLabel"
+text = "Ship"
+
+[node name="CloseButton" type="Button" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+text = "X"
+flat = true
+
+[node name="Separator" type="HSeparator" parent="Content"]
+layout_mode = 2
+
+[node name="Stats" type="GridContainer" parent="Content"]
+layout_mode = 2
+theme_override_constants/h_separation = 20
+columns = 2
+
+[node name="ModelName" type="Label" parent="Content/Stats"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Model"
+
+[node name="ModelValue" type="Label" parent="Content/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SpeedName" type="Label" parent="Content/Stats"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Top speed"
+
+[node name="SpeedValue" type="Label" parent="Content/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RangeName" type="Label" parent="Content/Stats"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Range"
+
+[node name="RangeValue" type="Label" parent="Content/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CapacityName" type="Label" parent="Content/Stats"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Capacity"
+
+[node name="CapacityValue" type="Label" parent="Content/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Separator2" type="HSeparator" parent="Content"]
+layout_mode = 2
+
+[node name="StatusLabel" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Status"
+autowrap_mode = 3
+
+[node name="RouteLabel" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Route"
+autowrap_mode = 3
+
+[node name="PendingLabel" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "After this leg"
+autowrap_mode = 3
+
+[node name="Buttons" type="HBoxContainer" parent="Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AssignButton" type="Button" parent="Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Assign Route"
+
+[node name="PauseButton" type="Button" parent="Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Pause"
