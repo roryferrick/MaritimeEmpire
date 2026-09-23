@@ -97,7 +97,7 @@
 | Mini Mammoth | 645,000 | 450 | 1 | $30,000 | 10 s |
 - Speeds keep a 30 : 20 : 18 : 35 : 22 ratio, scaled so a Scooter 10 sails Rome→Tunis (324.9 nm) in about 60 s. A Dominator's longest leg (9,000 nm) takes about 42 minutes with wear.
 - Range is the longest single leg a ship can sail at 100% maintenance. It's enforced when assigning routes; fuel is checked again at every departure.
-- On the map each model is a differently sized and colored rectangle with a pointed bow, smallest to biggest: Scooter 10 (pale yellow), GE 100 (light blue), Greenline 200 (orange), Trans Atlantic (magenta), Mini Mammoth (teal, the same size as a Trans Atlantic), Dominator (red), Mammoth (steel gray). Docked recovery boats are drawn as small dots in their model color on a tight ring around the port (inside the ring of docked cargo ships) to save room.
+- On the map each model is a differently sized and colored rectangle with a pointed bow, smallest to biggest: Scooter 10 (pale yellow), GE 100 (light blue), Greenline 200 (orange), Trans Atlantic (magenta), Mini Mammoth (teal, the same size as a Trans Atlantic), Dominator (red), Mammoth (steel gray). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
 - The player can own at most 10 of each cargo model and 5 of each recovery boat (60 ships in total).
 - Ship names must be unique (case-insensitive). No renaming in beta.
 - Selling: a docked ship (not lost, not on a recovery job) sells for 50% of its price × its maintenance, from the ship popup's Sell button (click again to confirm).
@@ -168,7 +168,7 @@
 - Pause behavior: a ship paused at sea continues to its next port and stays docked there. Go resumes the route from that port.
 
 ## Activity log
-- Messages go into an activity log down the left of the game screen (240 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text, each with the play time it happened (e.g. "02:10"). Bad news (breakdowns, lost ships, ships held in port or that won't make it) is red; good news (level-ups, recoveries) is green. It keeps the last 100 messages and starts empty each session.
+- Messages go into an activity log down the left of the game screen (272 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text (size 7, chosen so about 90% of messages fit on one line; long port names can wrap to two), each with the play time it happened (e.g. "02:10"). Bad news (breakdowns, lost ships, ships held in port or that won't make it) is red; good news (level-ups, recoveries) is green. It keeps the last 100 messages and starts empty each session.
 - Messages, e.g. "Sea Otter left Tunis: sold $1,990, profit $990", "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000".
 
 ## Explicitly NOT in beta

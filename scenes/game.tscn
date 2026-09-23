@@ -85,9 +85,9 @@ theme_override_constants/separation = 0
 
 [node name="ActivityLogPanel" type="PanelContainer" parent="Layout/Main"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 0)
+custom_minimum_size = Vector2(272, 0)
 layout_mode = 2
-theme_type_variation = &"BarPanel"
+theme_type_variation = &"ActivityLogPanel"
 script = ExtResource("9_log")
 
 [node name="LogBox" type="VBoxContainer" parent="Layout/Main/ActivityLogPanel"]
@@ -108,7 +108,7 @@ horizontal_scroll_mode = 0
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 6
+theme_override_constants/separation = 3
 
 [node name="EmptyLabel" type="Label" parent="Layout/Main/ActivityLogPanel/LogBox"]
 unique_name_in_owner = true

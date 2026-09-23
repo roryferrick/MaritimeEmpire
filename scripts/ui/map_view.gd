@@ -17,14 +17,13 @@ const THEME_TYPE := &"MapView"
 const PORT_RADIUS := 6.0
 const PORT_HIT_RADIUS := 14.0
 const SHIP_HIT_RADIUS := 12.0
-## Docked ships sit in rings around their port, this many per ring.
-const DOCK_SLOTS := 8
-const DOCK_RING_GAP := 11.0
-## Docked recovery boats are small dots on a tight ring of their own around
-## the port, inside the ring of docked cargo ships.
-const RECOVERY_DOT_RADIUS := 3.5
-const RECOVERY_RING_RADIUS := PORT_RADIUS + 6.0
-const RECOVERY_DOT_SLOTS := 10
+## Docked ships are small dots in their model's color, in rings around their
+## port: the first ring this far out, each next ring DOCK_RING_GAP further,
+## with dots about DOCK_DOT_SPACING apart (so outer rings hold more).
+const DOCK_DOT_RADIUS := 3.5
+const DOCK_FIRST_RING := PORT_RADIUS + 6.0
+const DOCK_RING_GAP := 7.5
+const DOCK_DOT_SPACING := 8.0
 const DRAG_THRESHOLD := 5.0
 const ZOOM_STEP := 1.15
 ## Closest zoom, in pixels per projected degree.
@@ -182,8 +181,8 @@ func port_screen_position(port_id: String) -> Vector2:
 	return world_to_screen(GameData.port_position(port_id))
 
 
-## Docked ships are spread around their port so they don't cover it or each
-## other; docked recovery boats get their own inner ring of dots.
+## Docked ships are dots spread in rings around their port, in fleet order,
+## so they don't cover it or each other.
 func ship_screen_position(ship: Ship) -> Vector2:
 	if not ship.is_docked():
 		return world_to_screen(ship.world_position())
@@ -191,15 +190,15 @@ func ship_screen_position(ship: Ship) -> Vector2:
 	for other in GameState.ships:
 		if other == ship:
 			break
-		if other.docked_at == ship.docked_at and other.is_recovery() == ship.is_recovery():
+		if other.docked_at == ship.docked_at:
 			slot += 1
-	if ship.is_recovery():
-		var dot_angle := PI / 2.0 + TAU * (slot % RECOVERY_DOT_SLOTS) / RECOVERY_DOT_SLOTS
-		return port_screen_position(ship.docked_at) + Vector2.from_angle(dot_angle) * RECOVERY_RING_RADIUS
-	@warning_ignore("integer_division")
-	var ring := slot / DOCK_SLOTS
-	var angle := -PI / 2.0 + TAU * (slot % DOCK_SLOTS) / DOCK_SLOTS
-	var radius := PORT_RADIUS + DOCK_RING_GAP + ring * DOCK_RING_GAP
+	var radius := DOCK_FIRST_RING
+	var per_ring := floori(TAU * radius / DOCK_DOT_SPACING)
+	while slot >= per_ring:
+		slot -= per_ring
+		radius += DOCK_RING_GAP
+		per_ring = floori(TAU * radius / DOCK_DOT_SPACING)
+	var angle := -PI / 2.0 + TAU * slot / per_ring
 	return port_screen_position(ship.docked_at) + Vector2.from_angle(angle) * radius
 
 
@@ -444,7 +443,7 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool) 
 		_overlay.draw_polyline(points, color, 2.5, true)
 
 
-## Ships are rectangles with a pointed bow (docked recovery boats: small dots).
+## Ships at sea are rectangles with a pointed bow; docked ships are small dots.
 ## Ships riding on a recovery boat are drawn after it, so they sit in its
 ## middle. Lost ships get a red "!" above them, and ships that won't make it
 ## to port an amber one.
@@ -467,11 +466,11 @@ func _draw_ships() -> void:
 func _draw_ship(ship: Ship, outline: Color) -> void:
 	var model := ship.model()
 	var color := Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE)
-	if ship.is_recovery() and ship.is_docked():
+	if ship.is_docked():
 		_overlay.draw_set_transform_matrix(Transform2D.IDENTITY)
 		var at := ship_screen_position(ship)
-		_overlay.draw_circle(at, RECOVERY_DOT_RADIUS, color, true, -1.0, true)
-		_overlay.draw_circle(at, RECOVERY_DOT_RADIUS, outline, false, 1.0, true)
+		_overlay.draw_circle(at, DOCK_DOT_RADIUS, color, true, -1.0, true)
+		_overlay.draw_circle(at, DOCK_DOT_RADIUS, outline, false, 1.0, true)
 		return
 	var dims: Array = model.get("map_size", [14, 6])
 	var length := float(dims[0])
