@@ -551,7 +551,7 @@ func recovery_plan(lost: Ship) -> Dictionary:
 		var model_name: String = lost.model().get("name", lost.model_id)
 		if ships.any(func(ship: Ship) -> bool: return ship.is_recovery()):
 			return {error = "Only a Mammoth can carry a %s. Buy one in the Shop." % model_name}
-		return {error = "Buy a Mammoth or Mini Mammoth in the Shop to recover lost ships."}
+		return {error = "Buy a Mammoth or Buffalo in the Shop to recover lost ships."}
 	var best := {}
 	var reason := "Every recovery boat that can carry it is busy."
 	for boat: Ship in capable:

@@ -8,8 +8,8 @@
 
 ## Data & tools
 - Game data lives in data/: ports.json (ports), ship_models.json (models, prices, speeds, ranges, limits, map look), ship_names.json (suggested ship names), game_config.json (starting money, pay rate, autosave interval, initial map zoom).
-- Generated data: data/world_map.res (land, coastline, borders, country names) and data/sea_lanes.res (a lane and distance for every pair of ports). Both are built by tools/build_map_data.gd from Natural Earth public-domain downloads kept in tools/source_data/ (not in git).
-- After changing ports.json, rerun the tool (about 17 minutes; add `-- --lanes-only` to skip rebuilding the map art):
+- Generated data: data/world_map.res (land, coastline, lakes, rivers, borders, country names) and data/sea_lanes.res (a lane and distance for every pair of ports). Both are built by tools/build_map_data.gd from Natural Earth public-domain downloads kept in tools/source_data/ (not in git).
+- After changing ports.json, rerun the tool (about 25-30 minutes; add `-- --lanes-only` to skip rebuilding the map art, or `-- --map-only` to rebuild only the map art after changing its source data). Source data in tools/source_data/: ne_10m_land, ne_50m_admin_0_countries, ne_10m_lakes and ne_10m_rivers_lake_centerlines (GeoJSON):
   `Godot --headless --path . -s tools/build_map_data.gd`
 - Narrow canals, straits and river approaches the pathfinding grid is too coarse to see are listed in the tool (CHANNELS) and carved as water; add to that list if a new port ends up with odd routes.
 - Saves record port and model ids, so renaming models or adding ports keeps existing saves working; removing or renaming a port id does not.
@@ -42,7 +42,7 @@
 ## Lost ships and recovery boats
 - A ship at sea that runs out of fuel or hits 0% maintenance is lost. It stops where it is, gets a red "!" above it on the map and a red dot on the Ships screen, and a toast says so.
 - The Mammoth is a recovery boat ($2,000,000, at most 5). It's the biggest ship, as fast as a Trans Atlantic (6.35 nm/s), and the most expensive to run: 4,500 fuel units/s ($10,800/s) and $300,000 per 1% of repair.
-- The Mini Mammoth is a smaller recovery boat ($250,000, at most 5), the size of a Trans Atlantic and as fast. It can only carry Scooter 10s, GE 100s, Greenline 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
+- The Buffalo is a smaller recovery boat ($250,000, at most 5), the size of a Trans Atlantic and as fast. It can only carry Scooter 10s, GE 100s, Greenline 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
 - A lost ship's popup has a Send Recovery button. It shows the estimated cost (the recovery boat's fuel and repairs, including its trip home), which boat would go, where it would take the ship, and about how long. You choose whether it's worth it.
 - The cheapest free boat that can carry the ship goes: one that's docked, not refueling, and not on a job. Boats sailing home count as busy. A boat only sets off if it has the fuel and maintenance to finish the job.
 - Auto-recovery ("Rescue" toggle in the ship popup, on for new ships): when the ship is lost, the cheapest capable free boat is sent automatically. If none is free, lost ships wait in a queue (longest-lost first) and the next free boat takes them.
@@ -58,14 +58,14 @@
 - Every delivery (when unloading finishes) gives XP to the company and to the ship in proportion to its pay: pay ÷ $0.6125 ÷ 100, which for container ships is containers × leg distance (nm) ÷ 100. Rome→Tunis in a Scooter 10 gives about 32 XP. Ships carried back to their origin earn nothing; recovery boats earn no XP.
 - The company levels from 1 to 100 (Level and an XP bar in the top bar; toast on level-up with what it unlocked). Each level's cost is set so it takes roughly 3 minutes at level 1, rising to about 47 minutes at level 99, of what a full fleet at that level earns. So bigger ships don't make levels fly by, and level 100 takes about 40 hours (about 1 hour to level 10, 11 hours to 50, 24 hours to 75).
 - Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 10 (so 21 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 5. Level-up messages say which models got a slot ("+1 slot: Scooter 10, GE 100").
-- Models unlock by company level: Scooter 10 at 1, GE 100 at 5, Mini Mammoth at 8, Greenline 200 at 12, Coastal at 15, Trans Atlantic and Mammoth at 25, Aframax at 35, Dominator at 50, Supertanker at 60. Ships already owned are kept even if they're above the current slots or unlocks.
+- Models unlock by company level: Scooter 10 at 1, GE 100 at 5, Buffalo at 8, Greenline 200 at 12, Coastal at 15, Trans Atlantic and Mammoth at 25, Aframax at 35, Dominator at 50, Supertanker at 60. Ships already owned are kept even if they're above the current slots or unlocks.
 - Ships level from 0 to 30. A model's first level needs xp_first_level XP (Scooter 10: 100, GE 100: 1,250, Greenline 200: 6,000, Trans Atlantic: 75,000, Dominator: 900,000; growing faster than the price, so small ships level fastest), and each level after costs 5% more.
 - Each ship level gives a skill point, spent in the ship popup's Skills view on three paths of up to 10 levels each: Speed (+2% top speed per level), Durability (−5% wear and −5% chance of taking a random breakdown per level), and Gas efficiency (−3% fuel burn per level). Range on the route screen stays at the model's base range.
 - Saves from before XP get the XP their past income would have earned.
 
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
-- Map art: blue sea, sandy land with a darker coastline, thin country borders, and country names that appear as you zoom in (placeholder colors, all in the theme). Built from Natural Earth public-domain data by tools/build_map_data.gd.
+- Map art: blue sea, sandy land with a darker coastline, thin country borders, lakes (drawn as water with a shoreline; islands in them are land), thin blue rivers (the biggest show zoomed out, smaller ones appear as you zoom in; visual only, ships don't sail them), and country names that appear as you zoom in (placeholder colors, all in the theme). Built from Natural Earth public-domain data by tools/build_map_data.gd.
 - 173 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
   - The world's biggest container ports (the top 100, plus the next several so that 100 are new beyond the original Mediterranean set). Ranks 1–25 follow the published 2023 figures; the rest follow recent Lloyd's List rankings as best known (the full list is paywalled), so a few borderline ports may differ from the official list.
   - The 18 biggest Mediterranean container ports, plus Rome (Civitavecchia) and Tunis (Radès).
@@ -84,7 +84,7 @@
 | Greenline 200 | $100,000 | 3.27 | 200 | 1,175 nm (≈6 min) | 10 |
 | Trans Atlantic | $1,000,000 | 6.35 | 1,250 | 4,080 nm (Rome→New York is 4,073 nm) | 10 |
 | Dominator | $10,000,000 | 3.99 | 10,000 | 9,000 nm | 10 |
-| Mini Mammoth | $250,000 | 6.35 | carries 1 lost Scooter 10, GE 100, Greenline 200 or Coastal | recovery jobs up to 8,000 nm | 5 |
+| Buffalo | $250,000 | 6.35 | carries 1 lost Scooter 10, GE 100, Greenline 200 or Coastal | recovery jobs up to 8,000 nm | 5 |
 | Coastal (gas tanker) | $300,000 | 6.35 | 5,000 tons of fuel | 1,175 nm | 10 |
 | Aframax (gas tanker) | $3,000,000 | 5.40 | 50,000 tons of fuel | 4,080 nm | 10 |
 | Supertanker (gas tanker) | $30,000,000 | 4.59 | 500,000 tons of fuel | 9,000 nm | 10 |
@@ -97,7 +97,7 @@
 | Greenline 200 | 25,000 | 67 | 1 | $2,400 | 15 s |
 | Trans Atlantic | 555,000 | 810 | 1 | $29,200 | 30 s |
 | Dominator | 10,300,000 | 4,070 | 0.5 | $293,000 | 1 min |
-| Mini Mammoth | 645,000 | 450 | 1 | $30,000 | 10 s |
+| Buffalo | 645,000 | 450 | 1 | $30,000 | 10 s |
 | Coastal | 50,500 | 265 | 1 | $9,500 | 15 s |
 | Aframax | 1,830,000 | 2,250 | 1 | $81,000 | 30 s |
 | Supertanker | 41,300,000 | 19,125 | 0.5 | $1,375,000 | 1 min |
@@ -105,7 +105,7 @@
 - Gas tankers carry fuel as paid cargo: $0.05 per ton per nm (container ships: $0.6125 per container per nm), paid when unloading finishes like any cargo. Each size carries 10x the last and is 15% slower. They earn a little more per dollar of price than the container ships nearest them in price (Coastal about $95k a minute gross, Aframax $810k, Supertanker $6.9M), with fuel still about 40% and repairs 10% of pay. They're the size of the Greenline 200, Trans Atlantic and Dominator, and their deliveries don't count toward "Containers delivered".
 - Speeds keep a 30 : 20 : 18 : 35 : 22 ratio, scaled so a Scooter 10 sails Rome→Tunis (324.9 nm) in about 60 s. A Dominator's longest leg (9,000 nm) takes about 42 minutes with wear.
 - Range is the longest single leg a ship can sail at 100% maintenance. It's enforced when assigning routes; fuel is checked again at every departure.
-- On the map each model is a differently sized and colored rectangle with a pointed bow. Colors by family, smallest to biggest: container ships yellow to red (Scooter 10, GE 100, Greenline 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Mini Mammoth, Mammoth). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
+- On the map each model is a differently sized and colored rectangle with a pointed bow. Colors by family, smallest to biggest: container ships yellow to red (Scooter 10, GE 100, Greenline 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Buffalo, Mammoth). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
 - The player can own at most 10 of each container ship and gas tanker, and 5 of each recovery boat, once the company level has opened all their slots.
 - Ship names must be unique (case-insensitive). No renaming in beta.
 - Selling: a docked ship (not lost, not on a recovery job) sells for 50% of its price × its maintenance, from the ship popup's Sell button (click again to confirm).

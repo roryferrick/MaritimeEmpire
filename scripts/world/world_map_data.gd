@@ -16,3 +16,10 @@ extends Resource
 @export var label_positions := PackedVector2Array()
 ## Web-map zoom level at which each country's name starts showing.
 @export var label_min_zoom := PackedFloat32Array()
+
+## Islands in lakes, drawn in the land color over the lake water.
+@export var lake_island_triangles := PackedVector2Array()
+## Rivers as line segments (pairs of points), grouped into tiers by the
+## web-map zoom level they start showing at (river_tier_min_zoom).
+@export var river_tiers: Array[PackedVector2Array] = []
+@export var river_tier_min_zoom := PackedFloat32Array()

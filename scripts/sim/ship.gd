@@ -13,7 +13,7 @@ extends RefCounted
 ## can leave.
 ##
 ## A ship that runs out of fuel or maintenance at sea is lost until a recovery
-## boat (a Mammoth, or a Mini Mammoth for small ships) tows it to the nearer
+## boat (a Mammoth, or a Buffalo for small ships) tows it to the nearer
 ## end of its leg. A recovery boat has no route: it sails a job (a list of lane
 ## segments) to the lost ship, turns to line up with it, carries it to port,
 ## then sails home.
@@ -110,7 +110,7 @@ func model() -> Dictionary:
 	return GameData.get_ship_model(model_id)
 
 
-## A recovery boat (Mammoth or Mini Mammoth): recovers lost ships instead of sailing routes.
+## A recovery boat (Mammoth or Buffalo): recovers lost ships instead of sailing routes.
 func is_recovery() -> bool:
 	return bool(model().get("recovery", false))
 

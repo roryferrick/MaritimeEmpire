@@ -4,15 +4,19 @@ extends SceneTree
 ##   data/sea_lanes.res  a sea route and its distance between every pair of ports
 ##
 ## Rerun after changing data/ports.json (takes several minutes; add
-## "-- --lanes-only" to skip rebuilding the map art):
+## "-- --lanes-only" to skip rebuilding the map art, or "-- --map-only" to
+## rebuild only the map art: land, lakes, rivers, borders and labels):
 ##   Godot --headless --path . -s tools/build_map_data.gd
 ##
 ## Source files (public domain, https://www.naturalearthdata.com), in tools/source_data/:
-##   ne_10m_land.geojson, ne_50m_admin_0_countries.geojson
+##   ne_10m_land.geojson, ne_50m_admin_0_countries.geojson,
+##   ne_10m_lakes.geojson, ne_10m_rivers_lake_centerlines.geojson
 ## from https://github.com/nvkelso/natural-earth-vector/tree/master/geojson
 
 const LAND_PATH := "res://tools/source_data/ne_10m_land.geojson"
 const COUNTRIES_PATH := "res://tools/source_data/ne_50m_admin_0_countries.geojson"
+const LAKES_PATH := "res://tools/source_data/ne_10m_lakes.geojson"
+const RIVERS_PATH := "res://tools/source_data/ne_10m_rivers_lake_centerlines.geojson"
 const PORTS_PATH := "res://data/ports.json"
 const MAP_OUT := "res://data/world_map.res"
 const LANES_OUT := "res://data/sea_lanes.res"
@@ -92,11 +96,13 @@ func _init() -> void:
 	var started := Time.get_ticks_msec()
 	var land_rings := _read_land_rings()
 	print("Land: %d rings" % land_rings.size())
-	if not "--lanes-only" in OS.get_cmdline_user_args():
+	var args := OS.get_cmdline_user_args()
+	if not "--lanes-only" in args:
 		_build_map(land_rings)
-	_build_grid(land_rings)
-	land_rings.clear()
-	_build_lanes()
+	if not "--map-only" in args:
+		_build_grid(land_rings)
+		land_rings.clear()
+		_build_lanes()
 	print("Done in %.1f min" % ((Time.get_ticks_msec() - started) / 60000.0))
 	quit()
 
@@ -166,6 +172,8 @@ func _build_map(land_polygons: Array) -> void:
 				_triangulate_tiled(hole_points, map.water_triangles, map.land_triangles)
 	print("Map: %d land triangles, %d coast segments" % [map.land_triangles.size() / 3, map.coast_segments.size() / 2])
 
+	_add_lakes(map)
+	_add_rivers(map)
 	_add_countries(map)
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
@@ -205,6 +213,50 @@ func _simplify(points: PackedVector2Array) -> PackedVector2Array:
 
 ## Coastline segments, skipping the artificial edges Natural Earth adds along
 ## the antimeridian and the bottom of Antarctica.
+## Lakes as water with a shoreline; islands in them go back in as land.
+func _add_lakes(map: WorldMapData) -> void:
+	var count := 0
+	for feature: Dictionary in _read_geojson(LAKES_PATH):
+		for polygon: Array in _feature_polygons(feature):
+			var outline := _simplify(_project_all(_to_points(polygon[0])))
+			if outline.size() < 3:
+				continue
+			_add_coast(map, outline)
+			_triangulate_tiled(outline, map.water_triangles, PackedVector2Array())
+			count += 1
+			for i in range(1, polygon.size()):
+				var island := _simplify(_project_all(_to_points(polygon[i])))
+				if island.size() >= 3:
+					_add_coast(map, island)
+					_triangulate_tiled(island, map.lake_island_triangles, PackedVector2Array())
+	print("Lakes: %d" % count)
+
+
+## Rivers as line segments, in tiers by the web-map zoom they show from (the
+## data's min_zoom). Lake centerlines are skipped: the lakes are drawn.
+func _add_rivers(map: WorldMapData) -> void:
+	var tiers := {}  # min zoom -> PackedVector2Array of segments
+	for feature: Dictionary in _read_geojson(RIVERS_PATH):
+		var props: Dictionary = feature.properties
+		if props.get("featurecla", "") != "River" or feature.geometry == null:
+			continue
+		var lines: Array = [feature.geometry.coordinates] if feature.geometry.type == "LineString" else feature.geometry.coordinates
+		var min_zoom := float(props.get("min_zoom", 7.0))
+		var segments: PackedVector2Array = tiers.get(min_zoom, PackedVector2Array())
+		for line: Array in lines:
+			var points := _simplify(_project_all(_to_points(line)))
+			for i in range(1, points.size()):
+				segments.append(points[i - 1])
+				segments.append(points[i])
+		tiers[min_zoom] = segments
+	var zooms := tiers.keys()
+	zooms.sort()
+	for zoom: float in zooms:
+		map.river_tiers.append(tiers[zoom])
+		map.river_tier_min_zoom.append(zoom)
+	print("Rivers: %d tiers" % zooms.size())
+
+
 func _add_coast(map: WorldMapData, ring: PackedVector2Array) -> void:
 	var bottom := Geo.project(Vector2(0, -Geo.MAX_LAT)).y + 0.01
 	for i in ring.size():

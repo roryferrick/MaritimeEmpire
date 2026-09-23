@@ -59,6 +59,8 @@ const FALLBACK_COLORS := {
 	&"lost_marker": Color(0.95, 0.15, 0.12),
 	&"lost_marker_outline": Color(1, 1, 1),
 	&"at_risk_marker": Color(1.0, 0.7, 0.1),
+	&"river": Color(0.3, 0.5, 0.72),
+	&"river_gray": Color(0.34, 0.35, 0.38),
 	&"route": Color(1.0, 0.6, 0.15),
 }
 
@@ -68,6 +70,8 @@ const FALLBACK_COLORS := {
 		gray_mode = value
 		for art in _art_copies:
 			art.queue_redraw()
+		for tier in _river_tiers:
+			tier.queue_redraw()
 		queue_redraw()
 
 ## Draw the player's ships and let them be clicked.
@@ -96,6 +100,8 @@ var _dragging := false
 var _art_root := Node2D.new()
 ## One copy of the world art per wrap-around: west, center and east.
 var _art_copies: Array[WorldArt] = []
+## Every copy's river tiers, shown or hidden by zoom.
+var _river_tiers: Array[RiverTier] = []
 ## Ports, ships, routes and labels, drawn in screen space every frame.
 var _overlay := Control.new()
 var _ports_by_rank: Array = []  # Label priority order, sorted on first draw.
@@ -109,14 +115,29 @@ class WorldArt:
 	var view: MapView
 	var land_mesh: ArrayMesh
 	var water_mesh: ArrayMesh
+	var lake_island_mesh: ArrayMesh
 	var white: Texture2D
 
 	func _draw() -> void:
 		var data := GameData.world_map
 		draw_mesh(land_mesh, white, Transform2D.IDENTITY, view._color(&"land"))
 		draw_mesh(water_mesh, white, Transform2D.IDENTITY, view._color(&"ocean"))
+		draw_mesh(lake_island_mesh, white, Transform2D.IDENTITY, view._color(&"land"))
 		draw_multiline(data.border_segments, view._color(&"border"), -1.0)
 		draw_multiline(data.coast_segments, view._color(&"coast"), -1.0)
+
+
+## One zoom tier of rivers for one copy of the world, shown once the view is
+## zoomed in to its min_zoom (see _update_rivers()).
+class RiverTier:
+	extends Node2D
+
+	var view: MapView
+	var segments: PackedVector2Array
+	var min_zoom := 0.0
+
+	func _draw() -> void:
+		draw_multiline(segments, view._color(&"river"), -1.0)
 
 
 func _ready() -> void:
@@ -127,6 +148,7 @@ func _ready() -> void:
 	var data := GameData.world_map
 	var land_mesh := _triangle_mesh(data.land_triangles)
 	var water_mesh := _triangle_mesh(data.water_triangles)
+	var lake_island_mesh := _triangle_mesh(data.lake_island_triangles)
 	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
 	image.fill(Color.WHITE)
 	var white := ImageTexture.create_from_image(image)
@@ -136,10 +158,18 @@ func _ready() -> void:
 		art.view = self
 		art.land_mesh = land_mesh
 		art.water_mesh = water_mesh
+		art.lake_island_mesh = lake_island_mesh
 		art.white = white
 		art.position.x = copy * Geo.WORLD_WIDTH
 		_art_root.add_child(art)
 		_art_copies.append(art)
+		for i in data.river_tiers.size():
+			var tier := RiverTier.new()
+			tier.view = self
+			tier.segments = data.river_tiers[i]
+			tier.min_zoom = data.river_tier_min_zoom[i]
+			art.add_child(tier)
+			_river_tiers.append(tier)
 
 	_overlay.mouse_filter = MOUSE_FILTER_IGNORE
 	_overlay.set_anchors_preset(PRESET_FULL_RECT)
@@ -291,12 +321,26 @@ func _zoom_at(screen_pos: Vector2, factor: float) -> void:
 	_changed()
 
 
+## Shows each river tier once the view is zoomed in to its min_zoom (in
+## web-map zoom levels, like the country names).
+func _update_rivers() -> void:
+	var web_zoom := _web_zoom()
+	for tier in _river_tiers:
+		tier.visible = web_zoom >= tier.min_zoom
+
+
+## The view's zoom as a web-map zoom level (0 = whole world in 256 px).
+func _web_zoom() -> float:
+	return log(_zoom * Geo.WORLD_WIDTH / 256.0) / log(2.0)
+
+
 func _changed() -> void:
 	_center.x = wrapf(_center.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0)
 	var max_y := Geo.project(Vector2(0, MAX_VIEW_LAT)).y
 	_center.y = clampf(_center.y, -max_y, max_y)
 	_art_root.position = size / 2.0 + Vector2(-_center.x, _center.y) * _zoom
 	_art_root.scale = Vector2(_zoom, -_zoom)
+	_update_rivers()
 	queue_redraw()
 	_overlay.queue_redraw()
 	view_changed.emit()
@@ -357,7 +401,7 @@ func _draw_country_labels(placed: Array[Rect2]) -> void:
 	var data := GameData.world_map
 	var font := get_theme_default_font()
 	var color := _color(&"country_label")
-	var web_zoom := log(_zoom * Geo.WORLD_WIDTH / 256.0) / log(2.0)
+	var web_zoom := _web_zoom()
 	var bounds := Rect2(Vector2.ZERO, size)
 	for i in data.label_names.size():
 		if data.label_min_zoom[i] > web_zoom:
