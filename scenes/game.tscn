@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/screens/shop_screen.tscn" id="5_shop"]
 [ext_resource type="Script" path="res://scripts/ui/popup_host.gd" id="6_popuphost"]
 [ext_resource type="PackedScene" path="res://scenes/screens/route_screen.tscn" id="7_route"]
+[ext_resource type="PackedScene" path="res://scenes/screens/finances_screen.tscn" id="8_finances"]
 
 [node name="Game" type="Control"]
 layout_mode = 3
@@ -77,6 +78,11 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
+[node name="FinancesScreen" parent="Layout/Screens" instance=ExtResource("8_finances")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
 [node name="RouteScreen" parent="Layout/Screens" instance=ExtResource("7_route")]
 unique_name_in_owner = true
 visible = false
@@ -115,6 +121,13 @@ custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Ships"
+
+[node name="FinancesButton" type="Button" parent="Layout/BottomNav/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Finances"
 
 [node name="ShopButton" type="Button" parent="Layout/BottomNav/Buttons"]
 unique_name_in_owner = true

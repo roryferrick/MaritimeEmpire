@@ -1,11 +1,16 @@
 class_name ShipPopup
 extends AnchoredPopup
-## A ship's stats, live status, bars and route, with the refuel/repair toggles,
-## Assign Route and Pause/Go. Lost ships get a Send Recovery button; Mammoths
-## have no route controls.
+## A ship's stats, live status, bars and route, with the repair/refuel/rescue
+## toggles, Assign Route, Pause/Go and Sell. Lost ships get a Send Recovery
+## button; recovery boats have no route controls.
+
+## Selling takes a second click within this many seconds.
+const SELL_CONFIRM_SECONDS := 3.0
 
 ## Set before adding to the tree.
 var ship: Ship
+
+var _sell_confirm_until := 0.0
 
 
 func _ready() -> void:
@@ -15,7 +20,9 @@ func _ready() -> void:
 	%ModelValue.text = model.get("name", ship.model_id)
 	if ship.is_recovery():
 		%RangeValue.text = "Recovers lost ships"
-		%CapacityValue.text = "Carries 1 ship"
+		var carries: Array = model.get("carries", [])
+		var biggest: String = GameData.get_ship_model(carries[-1]).get("name", "") if carries else ""
+		%CapacityValue.text = "Carries 1 ship" if carries.is_empty() else "1 ship, up to %s" % biggest
 	else:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 		%CapacityValue.text = "%s containers" % Fmt.thousands(ship.capacity())
@@ -26,6 +33,11 @@ func _ready() -> void:
 	%RecoveryButton.pressed.connect(func() -> void: GameState.send_recovery(ship))
 	%RepairToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_repair(ship, on))
 	%RefuelToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_refuel(ship, on))
+	%RescueToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_recover(ship, on))
+	%SellButton.pressed.connect(_on_sell_pressed)
+	GameState.ship_sold.connect(func(sold: Ship, _price: int) -> void:
+		if sold == ship:
+			queue_free())
 	GameState.ship_changed.connect(_on_ship_changed)
 	_refresh()
 
@@ -53,9 +65,33 @@ func _update_live() -> void:
 		%CostLabel.text = "This stop: Sold %s · %s\nProfit %s" % [
 			Fmt.money(ship.stop_sale), costs, Fmt.money(ship.stop_sale - fuel - repair)]
 	_update_recovery()
+	_update_sell()
 
 
-## A lost ship with no Mammoth on the way can have one sent, if one is free.
+func _update_sell() -> void:
+	var error := GameState.sell_error(ship)
+	%SellButton.disabled = not error.is_empty()
+	%SellButton.tooltip_text = error
+	if _seconds() < _sell_confirm_until and error.is_empty():
+		%SellButton.text = "Sell for %s?" % Fmt.money(ship.sell_price())
+	else:
+		%SellButton.text = "Sell"
+
+
+## First click asks for confirmation (showing the price); a second click sells.
+func _on_sell_pressed() -> void:
+	if _seconds() < _sell_confirm_until:
+		GameState.sell_ship(ship)
+	else:
+		_sell_confirm_until = _seconds() + SELL_CONFIRM_SECONDS
+		reset_size.call_deferred()
+
+
+static func _seconds() -> float:
+	return Time.get_ticks_msec() / 1000.0
+
+
+## A lost ship with no recovery boat on the way can have one sent, if one is free.
 func _update_recovery() -> void:
 	var needs_rescue := ship.is_lost() and ship.rescuer == null
 	_set_shown(%RecoveryButton, needs_rescue)
@@ -84,7 +120,10 @@ func _refresh() -> void:
 	_update_live()
 	%RepairToggle.set_pressed_no_signal(ship.auto_repair)
 	%RefuelToggle.set_pressed_no_signal(ship.auto_refuel)
-	%Buttons.visible = not ship.is_recovery()
+	%RescueToggle.set_pressed_no_signal(ship.auto_recover)
+	%RescueToggle.visible = not ship.is_recovery()
+	%AssignButton.visible = not ship.is_recovery()
+	%PauseButton.visible = not ship.is_recovery()
 	%RouteLabel.visible = not ship.is_recovery()
 	if ship.has_route():
 		%RouteLabel.text = "Route: %s (loops)" % GameData.route_text(ship.route)

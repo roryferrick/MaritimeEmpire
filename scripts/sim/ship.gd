@@ -13,9 +13,10 @@ extends RefCounted
 ## can leave.
 ##
 ## A ship that runs out of fuel or maintenance at sea is lost until a recovery
-## boat (a Mammoth) tows it to the nearer end of its leg. A Mammoth has no
-## route: it sails a job (a list of lane segments) to the lost ship, turns to
-## line up with it, carries it to port, then sails home.
+## boat (a Mammoth, or a Mini Mammoth for small ships) tows it to the nearer
+## end of its leg. A recovery boat has no route: it sails a job (a list of lane
+## segments) to the lost ship, turns to line up with it, carries it to port,
+## then sails home.
 
 ## How long a Mammoth takes to turn and line up with a lost ship, and to turn
 ## the pair around if it's towing it back the way it came.
@@ -26,6 +27,9 @@ const JOB_NONE := ""
 const JOB_APPROACH := "approach"
 const JOB_ALIGN := "align"
 const JOB_TOW := "tow"
+
+## A ship sells for this fraction of its price, times its maintenance.
+const SELL_FRACTION := 0.5
 
 var name := ""
 var model_id := ""
@@ -62,6 +66,15 @@ var hold_reason := ""
 
 ## Why this ship is stranded at sea ("out of fuel", "engine failure"), or "".
 var lost_reason := ""
+## Send the cheapest capable recovery boat automatically when lost.
+var auto_recover := true
+## When it was lost, relative to other lost ships (lower = earlier), for the recovery queue.
+var lost_order := 0
+## At sea without the fuel (or maintenance) to reach the end of its leg.
+var at_risk := false
+## Lifetime money in (income) and out (fuel, repair, and recovery: what a
+## recovery boat spent saving this ship), in dollars.
+var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0, "recovery": 0.0}
 ## The Mammoth sent to recover this ship, if any.
 var rescuer: Ship = null
 
@@ -75,6 +88,9 @@ var segment_end := 0.0
 var job_segments: Array = []
 var align_time := 0.0
 var tow_port := ""
+## Recovery boat only: the ship its spending is charged to, from being sent
+## on a job until it has refilled back at home.
+var billing: Ship = null
 
 
 func _init(ship_name := "", ship_model_id := "", start_port := "") -> void:
@@ -88,9 +104,30 @@ func model() -> Dictionary:
 	return GameData.get_ship_model(model_id)
 
 
-## A Mammoth: recovers lost ships instead of sailing routes.
+## A recovery boat (Mammoth or Mini Mammoth): recovers lost ships instead of sailing routes.
 func is_recovery() -> bool:
 	return bool(model().get("recovery", false))
+
+
+## Recovery boat only: whether it can carry this ship (models listed in
+## "carries", or any model if none are listed).
+func can_carry(other: Ship) -> bool:
+	var carries: Array = model().get("carries", [])
+	return is_recovery() and (carries.is_empty() or carries.has(other.model_id))
+
+
+## What the ship sells for: half its price, scaled by maintenance.
+func sell_price() -> int:
+	return floori(float(model().get("price", 0)) * SELL_FRACTION * clampf(maintenance, 0.0, 1.0))
+
+
+## Docked and not busy recovering (or being recovered).
+func can_sell() -> bool:
+	return is_docked() and not is_on_job() and not is_lost()
+
+
+func profit() -> float:
+	return ledger.income - ledger.fuel - ledger.repair - ledger.recovery
 
 
 func top_speed() -> float:
@@ -306,6 +343,8 @@ func status_text() -> String:
 		return _recovery_status_text()
 	if is_lost():
 		if rescuer == null:
+			if auto_recover:
+				return "Lost at sea (%s), waiting for a free recovery boat" % lost_reason
 			return "Lost at sea (%s)" % lost_reason
 		if is_carried():
 			return "Being carried to %s by %s" % [GameData.port_name(rescuer.tow_port), rescuer.name]
@@ -325,7 +364,8 @@ func status_text() -> String:
 	var destination := GameData.port_name(to_port)
 	if paused:
 		return "Stopping at %s" % destination
-	return "En route to %s — %d%%" % [destination, int(leg_progress() * 100.0)]
+	var text := "En route to %s — %d%%" % [destination, int(leg_progress() * 100.0)]
+	return text + " — won't make it!" if at_risk else text
 
 
 func _recovery_status_text() -> String:
@@ -378,6 +418,10 @@ func to_dict() -> Dictionary:
 		"job_segments": job_segments,
 		"align_time": align_time,
 		"tow_port": tow_port,
+		"billing": billing.name if billing else "",
+		"auto_recover": auto_recover,
+		"lost_order": lost_order,
+		"ledger": ledger,
 	}
 
 
@@ -411,18 +455,28 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.job_segments = data.get("job_segments", [])
 	ship.align_time = float(data.get("align_time", 0.0))
 	ship.tow_port = data.get("tow_port", "")
+	ship.auto_recover = bool(data.get("auto_recover", true))
+	ship.lost_order = int(data.get("lost_order", 0))
+	var saved_ledger: Dictionary = data.get("ledger", {})
+	for key: String in ship.ledger:
+		ship.ledger[key] = float(saved_ledger.get(key, 0.0))
+	ship.set_meta(&"billing", data.get("billing", ""))
 	ship.set_meta(&"rescuing", data.get("rescuing", ""))
 	return ship
 
 
-## Reconnects Mammoths to the ships they're recovering after loading.
+## Reconnects recovery boats to the ships they're recovering (and billing) after loading.
 static func link_rescues(all: Array[Ship]) -> void:
 	for mammoth in all:
 		var target: String = mammoth.get_meta(&"rescuing", "")
+		var billed: String = mammoth.get_meta(&"billing", "")
 		mammoth.remove_meta(&"rescuing")
+		mammoth.remove_meta(&"billing")
 		for ship in all:
 			if not target.is_empty() and ship.name == target:
 				mammoth.rescuing = ship
 				ship.rescuer = mammoth
+			if not billed.is_empty() and ship.name == billed:
+				mammoth.billing = ship
 		if mammoth.rescuing == null:
 			mammoth.job_phase = JOB_NONE

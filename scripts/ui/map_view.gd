@@ -20,6 +20,11 @@ const SHIP_HIT_RADIUS := 12.0
 ## Docked ships sit in rings around their port, this many per ring.
 const DOCK_SLOTS := 8
 const DOCK_RING_GAP := 11.0
+## Docked recovery boats are small dots on a tight ring of their own around
+## the port, inside the ring of docked cargo ships.
+const RECOVERY_DOT_RADIUS := 3.5
+const RECOVERY_RING_RADIUS := PORT_RADIUS + 6.0
+const RECOVERY_DOT_SLOTS := 10
 const DRAG_THRESHOLD := 5.0
 const ZOOM_STEP := 1.15
 ## Closest zoom, in pixels per projected degree.
@@ -54,6 +59,7 @@ const FALLBACK_COLORS := {
 	&"ship_outline": Color(0.1, 0.08, 0.05),
 	&"lost_marker": Color(0.95, 0.15, 0.12),
 	&"lost_marker_outline": Color(1, 1, 1),
+	&"at_risk_marker": Color(1.0, 0.7, 0.1),
 	&"route": Color(1.0, 0.6, 0.15),
 }
 
@@ -176,7 +182,8 @@ func port_screen_position(port_id: String) -> Vector2:
 	return world_to_screen(GameData.port_position(port_id))
 
 
-## Docked ships are spread around their port so they don't cover it or each other.
+## Docked ships are spread around their port so they don't cover it or each
+## other; docked recovery boats get their own inner ring of dots.
 func ship_screen_position(ship: Ship) -> Vector2:
 	if not ship.is_docked():
 		return world_to_screen(ship.world_position())
@@ -184,8 +191,11 @@ func ship_screen_position(ship: Ship) -> Vector2:
 	for other in GameState.ships:
 		if other == ship:
 			break
-		if other.docked_at == ship.docked_at:
+		if other.docked_at == ship.docked_at and other.is_recovery() == ship.is_recovery():
 			slot += 1
+	if ship.is_recovery():
+		var dot_angle := PI / 2.0 + TAU * (slot % RECOVERY_DOT_SLOTS) / RECOVERY_DOT_SLOTS
+		return port_screen_position(ship.docked_at) + Vector2.from_angle(dot_angle) * RECOVERY_RING_RADIUS
 	@warning_ignore("integer_division")
 	var ring := slot / DOCK_SLOTS
 	var angle := -PI / 2.0 + TAU * (slot % DOCK_SLOTS) / DOCK_SLOTS
@@ -434,8 +444,10 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool) 
 		_overlay.draw_polyline(points, color, 2.5, true)
 
 
-## Ships are rectangles with a pointed bow. Ships riding on a Mammoth are drawn
-## after it, so they sit in its middle; lost ships get a red "!" above them.
+## Ships are rectangles with a pointed bow (docked recovery boats: small dots).
+## Ships riding on a recovery boat are drawn after it, so they sit in its
+## middle. Lost ships get a red "!" above them, and ships that won't make it
+## to port an amber one.
 func _draw_ships() -> void:
 	var outline := _color(&"ship_outline")
 	for ship in GameState.ships:
@@ -447,11 +459,20 @@ func _draw_ships() -> void:
 	_overlay.draw_set_transform_matrix(Transform2D.IDENTITY)
 	for ship in GameState.ships:
 		if ship.is_lost() and not ship.is_carried():
-			_draw_lost_marker(ship_screen_position(ship))
+			_draw_marker(ship_screen_position(ship), _color(&"lost_marker"))
+		elif ship.at_risk:
+			_draw_marker(ship_screen_position(ship), _color(&"at_risk_marker"))
 
 
 func _draw_ship(ship: Ship, outline: Color) -> void:
 	var model := ship.model()
+	var color := Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE)
+	if ship.is_recovery() and ship.is_docked():
+		_overlay.draw_set_transform_matrix(Transform2D.IDENTITY)
+		var at := ship_screen_position(ship)
+		_overlay.draw_circle(at, RECOVERY_DOT_RADIUS, color, true, -1.0, true)
+		_overlay.draw_circle(at, RECOVERY_DOT_RADIUS, outline, false, 1.0, true)
+		return
 	var dims: Array = model.get("map_size", [14, 6])
 	var length := float(dims[0])
 	var width := float(dims[1])
@@ -465,14 +486,14 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	var direction := ship.heading()
 	var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
 	_overlay.draw_set_transform(ship_screen_position(ship), angle)
-	_overlay.draw_colored_polygon(hull, Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE))
+	_overlay.draw_colored_polygon(hull, color)
 	hull.append(hull[0])
 	_overlay.draw_polyline(hull, outline, 1.0)
 
 
-func _draw_lost_marker(at: Vector2) -> void:
+func _draw_marker(at: Vector2, color: Color) -> void:
 	var font := get_theme_default_font()
 	var baseline := at + Vector2(-LOST_MARKER_SIZE * 0.15, -LOST_MARKER_OFFSET)
 	_overlay.draw_string_outline(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, 4,
 		_color(&"lost_marker_outline"))
-	_overlay.draw_string(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, _color(&"lost_marker"))
+	_overlay.draw_string(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, color)

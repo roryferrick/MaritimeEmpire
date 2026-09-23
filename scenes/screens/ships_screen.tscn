@@ -11,11 +11,51 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_ships")
 
+[node name="Header" type="HBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = 56.0
+grow_horizontal = 2
+theme_override_constants/separation = 12
+
+[node name="SortLabel" type="Label" parent="Header"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Sort by"
+
+[node name="SortOption" type="OptionButton" parent="Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+
+[node name="FilterLabel" type="Label" parent="Header"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Show"
+
+[node name="FilterOption" type="OptionButton" parent="Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+
+[node name="CountLabel" type="Label" parent="Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DimLabel"
+horizontal_alignment = 2
+
 [node name="Scroll" type="ScrollContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_top = 64.0
 grow_horizontal = 2
 grow_vertical = 2
 horizontal_scroll_mode = 0
@@ -24,16 +64,14 @@ horizontal_scroll_mode = 0
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 24
+theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 24
 
-[node name="ShipGrid" type="GridContainer" parent="Scroll/Margin"]
+[node name="Groups" type="VBoxContainer" parent="Scroll/Margin"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/h_separation = 16
-theme_override_constants/v_separation = 16
-columns = 3
+theme_override_constants/separation = 12
 
 [node name="EmptyLabel" type="Label" parent="."]
 unique_name_in_owner = true

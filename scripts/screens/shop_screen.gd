@@ -1,5 +1,9 @@
 extends Control
-## Lists purchasable ship models from data/ship_models.json.
+## Lists purchasable ship models from data/ship_models.json, in sections:
+## cargo ships, then recovery boats.
+
+const SECTIONS := [["Cargo ships", false], ["Recovery boats", true]]
+const COLUMNS := 3
 
 const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
@@ -8,8 +12,19 @@ var _owned_labels: Dictionary = {}  # model id -> Label
 
 
 func _ready() -> void:
-	for model: Dictionary in GameData.ship_models:
-		%Items.add_child(_make_card(model))
+	for section: Array in SECTIONS:
+		var title := Label.new()
+		title.theme_type_variation = &"HeaderLabel"
+		title.text = section[0]
+		%Items.add_child(title)
+		var grid := GridContainer.new()
+		grid.columns = COLUMNS
+		grid.add_theme_constant_override(&"h_separation", 16)
+		grid.add_theme_constant_override(&"v_separation", 16)
+		%Items.add_child(grid)
+		for model: Dictionary in GameData.ship_models:
+			if bool(model.get("recovery", false)) == section[1]:
+				grid.add_child(_make_card(model))
 	GameState.money_changed.connect(_update_cards.unbind(1))
 	GameState.ships_changed.connect(_update_cards)
 	_update_cards()
@@ -43,7 +58,9 @@ func _make_card(model: Dictionary) -> Control:
 		["Owned", ""],
 	]
 	if model.get("recovery", false):
-		rows[1] = ["Carries", "1 lost ship"]
+		var carries: Array = model.get("carries", [])
+		rows[1] = ["Carries", "Any 1 lost ship" if carries.is_empty()
+			else "Up to %s" % GameData.get_ship_model(carries[-1]).get("name", "")]
 		rows[2] = ["Job", "Recovers ships lost at sea"]
 	for row: Array in rows:
 		var name_label := Label.new()

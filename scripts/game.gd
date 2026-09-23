@@ -1,9 +1,9 @@
 class_name GameRoot
 extends Control
-## Root of an active game: top bar, the three main screens, the bottom nav, and
+## Root of an active game: top bar, the four main screens, the bottom nav, and
 ## the full-screen Route Assignment screen.
 
-enum Screen { WORLD, SHIPS, SHOP }
+enum Screen { WORLD, SHIPS, FINANCES, SHOP }
 
 const GROUP := &"game_root"
 
@@ -12,11 +12,13 @@ var _current_screen := Screen.WORLD
 @onready var _screens := {
 	Screen.WORLD: %WorldScreen,
 	Screen.SHIPS: %ShipsScreen,
+	Screen.FINANCES: %FinancesScreen,
 	Screen.SHOP: %ShopScreen,
 }
 @onready var _nav_buttons := {
 	Screen.WORLD: %WorldButton,
 	Screen.SHIPS: %ShipsButton,
+	Screen.FINANCES: %FinancesButton,
 	Screen.SHOP: %ShopButton,
 }
 @onready var _popup_host: PopupHost = %PopupHost
@@ -40,6 +42,9 @@ func _ready() -> void:
 	GameState.ship_broke_down.connect(_on_ship_broke_down)
 	GameState.ship_lost.connect(_on_ship_lost)
 	GameState.ship_recovered.connect(_on_ship_recovered)
+	GameState.recovery_sent.connect(_on_recovery_sent)
+	GameState.ship_at_risk.connect(_on_ship_at_risk)
+	GameState.ship_sold.connect(_on_ship_sold)
 	show_screen(Screen.WORLD)
 
 
@@ -93,3 +98,16 @@ func _on_ship_lost(ship: Ship) -> void:
 func _on_ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool) -> void:
 	var outcome := "" if to_destination else " (back where it came from, so no pay)"
 	Toast.show_message("%s carried %s to %s%s" % [mammoth.name, ship.name, GameData.port_name(port_id), outcome])
+
+
+func _on_recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool) -> void:
+	if auto:
+		Toast.show_message("Auto-recovery: %s sent for %s (about %s)" % [boat.name, ship.name, Fmt.money(cost)])
+
+
+func _on_ship_at_risk(ship: Ship) -> void:
+	Toast.show_message("%s won't make it to %s at this rate!" % [ship.name, GameData.port_name(ship.to_port)])
+
+
+func _on_ship_sold(ship: Ship, price: int) -> void:
+	Toast.show_message("Sold %s for %s" % [ship.name, Fmt.money(price)])

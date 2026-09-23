@@ -7,7 +7,7 @@ extends Node
 
 signal money_changed(money: int)
 signal containers_changed(total: int)
-## A ship was bought.
+## A ship was bought or sold.
 signal ships_changed
 ## A ship docked, finished docking, departed, was held in port, was
 ## paused/resumed, got a new route, or had a refuel/repair toggle changed.
@@ -24,6 +24,12 @@ signal ship_broke_down(ship: Ship)
 signal ship_lost(ship: Ship)
 ## A Mammoth dropped a lost ship at a port (its destination, or back where it came from).
 signal ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool)
+## A recovery boat was sent to a lost ship (automatically, if auto is true).
+signal recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool)
+## A ship at sea no longer has the fuel or maintenance to reach port.
+signal ship_at_risk(ship: Ship)
+## A ship was sold.
+signal ship_sold(ship: Ship, price: int)
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 2
@@ -33,6 +39,14 @@ const MAX_COMPANY_NAME_LENGTH := 32
 const DEPARTURE_MARGIN_S := 1.0
 ## A worn-out Mammoth still crawls at this fraction of top speed, so it can always finish a job.
 const MIN_RECOVERY_SPEED_FACTOR := 0.05
+## The finances window: money is tallied in buckets this many seconds long,
+## kept for WINDOW_SECONDS.
+const BUCKET_SECONDS := 10.0
+const WINDOW_SECONDS := 600.0
+## How often lost ships with auto-recovery on look for a free boat.
+const AUTO_RECOVERY_INTERVAL := 0.5
+## Kinds of money tallied in the finances.
+const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "recovery", "bought", "sold"]
 
 var money: int = 0:
 	set(value):
@@ -50,8 +64,17 @@ var home_port := ""
 var ships: Array[Ship] = []
 var in_session := false
 
+## Seconds the company has been playing (only counts while a session is open).
+var play_time := 0.0
+## All-time totals for each of MONEY_KINDS.
+var totals := {}
+## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
+## ships: {ship name: {kind: amount}}}.
+var _window: Array = []
+
 var _autosave_timer := Timer.new()
 var _breakdown_clock := 0.0
+var _auto_recovery_clock := 0.0
 
 
 func _ready() -> void:
@@ -68,9 +91,14 @@ func _notification(what: int) -> void:
 func _process(delta: float) -> void:
 	if not in_session:
 		return
+	play_time += delta
 	for ship in ships:
 		_advance(ship, delta)
 	_roll_breakdowns(delta)
+	_auto_recovery_clock += delta
+	if _auto_recovery_clock >= AUTO_RECOVERY_INTERVAL:
+		_auto_recovery_clock = 0.0
+		_send_queued_recoveries()
 
 
 # --- Ships ---------------------------------------------------------------
@@ -79,7 +107,9 @@ func buy_ship(model_id: String, ship_name: String) -> Ship:
 	ship_name = ship_name.strip_edges()
 	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty():
 		return null
-	money -= int(GameData.get_ship_model(model_id).get("price", 0))
+	var price := int(GameData.get_ship_model(model_id).get("price", 0))
+	money -= price
+	_record(null, "bought", price)
 	var ship := Ship.new(ship_name, model_id, home_port)
 	ships.append(ship)
 	ships_changed.emit()
@@ -193,6 +223,38 @@ func set_auto_repair(ship: Ship, on: bool) -> void:
 	ship_changed.emit(ship)
 
 
+func set_auto_recover(ship: Ship, on: bool) -> void:
+	ship.auto_recover = on
+	ship_changed.emit(ship)
+
+
+## Why a ship can't be sold right now, or "".
+func sell_error(ship: Ship) -> String:
+	if ship.is_lost():
+		return "A lost ship can't be sold."
+	if not ship.can_sell():
+		return "Ships can only be sold while docked."
+	return ""
+
+
+## Sells a docked ship for Ship.sell_price(). Returns why it couldn't, or "".
+func sell_ship(ship: Ship) -> String:
+	var error := sell_error(ship)
+	if not error.is_empty():
+		return error
+	var price := ship.sell_price()
+	for other in ships:
+		if other.billing == ship:
+			other.billing = null
+	ships.erase(ship)
+	money += price
+	_record(null, "sold", price)
+	ship_sold.emit(ship, price)
+	ships_changed.emit()
+	save_game()
+	return ""
+
+
 func _advance(ship: Ship, delta: float) -> void:
 	if ship.is_on_job():
 		_advance_job(ship, delta)
@@ -220,11 +282,27 @@ func _sail(ship: Ship, delta: float) -> bool:
 	if ship.is_recovery():
 		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
 	ship.traveled_nm += speed * delta
+	if not ship.is_recovery():
+		_check_at_risk(ship)
 	return true
+
+
+## Flags a ship that no longer has the fuel (or maintenance) to finish its leg.
+func _check_at_risk(ship: Ship) -> void:
+	var left := ship.leg_length() - ship.traveled_nm
+	var at_risk := ship.fuel < ship.fuel_per_s() * ship.sailing_seconds(left, ship.maintenance)
+	if at_risk == ship.at_risk:
+		return
+	ship.at_risk = at_risk
+	if at_risk:
+		ship_at_risk.emit(ship)
+	ship_changed.emit(ship)
 
 
 func _lose(ship: Ship, reason: String) -> void:
 	ship.lost_reason = reason
+	ship.lost_order = roundi(play_time * 1000.0)
+	ship.at_risk = false
 	ship_lost.emit(ship)
 	ship_changed.emit(ship)
 
@@ -250,6 +328,7 @@ func _roll_breakdowns(delta: float) -> void:
 
 
 func _arrive(ship: Ship, port: String, paid := true) -> void:
+	ship.at_risk = false
 	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.capacity()) if paid else 0
 	ship.unloaded = ship.cargo_payment <= 0
 	ship.docked_at = port
@@ -289,6 +368,8 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		if end < ship.dock_seconds():
 			return
 		ship.dock_time = -1.0
+		if ship.docked_at == home_port:
+			ship.billing = null
 		ship_changed.emit(ship)
 	if ship.is_recovery() and ship.docked_at != home_port:
 		_try_depart(ship, delta, home_port)
@@ -302,6 +383,7 @@ func _unload(ship: Ship) -> void:
 	ship.unloaded = true
 	ship.stop_sale = ship.cargo_payment
 	money += ship.cargo_payment
+	_record(ship, "income", ship.cargo_payment)
 	containers_delivered += ship.capacity()
 	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
 
@@ -381,31 +463,51 @@ func _leave_port(ship: Ship) -> void:
 
 # --- Recovery --------------------------------------------------------------
 
-## How the nearest free Mammoth would recover a lost ship: {mammoth, segments,
-## tow_port, approach_nm, seconds, fuel, cost}, or {error} saying why none can.
+## How the cheapest free recovery boat able to carry a lost ship would recover
+## it: {mammoth, segments, tow_port, approach_nm, seconds, fuel, cost}, or
+## {error} saying why none can.
 func recovery_plan(lost: Ship) -> Dictionary:
 	if not lost.is_lost() or lost.rescuer != null:
 		return {error = "This ship doesn't need recovering."}
-	var mammoths := ships.filter(func(ship: Ship) -> bool: return ship.is_recovery())
-	if mammoths.is_empty():
-		return {error = "Buy a Mammoth in the Shop to recover lost ships."}
+	var capable := ships.filter(func(ship: Ship) -> bool: return ship.can_carry(lost))
+	if capable.is_empty():
+		var model_name: String = lost.model().get("name", lost.model_id)
+		if ships.any(func(ship: Ship) -> bool: return ship.is_recovery()):
+			return {error = "Only a Mammoth can carry a %s. Buy one in the Shop." % model_name}
+		return {error = "Buy a Mammoth or Mini Mammoth in the Shop to recover lost ships."}
 	var best := {}
-	var reason := "Every Mammoth is busy."
-	for mammoth: Ship in mammoths:
-		if mammoth.is_on_job() or not mammoth.is_docked() or mammoth.is_docking():
+	var reason := "Every recovery boat that can carry it is busy."
+	for boat: Ship in capable:
+		if boat.is_on_job() or not boat.is_docked() or boat.is_docking():
 			continue
-		var plan := _plan_for(mammoth, lost)
-		if mammoth.fuel < plan.fuel:
-			reason = "No free Mammoth has the fuel and maintenance to reach it."
+		var plan := _plan_for(boat, lost)
+		if boat.fuel < plan.fuel:
+			reason = "No free recovery boat has the fuel and maintenance to reach it."
 			continue
-		if best.is_empty() or plan.approach_nm < best.approach_nm:
+		if best.is_empty() or plan.cost < best.cost:
 			best = plan
 	return best if not best.is_empty() else {error = reason}
 
 
-## Sends the nearest free Mammoth to recover a lost ship. Returns why it
-## couldn't, or "".
+## Lost ships with auto-recovery on, longest-lost first, each get the cheapest
+## free boat that can carry them, if there is one.
+func _send_queued_recoveries() -> void:
+	var waiting := ships.filter(func(ship: Ship) -> bool:
+		return ship.is_lost() and ship.auto_recover and ship.rescuer == null)
+	waiting.sort_custom(func(a: Ship, b: Ship) -> bool: return a.lost_order < b.lost_order)
+	for ship: Ship in waiting:
+		_send_recovery(ship, true)
+
+
+## Sends the cheapest free recovery boat that can carry a lost ship. Returns
+## why it couldn't, or "".
 func send_recovery(lost: Ship) -> String:
+	return _send_recovery(lost, false)
+
+
+## From sending until it has refilled back at home, the boat's spending is
+## charged to the ship it's recovering.
+func _send_recovery(lost: Ship, auto: bool) -> String:
 	var plan := recovery_plan(lost)
 	if plan.has("error"):
 		return plan.error
@@ -413,7 +515,9 @@ func send_recovery(lost: Ship) -> String:
 	_leave_port(mammoth)
 	mammoth.docked_at = ""
 	mammoth.rescuing = lost
+	mammoth.billing = lost
 	lost.rescuer = mammoth
+	recovery_sent.emit(lost, mammoth, roundi(plan.cost), auto)
 	mammoth.tow_port = plan.tow_port
 	mammoth.job_segments = plan.segments.duplicate(true)
 	mammoth.job_phase = Ship.JOB_APPROACH
@@ -519,7 +623,7 @@ func _repair(ship: Ship, amount: float) -> void:
 	if amount <= 0.0:
 		return
 	var cost := amount * ship.full_repair_cost()
-	var paid := _spend(ship, cost)
+	var paid := _spend(ship, cost, "repair")
 	ship.stop_repair_cost += paid
 	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
 
@@ -530,19 +634,21 @@ func _refuel(ship: Ship, amount: float) -> void:
 	if amount <= 0.0:
 		return
 	var cost := amount * float(GameData.config.get("fuel_price", 0))
-	var paid := _spend(ship, cost)
+	var paid := _spend(ship, cost, "fuel")
 	ship.stop_fuel_cost += paid
 	ship.fuel = minf(ship.fuel + amount * paid / cost, ship.fuel_tank())
 
 
-## Spends up to `cost` dollars without going below $0 and returns what was
-## spent. Money is whole dollars, so fractions build up on the ship's bill.
-func _spend(ship: Ship, cost: float) -> float:
+## Spends up to `cost` dollars of a kind ("fuel" or "repair") without going
+## below $0 and returns what was spent. Money is whole dollars, so fractions
+## build up on the ship's bill.
+func _spend(ship: Ship, cost: float, kind: String) -> float:
 	if cost <= 0.0:
 		return 0.0
 	var paid := minf(cost, float(money) - ship.bill)
 	if paid <= 0.0:
 		return 0.0
+	_record(ship, kind, paid)
 	ship.bill += paid
 	var whole := floori(ship.bill)
 	if whole > 0:
@@ -560,6 +666,50 @@ static func _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
 	return maxf(minf(a1, b1) - maxf(a0, b0), 0.0)
 
 
+# --- Finances ------------------------------------------------------------
+
+## Tallies money of a kind (see MONEY_KINDS) for a ship (null for the company
+## as a whole: buying and selling ships). A recovery boat's spending goes on
+## the books of the ship it's recovering.
+func _record(ship: Ship, kind: String, amount: float) -> void:
+	if ship and ship.billing:
+		ship = ship.billing
+		kind = "recovery"
+	totals[kind] = float(totals.get(kind, 0.0)) + amount
+	var bucket := _current_bucket()
+	bucket.fleet[kind] = float(bucket.fleet.get(kind, 0.0)) + amount
+	if ship:
+		ship.ledger[kind] = float(ship.ledger.get(kind, 0.0)) + amount
+		var tally: Dictionary = bucket.ships.get_or_add(ship.name, {})
+		tally[kind] = float(tally.get(kind, 0.0)) + amount
+
+
+func _current_bucket() -> Dictionary:
+	var start := floorf(play_time / BUCKET_SECONDS) * BUCKET_SECONDS
+	if _window.is_empty() or _window[-1].start < start:
+		_window.append({start = start, fleet = {}, ships = {}})
+	while _window[0].start < play_time - WINDOW_SECONDS:
+		_window.pop_front()
+	return _window[-1]
+
+
+## Money over the last WINDOW_SECONDS: {fleet: {kind: amount}, ships: {ship
+## name: profit}}.
+func recent_finances() -> Dictionary:
+	var fleet := {}
+	var ship_profit := {}
+	for bucket: Dictionary in _window:
+		if bucket.start < play_time - WINDOW_SECONDS:
+			continue
+		for kind: String in bucket.fleet:
+			fleet[kind] = float(fleet.get(kind, 0.0)) + bucket.fleet[kind]
+		for ship_name: String in bucket.ships:
+			var tally: Dictionary = bucket.ships[ship_name]
+			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0)) + float(tally.get("recovery", 0.0))
+			ship_profit[ship_name] = float(ship_profit.get(ship_name, 0.0)) + float(tally.get("income", 0.0)) - costs
+	return {fleet = fleet, ships = ship_profit}
+
+
 # --- Saving --------------------------------------------------------------
 
 func has_save() -> bool:
@@ -572,6 +722,9 @@ func new_game(new_company_name: String, new_home_port: String) -> void:
 	money = int(GameData.config.get("starting_money", 10000))
 	containers_delivered = 0
 	_clear_ships()
+	play_time = 0.0
+	totals = {}
+	_window = []
 	_begin_session()
 	save_game()
 
@@ -589,6 +742,9 @@ func continue_game() -> String:
 	money = int(data.get("money", 0))
 	containers_delivered = int(data.get("containers_delivered", 0))
 	_clear_ships()
+	play_time = float(data.get("play_time", 0.0))
+	totals = data.get("totals", {})
+	_window = data.get("finance_window", [])
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
 	Ship.link_rescues(ships)
@@ -604,6 +760,9 @@ func save_game() -> void:
 		"company_name": company_name,
 		"home_port": home_port,
 		"money": money,
+		"play_time": play_time,
+		"totals": totals,
+		"finance_window": _window,
 		"containers_delivered": containers_delivered,
 		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),
 	}
@@ -620,6 +779,7 @@ func _clear_ships() -> void:
 	for ship in ships:
 		ship.rescuer = null
 		ship.rescuing = null
+		ship.billing = null
 	ships.clear()
 
 

@@ -1,0 +1,76 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/finances_screen.gd" id="1_finances"]
+
+[node name="FinancesScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_finances")
+
+[node name="Scroll" type="ScrollContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+
+[node name="Margin" type="MarginContainer" parent="Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Scroll/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TotalsCard" type="PanelContainer" parent="Scroll/Margin/Content"]
+layout_mode = 2
+size_flags_horizontal = 0
+theme_type_variation = &"CardPanel"
+
+[node name="Totals" type="GridContainer" parent="Scroll/Margin/Content/TotalsCard"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 40
+theme_override_constants/v_separation = 6
+columns = 3
+
+[node name="ShipsCard" type="PanelContainer" parent="Scroll/Margin/Content"]
+layout_mode = 2
+theme_type_variation = &"CardPanel"
+
+[node name="ShipsBox" type="VBoxContainer" parent="Scroll/Margin/Content/ShipsCard"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ShipsTitle" type="Label" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
+layout_mode = 2
+theme_type_variation = &"HeaderLabel"
+text = "Profit by ship"
+
+[node name="ShipsHint" type="Label" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Click a column to sort. A recovery's cost goes on the books of the ship it saved."
+
+[node name="ShipTable" type="GridContainer" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 28
+theme_override_constants/v_separation = 6
+columns = 8
+
+[node name="EmptyLabel" type="Label" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "You don't own any ships yet."
