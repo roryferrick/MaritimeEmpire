@@ -27,12 +27,10 @@ func _ready() -> void:
 	%ModelValue.text = model.get("name", ship.model_id)
 	if ship.is_recovery():
 		%RangeValue.text = "Recovers lost ships"
-		var carries: Array = model.get("carries", [])
-		var biggest: String = GameData.get_ship_model(carries[-1]).get("name", "") if carries else ""
-		%CapacityValue.text = "Carries 1 ship" if carries.is_empty() else "1 ship, up to %s" % biggest
+		%CapacityValue.text = GameData.carries_text(model)
 	else:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
-		%CapacityValue.text = "%s containers" % Fmt.thousands(ship.capacity())
+		%CapacityValue.text = GameData.cargo_text(model)
 	%BarsSlot.add_child(ShipBars.new(ship))
 	for node: Control in [%SkillsButton, %LevelName, %LevelValue]:
 		node.visible = not ship.is_recovery()

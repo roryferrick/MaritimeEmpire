@@ -132,15 +132,15 @@ func owned_count(model_id: String) -> int:
 ## Why the player can't buy another of this model, or "" if they can.
 func buy_error(model_id: String) -> String:
 	var model := GameData.get_ship_model(model_id)
-	if company_level() < Progression.unlock_level(model):
+	var level := company_level()
+	if level < Progression.unlock_level(model):
 		return "Unlocks at company level %d." % Progression.unlock_level(model)
-	if not model.get("recovery", false) and cargo_ship_count() >= Progression.fleet_slots(company_level()):
-		var next := Progression.next_slots(company_level())
-		var more := " Reach level %d for %d." % next if not next.is_empty() else ""
-		return "All %d fleet slots are full.%s" % [Progression.fleet_slots(company_level()), more]
-	var limit := int(model.get("max_owned", 0))
-	if limit > 0 and owned_count(model_id) >= limit:
-		return "You already own the maximum of %d %s ships." % [limit, model.get("name", model_id)]
+	var slots := Progression.model_slots(model, level)
+	if owned_count(model_id) >= slots:
+		var next := Progression.next_slot_level(model, level)
+		if next < 0:
+			return "You already own the maximum of %d %s ships." % [slots, model.get("name", model_id)]
+		return "All %d %s slots are full. Level %d gives another." % [slots, model.get("name", model_id), next]
 	if money < int(model.get("price", 0)):
 		return "You can't afford this ship."
 	return ""
@@ -152,11 +152,6 @@ func company_name_error(new_company_name: String) -> String:
 
 func company_level() -> int:
 	return int(Progression.company_level(company_xp).level)
-
-
-## Cargo ships owned (recovery boats don't use fleet slots).
-func cargo_ship_count() -> int:
-	return ships.filter(func(ship: Ship) -> bool: return not ship.is_recovery()).size()
 
 
 ## Spends one of a ship's skill points on "speed", "durability" or "efficiency".
@@ -362,7 +357,7 @@ func _roll_breakdowns(delta: float) -> void:
 
 func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.at_risk = false
-	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.capacity()) if paid else 0
+	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.model()) if paid else 0
 	ship.unloaded = ship.cargo_payment <= 0
 	ship.docked_at = port
 	ship.from_port = ""
@@ -417,10 +412,10 @@ func _unload(ship: Ship) -> void:
 	ship.stop_sale = ship.cargo_payment
 	money += ship.cargo_payment
 	_record(ship, "income", ship.cargo_payment)
-	containers_delivered += ship.capacity()
+	if ship.model().get("category", "") == "container":
+		containers_delivered += ship.capacity()
 	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
-	var pay_rate := float(GameData.config.get("pay_per_container_nm", 1.0))
-	_gain_xp(ship, Progression.xp_for_delivery(1, ship.cargo_payment / pay_rate))
+	_gain_xp(ship, Progression.xp_for_payment(ship.cargo_payment))
 
 
 ## Adds delivery XP to the company and the ship, announcing any level-ups.
@@ -795,9 +790,7 @@ func continue_game() -> String:
 	play_time = float(data.get("play_time", 0.0))
 	totals = data.get("totals", {})
 	# Saves from before XP: count the XP past deliveries would have earned.
-	var pay_rate := float(GameData.config.get("pay_per_container_nm", 1.0))
-	company_xp = float(data.get("company_xp",
-		Progression.xp_for_delivery(1, float(totals.get("income", 0.0)) / pay_rate)))
+	company_xp = float(data.get("company_xp", Progression.xp_for_payment(float(totals.get("income", 0.0)))))
 	_window = data.get("finance_window", [])
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))

@@ -15,6 +15,12 @@ static func xp_for_delivery(capacity: int, distance_nm: float) -> float:
 	return capacity * distance_nm * float(GameData.config.get("xp_per_container_nm", 0.01))
 
 
+## XP for a delivery that paid this much: the containers x nm that pay would
+## buy at the container rate, x xp_per_container_nm.
+static func xp_for_payment(payment: float) -> float:
+	return xp_for_delivery(1, payment / float(GameData.config.get("pay_per_container_nm", 1.0)))
+
+
 static func max_company_level() -> int:
 	return int(GameData.config.get("max_company_level", 100))
 
@@ -36,35 +42,48 @@ static func company_level(total_xp: float) -> Dictionary:
 	return {level = level, xp = left, cost = company_level_cost(level)}
 
 
-## Cargo ship slots at a company level.
-static func fleet_slots(level: int) -> int:
-	var slots := 0
-	for step: Array in GameData.config.get("fleet_slots", []):
-		if level >= int(step[0]):
-			slots = int(step[1])
-	return slots
+## How many of a model the company can own at a level: none before it
+## unlocks, then ship_slots' start, one more every few levels, up to max_owned.
+static func model_slots(model: Dictionary, level: int) -> int:
+	var unlock := unlock_level(model)
+	if level < unlock:
+		return 0
+	var growth := _slot_growth(model)
+	return mini(int(growth[0]) + floori(float(level - unlock) / int(growth[1])), int(model.get("max_owned", 10)))
 
 
-## The next benchmark after this level that adds slots: [level, slots], or [] if none.
-static func next_slots(level: int) -> Array:
-	for step: Array in GameData.config.get("fleet_slots", []):
-		if int(step[0]) > level:
-			return [int(step[0]), int(step[1])]
-	return []
+## The company level that gives this model its next slot, or -1 if it's at its max.
+static func next_slot_level(model: Dictionary, level: int) -> int:
+	if level < unlock_level(model):
+		return unlock_level(model)
+	if model_slots(model, level) >= int(model.get("max_owned", 10)):
+		return -1
+	var growth := _slot_growth(model)
+	var every := int(growth[1])
+	return level + every - (level - unlock_level(model)) % every
+
+
+## [start, every] from game_config ship_slots, for cargo ships or recovery boats.
+static func _slot_growth(model: Dictionary) -> Array:
+	var slots: Dictionary = GameData.config.get("ship_slots", {})
+	return slots.get("recovery" if model.get("recovery", false) else "cargo", [3, 3])
 
 
 static func unlock_level(model: Dictionary) -> int:
 	return int(model.get("unlock_level", 1))
 
 
-## What reaching this company level unlocks, e.g. ["GE 100", "5 fleet slots"].
+## What reaching this company level unlocks, e.g. ["GE 100", "+1 slot: Scooter 10"].
 static func unlocks_at(level: int) -> Array[String]:
 	var unlocked: Array[String] = []
+	var more_slots := PackedStringArray()
 	for model: Dictionary in GameData.ship_models:
-		if unlock_level(model) == level and level > 1:
+		if level > 1 and unlock_level(model) == level:
 			unlocked.append(String(model.get("name", model.id)))
-	if fleet_slots(level) > fleet_slots(level - 1):
-		unlocked.append("%d fleet slots" % fleet_slots(level))
+		elif model_slots(model, level) > model_slots(model, level - 1):
+			more_slots.append(String(model.get("name", model.id)))
+	if not more_slots.is_empty():
+		unlocked.append("+1 slot: %s" % ", ".join(more_slots))
 	return unlocked
 
 
@@ -110,23 +129,20 @@ static func _build_company_costs() -> void:
 	_company_costs.append(0)
 
 
-## XP per minute from the best unlocked cargo models (max_owned of each)
-## filling this level's slots, at sea at_sea_share of the time.
+## XP per minute from every unlocked cargo model with all its slots filled
+## at this level, at sea at_sea_share of the time.
 static func _full_fleet_xp_per_minute(level: int) -> float:
-	var cargo := GameData.ship_models.filter(func(model: Dictionary) -> bool:
-		return not model.get("recovery", false) and unlock_level(model) <= level)
-	cargo.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return _xp_per_minute(a) > _xp_per_minute(b))
-	var left := fleet_slots(level)
 	var rate := 0.0
-	for model: Dictionary in cargo:
-		var count := mini(int(model.get("max_owned", 10)), left)
-		rate += count * _xp_per_minute(model)
-		left -= count
+	for model: Dictionary in GameData.ship_models:
+		if not model.get("recovery", false):
+			rate += model_slots(model, level) * _xp_per_minute(model)
 	return rate * float(GameData.config.get("at_sea_share", 0.75))
 
 
+## Delivery XP follows pay, so a tanker earns the XP of the containers its pay would buy.
 static func _xp_per_minute(model: Dictionary) -> float:
-	return xp_for_delivery(int(model.get("capacity", 0)), float(model.get("speed_nm_per_s", 0)) * 60.0)
+	var pay_per_minute := int(model.get("capacity", 0)) * float(model.get("speed_nm_per_s", 0)) * 60.0 * GameData.pay_rate(model)
+	return xp_for_payment(pay_per_minute)
 
 
 static func _round_to_2_figures(value: float) -> int:

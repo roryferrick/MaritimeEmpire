@@ -138,10 +138,21 @@ func route_text(route: Array[String]) -> String:
 	return " → ".join(PackedStringArray(route.map(port_name)))
 
 
-## Paid to a ship arriving at the end of a leg.
-func leg_payment(from_port: String, to_port: String, containers: int) -> int:
-	var rate := float(config.get("pay_per_container_nm", 0.0))
-	return roundi(containers * distance_nm(from_port, to_port) * rate)
+## Paid to a ship of this model for carrying a full load between two ports.
+func leg_payment(from_port: String, to_port: String, model: Dictionary) -> int:
+	return roundi(int(model.get("capacity", 0)) * distance_nm(from_port, to_port) * pay_rate(model))
+
+
+## Dollars per unit of cargo per nm: the model's own pay_per_unit_nm (gas
+## tankers), or game_config pay_per_container_nm.
+func pay_rate(model: Dictionary) -> float:
+	return float(model.get("pay_per_unit_nm", config.get("pay_per_container_nm", 0.0)))
+
+
+## "10,000 containers" or "5,000 tons of fuel".
+func cargo_text(model: Dictionary) -> String:
+	var unit := "tons of fuel" if model.get("category", "") == "tanker" else "containers"
+	return "%s %s" % [Fmt.thousands(int(model.get("capacity", 0))), unit]
 
 
 func get_ship_model(id: String) -> Dictionary:
@@ -170,3 +181,19 @@ func _load_json(path: String) -> Dictionary:
 		push_error("GameData: %s is not a JSON object" % path)
 		return {}
 	return data
+
+
+## What a recovery boat can carry: "Any 1 lost ship", or the biggest models it
+## can carry, e.g. "Up to Greenline 200 / Coastal size".
+func carries_text(model: Dictionary) -> String:
+	var carries: Array = model.get("carries", [])
+	if carries.is_empty():
+		return "Any 1 lost ship"
+	var longest := 0.0
+	for id: String in carries:
+		longest = maxf(longest, float(get_ship_model(id).get("map_size", [0])[0]))
+	var names := PackedStringArray()
+	for id: String in carries:
+		if float(get_ship_model(id).get("map_size", [0])[0]) == longest:
+			names.append(get_ship_model(id).get("name", id))
+	return "Up to %s size" % " / ".join(names)

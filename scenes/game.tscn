@@ -99,6 +99,13 @@ layout_mode = 2
 theme_type_variation = &"DimLabel"
 text = "Activity"
 
+[node name="EmptyLabel" type="Label" parent="Layout/Main/ActivityLogPanel/LogBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ActivityLog"
+text = "Deliveries, breakdowns and level-ups will show up here."
+autowrap_mode = 3
+
 [node name="LogScroll" type="ScrollContainer" parent="Layout/Main/ActivityLogPanel/LogBox"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -109,13 +116,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 3
-
-[node name="EmptyLabel" type="Label" parent="Layout/Main/ActivityLogPanel/LogBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ActivityLog"
-text = "Deliveries, breakdowns and level-ups will show up here."
-autowrap_mode = 3
 
 [node name="Screens" type="Control" parent="Layout/Main"]
 clip_contents = true

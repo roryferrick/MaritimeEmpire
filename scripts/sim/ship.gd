@@ -509,8 +509,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	for key: String in ship.ledger:
 		ship.ledger[key] = float(saved_ledger.get(key, 0.0))
 	# Saves from before XP: count the XP its past deliveries would have earned.
-	var pay_rate := float(GameData.config.get("pay_per_container_nm", 1.0))
-	ship.xp = float(data.get("xp", Progression.xp_for_delivery(1, ship.ledger.income / pay_rate)))
+	ship.xp = float(data.get("xp", Progression.xp_for_payment(ship.ledger.income)))
 	var saved_skills: Dictionary = data.get("skills", {})
 	for key: String in ship.skills:
 		ship.skills[key] = int(saved_skills.get(key, 0))
