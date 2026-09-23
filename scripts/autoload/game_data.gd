@@ -7,10 +7,11 @@ extends Node
 
 const CONFIG_PATH := "res://data/game_config.json"
 const PORTS_PATH := "res://data/ports.json"
-const LANES_PATH := "res://data/sea_lanes.json"
+const LANES_PATH := "res://data/sea_lanes.res"
 const SHIP_MODELS_PATH := "res://data/ship_models.json"
 const SHIP_NAMES_PATH := "res://data/ship_names.json"
 const WORLD_MAP_PATH := "res://data/world_map.res"
+const _NO_LANE := 1 << 30
 
 var config: Dictionary = {}
 var ports: Array[Dictionary] = []
@@ -22,7 +23,11 @@ var world_map: WorldMapData
 var _ports_by_id: Dictionary = {}
 var _port_positions: Dictionary = {}  # id -> projected Vector2
 var _models_by_id: Dictionary = {}
-var _lanes: Dictionary = {}  # "FROM-TO" (both directions) -> SeaLane
+var _lane_data: SeaLaneData
+## "FROM-TO" (both directions) -> index into _lane_data; negative (-index - 1)
+## when the stored lane runs the other way.
+var _lane_index: Dictionary = {}
+var _lane_cache: Dictionary = {}  # "FROM-TO" -> SeaLane, built on first use
 
 
 ## A sailing path between two ports.
@@ -89,13 +94,43 @@ func port_position(id: String) -> Vector2:
 
 ## The sea lane from one port to another, or null if there isn't one.
 func lane(from_port: String, to_port: String) -> SeaLane:
-	return _lanes.get("%s-%s" % [from_port, to_port])
+	var key := "%s-%s" % [from_port, to_port]
+	if _lane_cache.has(key):
+		return _lane_cache[key]
+	if not _lane_index.has(key):
+		return null
+	var index: int = _lane_index[key]
+	var stored := index if index >= 0 else -index - 1
+	var sea_lane := SeaLane.new()
+	var previous := Vector2.ZERO
+	var miles := 0.0
+	for i in range(_lane_data.starts[stored], _lane_data.starts[stored + 1]):
+		var lon_lat := _lane_data.points[i]
+		if not sea_lane.points.is_empty():
+			miles += Geo.distance_nm(previous, lon_lat)
+		sea_lane.points.append(Geo.project(lon_lat))
+		sea_lane.miles.append(miles)
+		previous = lon_lat
+	if index < 0:
+		sea_lane = sea_lane.reversed()
+	_lane_cache[key] = sea_lane
+	return sea_lane
 
 
 ## Sailing distance in nautical miles; INF if there's no sea route.
 func distance_nm(from_port: String, to_port: String) -> float:
-	var sea_lane := lane(from_port, to_port)
-	return sea_lane.length() if sea_lane else INF
+	var index: int = _lane_index.get("%s-%s" % [from_port, to_port], _NO_LANE)
+	if index == _NO_LANE:
+		return INF
+	return _lane_data.distances[index if index >= 0 else -index - 1]
+
+
+## The longest sailing distance between any two ports.
+func longest_lane_nm() -> float:
+	var longest := 0.0
+	for distance in _lane_data.distances:
+		longest = maxf(longest, distance)
+	return longest
 
 
 ## "Port A → Port B → Port C"
@@ -114,23 +149,15 @@ func get_ship_model(id: String) -> Dictionary:
 
 
 func _load_lanes() -> void:
-	var lanes: Dictionary = _load_json(LANES_PATH).get("lanes", {})
-	for key: String in lanes:
-		var ids := key.split("-")
-		var sea_lane := SeaLane.new()
-		var previous := Vector2.ZERO
-		var miles := 0.0
-		for coord: Array in lanes[key].points:
-			var lon_lat := Vector2(coord[0], coord[1])
-			if not sea_lane.points.is_empty():
-				miles += Geo.distance_nm(previous, lon_lat)
-			sea_lane.points.append(Geo.project(lon_lat))
-			sea_lane.miles.append(miles)
-			previous = lon_lat
-		if sea_lane.points.size() < 2:
-			continue
-		_lanes["%s-%s" % [ids[0], ids[1]]] = sea_lane
-		_lanes["%s-%s" % [ids[1], ids[0]]] = sea_lane.reversed()
+	_lane_data = load(LANES_PATH)
+	if _lane_data == null:
+		push_error("GameData: could not read %s" % LANES_PATH)
+		_lane_data = SeaLaneData.new()
+		return
+	for i in _lane_data.keys.size():
+		var ids := _lane_data.keys[i].split("-")
+		_lane_index["%s-%s" % [ids[0], ids[1]]] = i
+		_lane_index["%s-%s" % [ids[1], ids[0]]] = -i - 1
 
 
 func _load_json(path: String) -> Dictionary:

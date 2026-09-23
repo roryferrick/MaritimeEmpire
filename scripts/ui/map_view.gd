@@ -86,6 +86,7 @@ var _art_root := Node2D.new()
 var _art_copies: Array[WorldArt] = []
 ## Ports, ships, routes and labels, drawn in screen space every frame.
 var _overlay := Control.new()
+var _ports_by_rank: Array = []  # Label priority order, sorted on first draw.
 
 
 ## Land, coastline and borders for one copy of the world. Drawn once and cached;
@@ -185,14 +186,14 @@ func ship_screen_position(ship: Ship) -> Vector2:
 	return port_screen_position(ship.docked_at) + Vector2.from_angle(angle) * radius
 
 
-## Shows the lon/lat box from game_config.json's initial_view.
-func reset_view() -> void:
-	var box: Dictionary = GameData.config.get("initial_view", {})
-	var south_west := Geo.project(Vector2(box.get("west", -10.0), box.get("south", 28.0)))
-	var north_east := Geo.project(Vector2(box.get("east", 40.0), box.get("north", 48.0)))
-	var extent := north_east - south_west
-	_center = (south_west + north_east) / 2.0
-	_zoom = clampf(minf(size.x / extent.x, size.y / extent.y), _min_zoom(), MAX_ZOOM)
+## Centers on a port (by default the company's home port), showing
+## game_config.json's initial_view_width_deg degrees of longitude across.
+func reset_view(center_port := "") -> void:
+	if center_port.is_empty():
+		center_port = GameState.home_port
+	var width := float(GameData.config.get("initial_view_width_deg", 45.0))
+	_center = GameData.port_position(center_port) if not center_port.is_empty() else Vector2.ZERO
+	_zoom = clampf(size.x / width, _min_zoom(), MAX_ZOOM)
 	_changed()
 
 
@@ -318,8 +319,11 @@ func _draw_overlay() -> void:
 ## Returns [port id, label rect] pairs.
 func _place_port_labels(placed: Array[Rect2]) -> Array:
 	var font := get_theme_default_font()
-	var ranked := GameData.ports.duplicate()
-	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.get("rank", 99) < b.get("rank", 99))
+	if _ports_by_rank.is_empty():
+		_ports_by_rank = GameData.ports.duplicate()
+		_ports_by_rank.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return a.get("rank", 999) < b.get("rank", 999))
+	var ranked := _ports_by_rank
 	var labels := []
 	var bounds := Rect2(Vector2.ZERO, size)
 	for port: Dictionary in ranked:

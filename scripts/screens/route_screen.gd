@@ -30,7 +30,7 @@ func open(ship: Ship) -> void:
 	_refresh()
 	# Refit once the top and bottom bars have gone and the map has its full size.
 	await get_tree().process_frame
-	_map.reset_view()
+	_map.reset_view(ship.reference_port())
 
 
 func _unhandled_input(event: InputEvent) -> void:

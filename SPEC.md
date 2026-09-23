@@ -6,35 +6,46 @@
 - Placeholder visuals only (rectangles, circles, default Godot buttons). Structure UI so custom art can be swapped in later via a single Theme resource.
 - Silent (no audio) for beta.
 
+## Data & tools
+- Game data lives in data/: ports.json (ports), ship_models.json (models, prices, speeds, ranges, limits, map look), ship_names.json (suggested ship names), game_config.json (starting money, pay rate, autosave interval, initial map zoom).
+- Generated data: data/world_map.res (land, coastline, borders, country names) and data/sea_lanes.res (a lane and distance for every pair of ports). Both are built by tools/build_map_data.gd from Natural Earth public-domain downloads kept in tools/source_data/ (not in git).
+- After changing ports.json, rerun the tool (about 17 minutes; add `-- --lanes-only` to skip rebuilding the map art):
+  `Godot --headless --path . -s tools/build_map_data.gd`
+- Narrow canals, straits and river approaches the pathfinding grid is too coarse to see are listed in the tool (CHANNELS) and carved as water; add to that list if a new port ends up with odd routes.
+- Saves record port and model ids, so renaming models or adding ports keeps existing saves working; removing or renaming a port id does not.
+
 ## Economy & time
 - Starting money: $10,000.
 - NOT an idle game (for beta): time only passes while the game is open, at a constant speed. No speed controls.
 - On quit, the game saves and the world freezes. On Continue, everything resumes exactly where it left off. Ships do not move and no money is earned while the game is closed.
-- Payment on every port arrival: containers (the ship's capacity) × leg distance in nm × $0.6125. The rate is tuned so a Model 1 earns about $2,000 per minute of sailing; Rome→Tunis pays a Model 1 $2,000.
+- Payment on every port arrival: containers (the ship's capacity) × leg distance in nm × $0.6125. The rate is tuned so a Scooter 10 earns about $2,000 per minute of sailing; Rome→Tunis pays a Scooter 10 about $2,000.
 - Every arrival adds the ship's capacity to the "Containers delivered" total.
 - Endless sandbox — no win condition.
 
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
 - Map art: blue sea, sandy land with a darker coastline, thin country borders, and country names that appear as you zoom in (placeholder colors, all in the theme). Built from Natural Earth public-domain data by tools/build_map_data.gd.
-- 23 real ports, in data/ports.json with real latitude/longitude:
-  - Mediterranean (the 18 biggest container ports): Tanger Med, Valencia, Piraeus, Algeciras, Port Said, Gioia Tauro, Barcelona, Istanbul (Ambarlı), Marsaxlokk (Malta), Genoa, Mersin, Alexandria, Marseille-Fos, Haifa, Izmir (Aliağa), Ashdod, La Spezia, Koper.
-  - Also Rome (Civitavecchia) and Tunis (Radès).
-  - US East Coast: Boston, New York, Miami.
+- 131 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
+  - The world's biggest container ports (the top 100, plus the next several so that 100 are new beyond the original Mediterranean set). Ranks 1–25 follow the published 2023 figures; the rest follow recent Lloyd's List rankings as best known (the full list is paywalled), so a few borderline ports may differ from the official list.
+  - The 18 biggest Mediterranean container ports, plus Rome (Civitavecchia) and Tunis (Radès).
+  - Mediterranean islands: Limassol (Cyprus), Palermo (Sicily), Cagliari (Sardinia), Bastia (Corsica), Palma (Mallorca).
+  - Also: Boston, Miami, Monterey, Anchorage, Seattle-Tacoma, Cabo San Lucas.
+- The map opens centered on the company's home port (45 degrees of longitude across); the route screen opens centered on the ship.
 - Ports are white circles with names; when names would overlap, the bigger port's name wins and the other shows on zoom.
-- Ships follow real sea lanes around land (through Gibraltar, the Strait of Messina, the Dardanelles, etc.), pre-computed for every pair of ports into data/sea_lanes.json. All distances are real nautical miles along those lanes. Pacific ports come later (with Models 5 and 6).
+- Ships follow real sea lanes around land, pre-computed for every pair of ports (8,515 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
 
 ## Ship models (data file)
 | Model | Price | Speed (nm/s) | Capacity | Range per leg | Max owned |
 |---|---|---|---|---|---|
-| Model 1 | $2,500 | 5.44 | 10 | 490 nm (≈1 min 30 s) | 10 |
-| Model 2 | $25,000 | 3.63 | 100 | 760 nm (≈3 min 30 s) | 10 |
-| Model 3 | $100,000 | 3.27 | 200 | 1,175 nm (≈6 min) | 10 |
-| Model 4 | $1,000,000 | 6.35 | 1,250 | 6,000 nm (any Med port to the US East Coast) | 10 |
-- Speeds keep a 30 : 20 : 18 : 35 ratio, scaled so a Model 1 sails Rome→Tunis (326.6 nm) in 60 s.
+| Scooter 10 | $2,500 | 5.44 | 10 | 490 nm (≈1 min 30 s) | 10 |
+| GE 100 | $25,000 | 3.63 | 100 | 760 nm (≈3 min 30 s) | 10 |
+| Greenline 200 | $100,000 | 3.27 | 200 | 1,175 nm (≈6 min) | 10 |
+| Trans Atlantic | $1,000,000 | 6.35 | 1,250 | 6,000 nm (any Med port to the US East Coast) | 10 |
+| Dominator | $10,000,000 | 3.99 | 10,000 | 13,500 nm (every route in the game; the longest, Brisbane→St Petersburg, is 13,394 nm) | 10 |
+- Speeds keep a 30 : 20 : 18 : 35 : 22 ratio, scaled so a Scooter 10 sails Rome→Tunis (324.9 nm) in about 60 s. A Dominator takes about 56 minutes for Brisbane→St Petersburg.
 - Range is the longest single leg a ship can sail. It's enforced when assigning routes (future: fuel tanks).
-- On the map each model is a differently sized and colored rectangle: Model 1 smallest (pale yellow), Model 2 (light blue), Model 3 (orange), Model 4 biggest (magenta).
-- The player can own at most 10 of each model (40 ships in total).
+- On the map each model is a differently sized and colored rectangle, smallest to biggest: Scooter 10 (pale yellow), GE 100 (light blue), Greenline 200 (orange), Trans Atlantic (magenta), Dominator (red).
+- The player can own at most 10 of each model (50 ships in total).
 - Ship names must be unique (case-insensitive). No renaming or selling in beta.
 - Newly bought ships spawn docked at the company's home port with no route.
 
@@ -63,7 +74,7 @@
 - (Later: sorting/filtering.)
 
 ### 3. Shop screen
-- One card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10").
+- One card per ship model (a scrolling grid, 3 across), showing its stats, price, and how many are owned ("Owned 2 / 10").
 - Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it; shows "Limit reached" at the ownership limit.
 
 ### 4. Route Assignment screen

@@ -1,9 +1,10 @@
 extends SceneTree
 ## Builds the game's map data from Natural Earth downloads:
-##   data/world_map.res   land, coastline, borders and country labels, for drawing
-##   data/sea_lanes.json  a sea route and its distance between every pair of ports
+##   data/world_map.res  land, coastline, borders and country labels, for drawing
+##   data/sea_lanes.res  a sea route and its distance between every pair of ports
 ##
-## Rerun after changing data/ports.json:
+## Rerun after changing data/ports.json (takes several minutes; add
+## "-- --lanes-only" to skip rebuilding the map art):
 ##   Godot --headless --path . -s tools/build_map_data.gd
 ##
 ## Source files (public domain, https://www.naturalearthdata.com), in tools/source_data/:
@@ -14,53 +15,90 @@ const LAND_PATH := "res://tools/source_data/ne_10m_land.geojson"
 const COUNTRIES_PATH := "res://tools/source_data/ne_50m_admin_0_countries.geojson"
 const PORTS_PATH := "res://data/ports.json"
 const MAP_OUT := "res://data/world_map.res"
-const LANES_OUT := "res://data/sea_lanes.json"
+const LANES_OUT := "res://data/sea_lanes.res"
 
 ## Coastline simplification, in projected degrees (~0.7 nm at the equator).
 const SIMPLIFY_TOLERANCE := 0.012
 ## Land is cut into tiles this size before triangulating, to keep polygons small.
 const TILE_SIZE := 5.0
 
-## Pathfinding grid in projected coordinates. Covers the Mediterranean and the
-## North Atlantic out to the US East Coast.
-const GRID_WEST := -84.0
-const GRID_EAST := 40.0
-const GRID_SOUTH_LAT := 15.0
-const GRID_NORTH_LAT := 50.0
-const GRID_CELL := 0.05
-## Extra cost for sailing right next to the coast, so lanes keep off the beach.
-const COAST_PENALTY := 1.5
+## Pathfinding grid in projected coordinates. It runs past 180 degrees east so
+## routes across the Pacific have no seam: the Americas appear twice, once at
+## their real longitude and once 360 degrees further east.
+const GRID_WEST := -180.0
+const GRID_EAST := 320.0
+const GRID_SOUTH_LAT := -58.0
+const GRID_NORTH_LAT := 66.0
+const GRID_CELL := 0.1
+## Routes whose ends are further apart than this (in longitude) are not tried
+## with that pairing of the two copies of the Americas.
+const MAX_ROUTE_SPAN := 270.0
+## Ports closer than this in longitude are only routed at their real
+## longitudes; further apart, the way across the Pacific is tried too.
+const MIN_WRAP_SPAN := 150.0
+## Coarse search grid: this many fine cells per side.
+const COARSE := 5
+## Extra cost for coarse cells that touch land, so lanes keep off the coast.
+const COAST_PENALTY := 1.3
+## How far (in cells) a port may be from the water cell its lanes start from.
+const SNAP_RADIUS := 30
 ## Great-circle legs are split into pieces about this long (nm) where open water allows.
-const GREAT_CIRCLE_STEP_NM := 60.0
-## Straits too narrow for the grid to see. Carved as water.
-const CHANNELS := [
-	# Dardanelles (Aegean to the Sea of Marmara, for Istanbul).
-	[[26.15, 40.00], [26.27, 40.07], [26.40, 40.15], [26.45, 40.22], [26.55, 40.30], [26.68, 40.41], [26.80, 40.48]],
-	# Strait of Messina.
-	[[15.68, 38.31], [15.66, 38.25], [15.62, 38.18], [15.60, 38.10], [15.57, 38.00]],
-	# The Narrows, New York (Upper Bay to Lower Bay).
-	[[-74.05, 40.66], [-74.045, 40.63], [-74.04, 40.605], [-74.03, 40.58], [-74.00, 40.53]],
-]
+const GREAT_CIRCLE_STEP_NM := 100.0
+## Canals, rivers and straits too narrow for the grid to see. Carved as water.
+## Each is a list of [lon, lat] points.
+const CHANNELS := {
+	"Strait of Gibraltar": [[-6.2, 35.95], [-5.6, 35.97], [-5.2, 36.0]],
+	"Dardanelles": [[26.15, 40.00], [26.27, 40.07], [26.40, 40.15], [26.45, 40.22], [26.55, 40.30], [26.68, 40.41], [26.80, 40.48]],
+	"Strait of Messina": [[15.68, 38.31], [15.66, 38.25], [15.62, 38.18], [15.60, 38.10], [15.57, 38.00]],
+	"Strait of Bonifacio": [[9.0, 41.33], [9.25, 41.32], [9.5, 41.30]],
+	"Suez Canal": [[32.31, 31.30], [32.32, 31.00], [32.33, 30.70], [32.35, 30.45], [32.42, 30.20], [32.57, 29.95], [32.57, 29.80]],
+	"Panama Canal": [[-79.92, 9.40], [-79.90, 9.30], [-79.85, 9.20], [-79.75, 9.12], [-79.68, 9.05], [-79.62, 9.00], [-79.55, 8.90], [-79.52, 8.80]],
+	"Singapore Strait": [[103.5, 1.20], [103.8, 1.20], [104.1, 1.25], [104.4, 1.30]],
+	"Great Belt": [[11.0, 56.10], [10.95, 55.70], [11.0, 55.35], [11.05, 55.05], [11.2, 54.70], [11.5, 54.55]],
+	"Elbe (Hamburg)": [[8.3, 53.95], [8.7, 53.88], [9.0, 53.85], [9.35, 53.72], [9.55, 53.60], [9.8, 53.54], [9.95, 53.54]],
+	"Western Scheldt (Antwerp)": [[3.3, 51.45], [3.6, 51.42], [3.9, 51.40], [4.1, 51.38], [4.25, 51.33], [4.33, 51.28]],
+	"The Narrows (New York)": [[-74.05, 40.66], [-74.045, 40.63], [-74.04, 40.605], [-74.03, 40.58], [-74.00, 40.53]],
+	"Savannah River": [[-80.80, 32.02], [-80.95, 32.05], [-81.10, 32.08]],
+	"Galveston Bay (Houston)": [[-94.65, 29.30], [-94.75, 29.36], [-94.85, 29.45], [-94.95, 29.55], [-94.98, 29.60]],
+	"Golden Gate (Oakland)": [[-122.65, 37.78], [-122.50, 37.81], [-122.40, 37.81], [-122.32, 37.80]],
+	"Admiralty Inlet (Seattle)": [[-122.75, 48.20], [-122.65, 48.05], [-122.50, 47.85], [-122.40, 47.65], [-122.35, 47.60]],
+	"Port Phillip Heads (Melbourne)": [[144.60, -38.32], [144.64, -38.28], [144.75, -38.15], [144.90, -37.90]],
+	"Santos channel": [[-46.30, -24.05], [-46.30, -23.98]],
+	"Paranagua Bay": [[-48.30, -25.57], [-48.40, -25.52], [-48.52, -25.50]],
+	"Lagos harbor": [[3.40, 6.35], [3.39, 6.44]],
+	"Vridi Canal (Abidjan)": [[-4.02, 5.20], [-4.00, 5.25]],
+	"Kilindini (Mombasa)": [[39.70, -4.10], [39.67, -4.05]],
+	"Durban harbor": [[31.10, -29.88], [31.03, -29.87]],
+}
 
 var _cols := 0
 var _rows := 0
 var _grid_origin := Vector2.ZERO  # Projected coords of cell (0, 0)'s corner.
 var _land := PackedByteArray()  # 1 = land
 var _near_land := PackedByteArray()  # 1 = land or next to land
+## 1 = water connected to the open ocean. Ports snap to these cells, so every
+## pair of ports has a route (and no search is wasted on an enclosed pocket).
+var _ocean := PackedByteArray()
+var _coarse_cols := 0
+## For each coarse cell, the index of the fine ocean cell a route passes through (-1 if none).
+var _coarse_rep := PackedInt32Array()
 
 
 func _init() -> void:
 	var started := Time.get_ticks_msec()
 	var land_rings := _read_land_rings()
 	print("Land: %d rings" % land_rings.size())
-	_build_map(land_rings)
+	if not "--lanes-only" in OS.get_cmdline_user_args():
+		_build_map(land_rings)
 	_build_grid(land_rings)
+	land_rings.clear()
 	_build_lanes()
-	print("Done in %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0))
+	print("Done in %.1f min" % ((Time.get_ticks_msec() - started) / 60000.0))
 	quit()
 
 
 # --- Source data ---------------------------------------------------------
+
 
 func _read_geojson(path: String) -> Array:
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -259,6 +297,8 @@ func _edge_key(a: Vector2, b: Vector2) -> Array:
 	return [a, b] if (a.x < b.x or (a.x == b.x and a.y < b.y)) else [b, a]
 
 
+
+
 # --- Pathfinding grid ----------------------------------------------------
 
 func _build_grid(land_polygons: Array) -> void:
@@ -269,37 +309,77 @@ func _build_grid(land_polygons: Array) -> void:
 	_rows = ceili((north - south) / GRID_CELL)
 	_land.resize(_cols * _rows)
 
-	# Scanline-fill every land polygon (outline and holes, even-odd) into the grid.
+	# Scanline-fill every land polygon (outline and holes, even-odd) into the
+	# grid, plus a second copy 360 degrees east for the part past 180.
 	for polygon: Dictionary in land_polygons:
 		var rings := [_project_all(polygon.outline)]
 		for hole: PackedVector2Array in polygon.holes:
 			rings.append(_project_all(hole))
-		_fill_rings(rings)
+		_fill_rings(rings, 0.0)
+		_fill_rings(rings, Geo.WORLD_WIDTH)
 
-	for channel: Array in CHANNELS:
+	for channel_name: String in CHANNELS:
+		var channel: Array = CHANNELS[channel_name]
 		for i in range(1, channel.size()):
-			_carve(Geo.project(Vector2(channel[i - 1][0], channel[i - 1][1])),
-					Geo.project(Vector2(channel[i][0], channel[i][1])))
+			var a := Geo.project(Vector2(channel[i - 1][0], channel[i - 1][1]))
+			var b := Geo.project(Vector2(channel[i][0], channel[i][1]))
+			_carve(a, b)
+			_carve(a + Vector2(Geo.WORLD_WIDTH, 0), b + Vector2(Geo.WORLD_WIDTH, 0))
 
-	_near_land.resize(_land.size())
+	_near_land = _land.duplicate()
 	for row in _rows:
+		var base := row * _cols
 		for col in _cols:
-			if _land[row * _cols + col]:
-				for dy in range(-1, 2):
-					for dx in range(-1, 2):
-						var c := col + dx
-						var r := row + dy
-						if c >= 0 and c < _cols and r >= 0 and r < _rows:
-							_near_land[r * _cols + c] = 1
+			if not _land[base + col]:
+				continue
+			for dy in range(-1, 2):
+				var r := row + dy
+				if r < 0 or r >= _rows:
+					continue
+				var rbase := r * _cols
+				for dx in range(-1, 2):
+					var c := col + dx
+					if c >= 0 and c < _cols:
+						_near_land[rbase + c] = 1
+	_mark_ocean()
 	print("Grid: %d x %d cells" % [_cols, _rows])
 
 
-func _fill_rings(rings: Array) -> void:
+## Flood-fills the water reachable from the middle of the Pacific. Moves are
+## 4-way, matching the pathfinder (it only cuts corners when both sides are water).
+func _mark_ocean() -> void:
+	_ocean.resize(_land.size())
+	var start := _cell_of(Geo.project(Vector2(-150.0, 0.0)))
+	var queue := PackedInt32Array([start.y * _cols + start.x])
+	_ocean[queue[0]] = 1
+	var total := _land.size()
+	var head := 0
+	while head < queue.size():
+		var index := queue[head]
+		head += 1
+		var col := index % _cols
+		if col > 0 and not _land[index - 1] and not _ocean[index - 1]:
+			_ocean[index - 1] = 1
+			queue.append(index - 1)
+		if col < _cols - 1 and not _land[index + 1] and not _ocean[index + 1]:
+			_ocean[index + 1] = 1
+			queue.append(index + 1)
+		if index >= _cols and not _land[index - _cols] and not _ocean[index - _cols]:
+			_ocean[index - _cols] = 1
+			queue.append(index - _cols)
+		if index + _cols < total and not _land[index + _cols] and not _ocean[index + _cols]:
+			_ocean[index + _cols] = 1
+			queue.append(index + _cols)
+	print("Ocean: %d connected water cells" % queue.size())
+
+
+func _fill_rings(rings: Array, x_offset: float) -> void:
 	var crossings := {}  # row -> x positions where an edge crosses the row's center line
+	var origin := _grid_origin - Vector2(x_offset, 0)
 	for ring: PackedVector2Array in rings:
 		for i in ring.size():
-			var a := (ring[i] - _grid_origin) / GRID_CELL
-			var b := (ring[(i + 1) % ring.size()] - _grid_origin) / GRID_CELL
+			var a := (ring[i] - origin) / GRID_CELL
+			var b := (ring[(i + 1) % ring.size()] - origin) / GRID_CELL
 			if a.y == b.y:
 				continue
 			var lo := minf(a.y, b.y)
@@ -307,8 +387,7 @@ func _fill_rings(rings: Array) -> void:
 			var first_row := maxi(0, ceili(lo - 0.5))
 			var last_row := mini(_rows - 1, ceili(hi - 0.5) - 1)
 			for row in range(first_row, last_row + 1):
-				var cy := row + 0.5
-				var t := (cy - a.y) / (b.y - a.y)
+				var t := (row + 0.5 - a.y) / (b.y - a.y)
 				if not crossings.has(row):
 					crossings[row] = PackedFloat32Array()
 				crossings[row].append(a.x + t * (b.x - a.x))
@@ -323,7 +402,7 @@ func _fill_rings(rings: Array) -> void:
 
 
 func _carve(a: Vector2, b: Vector2) -> void:
-	var steps := ceili(a.distance_to(b) / (GRID_CELL * 0.25))
+	var steps := maxi(1, ceili(a.distance_to(b) / (GRID_CELL * 0.25)))
 	for s in steps + 1:
 		var cell := _cell_of(a.lerp(b, float(s) / steps))
 		for dy in range(-1, 2):
@@ -354,67 +433,213 @@ func _is_near_land(cell: Vector2i) -> bool:
 	return not _in_grid(cell) or _near_land[cell.y * _cols + cell.x] == 1
 
 
+## Like _is_near_land for a (lon, lat) point, trying both copies of the Americas.
+func _lon_lat_near_land(lon_lat: Vector2) -> bool:
+	var p := Geo.project(Vector2(wrapf(lon_lat.x, -180.0, 180.0), lon_lat.y))
+	if not _is_near_land(_cell_of(p)):
+		return false
+	var east := _cell_of(p + Vector2(Geo.WORLD_WIDTH, 0))
+	return not _in_grid(east) or _is_near_land(east)
+
+
 # --- Sea lanes -----------------------------------------------------------
 
 func _build_lanes() -> void:
+	# Routes are found on a coarse grid (fast, and weighted so they follow real
+	# distances and keep off the coast), then fitted to the fine grid; the fine
+	# grid is only searched for short hops the coarse route can't see across.
+	var coarse := _build_coarse_grid()
 	var astar := AStarGrid2D.new()
 	astar.region = Rect2i(0, 0, _cols, _rows)
 	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
-	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_EUCLIDEAN
-	astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_EUCLIDEAN
+	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	astar.jumping_enabled = true
 	astar.update()
-	# On a Mercator grid, one cell spans cos(latitude) as much real distance at
-	# every latitude. Weights are normalized to >= 1 so the heuristic stays admissible.
-	var min_scale := cos(deg_to_rad(GRID_NORTH_LAT))
 	for row in _rows:
-		var lat := Geo.unproject(_cell_center(Vector2i(0, row))).y
-		var weight := cos(deg_to_rad(lat)) / min_scale
-		for col in _cols:
-			var cell := Vector2i(col, row)
-			if _land[row * _cols + col]:
-				astar.set_point_solid(cell)
-			else:
-				astar.set_point_weight_scale(cell, weight * (COAST_PENALTY if _near_land[row * _cols + col] else 1.0))
+		var col := 0
+		while col < _cols:
+			if not _land[row * _cols + col]:
+				col += 1
+				continue
+			var run_start := col
+			while col < _cols and _land[row * _cols + col]:
+				col += 1
+			astar.fill_solid_region(Rect2i(run_start, row, col - run_start, 1))
+	print("Pathfinding grid ready")
 
 	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
-	var water_cells := {}
+	ports.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.id < b.id)
+	# Each port's starting water cell, at its real longitude and (if it fits in
+	# the grid) 360 degrees east: [[lon offset, cell], ...]
+	var starts := {}
 	for port: Dictionary in ports:
-		water_cells[port.id] = _nearest_water(_cell_of(Geo.project(Vector2(port.lon, port.lat))))
+		var options := []
+		for offset in [0.0, Geo.WORLD_WIDTH]:
+			var p := Geo.project(Vector2(port.lon + offset, port.lat))
+			if p.x < GRID_EAST - 1.0:
+				var cell := _nearest_water(_cell_of(p))
+				if cell.x >= 0:
+					options.append([offset, cell])
+					var snap := Vector2(cell - _cell_of(p)).length()
+					if snap > 12 and offset == 0.0:
+						print("  note: %s is %.0f cells from open water" % [port.id, snap])
+		if options.is_empty():
+			push_error("%s is not near any water" % port.id)
+		starts[port.id] = options
 
-	var lanes := {}
-	var stats := {}
+	var data := SeaLaneData.new()
+	var started := Time.get_ticks_msec()
+	@warning_ignore("integer_division")
+	var pairs := ports.size() * (ports.size() - 1) / 2
+	var done := 0
+	var search_usec := 0
+	var shape_usec := 0
+	var args := OS.get_cmdline_user_args()
+	var limit := int(args[args.find("--limit") + 1]) if "--limit" in args else pairs
 	for i in ports.size():
+		if done >= limit:
+			break
 		for j in range(i + 1, ports.size()):
-			# Keys and point order run from the alphabetically first port id.
-			var a: Dictionary = ports[i] if ports[i].id < ports[j].id else ports[j]
-			var b: Dictionary = ports[j] if a == ports[i] else ports[i]
-			var cells := astar.get_id_path(water_cells[a.id], water_cells[b.id])
-			if cells.is_empty():
+			if done >= limit:
+				break
+			var a: Dictionary = ports[i]
+			var b: Dictionary = ports[j]
+			var best := PackedVector2Array()
+			var best_distance := INF
+			var span: float = absf(a.lon - b.lon)
+			for option_a: Array in starts[a.id]:
+				for option_b: Array in starts[b.id]:
+					if option_a[0] > 0.0 and option_b[0] > 0.0:
+						continue  # Same as both at their real longitude.
+					var shifted: bool = option_a[0] > 0.0 or option_b[0] > 0.0
+					if shifted and span <= MIN_WRAP_SPAN:
+						continue  # Close enough that the short way can't cross the Pacific seam.
+					var lon_a: float = a.lon + option_a[0]
+					var lon_b: float = b.lon + option_b[0]
+					if absf(lon_a - lon_b) > MAX_ROUTE_SPAN:
+						continue
+					var t0 := Time.get_ticks_usec()
+					var cells := _route(coarse, astar, option_a[1], option_b[1])
+					var t1 := Time.get_ticks_usec()
+					search_usec += t1 - t0
+					if cells.is_empty():
+						continue
+					var points := _lane_points(Vector2(lon_a, a.lat), cells, Vector2(lon_b, b.lat))
+					shape_usec += Time.get_ticks_usec() - t1
+					var distance := _length_nm(points)
+					if distance < best_distance:
+						best_distance = distance
+						best = points
+			if best.is_empty():
 				push_error("No sea route from %s to %s" % [a.id, b.id])
-				continue
-			var points := _lane_points(Vector2(a.lon, a.lat), cells, Vector2(b.lon, b.lat))
-			var distance := 0.0
-			for k in range(1, points.size()):
-				distance += Geo.distance_nm(points[k - 1], points[k])
-			var coords := []
-			for p in points:
-				coords.append([snappedf(p.x, 0.0001), snappedf(p.y, 0.0001)])
-			var key := "%s-%s" % [a.id, b.id]
-			lanes[key] = {"distance_nm": snappedf(distance, 0.1), "points": coords}
-			stats[key] = distance
+			else:
+				# Shift the lane so it starts at the first port's real longitude.
+				var shift: float = a.lon - best[0].x
+				data.keys.append("%s-%s" % [a.id, b.id])
+				data.starts.append(data.points.size())
+				for p in best:
+					data.points.append(Vector2(snappedf(p.x + shift, 0.0001), snappedf(p.y, 0.0001)))
+				data.distances.append(best_distance)
+			done += 1
+			if done % 50 == 0:
+				var elapsed := (Time.get_ticks_msec() - started) / 1000.0
+				print("  %d / %d lanes (%.0f s, ~%.0f s left; search %.0f s, shaping %.0f s)" % [done, pairs, elapsed, elapsed / done * (pairs - done), search_usec / 1e6, shape_usec / 1e6])
+	data.starts.append(data.points.size())
 
-	var file := FileAccess.open(LANES_OUT, FileAccess.WRITE)
-	file.store_string(JSON.stringify({
-		"_comment": "Generated by tools/build_map_data.gd. Sea route between each pair of ports, as [lon, lat] points from the first port to the second.",
-		"lanes": lanes,
-	}, "\t"))
-	file.close()
-	print("Lanes: %d" % lanes.size())
-	_print_stats(ports, stats)
+	var err := ResourceSaver.save(data, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % LANES_OUT)
+	print("Lanes: %d, %d points" % [data.keys.size(), data.points.size()])
+	_print_stats(data)
+
+
+## Coarse grid over the fine one. A coarse cell is water if any of its fine
+## cells is open ocean (so narrow straits stay open), and remembers the ocean
+## cell nearest its center, preferring cells off the coast.
+func _build_coarse_grid() -> AStarGrid2D:
+	var coarse_cols := ceili(float(_cols) / COARSE)
+	var coarse_rows := ceili(float(_rows) / COARSE)
+	var coarse := AStarGrid2D.new()
+	coarse.region = Rect2i(0, 0, coarse_cols, coarse_rows)
+	coarse.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	coarse.default_compute_heuristic = AStarGrid2D.HEURISTIC_EUCLIDEAN
+	coarse.default_estimate_heuristic = AStarGrid2D.HEURISTIC_EUCLIDEAN
+	coarse.update()
+	# On a Mercator grid a cell spans cos(latitude) as much real distance at
+	# every latitude. Weights are normalized to >= 1 so the heuristic stays admissible.
+	var min_scale := cos(deg_to_rad(maxf(absf(GRID_NORTH_LAT), absf(GRID_SOUTH_LAT))))
+	_coarse_rep.resize(coarse_cols * coarse_rows)
+	for cy in coarse_rows:
+		var lat := Geo.unproject(_cell_center(Vector2i(0, mini(cy * COARSE + COARSE / 2, _rows - 1)))).y
+		var weight := cos(deg_to_rad(lat)) / min_scale
+		for cx in coarse_cols:
+			var center := Vector2((cx + 0.5) * COARSE, (cy + 0.5) * COARSE)
+			var best := -1
+			var best_score := INF
+			var touches_land := false
+			for fy in range(cy * COARSE, mini((cy + 1) * COARSE, _rows)):
+				for fx in range(cx * COARSE, mini((cx + 1) * COARSE, _cols)):
+					var index := fy * _cols + fx
+					if not _ocean[index]:
+						touches_land = touches_land or _land[index] == 1
+						continue
+					var score := center.distance_to(Vector2(fx + 0.5, fy + 0.5)) + (100.0 if _near_land[index] else 0.0)
+					if score < best_score:
+						best_score = score
+						best = index
+			_coarse_rep[cy * coarse_cols + cx] = best
+			if best < 0:
+				coarse.set_point_solid(Vector2i(cx, cy))
+			else:
+				coarse.set_point_weight_scale(Vector2i(cx, cy), weight * (COAST_PENALTY if touches_land else 1.0))
+	_coarse_cols = coarse_cols
+	print("Coarse grid: %d x %d cells" % [coarse_cols, coarse_rows])
+	return coarse
+
+
+## A fine-grid path between two ocean cells: the coarse route's cells, with
+## any hop that would cross land replaced by a short fine-grid search.
+func _route(coarse: AStarGrid2D, fine: AStarGrid2D, from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+	var coarse_path := coarse.get_id_path(from / COARSE, to / COARSE)
+	var result: Array[Vector2i] = []
+	if coarse_path.is_empty():
+		return result
+	var waypoints: Array[Vector2i] = [from]
+	for k in range(1, coarse_path.size() - 1):
+		var rep := _coarse_rep[coarse_path[k].y * _coarse_cols + coarse_path[k].x]
+		waypoints.append(Vector2i(rep % _cols, rep / _cols))
+	waypoints.append(to)
+
+	result.append(from)
+	for k in range(1, waypoints.size()):
+		var a := waypoints[k - 1]
+		var b := waypoints[k]
+		if _clear_of_land(a, b):
+			result.append(b)
+			continue
+		var hop := fine.get_id_path(a, b)
+		if hop.is_empty():
+			result.clear()
+			return result
+		for h in range(1, hop.size()):
+			result.append(hop[h])
+	return result
+
+
+## True if the straight line between two cells crosses no land at all.
+func _clear_of_land(a: Vector2i, b: Vector2i) -> bool:
+	var pa := Vector2(a) + Vector2(0.5, 0.5)
+	var pb := Vector2(b) + Vector2(0.5, 0.5)
+	var steps := ceili(pa.distance_to(pb) * 2.0)
+	for s in range(1, steps):
+		var p := pa.lerp(pb, float(s) / steps)
+		if _land[floori(p.y) * _cols + floori(p.x)]:
+			return false
+	return true
 
 
 func _nearest_water(cell: Vector2i) -> Vector2i:
-	for radius in 60:
+	for radius in SNAP_RADIUS + 1:
 		var best := Vector2i(-1, -1)
 		var best_dist := INF
 		for dy in range(-radius, radius + 1):
@@ -422,38 +647,55 @@ func _nearest_water(cell: Vector2i) -> Vector2i:
 				if maxi(absi(dx), absi(dy)) != radius:
 					continue
 				var c := cell + Vector2i(dx, dy)
-				if _in_grid(c) and not _is_land(c) and Vector2(dx, dy).length() < best_dist:
+				if _in_grid(c) and _ocean[c.y * _cols + c.x] and Vector2(dx, dy).length() < best_dist:
 					best_dist = Vector2(dx, dy).length()
 					best = c
 		if best.x >= 0:
 			return best
-	push_error("No water near cell %s" % cell)
-	return cell
+	return Vector2i(-1, -1)
 
 
 ## Turns a grid path into a short list of (lon, lat) points: straightens it
 ## wherever there's clear water, then follows great circles on long open legs.
+## Longitudes stay continuous (they may run past 180).
 func _lane_points(start: Vector2, cells: Array[Vector2i], end: Vector2) -> PackedVector2Array:
-	# From each kept cell, jump to the farthest later cell with a clear line:
-	# double the jump while clear, then binary-search the edge.
-	var kept: Array[Vector2i] = [cells[0]]
-	var last := cells.size() - 1
+	# The route is a list of turning points; fill in every cell along each hop.
+	var path: Array[Vector2i] = [cells[0]]
+	for k in range(1, cells.size()):
+		var a := Vector2(cells[k - 1])
+		var delta := Vector2(cells[k] - cells[k - 1])
+		var steps := maxi(absi(cells[k].x - cells[k - 1].x), absi(cells[k].y - cells[k - 1].y))
+		for s in range(1, steps + 1):
+			path.append(Vector2i((a + delta * (float(s) / steps)).round()))
+
+	# Straighten: keep a span as one line if it's clear, otherwise split it in
+	# half and try again. Then drop any kept cell the line can skip over.
+	var marks := PackedByteArray()
+	marks.resize(path.size())
+	marks[0] = 1
+	marks[-1] = 1
+	var spans := [Vector2i(0, path.size() - 1)]
+	while not spans.is_empty():
+		var span: Vector2i = spans.pop_back()
+		if span.y - span.x < 2 or _clear_line(path[span.x], path[span.y]):
+			continue
+		@warning_ignore("integer_division")
+		var mid := (span.x + span.y) / 2
+		marks[mid] = 1
+		spans.append(Vector2i(span.x, mid))
+		spans.append(Vector2i(mid, span.y))
+	var candidates: Array[Vector2i] = []
+	for k in path.size():
+		if marks[k]:
+			candidates.append(path[k])
+	var kept: Array[Vector2i] = [candidates[0]]
 	var i := 0
-	while i < last:
-		var good := i + 1
-		var step := 1
-		while good < last and _clear_line(cells[i], cells[mini(good + step, last)]):
-			good = mini(good + step, last)
-			step *= 2
-		var bad := mini(good + step, last + 1)
-		while bad - good > 1:
-			var mid := (good + bad) / 2
-			if _clear_line(cells[i], cells[mid]):
-				good = mid
-			else:
-				bad = mid
-		kept.append(cells[good])
-		i = good
+	while i < candidates.size() - 1:
+		var j := i + 1
+		while j + 1 < candidates.size() and _clear_line(candidates[i], candidates[j + 1]):
+			j += 1
+		kept.append(candidates[j])
+		i = j
 
 	var points := PackedVector2Array([start])
 	for cell in kept:
@@ -467,9 +709,12 @@ func _lane_points(start: Vector2, cells: Array[Vector2i], end: Vector2) -> Packe
 		var pieces := floori(Geo.distance_nm(a, b) / GREAT_CIRCLE_STEP_NM)
 		var arc := PackedVector2Array()
 		var arc_ok := pieces >= 2
+		var previous_lon := a.x
 		for s in range(1, pieces):
 			var p := Geo.great_circle_lerp(a, b, float(s) / pieces)
-			if _is_near_land(_cell_of(Geo.project(p))):
+			p.x += roundf((previous_lon - p.x) / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
+			previous_lon = p.x
+			if _lon_lat_near_land(p):
 				arc_ok = false
 				break
 			arc.append(p)
@@ -494,16 +739,31 @@ func _clear_line(a: Vector2i, b: Vector2i) -> bool:
 	return true
 
 
-func _print_stats(ports: Array, stats: Dictionary) -> void:
-	print("Rome-Tunis: %.1f nm" % stats.get("ROM-TUN", stats.get("TUN-ROM", -1.0)))
-	var us := ["BOS", "NYC", "MIA"]
+func _length_nm(points: PackedVector2Array) -> float:
+	var distance := 0.0
+	for k in range(1, points.size()):
+		distance += Geo.distance_nm(points[k - 1], points[k])
+	return distance
+
+
+func _print_stats(data: SeaLaneData) -> void:
+	var by_key := {}
+	for i in data.keys.size():
+		by_key[data.keys[i]] = data.distances[i]
 	var longest := 0.0
 	var longest_key := ""
-	for key: String in stats:
+	var longest_med_us := 0.0
+	var med := ["ALG", "ALY", "ASH", "BCN", "BIA", "CAG", "GIT", "GOA", "HFA", "IST", "IZM", "KOP", "LMS", "MER", "MLA", "MRS", "PIR", "PMI", "PMO", "PSD", "ROM", "SPE", "TNG", "TUN", "VLC"]
+	var us_east := ["BOS", "NYC", "MIA"]
+	for key: String in by_key:
 		var ids := key.split("-")
-		if (ids[0] in us) != (ids[1] in us) and stats[key] > longest:
-			longest = stats[key]
+		if by_key[key] > longest:
+			longest = by_key[key]
 			longest_key = key
-	print("Longest Med-US leg: %s %.1f nm" % [longest_key, longest])
-	for key: String in ["ALG-TNG", "ALG-NYC", "GIT-MLA", "IST-PIR", "MIA-PSD", "NYC-TNG", "BCN-VLC", "GOA-ROM"]:
-		print("  %s: %.1f nm" % [key, stats.get(key, -1.0)])
+		if ((ids[0] in med) and (ids[1] in us_east)) or ((ids[1] in med) and (ids[0] in us_east)):
+			longest_med_us = maxf(longest_med_us, by_key[key])
+	print("Rome-Tunis: %.1f nm" % by_key.get("ROM-TUN", -1.0))
+	print("Longest Med-US East leg: %.1f nm" % longest_med_us)
+	print("Longest leg overall: %s %.1f nm" % [longest_key, longest])
+	for key: String in ["ALG-TNG", "ALG-NYC", "GIT-MLA", "IST-PIR", "BCN-VLC", "RTM-SHA", "LAX-SHA", "NYC-RTM", "HAM-SIN", "ANC-SEA", "BLB-CLN", "LAX-NYC", "PMO-TUN", "BIA-GOA"]:
+		print("  %s: %.1f nm" % [key, by_key.get(key, -1.0)])
