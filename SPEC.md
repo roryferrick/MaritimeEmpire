@@ -30,7 +30,7 @@
 - Maintenance drops 1% per minute while a running ship is at sea (the Dominator and Mammoth: 0.5% per minute). It doesn't drop while docked or while paused.
 - Speed = top speed × maintenance, so a ship at 0% stops dead.
 - A slower, worn ship takes longer and so burns more fuel per leg. Tanks are sized so a ship leaving at 100% can just finish a leg of its full range (plus 1 s of spare fuel) while wearing on the way.
-- Random breakdowns: every 5 s there's a 1% chance that one random ship at sea (never a Mammoth) loses 50 points of maintenance. At 0% it's lost at sea. A ship that's slowed down can also run out of fuel before it arrives.
+- Random breakdowns start at company level 6. Every 5 s, each ship at sea (never a recovery boat) rolls its own chance of losing 50 points of maintenance: 0.05% a roll at 100% maintenance, rising to 0.5% at 0% (worn ships break far more often). That's times the model's sturdiness (breakdown_factor: 1.0 for a Scooter down to 0.59 for a Dominator or Supertanker), times its age (+10% for every hour it has spent at sea, up to double), less its durability skill. A new Scooter at 100% breaks down about once every 3 hours at sea. At 0% it's lost at sea. A ship that's slowed down can also run out of fuel before it arrives.
 - Port stop: after arriving, a ship docks for a set time: Scooter 10 5 s, GE 100 10 s, Greenline 200 15 s, Trans Atlantic 30 s, Dominator 1 min.
   - Cargo unloads over the first half of the stop (the cargo bar drains), and the ship is paid when unloading finishes. Cargo loads over the second half (the bar refills).
   - With auto-repair on, maintenance refills to 100% over the first 5 s, paid as it goes. With auto-refuel on, the tank refills over the next 5 s. The Scooter 10 does each in 2.5 s to fit its 5 s stop.
@@ -66,14 +66,15 @@
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
 - Map art: blue sea, sandy land with a darker coastline, thin country borders, and country names that appear as you zoom in (placeholder colors, all in the theme). Built from Natural Earth public-domain data by tools/build_map_data.gd.
-- 131 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
+- 173 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
   - The world's biggest container ports (the top 100, plus the next several so that 100 are new beyond the original Mediterranean set). Ranks 1–25 follow the published 2023 figures; the rest follow recent Lloyd's List rankings as best known (the full list is paywalled), so a few borderline ports may differ from the official list.
   - The 18 biggest Mediterranean container ports, plus Rome (Civitavecchia) and Tunis (Radès).
   - Mediterranean islands: Limassol (Cyprus), Palermo (Sicily), Cagliari (Sardinia), Bastia (Corsica), Palma (Mallorca).
   - Also: Boston, Miami, Monterey, Anchorage, Seattle-Tacoma, Cabo San Lucas.
+  - Added for coverage: New Orleans, Havana, Port-au-Prince, San Juan, Bridgetown, Cancun, Puerto Quetzal (Guatemala), Puntarenas (Costa Rica), Puerto Ayora (Galapagos); Honolulu, Nawiliwili (Kauai), Apia (Samoa), Pago Pago (American Samoa), Nuku'alofa (Tonga), Suva (Fiji), Papeete (French Polynesia), Auckland, Wellington, Apra Harbor (Guam), Port Moresby, Cebu, Muara (Brunei); Toamasina (Madagascar), Praia (Cabo Verde); Dublin, Douglas (Isle of Man), Reykjavik, Nuuk, Juneau, Dutch Harbor (Aleutians); Gothenburg, Oslo, Copenhagen, Aarhus, Bergen, Tallinn, Riga, Klaipeda; Durres; Constanta, Odesa, Novorossiysk.
 - The map opens centered on the company's home port (45 degrees of longitude across); the route screen opens centered on the ship.
 - Ports are white circles with names; when names would overlap, the bigger port's name wins and the other shows on zoom.
-- Ships follow real sea lanes around land, pre-computed for every pair of ports (8,515 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
+- Ships follow real sea lanes around land, pre-computed for every pair of ports (14,878 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, the Bosphorus to the Black Sea, the Mississippi to New Orleans, Icy Strait to Juneau, the Oslofjord, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
 
 ## Ship models (data file)
 | Model | Price | Speed (nm/s) | Capacity | Range per leg | Max owned |
@@ -83,11 +84,11 @@
 | Greenline 200 | $100,000 | 3.27 | 200 | 1,175 nm (≈6 min) | 10 |
 | Trans Atlantic | $1,000,000 | 6.35 | 1,250 | 4,080 nm (Rome→New York is 4,073 nm) | 10 |
 | Dominator | $10,000,000 | 3.99 | 10,000 | 9,000 nm | 10 |
-| Mammoth | $2,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 22,500 nm | 5 |
+| Mini Mammoth | $250,000 | 6.35 | carries 1 lost Scooter 10, GE 100, Greenline 200 or Coastal | recovery jobs up to 8,000 nm | 5 |
 | Coastal (gas tanker) | $300,000 | 6.35 | 5,000 tons of fuel | 1,175 nm | 10 |
 | Aframax (gas tanker) | $3,000,000 | 5.40 | 50,000 tons of fuel | 4,080 nm | 10 |
 | Supertanker (gas tanker) | $30,000,000 | 4.59 | 500,000 tons of fuel | 9,000 nm | 10 |
-| Mini Mammoth | $250,000 | 6.35 | carries 1 lost Scooter 10, GE 100 or Greenline 200 | recovery jobs up to 8,000 nm | 5 |
+| Mammoth | $2,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 23,200 nm | 5 |
 
 | Model | Fuel tank (units) | Burn (units/s) | Wear (%/min) | Repair per 1% | Port stop |
 |---|---|---|---|---|---|
@@ -96,15 +97,15 @@
 | Greenline 200 | 25,000 | 67 | 1 | $2,400 | 15 s |
 | Trans Atlantic | 555,000 | 810 | 1 | $29,200 | 30 s |
 | Dominator | 10,300,000 | 4,070 | 0.5 | $293,000 | 1 min |
-| Mammoth | 19,500,000 | 4,500 | 0.5 | $300,000 | 10 s |
+| Mini Mammoth | 645,000 | 450 | 1 | $30,000 | 10 s |
 | Coastal | 50,500 | 265 | 1 | $9,500 | 15 s |
 | Aframax | 1,830,000 | 2,250 | 1 | $81,000 | 30 s |
 | Supertanker | 41,300,000 | 19,125 | 0.5 | $1,375,000 | 1 min |
-| Mini Mammoth | 645,000 | 450 | 1 | $30,000 | 10 s |
+| Mammoth | 20,300,000 | 4,500 | 0.5 | $300,000 | 10 s |
 - Gas tankers carry fuel as paid cargo: $0.05 per ton per nm (container ships: $0.6125 per container per nm), paid when unloading finishes like any cargo. Each size carries 10x the last and is 15% slower. They earn a little more per dollar of price than the container ships nearest them in price (Coastal about $95k a minute gross, Aframax $810k, Supertanker $6.9M), with fuel still about 40% and repairs 10% of pay. They're the size of the Greenline 200, Trans Atlantic and Dominator, and their deliveries don't count toward "Containers delivered".
 - Speeds keep a 30 : 20 : 18 : 35 : 22 ratio, scaled so a Scooter 10 sails Rome→Tunis (324.9 nm) in about 60 s. A Dominator's longest leg (9,000 nm) takes about 42 minutes with wear.
 - Range is the longest single leg a ship can sail at 100% maintenance. It's enforced when assigning routes; fuel is checked again at every departure.
-- On the map each model is a differently sized and colored rectangle with a pointed bow, smallest to biggest: Scooter 10 (pale yellow), GE 100 (light blue), Greenline 200 (orange), Trans Atlantic (magenta), Coastal (sand), Aframax (tan), Supertanker (brown), Mini Mammoth (teal, the same size as a Trans Atlantic), Dominator (red), Mammoth (steel gray). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
+- On the map each model is a differently sized and colored rectangle with a pointed bow. Colors by family, smallest to biggest: container ships yellow to red (Scooter 10, GE 100, Greenline 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Mini Mammoth, Mammoth). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
 - The player can own at most 10 of each container ship and gas tanker, and 5 of each recovery boat, once the company level has opened all their slots.
 - Ship names must be unique (case-insensitive). No renaming in beta.
 - Selling: a docked ship (not lost, not on a recovery job) sells for 50% of its price × its maintenance, from the ship popup's Sell button (click again to confirm).
@@ -118,11 +119,13 @@
 - Autosave on quit and every 30 s.
 
 ### Top bar (on World, Ships, Finances, Shop screens)
-- Company name, company level with an XP bar (hover for XP to the next level), money, and total containers delivered.
+- Company name, company level with an XP bar, money, and total containers delivered.
+- Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ..."), each with an estimate of how long until you reach it at that rate. Refreshes every second.
 
 ### Bottom navigation bar
 - World | Ships | Finances | Shop. Hidden on the Route Assignment screen.
-- The Ships tab shows a red dot while any ship needs the player: lost with no recovery boat on the way, held in port, docked and paused, a docked cargo ship with no route, or unspent skill points. Its tooltip counts each reason. The Ships screen filter "Needs attention" shows just those ships.
+- The Ships tab shows a red dot while any ship needs the player: lost with no recovery boat on the way, held in port, docked and paused, a docked cargo ship with no route, or upgrade points to spend. Its tooltip counts each reason. The Ships screen filter "Needs attention" shows just those ships.
+- The Shop tab shows a red dot while any ship can be bought (unlocked, a free slot, and affordable); its tooltip lists them.
 
 ### 1. World (map) screen
 - Pan (drag) and zoom (mouse wheel) supported.
@@ -131,10 +134,11 @@
 
 ### 2. Ships screen
 - Scrolling list grouped by model (in shop order), each group under a divider with the model name, 5 tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
-- Each tile shows the ship's level ("Lv 7", in green with "+2" while it has skill points to spend).
+- Each tile shows the ship's level ("Lv 7", in green with "+2" while it has upgrade points to spend).
 - Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); red = docked (paused at a port, no route, or held in port).
 - Clicking a tile opens the ship popup.
 - Sort (within each model) by name, status (lost, then at risk, then held, then stopped, then running) or profit; show all ships, running, stopped, lost, or recovery boats. A count shows how many are shown. Tiles re-sort when the fleet or the sort changes, not live.
+- An "Upgrade all (N)" button spends every ship's upgrade points at once, round-robin: each point goes to the ship's lowest skill path, ties in the order speed, efficiency, durability (so speed 1, efficiency 1, durability 1, speed 2, ... up to all 30). Greyed out when there are none.
 
 ### Finances screen
 - Totals for the last 10 minutes and all time: cargo income, fuel, repairs, recoveries, ships bought, ships sold, and operating profit (income − fuel − repairs − recoveries).
@@ -142,7 +146,7 @@
 - The totals and the 10-minute window are saved with the game.
 
 ### 3. Shop screen
-- Three sections, "Container ships", "Gas tankers" and "Recovery boats", each a grid of cards up to 3 across (as many as fit beside the activity log), one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10").
+- Three sections, "Container ships", "Gas tankers" and "Recovery boats", each a grid of compact cards up to 5 across (as many as fit beside the activity log: 5 at the default window, so 5 container ships, then 3 tankers, then 2 recovery boats, cheapest first), one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10").
 - Each card shows owned / slots at the current level (and the max, while it can still grow). A full model shows "Next slot at level N"; a locked model shows "Unlocks at level N".
 - Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it; shows "Limit reached" at the ownership limit.
 
@@ -165,8 +169,8 @@
 - Placeholder line: "Cargo market: coming soon".
 
 ### Ship popup (openable from map, Ships screen, and port popups)
-- Name (top) with a Skills button (showing unspent points) and X; Model, current speed (with top speed), range, capacity, and level with XP into it (cargo ships).
-- The Skills button swaps the bars and toggles for the three skill paths (10 pips each, the bonus so far, and a + button to spend a point).
+- Name (top) with an Upgrades button (showing unspent points, with a red dot while there are any) and X; Model, current speed (with top speed), range, capacity, and level with XP into it (cargo ships).
+- The Upgrades button swaps the bars and toggles for the three skill paths (10 pips each, the bonus so far, and a + button to spend a point). Paths are listed Speed, Efficiency, Durability.
 - Maintenance, Fuel and Cargo bars with live values (recovery boats: Tow instead of Cargo), then the Repair, Refuel and Rescue (auto-recovery) toggles. While docked: this stop's summary, e.g. "Sold $1,990 · Fuel −$800 · Repair −$200 / Profit $990".
 - Lost ships: a Send Recovery button (see Lost ships and recovery boats).
 - Status: e.g. "Docked at Rome" (with "(no route)", "(paused)", or why it's held when relevant), "Unloading at Tunis" / "Loading at Tunis", "En route to Tunis — 40%", "Stopping at Tunis" (paused while at sea).
@@ -175,7 +179,7 @@
 - Pause behavior: a ship paused at sea continues to its next port and stays docked there. Go resumes the route from that port.
 
 ## Activity log
-- Messages go into an activity log down the left of the game screen (272 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text (size 7, chosen so about 90% of messages fit on one line; long port names can wrap to two), each with the play time it happened (e.g. "02:10"). Bad news (breakdowns, lost ships, ships held in port or that won't make it) is red; good news (level-ups, recoveries) is green. It keeps the last 100 messages and starts empty each session.
+- Messages go into an activity log down the left of the game screen (272 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text (size 7, chosen so about 90% of messages fit on one line; long port names can wrap to two), each with the play time it happened (e.g. "02:10"). Text is in the color of the ship it's about (lightened if too dark to read; company-wide messages stay white). Bad news (breakdowns, lost ships, ships held in port or that won't make it) has a red highlight behind it; good news (level-ups, recoveries) a green one. It keeps the last 100 messages and starts empty each session.
 - Messages, e.g. "Sea Otter left Tunis: sold $1,990, profit $990", "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000".
 
 ## Explicitly NOT in beta

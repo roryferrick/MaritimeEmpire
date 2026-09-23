@@ -25,8 +25,10 @@ var _current_screen := Screen.WORLD
 }
 @onready var _popup_host: PopupHost = %PopupHost
 
-## Shown on the Ships tab while any ship needs the player (see Ship.attention_reason()).
+## Shown on the Ships tab while any ship needs the player (see
+## Ship.attention_reason()), and on the Shop tab while any ship can be bought.
 var _ships_alert := AlertDot.new()
+var _shop_alert := AlertDot.new()
 var _alert_clock := 0.0
 
 
@@ -54,7 +56,8 @@ func _ready() -> void:
 	GameState.company_leveled.connect(_on_company_leveled)
 	GameState.ship_leveled.connect(_on_ship_leveled)
 	%ShipsButton.add_child(_ships_alert)
-	_update_ships_alert()
+	%ShopButton.add_child(_shop_alert)
+	_update_alerts()
 	show_screen(Screen.WORLD)
 
 
@@ -62,11 +65,18 @@ func _process(delta: float) -> void:
 	_alert_clock += delta
 	if _alert_clock >= ALERT_CHECK_SECONDS:
 		_alert_clock = 0.0
-		_update_ships_alert()
+		_update_alerts()
 
 
-## Red dot on the Ships tab if any ship needs the player; the tooltip says why.
-func _update_ships_alert() -> void:
+## Red dots on the Ships tab if any ship needs the player (the tooltip says
+## why), and on the Shop tab if anything can be bought.
+func _update_alerts() -> void:
+	var buyable := PackedStringArray()
+	for model: Dictionary in GameData.ship_models:
+		if GameState.buy_error(model.id).is_empty():
+			buyable.append(model.get("name", model.id))
+	_shop_alert.visible = not buyable.is_empty()
+	%ShopButton.tooltip_text = "You can buy: %s" % ", ".join(buyable) if not buyable.is_empty() else ""
 	var reasons := {}
 	for ship in GameState.ships:
 		var reason := ship.attention_reason()
@@ -111,39 +121,39 @@ func _on_ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, r
 	var port := GameData.port_name(port_id)
 	var costs := fuel_cost + repair_cost
 	if sale > 0:
-		ActivityLog.add("%s left %s: sold %s, profit %s" % [ship.name, port, Fmt.money(sale), Fmt.money(sale - costs)])
+		ActivityLog.add("%s left %s: sold %s, profit %s" % [ship.name, port, Fmt.money(sale), Fmt.money(sale - costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 	else:
-		ActivityLog.add("%s left %s: fuel and repairs %s" % [ship.name, port, Fmt.money(-costs)])
+		ActivityLog.add("%s left %s: fuel and repairs %s" % [ship.name, port, Fmt.money(-costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 func _on_ship_held(ship: Ship, reason: String) -> void:
-	ActivityLog.add("%s is held at %s: %s" % [ship.name, GameData.port_name(ship.docked_at), reason], ActivityLog.Kind.BAD)
+	ActivityLog.add("%s is held at %s: %s" % [ship.name, GameData.port_name(ship.docked_at), reason], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_broke_down(ship: Ship) -> void:
-	ActivityLog.add("%s broke down at sea! Maintenance now %d%%" % [ship.name, floori(ship.maintenance * 100.0)], ActivityLog.Kind.BAD)
+	ActivityLog.add("%s broke down at sea! Maintenance now %d%%" % [ship.name, floori(ship.maintenance * 100.0)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_lost(ship: Ship) -> void:
-	ActivityLog.add("%s is lost at sea (%s)." % [ship.name, ship.lost_reason], ActivityLog.Kind.BAD)
+	ActivityLog.add("%s is lost at sea (%s)." % [ship.name, ship.lost_reason], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool) -> void:
 	var outcome := "" if to_destination else " (back where it came from, so no pay)"
-	ActivityLog.add("%s carried %s to %s%s" % [mammoth.name, ship.name, GameData.port_name(port_id), outcome], ActivityLog.Kind.GOOD)
+	ActivityLog.add("%s carried %s to %s%s" % [mammoth.name, ship.name, GameData.port_name(port_id), outcome], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
 
 
 func _on_recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool) -> void:
 	if auto:
-		ActivityLog.add("Auto-recovery: %s sent for %s (about %s)" % [boat.name, ship.name, Fmt.money(cost)])
+		ActivityLog.add("Auto-recovery: %s sent for %s (about %s)" % [boat.name, ship.name, Fmt.money(cost)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 func _on_ship_at_risk(ship: Ship) -> void:
-	ActivityLog.add("%s won't make it to %s at this rate!" % [ship.name, GameData.port_name(ship.to_port)], ActivityLog.Kind.BAD)
+	ActivityLog.add("%s won't make it to %s at this rate!" % [ship.name, GameData.port_name(ship.to_port)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_sold(ship: Ship, price: int) -> void:
-	ActivityLog.add("Sold %s for %s" % [ship.name, Fmt.money(price)])
+	ActivityLog.add("Sold %s for %s" % [ship.name, Fmt.money(price)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 func _on_company_leveled(level: int, unlocks: Array[String]) -> void:
@@ -154,4 +164,4 @@ func _on_company_leveled(level: int, unlocks: Array[String]) -> void:
 
 
 func _on_ship_leveled(ship: Ship, level: int) -> void:
-	ActivityLog.add("%s reached level %d: a skill point to spend" % [ship.name, level], ActivityLog.Kind.GOOD)
+	ActivityLog.add("%s reached level %d: an upgrade to spend" % [ship.name, level], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))

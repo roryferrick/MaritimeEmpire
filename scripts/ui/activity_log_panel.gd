@@ -1,7 +1,12 @@
 class_name ActivityLogPanel
 extends PanelContainer
 ## The activity log down the left of the game screen: ActivityLog's messages,
-## newest at the top, in small text with the play time they happened at.
+## newest at the top, in small text with the play time they happened at. Text
+## takes the ship's color (lightened if too dark to read); good and bad news
+## get a green or red highlight behind it.
+
+## Colors darker than this are lightened toward white so they read on the panel.
+const MIN_TEXT_LUMINANCE := 0.55
 
 const THEME_TYPE := &"ActivityLog"
 
@@ -20,11 +25,16 @@ func _add_row(entry: Dictionary) -> void:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.text = "%s  %s" % [_clock(entry.time), entry.text]
 	label.theme_type_variation = THEME_TYPE
+	var color: Color = entry.get("color", Color.TRANSPARENT)
+	if color.a > 0.0:
+		label.add_theme_color_override(&"font_color", _readable(color))
 	match entry.kind:
+		ActivityLog.Kind.INFO:
+			label.add_theme_stylebox_override(&"normal", _highlight(Color.TRANSPARENT))
 		ActivityLog.Kind.GOOD:
-			label.add_theme_color_override(&"font_color", _color(&"good_color", Color(0.45, 0.9, 0.5)))
+			label.add_theme_stylebox_override(&"normal", _highlight(_color(&"good_highlight", Color(0.2, 0.6, 0.3, 0.35))))
 		ActivityLog.Kind.BAD:
-			label.add_theme_color_override(&"font_color", _color(&"bad_color", Color(1, 0.45, 0.4)))
+			label.add_theme_stylebox_override(&"normal", _highlight(_color(&"bad_highlight", Color(0.75, 0.2, 0.2, 0.35))))
 	_list.add_child(label)
 	_list.move_child(label, 0)
 	while _list.get_child_count() > ActivityLog.MAX_ENTRIES:
@@ -39,6 +49,21 @@ func _clear() -> void:
 		_list.remove_child(child)
 		child.queue_free()
 	%EmptyLabel.visible = true
+
+
+static func _highlight(color: Color) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = color
+	box.set_content_margin_all(2.0)
+	box.set_corner_radius_all(2)
+	return box
+
+
+static func _readable(color: Color) -> Color:
+	var lightened := color
+	while lightened.get_luminance() < MIN_TEXT_LUMINANCE:
+		lightened = lightened.lerp(Color.WHITE, 0.1)
+	return lightened
 
 
 func _color(color_name: StringName, fallback: Color) -> Color:

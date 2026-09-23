@@ -28,8 +28,8 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 toggle_mode = true
-tooltip_text = "Spend skill points on speed, durability and gas efficiency."
-text = "Skills"
+tooltip_text = "Spend upgrade points on speed, durability and gas efficiency."
+text = "Upgrades"
 
 [node name="CloseButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true

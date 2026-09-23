@@ -72,6 +72,8 @@ var auto_recover := true
 var lost_order := 0
 ## At sea without the fuel (or maintenance) to reach the end of its leg.
 var at_risk := false
+## Seconds spent sailing since it was bought; older ships break down more.
+var sea_time := 0.0
 ## Lifetime money in (income) and out (fuel, repair, and recovery: what a
 ## recovery boat spent saving this ship), in dollars.
 var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0, "recovery": 0.0}
@@ -167,9 +169,21 @@ func wear_per_s() -> float:
 	return float(model().get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability"))
 
 
-## Chance (0..1) that the durability skill shrugs off a random breakdown.
+## How much the durability skill cuts the chance of a random breakdown (0..1).
 func breakdown_resistance() -> float:
 	return _skill_bonus("durability")
+
+
+## Chance of a random breakdown in one roll (see game_config breakdowns): higher
+## the more worn the ship is, times the model's sturdiness (breakdown_factor)
+## and the ship's age at sea, less its durability skill.
+func breakdown_chance() -> float:
+	var settings: Dictionary = GameData.config.get("breakdowns", {})
+	var worn := 1.0 - clampf(maintenance, 0.0, 1.0)
+	var chance := lerpf(float(settings.get("chance_at_full", 0.0005)), float(settings.get("chance_at_empty", 0.005)), worn)
+	var age := minf(1.0 + float(settings.get("age_per_hour_at_sea", 0.1)) * sea_time / 3600.0,
+		float(settings.get("max_age_factor", 2.0)))
+	return chance * float(model().get("breakdown_factor", 1.0)) * age * (1.0 - breakdown_resistance())
 
 
 ## {level, xp (into the level), cost (of the level)}; recovery boats stay at 0.
@@ -303,7 +317,7 @@ func attention_reason() -> String:
 	if is_docked() and paused:
 		return "paused"
 	if skill_points() > 0:
-		return "skill points to spend"
+		return "upgrades to spend"
 	return ""
 
 
@@ -467,6 +481,7 @@ func to_dict() -> Dictionary:
 		"billing": billing.name if billing else "",
 		"auto_recover": auto_recover,
 		"lost_order": lost_order,
+		"sea_time": sea_time,
 		"ledger": ledger,
 		"xp": xp,
 		"skills": skills,
@@ -505,6 +520,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.tow_port = data.get("tow_port", "")
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.lost_order = int(data.get("lost_order", 0))
+	ship.sea_time = float(data.get("sea_time", 0.0))
 	var saved_ledger: Dictionary = data.get("ledger", {})
 	for key: String in ship.ledger:
 		ship.ledger[key] = float(saved_ledger.get(key, 0.0))

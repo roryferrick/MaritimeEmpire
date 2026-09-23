@@ -53,6 +53,8 @@ const WINDOW_SECONDS := 600.0
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
 const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "recovery", "bought", "sold"]
+## Order "Upgrade all" levels skills in, and breaks ties in.
+const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 
 var money: int = 0:
 	set(value):
@@ -160,6 +162,35 @@ func level_skill(ship: Ship, skill: String) -> void:
 		return
 	ship.skills[skill] = int(ship.skills[skill]) + 1
 	ship_changed.emit(ship)
+
+
+## Spends all of every ship's skill points round-robin: each point goes to the
+## lowest skill, ties broken in AUTO_UPGRADE_ORDER, so a ship fills speed 1,
+## efficiency 1, durability 1, speed 2... Returns how many points were spent.
+func upgrade_all() -> int:
+	var spent := 0
+	for ship in ships:
+		var before := spent
+		while ship.skill_points() > 0:
+			var best := ""
+			for skill in AUTO_UPGRADE_ORDER:
+				if ship.can_level_skill(skill) and (best.is_empty() or int(ship.skills[skill]) < int(ship.skills[best])):
+					best = skill
+			if best.is_empty():
+				break
+			ship.skills[best] = int(ship.skills[best]) + 1
+			spent += 1
+		if spent > before:
+			ship_changed.emit(ship)
+	return spent
+
+
+## Unspent skill points across the fleet.
+func unspent_skill_points() -> int:
+	var points := 0
+	for ship in ships:
+		points += maxi(ship.skill_points(), 0)
+	return points
 
 
 ## Why a ship name can't be used, or "" if it's fine.
@@ -298,6 +329,8 @@ func _sail(ship: Ship, delta: float) -> bool:
 		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * delta, 0.0)
 	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * delta, 0.0)
 	if not ship.is_recovery():
+		ship.sea_time += delta
+	if not ship.is_recovery():
 		if ship.fuel <= 0.0:
 			_lose(ship, "out of fuel")
 			return false
@@ -333,26 +366,24 @@ func _lose(ship: Ship, reason: String) -> void:
 	ship_changed.emit(ship)
 
 
-## Every breakdown_interval_s, a breakdown_chance roll; on a hit, one random
-## ship at sea (not a Mammoth) loses breakdown_hit of maintenance.
+## From the breakdowns min_company_level on, every interval_s each ship at sea
+## (not recovery boats) rolls its own Ship.breakdown_chance(); on a hit it
+## loses hit of its maintenance, and is lost at sea if that leaves it at 0%.
 func _roll_breakdowns(delta: float) -> void:
-	var interval := float(GameData.config.get("breakdown_interval_s", 5))
+	var settings: Dictionary = GameData.config.get("breakdowns", {})
+	var interval := float(settings.get("interval_s", 5))
 	_breakdown_clock += delta
 	while _breakdown_clock >= interval:
 		_breakdown_clock -= interval
-		if randf() >= float(GameData.config.get("breakdown_chance", 0.01)):
+		if company_level() < int(settings.get("min_company_level", 6)):
 			continue
-		var candidates := ships.filter(func(ship: Ship) -> bool:
-			return not ship.is_recovery() and not ship.is_docked() and not ship.is_lost())
-		if candidates.is_empty():
-			continue
-		var ship: Ship = candidates.pick_random()
-		if randf() < ship.breakdown_resistance():
-			continue  # Its durability skill shrugged it off.
-		ship.maintenance = maxf(ship.maintenance - float(GameData.config.get("breakdown_hit", 0.5)), 0.0)
-		ship_broke_down.emit(ship)
-		if ship.maintenance <= 0.0:
-			_lose(ship, "broken down")
+		for ship in ships:
+			if ship.is_recovery() or ship.is_docked() or ship.is_lost() or randf() >= ship.breakdown_chance():
+				continue
+			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
+			ship_broke_down.emit(ship)
+			if ship.maintenance <= 0.0:
+				_lose(ship, "broken down")
 
 
 func _arrive(ship: Ship, port: String, paid := true) -> void:
@@ -424,6 +455,8 @@ func _gain_xp(ship: Ship, amount: float) -> void:
 	var ship_before := ship.level()
 	company_xp += amount
 	ship.xp += amount
+	var bucket := _current_bucket()
+	bucket.fleet["xp"] = float(bucket.fleet.get("xp", 0.0)) + amount
 	company_xp_changed.emit(company_xp)
 	for level in range(company_before + 1, company_level() + 1):
 		company_leveled.emit(level, Progression.unlocks_at(level))
@@ -735,6 +768,13 @@ func _current_bucket() -> Dictionary:
 	while _window[0].start < play_time - WINDOW_SECONDS:
 		_window.pop_front()
 	return _window[-1]
+
+
+## Company XP per minute over the last WINDOW_SECONDS (or the time played, if
+## less), or 0 before any.
+func recent_xp_per_minute() -> float:
+	var minutes := minf(WINDOW_SECONDS, play_time) / 60.0
+	return float(recent_finances().fleet.get("xp", 0.0)) / minutes if minutes > 0.0 else 0.0
 
 
 ## Money over the last WINDOW_SECONDS: {fleet: {kind: amount}, ships: {ship

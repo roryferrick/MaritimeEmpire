@@ -11,11 +11,15 @@ static func decimal(value: float, places: int) -> String:
 	return String.num(value, places).pad_decimals(places)
 
 
-## 45 -> "45 s", 90 -> "1 min 30 s"
+## 45 -> "45 s", 90 -> "1 min 30 s", 4380 -> "1 h 13 min"
 static func duration(seconds: float) -> String:
 	var total := roundi(seconds)
 	if total < 60:
 		return "%d s" % total
+	if total >= 3600:
+		var hours := floori(total / 3600.0)
+		var mins := floori((total % 3600) / 60.0)
+		return "%d h" % hours if mins == 0 else "%d h %d min" % [hours, mins]
 	var minutes := floori(total / 60.0)
 	if total % 60 == 0:
 		return "%d min" % minutes
@@ -30,3 +34,18 @@ static func thousands(n: int) -> String:
 		out = "," + digits.right(3) + out
 		digits = digits.left(digits.length() - 3)
 	return ("-" if n < 0 else "") + digits + out
+
+
+## 1830000 -> "1.83M", 555000 -> "555k", 7950 -> "7,950"
+static func short(n: float) -> String:
+	if absf(n) >= 1e6:
+		return String.num(n / 1e6, 2 if absf(n) < 1e7 else 1).trim_suffix(".0") + "M"
+	if absf(n) >= 1e5:
+		return "%dk" % roundi(n / 1e3)
+	return thousands(roundi(n))
+
+
+## Like duration(), but rounded to whole minutes from a minute up:
+## 45 -> "45 s", 100 -> "2 min", 4380 -> "1 h 13 min"
+static func rough_duration(seconds: float) -> String:
+	return duration(seconds if seconds < 60.0 else roundf(seconds / 60.0) * 60.0)

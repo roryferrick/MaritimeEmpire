@@ -18,6 +18,8 @@ const FILTER_NAMES := {
 
 ## Model id -> [group box, tile grid].
 var _groups := {}
+## Spends every ship's upgrade points (see GameState.upgrade_all()).
+var _upgrade_all := Button.new()
 
 
 func _ready() -> void:
@@ -29,6 +31,13 @@ func _ready() -> void:
 	%FilterOption.item_selected.connect(_apply_filter.unbind(1))
 	GameState.ships_changed.connect(_rebuild)
 	GameState.ship_changed.connect(_apply_filter.unbind(1))
+	_upgrade_all.tooltip_text = "Spend every ship's upgrade points in turn: speed, efficiency, durability, speed..."
+	_upgrade_all.pressed.connect(GameState.upgrade_all)
+	%Header.add_child(_upgrade_all)
+	%Header.move_child(_upgrade_all, %CountLabel.get_index())
+	GameState.ship_changed.connect(_update_upgrade_all.unbind(1))
+	GameState.ships_changed.connect(_update_upgrade_all)
+	_update_upgrade_all()
 	%Groups.resized.connect(_size_tiles)
 	_rebuild()
 
@@ -53,6 +62,12 @@ func _rebuild() -> void:
 	%Header.visible = not GameState.ships.is_empty()
 	_apply_filter()
 	_size_tiles()
+
+
+func _update_upgrade_all() -> void:
+	var points := GameState.unspent_skill_points()
+	_upgrade_all.text = "Upgrade all (%d)" % points if points > 0 else "Upgrade all"
+	_upgrade_all.disabled = points == 0
 
 
 ## Every tile is a fifth of the row wide, so part-filled rows line up.

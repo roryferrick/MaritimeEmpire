@@ -41,6 +41,17 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_shopcard"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.16, 0.18, 0.23, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
 [resource]
 default_font_size = 18
 BarPanel/base_type = &"PanelContainer"
@@ -62,12 +73,23 @@ ShipBars/colors/fuel = Color(0.3, 0.65, 0.95, 1)
 ShipBars/colors/label = Color(1, 1, 1, 0.65)
 ShipBars/colors/maintenance = Color(0.95, 0.65, 0.2, 1)
 ShipBars/colors/track = Color(1, 1, 1, 0.15)
+ShopCard/base_type = &"PanelContainer"
+ShopCard/styles/panel = SubResource("StyleBoxFlat_shopcard")
+ShopCardButton/base_type = &"Button"
+ShopCardButton/font_sizes/font_size = 13
+ShopCardDim/base_type = &"Label"
+ShopCardDim/colors/font_color = Color(1, 1, 1, 0.65)
+ShopCardDim/font_sizes/font_size = 12
+ShopCardText/base_type = &"Label"
+ShopCardText/font_sizes/font_size = 12
+ShopCardTitle/base_type = &"Label"
+ShopCardTitle/font_sizes/font_size = 17
 SkillPip/colors/empty = Color(1, 1, 1, 0.15)
 SkillPip/colors/filled = Color(0.45, 0.9, 0.5, 1)
 ActivityLog/base_type = &"Label"
-ActivityLog/colors/bad_color = Color(1, 0.45, 0.4, 1)
+ActivityLog/colors/bad_highlight = Color(0.75, 0.2, 0.2, 0.35)
 ActivityLog/colors/font_color = Color(1, 1, 1, 0.8)
-ActivityLog/colors/good_color = Color(0.45, 0.9, 0.5, 1)
+ActivityLog/colors/good_highlight = Color(0.2, 0.6, 0.3, 0.35)
 ActivityLog/font_sizes/font_size = 7
 ActivityLogPanel/base_type = &"PanelContainer"
 ActivityLogPanel/styles/panel = SubResource("StyleBoxFlat_log")

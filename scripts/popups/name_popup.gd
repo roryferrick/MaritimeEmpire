@@ -43,5 +43,6 @@ func _confirm() -> void:
 		return
 	var ship := GameState.buy_ship(model_id, %NameEdit.text)
 	if ship:
-		ActivityLog.add("Bought %s. It's docked at %s." % [ship.name, GameData.port_name(ship.docked_at)])
+		ActivityLog.add("Bought %s. It's docked at %s." % [ship.name, GameData.port_name(ship.docked_at)],
+			ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 	queue_free()

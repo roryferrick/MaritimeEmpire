@@ -3,21 +3,23 @@ extends AnchoredPopup
 ## A ship's stats, live status, bars and route, with the repair/refuel/rescue
 ## toggles, Assign Route, Pause/Go and Sell. Lost ships get a Send Recovery
 ## button; recovery boats have no route controls. Cargo ships show their level,
-## and the Skills button swaps the bars for spending skill points.
+## and the Upgrades button (red dot while points are unspent) swaps the bars
+## for spending upgrade points on the skill paths.
 
 ## Selling takes a second click within this many seconds.
 const SELL_CONFIRM_SECONDS := 3.0
 ## Skill paths: [key, name, what each level does ("%d" is the total percent)].
 const SKILLS := [
 	["speed", "Speed", "+%d%%"],
-	["durability", "Durability", "-%d%% wear"],
 	["efficiency", "Efficiency", "-%d%% fuel"],
+	["durability", "Durability", "-%d%% wear"],
 ]
 
 ## Set before adding to the tree.
 var ship: Ship
 
 var _sell_confirm_until := 0.0
+var _upgrades_alert := AlertDot.new(4.0, Vector2(6, 6))
 
 
 func _ready() -> void:
@@ -35,6 +37,7 @@ func _ready() -> void:
 	for node: Control in [%SkillsButton, %LevelName, %LevelValue]:
 		node.visible = not ship.is_recovery()
 	%SkillsButton.toggled.connect(_show_skills)
+	%SkillsButton.add_child(_upgrades_alert)
 	%CloseButton.pressed.connect(queue_free)
 	%AssignButton.pressed.connect(func() -> void: GameRoot.find(self).open_route_screen(ship))
 	%PauseButton.pressed.connect(func() -> void: GameState.set_paused(ship, not ship.paused))
@@ -121,7 +124,7 @@ func _update_recovery() -> void:
 		mammoth.name, GameData.port_name(plan.tow_port), Fmt.duration(plan.seconds)]
 
 
-## Swaps the bars, toggles and stop summary for the skills panel.
+## Swaps the bars, toggles and stop summary for the upgrades (skills) panel.
 func _show_skills(on: bool) -> void:
 	%BarsSlot.visible = not on
 	%Toggles.visible = not on
@@ -138,10 +141,11 @@ func _update_level_text() -> void:
 		%LevelValue.text = "%d (max)" % info.level
 
 
-## The Skills button's point count and the skills panel's rows.
+## The Upgrades button's point count and dot, and the skills panel's rows.
 func _refresh_level() -> void:
 	var points := ship.skill_points()
-	%SkillsButton.text = "Skills (%d)" % points if points > 0 else "Skills"
+	%SkillsButton.text = "Upgrades (%d)" % points if points > 0 else "Upgrades"
+	_upgrades_alert.visible = points > 0
 	for child in %SkillsBox.get_children():
 		%SkillsBox.remove_child(child)
 		child.queue_free()

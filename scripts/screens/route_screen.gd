@@ -69,7 +69,8 @@ func _accept() -> void:
 	if not GameState.route_error(_waypoints, _ship).is_empty():
 		return
 	GameState.assign_route(_ship, _waypoints)
-	ActivityLog.add("%s: new route %s" % [_ship.name, GameData.route_text(_waypoints)])
+	ActivityLog.add("%s: new route %s" % [_ship.name, GameData.route_text(_waypoints)], ActivityLog.Kind.INFO,
+		ActivityLog.ship_color(_ship))
 	finished.emit()
 
 

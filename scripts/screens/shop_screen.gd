@@ -6,9 +6,12 @@ extends Control
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Gas tankers", "tanker"], ["Recovery boats", "recovery"]]
-## Cards per row, fewer if they don't fit.
-const MAX_COLUMNS := 3
-const CARD_GAP := 16
+## Cards per row, fewer if they don't fit. Five fit beside the activity log
+## at the default window size.
+const MAX_COLUMNS := 5
+const CARD_GAP := 12
+const CARD_WIDTH := 176.0
+const CARD_LABEL_WIDTH := 44.0
 
 const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
@@ -53,51 +56,57 @@ func _fit_columns() -> void:
 
 func _make_card(model: Dictionary) -> Control:
 	var card := PanelContainer.new()
-	card.theme_type_variation = &"CardPanel"
-	card.custom_minimum_size = Vector2(290, 0)
+	card.theme_type_variation = &"ShopCard"
+	card.custom_minimum_size = Vector2(CARD_WIDTH, 0)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 12)
+	box.add_theme_constant_override(&"separation", 6)
 	card.add_child(box)
 
 	var title := Label.new()
-	title.theme_type_variation = &"HeaderLabel"
+	title.theme_type_variation = &"ShopCardTitle"
 	title.text = model.get("name", model.id)
 	box.add_child(title)
 
-	var stats := GridContainer.new()
-	stats.columns = 2
-	stats.add_theme_constant_override(&"h_separation", 24)
-	box.add_child(stats)
+	var tank := float(model.get("fuel_tank", 0))
 	var rows := [
-		["Top speed", "%s nm/s" % Fmt.decimal(float(model.get("speed_nm_per_s", 0)), 2)],
-		["Capacity", GameData.cargo_text(model)],
+		["Speed", "%s nm/s" % Fmt.decimal(float(model.get("speed_nm_per_s", 0)), 2)],
+		["Cargo", GameData.cargo_text(model)],
 		["Range", "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))],
-		["Fuel tank", "%s (%s)" % [Fmt.thousands(int(model.get("fuel_tank", 0))),
-			Fmt.duration(float(model.get("fuel_tank", 0)) / float(model.get("fuel_per_s", 1)))]],
-		["Port stop", Fmt.duration(float(model.get("dock_s", 0)))],
+		["Tank", "%s · %s" % [Fmt.short(tank), Fmt.rough_duration(tank / float(model.get("fuel_per_s", 1)))]],
+		["Stop", Fmt.duration(float(model.get("dock_s", 0)))],
 		["Price", Fmt.money(int(model.get("price", 0)))],
 		["Owned", ""],
 	]
 	if model.get("recovery", false):
 		rows[1] = ["Carries", GameData.carries_text(model)]
-		rows[2] = ["Job", "Recovers ships lost at sea"]
+		rows[2] = ["Job", "Recovers lost ships"]
 	for row: Array in rows:
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override(&"separation", 6)
+		box.add_child(line)
 		var name_label := Label.new()
+		name_label.theme_type_variation = &"ShopCardDim"
+		name_label.custom_minimum_size.x = CARD_LABEL_WIDTH
 		name_label.text = row[0]
-		name_label.modulate = Color(1, 1, 1, 0.7)
-		stats.add_child(name_label)
+		line.add_child(name_label)
 		var value_label := Label.new()
+		value_label.theme_type_variation = &"ShopCardText"
+		value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		value_label.text = row[1]
-		stats.add_child(value_label)
+		line.add_child(value_label)
 		if row[0] == "Owned":
 			_owned_labels[model.id] = value_label
 
 	var buy := Button.new()
-	buy.custom_minimum_size = Vector2(0, 48)
+	buy.theme_type_variation = &"ShopCardButton"
+	buy.custom_minimum_size = Vector2(0, 34)
+	buy.size_flags_vertical = Control.SIZE_SHRINK_END | Control.SIZE_EXPAND
 	buy.pressed.connect(_on_buy_pressed.bind(model.id))
 	box.add_child(buy)
 	_buy_buttons[model.id] = buy
 	return card
+
 
 
 func _update_cards() -> void:
