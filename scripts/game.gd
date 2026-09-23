@@ -35,8 +35,11 @@ func _ready() -> void:
 		button.button_group = group
 		button.pressed.connect(show_screen.bind(screen))
 	%RouteScreen.finished.connect(_close_route_screen)
-	GameState.ship_arrived.connect(_on_ship_arrived)
+	GameState.ship_departed.connect(_on_ship_departed)
 	GameState.ship_held.connect(_on_ship_held)
+	GameState.ship_broke_down.connect(_on_ship_broke_down)
+	GameState.ship_lost.connect(_on_ship_lost)
+	GameState.ship_recovered.connect(_on_ship_recovered)
 	show_screen(Screen.WORLD)
 
 
@@ -66,9 +69,27 @@ func _close_route_screen() -> void:
 	show_screen(_current_screen)
 
 
-func _on_ship_arrived(ship: Ship, port_id: String, payment: int) -> void:
-	Toast.show_message("%s delivered to %s (+%s)" % [ship.name, GameData.port_name(port_id), Fmt.money(payment)])
+func _on_ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, repair_cost: int) -> void:
+	var port := GameData.port_name(port_id)
+	var costs := fuel_cost + repair_cost
+	if sale > 0:
+		Toast.show_message("%s left %s: sold %s, profit %s" % [ship.name, port, Fmt.money(sale), Fmt.money(sale - costs)])
+	else:
+		Toast.show_message("%s left %s: fuel and repairs %s" % [ship.name, port, Fmt.money(-costs)])
 
 
 func _on_ship_held(ship: Ship, reason: String) -> void:
 	Toast.show_message("%s is held at %s: %s" % [ship.name, GameData.port_name(ship.docked_at), reason])
+
+
+func _on_ship_broke_down(ship: Ship) -> void:
+	Toast.show_message("%s broke down at sea! Maintenance now %d%%" % [ship.name, floori(ship.maintenance * 100.0)])
+
+
+func _on_ship_lost(ship: Ship) -> void:
+	Toast.show_message("%s is lost at sea (%s). Send a Mammoth from its popup." % [ship.name, ship.lost_reason])
+
+
+func _on_ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool) -> void:
+	var outcome := "" if to_destination else " (back where it came from, so no pay)"
+	Toast.show_message("%s carried %s to %s%s" % [mammoth.name, ship.name, GameData.port_name(port_id), outcome])

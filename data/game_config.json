@@ -1,8 +1,11 @@
 {
-	"_comment": "pay_per_container_nm: a ship is paid capacity x leg distance (nm) x this rate when it finishes unloading; tuned so a Scooter 10 earns about $2,000 per minute of sailing. fuel_price: dollars per fuel unit, the same at every port. initial_view_width_deg: how many degrees of longitude the map shows across when it opens, centered on the home port.",
+	"_comment": "pay_per_container_nm: a ship is paid capacity x leg distance (nm) x this rate when it finishes unloading; tuned so a Scooter 10 earns about $2,000 per minute of sailing. fuel_price: dollars per fuel unit, the same at every port (fuel is about 40% of a leg's pay). Breakdowns: every breakdown_interval_s seconds there's a breakdown_chance that one random ship at sea (not a Mammoth) loses breakdown_hit of its maintenance (0.5 = 50 points). initial_view_width_deg: how many degrees of longitude the map shows across when it opens, centered on the home port.",
 	"starting_money": 10000,
 	"autosave_seconds": 30,
 	"pay_per_container_nm": 0.6125,
-	"fuel_price": 2,
+	"fuel_price": 2.4,
+	"breakdown_interval_s": 5,
+	"breakdown_chance": 0.01,
+	"breakdown_hit": 0.5,
 	"initial_view_width_deg": 45
 }

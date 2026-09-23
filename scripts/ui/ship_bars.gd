@@ -34,10 +34,14 @@ func _draw() -> void:
 	var cargo_text := "Loaded"
 	if ship.is_docking():
 		cargo_text = "Unloading" if ship.dock_time < ship.dock_seconds() / 2.0 else "Loading"
+	var load_bar := ["Cargo", ship.cargo_level(), &"cargo", cargo_text]
+	if ship.is_recovery():  # A Mammoth's load is the ship it's carrying.
+		var carrying := ship.is_carrying()
+		load_bar = ["Tow", 1.0 if carrying else 0.0, &"cargo", ship.rescuing.name if carrying else "Empty"]
 	var bars := [
 		["Maintenance", ship.maintenance, &"maintenance", "%d%%" % floori(ship.maintenance * 100.0)],
 		["Fuel", ship.fuel_level(), &"fuel", "%d%%" % floori(ship.fuel_level() * 100.0)],
-		["Cargo", ship.cargo_level(), &"cargo", cargo_text],
+		load_bar,
 	]
 	var y := 0.0
 	for bar: Array in bars:

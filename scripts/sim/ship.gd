@@ -6,13 +6,26 @@ extends RefCounted
 ## Routes are loops of port ids; route_index is the route stop the ship is at or
 ## heading to.
 ##
-## Maintenance (0..1) wears down while the ship runs at sea and slows it down;
-## fuel burns at a constant rate per second at sea. After arriving, a ship docks
-## for dock_seconds(): it unloads (and is paid), is repaired then refueled if
-## those toggles are on, and loads again before it can leave.
+## Maintenance (0..1) wears down while the ship runs at sea and slows it down
+## (at 0% it stops); fuel burns at a constant rate per second at sea. After
+## arriving, a ship docks for dock_seconds(): it unloads (and is paid), is
+## repaired then refueled if those toggles are on, and loads again before it
+## can leave.
+##
+## A ship that runs out of fuel or maintenance at sea is lost until a recovery
+## boat (a Mammoth) tows it to the nearer end of its leg. A Mammoth has no
+## route: it sails a job (a list of lane segments) to the lost ship, turns to
+## line up with it, carries it to port, then sails home.
 
-## Speed never drops below this fraction of top speed, however worn the ship is.
-const MIN_SPEED_FACTOR := 0.5
+## How long a Mammoth takes to turn and line up with a lost ship, and to turn
+## the pair around if it's towing it back the way it came.
+const ALIGN_SECONDS := 2.0
+
+## Job phases for a Mammoth.
+const JOB_NONE := ""
+const JOB_APPROACH := "approach"
+const JOB_ALIGN := "align"
+const JOB_TOW := "tow"
 
 var name := ""
 var model_id := ""
@@ -38,13 +51,30 @@ var unloaded := true
 ## Rates (per second) that refill what was missing on arrival within one refill phase.
 var repair_rate := 0.0
 var refuel_rate := 0.0
-## Spent at the current stop, for display.
+## Earned and spent at the current stop, for display.
+var stop_sale := 0
 var stop_fuel_cost := 0.0
 var stop_repair_cost := 0.0
 ## Fractions of a dollar spent but not yet taken from the player's money.
 var bill := 0.0
 ## Why a running ship is stuck in port, or "".
 var hold_reason := ""
+
+## Why this ship is stranded at sea ("out of fuel", "engine failure"), or "".
+var lost_reason := ""
+## The Mammoth sent to recover this ship, if any.
+var rescuer: Ship = null
+
+## Mammoth only: the lost ship it's recovering, the job phase, where the
+## current segment ends (nm along from_port -> to_port), the segments still to
+## sail ([from, to, start_nm, end_nm]), seconds spent aligning, and the port
+## it's towing to.
+var rescuing: Ship = null
+var job_phase := JOB_NONE
+var segment_end := 0.0
+var job_segments: Array = []
+var align_time := 0.0
+var tow_port := ""
 
 
 func _init(ship_name := "", ship_model_id := "", start_port := "") -> void:
@@ -58,13 +88,18 @@ func model() -> Dictionary:
 	return GameData.get_ship_model(model_id)
 
 
+## A Mammoth: recovers lost ships instead of sailing routes.
+func is_recovery() -> bool:
+	return bool(model().get("recovery", false))
+
+
 func top_speed() -> float:
 	return float(model().get("speed_nm_per_s", 0))
 
 
-## Current speed: top speed scaled by maintenance, down to MIN_SPEED_FACTOR.
+## Current speed: top speed scaled by maintenance.
 func speed() -> float:
-	return top_speed() * maxf(maintenance, MIN_SPEED_FACTOR)
+	return top_speed() * clampf(maintenance, 0.0, 1.0)
 
 
 func capacity() -> int:
@@ -109,20 +144,21 @@ func can_sail(from: String, to: String) -> bool:
 
 
 ## Seconds to sail a distance starting at a given maintenance, slowing as the
-## ship wears until it hits MIN_SPEED_FACTOR.
+## ship wears. INF if it would wear down to a stop first.
 func sailing_seconds(distance: float, start_maintenance: float) -> float:
 	var v := top_speed()
 	var w := wear_per_s()
 	var m := start_maintenance
-	if v <= 0.0:
+	if distance <= 0.0:
+		return 0.0
+	if v <= 0.0 or m <= 0.0:
 		return INF
-	if w <= 0.0 or m <= MIN_SPEED_FACTOR:
-		return distance / (v * maxf(m, MIN_SPEED_FACTOR))
-	var fade_time := (m - MIN_SPEED_FACTOR) / w
-	var fade_distance := v * (m + MIN_SPEED_FACTOR) / 2.0 * fade_time
-	if distance <= fade_distance:
-		return (m - sqrt(m * m - 2.0 * w * distance / v)) / w
-	return fade_time + (distance - fade_distance) / (v * MIN_SPEED_FACTOR)
+	if w <= 0.0:
+		return distance / (v * m)
+	var discriminant := m * m - 2.0 * w * distance / v
+	if discriminant < 0.0:
+		return INF
+	return (m - sqrt(discriminant)) / w
 
 
 ## Fuel needed to sail between two ports, leaving at the current maintenance.
@@ -158,6 +194,43 @@ func is_held() -> bool:
 	return not hold_reason.is_empty()
 
 
+## Stranded at sea, waiting for (or being carried by) a Mammoth.
+func is_lost() -> bool:
+	return not lost_reason.is_empty()
+
+
+## A Mammoth out on a job.
+func is_on_job() -> bool:
+	return job_phase != JOB_NONE
+
+
+## Riding on a Mammoth (from partway through its alignment until port).
+func is_carried() -> bool:
+	return rescuer != null and rescuer.is_carrying()
+
+
+## Mammoth only: has the lost ship aboard.
+func is_carrying() -> bool:
+	return job_phase == JOB_TOW or (job_phase == JOB_ALIGN and align_time >= ALIGN_SECONDS)
+
+
+## Mammoth only: turns the pair around after lining up, when towing back the way the ship came.
+func tow_turns_around() -> bool:
+	return rescuing != null and tow_port == rescuing.from_port
+
+
+## Mammoth only: total seconds spent lining up (and turning around if needed).
+func align_seconds() -> float:
+	return ALIGN_SECONDS * (2.0 if tow_turns_around() else 1.0)
+
+
+## Green on the status dot.
+func is_active() -> bool:
+	if is_recovery():
+		return is_on_job() or not is_docked()
+	return is_running() and not is_held() and not is_lost()
+
+
 func fuel_level() -> float:
 	var tank := fuel_tank()
 	return clampf(fuel / tank, 0.0, 1.0) if tank > 0.0 else 0.0
@@ -181,6 +254,8 @@ func leg_progress() -> float:
 
 ## Position in projected map coordinates.
 func world_position() -> Vector2:
+	if is_carried():
+		return rescuer.world_position()
 	if is_docked():
 		return GameData.port_position(docked_at)
 	var sea_lane = GameData.lane(from_port, to_port)
@@ -191,10 +266,29 @@ func world_position() -> Vector2:
 
 ## Direction of travel in projected map coordinates (zero when docked).
 func heading() -> Vector2:
+	if is_carried():
+		return rescuer.heading()
 	if is_docked():
 		return Vector2.ZERO
-	var sea_lane = GameData.lane(from_port, to_port)
-	return sea_lane.sample(traveled_nm)[1] if sea_lane else Vector2.ZERO
+	if job_phase == JOB_ALIGN:
+		return _align_heading()
+	return _lane_heading(from_port, to_port, traveled_nm)
+
+
+## Turns from the approach heading to the lost ship's heading, then (if
+## towing it back) on round to face the way it came.
+func _align_heading() -> Vector2:
+	var arrive := _lane_heading(from_port, to_port, traveled_nm).angle()
+	var ship_angle := _lane_heading(rescuing.from_port, rescuing.to_port, rescuing.traveled_nm).angle()
+	if align_time < ALIGN_SECONDS:
+		return Vector2.from_angle(lerp_angle(arrive, ship_angle, align_time / ALIGN_SECONDS))
+	var t := (align_time - ALIGN_SECONDS) / ALIGN_SECONDS if tow_turns_around() else 0.0
+	return Vector2.from_angle(ship_angle + PI * clampf(t, 0.0, 1.0))
+
+
+static func _lane_heading(from: String, to: String, distance: float) -> Vector2:
+	var sea_lane = GameData.lane(from, to)
+	return sea_lane.sample(distance)[1] if sea_lane else Vector2.ZERO
 
 
 ## Index of the route stop to sail to next from the port the ship is docked at.
@@ -208,6 +302,14 @@ func next_route_index() -> int:
 
 
 func status_text() -> String:
+	if is_recovery():
+		return _recovery_status_text()
+	if is_lost():
+		if rescuer == null:
+			return "Lost at sea (%s)" % lost_reason
+		if is_carried():
+			return "Being carried to %s by %s" % [GameData.port_name(rescuer.tow_port), rescuer.name]
+		return "Lost at sea (%s), %s on the way" % [lost_reason, rescuer.name]
 	if is_docked():
 		var port := GameData.port_name(docked_at)
 		if is_docking():
@@ -224,6 +326,24 @@ func status_text() -> String:
 	if paused:
 		return "Stopping at %s" % destination
 	return "En route to %s — %d%%" % [destination, int(leg_progress() * 100.0)]
+
+
+func _recovery_status_text() -> String:
+	match job_phase:
+		JOB_APPROACH:
+			return "Heading to recover %s" % rescuing.name
+		JOB_ALIGN:
+			return "Lining up with %s" % rescuing.name
+		JOB_TOW:
+			return "Carrying %s to %s" % [rescuing.name, GameData.port_name(tow_port)]
+	if is_docked():
+		var port := GameData.port_name(docked_at)
+		if is_docking():
+			return "Refueling at %s" % port
+		if is_held():
+			return "Docked at %s — %s" % [port, hold_reason]
+		return "Standing by at %s" % port
+	return "Returning to %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
 
 
 func to_dict() -> Dictionary:
@@ -247,14 +367,22 @@ func to_dict() -> Dictionary:
 		"unloaded": unloaded,
 		"repair_rate": repair_rate,
 		"refuel_rate": refuel_rate,
+		"stop_sale": stop_sale,
 		"stop_fuel_cost": stop_fuel_cost,
 		"stop_repair_cost": stop_repair_cost,
 		"bill": bill,
+		"lost_reason": lost_reason,
+		"rescuing": rescuing.name if rescuing else "",
+		"job_phase": job_phase,
+		"segment_end": segment_end,
+		"job_segments": job_segments,
+		"align_time": align_time,
+		"tow_port": tow_port,
 	}
 
 
 ## Saves from before fuel and maintenance load with full tanks, 100%
-## maintenance and both toggles on.
+## maintenance and both toggles on. Call link_rescues() once every ship is loaded.
 static func from_dict(data: Dictionary) -> Ship:
 	var ship := Ship.new(data.get("name", ""), data.get("model_id", ""), data.get("docked_at", ""))
 	ship.route.assign(data.get("route", []))
@@ -273,7 +401,28 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.unloaded = bool(data.get("unloaded", true))
 	ship.repair_rate = float(data.get("repair_rate", 0.0))
 	ship.refuel_rate = float(data.get("refuel_rate", 0.0))
+	ship.stop_sale = int(data.get("stop_sale", 0))
 	ship.stop_fuel_cost = float(data.get("stop_fuel_cost", 0.0))
 	ship.stop_repair_cost = float(data.get("stop_repair_cost", 0.0))
 	ship.bill = float(data.get("bill", 0.0))
+	ship.lost_reason = data.get("lost_reason", "")
+	ship.job_phase = data.get("job_phase", JOB_NONE)
+	ship.segment_end = float(data.get("segment_end", 0.0))
+	ship.job_segments = data.get("job_segments", [])
+	ship.align_time = float(data.get("align_time", 0.0))
+	ship.tow_port = data.get("tow_port", "")
+	ship.set_meta(&"rescuing", data.get("rescuing", ""))
 	return ship
+
+
+## Reconnects Mammoths to the ships they're recovering after loading.
+static func link_rescues(all: Array[Ship]) -> void:
+	for mammoth in all:
+		var target: String = mammoth.get_meta(&"rescuing", "")
+		mammoth.remove_meta(&"rescuing")
+		for ship in all:
+			if not target.is_empty() and ship.name == target:
+				mammoth.rescuing = ship
+				ship.rescuer = mammoth
+		if mammoth.rescuing == null:
+			mammoth.job_phase = JOB_NONE

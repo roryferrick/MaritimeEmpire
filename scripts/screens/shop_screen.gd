@@ -42,6 +42,9 @@ func _make_card(model: Dictionary) -> Control:
 		["Price", Fmt.money(int(model.get("price", 0)))],
 		["Owned", ""],
 	]
+	if model.get("recovery", false):
+		rows[1] = ["Carries", "1 lost ship"]
+		rows[2] = ["Job", "Recovers ships lost at sea"]
 	for row: Array in rows:
 		var name_label := Label.new()
 		name_label.text = row[0]

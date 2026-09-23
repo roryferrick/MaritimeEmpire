@@ -52,7 +52,7 @@ func _on_ship_changed(changed: Ship) -> void:
 
 
 func _draw_dot() -> void:
-	var running := ship.is_running() and not ship.is_held()  # Held ships show red.
+	var running := ship.is_active()
 	var color_name := &"running" if running else &"stopped"
 	var color := Color.GREEN if running else Color.RED
 	if has_theme_color(color_name, THEME_TYPE):

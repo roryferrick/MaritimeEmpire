@@ -29,6 +29,11 @@ const MAX_VIEW_LAT := 75.0
 const PORT_FONT_SIZE := 15
 const COUNTRY_FONT_SIZE := 13
 const LABEL_PADDING := 3.0
+## A ship's pointed bow sticks out this many times its width.
+const BOW_LENGTH_FACTOR := 0.6
+const LOST_MARKER_SIZE := 26
+## How far above a lost ship its "!" sits.
+const LOST_MARKER_OFFSET := 12.0
 
 const FALLBACK_COLORS := {
 	&"ocean": Color(0.16, 0.36, 0.56),
@@ -47,6 +52,8 @@ const FALLBACK_COLORS := {
 	&"label": Color.WHITE,
 	&"label_shadow": Color(0, 0, 0, 0.7),
 	&"ship_outline": Color(0.1, 0.08, 0.05),
+	&"lost_marker": Color(0.95, 0.15, 0.12),
+	&"lost_marker_outline": Color(1, 1, 1),
 	&"route": Color(1.0, 0.6, 0.15),
 }
 
@@ -427,15 +434,45 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool) 
 		_overlay.draw_polyline(points, color, 2.5, true)
 
 
+## Ships are rectangles with a pointed bow. Ships riding on a Mammoth are drawn
+## after it, so they sit in its middle; lost ships get a red "!" above them.
 func _draw_ships() -> void:
 	var outline := _color(&"ship_outline")
 	for ship in GameState.ships:
-		var model := ship.model()
-		var dims: Array = model.get("map_size", [14, 6])
-		var rect := Rect2(-Vector2(dims[0], dims[1]) / 2.0, Vector2(dims[0], dims[1]))
-		var direction := ship.heading()
-		var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
-		_overlay.draw_set_transform(ship_screen_position(ship), angle)
-		_overlay.draw_rect(rect, Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE))
-		_overlay.draw_rect(rect, outline, false, 1.0)
+		if not ship.is_carried():
+			_draw_ship(ship, outline)
+	for ship in GameState.ships:
+		if ship.is_carried():
+			_draw_ship(ship, outline)
 	_overlay.draw_set_transform_matrix(Transform2D.IDENTITY)
+	for ship in GameState.ships:
+		if ship.is_lost() and not ship.is_carried():
+			_draw_lost_marker(ship_screen_position(ship))
+
+
+func _draw_ship(ship: Ship, outline: Color) -> void:
+	var model := ship.model()
+	var dims: Array = model.get("map_size", [14, 6])
+	var length := float(dims[0])
+	var width := float(dims[1])
+	var bow := width * BOW_LENGTH_FACTOR
+	# Hull plus bow, centered on the ship's position.
+	var back := -(length + bow) / 2.0
+	var front := back + length
+	var hull := PackedVector2Array([
+		Vector2(back, -width / 2.0), Vector2(front, -width / 2.0), Vector2(front + bow, 0.0),
+		Vector2(front, width / 2.0), Vector2(back, width / 2.0)])
+	var direction := ship.heading()
+	var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
+	_overlay.draw_set_transform(ship_screen_position(ship), angle)
+	_overlay.draw_colored_polygon(hull, Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE))
+	hull.append(hull[0])
+	_overlay.draw_polyline(hull, outline, 1.0)
+
+
+func _draw_lost_marker(at: Vector2) -> void:
+	var font := get_theme_default_font()
+	var baseline := at + Vector2(-LOST_MARKER_SIZE * 0.15, -LOST_MARKER_OFFSET)
+	_overlay.draw_string_outline(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, 4,
+		_color(&"lost_marker_outline"))
+	_overlay.draw_string(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, _color(&"lost_marker"))

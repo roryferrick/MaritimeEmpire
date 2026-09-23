@@ -16,11 +16,23 @@ signal ship_changed(ship: Ship)
 signal ship_arrived(ship: Ship, port_id: String, payment: int)
 ## A running ship is stuck in port, e.g. without enough fuel for its next leg.
 signal ship_held(ship: Ship, reason: String)
+## A ship left a port, with what it earned and spent there.
+signal ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, repair_cost: int)
+## A random breakdown knocked a ship's maintenance down.
+signal ship_broke_down(ship: Ship)
+## A ship ran out of fuel or maintenance at sea.
+signal ship_lost(ship: Ship)
+## A Mammoth dropped a lost ship at a port (its destination, or back where it came from).
+signal ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool)
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 2
 const MAX_NAME_LENGTH := 24
 const MAX_COMPANY_NAME_LENGTH := 32
+## Seconds of spare fuel a ship must have beyond what its next leg needs.
+const DEPARTURE_MARGIN_S := 1.0
+## A worn-out Mammoth still crawls at this fraction of top speed, so it can always finish a job.
+const MIN_RECOVERY_SPEED_FACTOR := 0.05
 
 var money: int = 0:
 	set(value):
@@ -39,6 +51,7 @@ var ships: Array[Ship] = []
 var in_session := false
 
 var _autosave_timer := Timer.new()
+var _breakdown_clock := 0.0
 
 
 func _ready() -> void:
@@ -57,6 +70,7 @@ func _process(delta: float) -> void:
 		return
 	for ship in ships:
 		_advance(ship, delta)
+	_roll_breakdowns(delta)
 
 
 # --- Ships ---------------------------------------------------------------
@@ -149,7 +163,7 @@ func _range_error(ship: Ship, from: String, to: String) -> String:
 ## Gives a ship a new route and sets it running. A ship at sea finishes its
 ## current leg first.
 func assign_route(ship: Ship, route: Array[String]) -> void:
-	if not route_error(route, ship).is_empty():
+	if ship.is_recovery() or not route_error(route, ship).is_empty():
 		return
 	ship.paused = false
 	if ship.is_docked():
@@ -180,22 +194,64 @@ func set_auto_repair(ship: Ship, on: bool) -> void:
 
 
 func _advance(ship: Ship, delta: float) -> void:
-	if ship.is_docked():
+	if ship.is_on_job():
+		_advance_job(ship, delta)
+	elif ship.is_docked():
 		_advance_docked(ship, delta)
-		return
-	if ship.is_running():
+	elif not ship.is_lost() and _sail(ship, delta) and ship.traveled_nm >= ship.leg_length():
+		_arrive(ship, ship.to_port)
+
+
+## Wears, burns fuel and moves a ship along its current lane. Returns false if
+## the ship ran out of fuel or maintenance and is now lost at sea. Mammoths
+## only set off when they can finish, so they're never lost.
+func _sail(ship: Ship, delta: float) -> bool:
+	if ship.is_running() or ship.is_recovery():
 		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * delta, 0.0)
-	# Ships only leave with enough fuel for the leg, so this only clips rounding.
 	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * delta, 0.0)
-	ship.traveled_nm += ship.speed() * delta
-	if ship.traveled_nm >= ship.leg_length():
-		_arrive(ship)
+	if not ship.is_recovery():
+		if ship.fuel <= 0.0:
+			_lose(ship, "out of fuel")
+			return false
+		if ship.maintenance <= 0.0:
+			_lose(ship, "broken down")
+			return false
+	var speed := ship.speed()
+	if ship.is_recovery():
+		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
+	ship.traveled_nm += speed * delta
+	return true
 
 
-func _arrive(ship: Ship) -> void:
-	var port := ship.to_port
-	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.capacity())
-	ship.unloaded = false
+func _lose(ship: Ship, reason: String) -> void:
+	ship.lost_reason = reason
+	ship_lost.emit(ship)
+	ship_changed.emit(ship)
+
+
+## Every breakdown_interval_s, a breakdown_chance roll; on a hit, one random
+## ship at sea (not a Mammoth) loses breakdown_hit of maintenance.
+func _roll_breakdowns(delta: float) -> void:
+	var interval := float(GameData.config.get("breakdown_interval_s", 5))
+	_breakdown_clock += delta
+	while _breakdown_clock >= interval:
+		_breakdown_clock -= interval
+		if randf() >= float(GameData.config.get("breakdown_chance", 0.01)):
+			continue
+		var candidates := ships.filter(func(ship: Ship) -> bool:
+			return not ship.is_recovery() and not ship.is_docked() and not ship.is_lost())
+		if candidates.is_empty():
+			continue
+		var ship: Ship = candidates.pick_random()
+		ship.maintenance = maxf(ship.maintenance - float(GameData.config.get("breakdown_hit", 0.5)), 0.0)
+		ship_broke_down.emit(ship)
+		if ship.maintenance <= 0.0:
+			_lose(ship, "broken down")
+
+
+func _arrive(ship: Ship, port: String, paid := true) -> void:
+	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.capacity()) if paid else 0
+	ship.unloaded = ship.cargo_payment <= 0
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""
@@ -208,6 +264,7 @@ func _arrive(ship: Ship) -> void:
 	var phase := ship.refill_phase_seconds()
 	ship.repair_rate = (1.0 - ship.maintenance) / phase
 	ship.refuel_rate = (ship.fuel_tank() - ship.fuel) / phase
+	ship.stop_sale = 0
 	ship.stop_fuel_cost = 0.0
 	ship.stop_repair_cost = 0.0
 	ship_changed.emit(ship)
@@ -216,7 +273,7 @@ func _arrive(ship: Ship) -> void:
 ## Docking runs on a fixed clock: repair for one refill phase, then refuel for
 ## one, with unloading (and payment) over the first half of the dock time and
 ## loading over the second. Afterwards a running ship leaves as soon as it has
-## the fuel for its next leg.
+## the fuel for its next leg, and a Mammoth away from home sails back.
 func _advance_docked(ship: Ship, delta: float) -> void:
 	if ship.is_docking():
 		var phase := ship.refill_phase_seconds()
@@ -233,39 +290,51 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 			return
 		ship.dock_time = -1.0
 		ship_changed.emit(ship)
-	if ship.is_running():
-		_try_depart(ship, delta)
+	if ship.is_recovery() and ship.docked_at != home_port:
+		_try_depart(ship, delta, home_port)
+	elif ship.is_running():
+		_try_depart(ship, delta, ship.route[ship.next_route_index()])
 	else:
 		_set_hold(ship, "")
 
 
 func _unload(ship: Ship) -> void:
 	ship.unloaded = true
+	ship.stop_sale = ship.cargo_payment
 	money += ship.cargo_payment
 	containers_delivered += ship.capacity()
 	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
 
 
-## Leaves once it has fuel for the next leg. A ship that ran out of money while
-## refilling tops up (as the toggles and money allow) until its tank is full or
-## the money runs out, and is held in port while it lacks fuel for the leg.
-func _try_depart(ship: Ship, delta: float) -> void:
-	var to := ship.route[ship.next_route_index()]
+## Fuel a ship must have to set off on a leg: enough for the leg, allowing for
+## wear, plus a little spare.
+func _fuel_to_leave(ship: Ship, to: String) -> float:
+	return ship.fuel_needed(ship.docked_at, to) + ship.fuel_per_s() * DEPARTURE_MARGIN_S
+
+
+## Leaves once it has fuel for the leg to `to`. A ship that ran out of money
+## while refilling tops up (as the toggles and money allow) until its tank is
+## full or the money runs out, and is held in port while it lacks fuel for the leg.
+func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	var phase := ship.refill_phase_seconds()
 	var topping_up := ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
-	if topping_up or ship.fuel < ship.fuel_needed(ship.docked_at, to):
-		var too_worn := ship.fuel_needed(ship.docked_at, to) > ship.fuel_tank()
+	if topping_up or ship.fuel < _fuel_to_leave(ship, to):
+		var too_worn := _fuel_to_leave(ship, to) > ship.fuel_tank()
 		if too_worn and ship.auto_repair:
 			_repair(ship, delta / phase)
 		elif ship.auto_refuel:
 			_refuel(ship, ship.fuel_tank() / phase * delta)
-		var need := ship.fuel_needed(ship.docked_at, to)
+		var need := _fuel_to_leave(ship, to)
 		if ship.fuel >= need and ship.fuel < ship.fuel_tank() and ship.auto_refuel and _can_spend(ship):
 			_set_hold(ship, "")
 			return  # Still topping up.
 		if ship.fuel < need:
 			var destination := GameData.port_name(to)
-			if need > ship.fuel_tank():
+			var fresh_need := ship.fuel_per_s() * (DEPARTURE_MARGIN_S
+				+ ship.sailing_seconds(GameData.distance_nm(ship.docked_at, to), 1.0))
+			if fresh_need > ship.fuel_tank():
+				_set_hold(ship, "%s is beyond this ship's range; assign a new route" % destination)
+			elif need > ship.fuel_tank():
 				_set_hold(ship, "too worn to reach %s on a full tank%s" % [destination,
 					", waiting for money to repair" if ship.auto_repair else "; turn on repair"])
 			elif not ship.auto_refuel:
@@ -274,7 +343,7 @@ func _try_depart(ship: Ship, delta: float) -> void:
 				_set_hold(ship, "waiting for money to buy fuel for %s" % destination)
 			return
 	_set_hold(ship, "")
-	_depart(ship)
+	_depart(ship, to)
 
 
 func _set_hold(ship: Ship, reason: String) -> void:
@@ -286,15 +355,162 @@ func _set_hold(ship: Ship, reason: String) -> void:
 	ship_changed.emit(ship)
 
 
-func _depart(ship: Ship) -> void:
-	var next := ship.next_route_index()
-	ship.route_index = next
+func _depart(ship: Ship, to: String) -> void:
+	if not ship.is_recovery():
+		ship.route_index = ship.next_route_index()
+	_leave_port(ship)
 	ship.from_port = ship.docked_at
-	ship.to_port = ship.route[next]
+	ship.to_port = to
 	ship.traveled_nm = 0.0
 	ship.docked_at = ""
-	ship.dock_time = -1.0
 	ship_changed.emit(ship)
+
+
+## Reports what the ship earned and spent at the port it's leaving.
+func _leave_port(ship: Ship) -> void:
+	var fuel := roundi(ship.stop_fuel_cost)
+	var repair := roundi(ship.stop_repair_cost)
+	if ship.stop_sale > 0 or fuel > 0 or repair > 0:
+		ship_departed.emit(ship, ship.docked_at, ship.stop_sale, fuel, repair)
+	ship.stop_sale = 0
+	ship.stop_fuel_cost = 0.0
+	ship.stop_repair_cost = 0.0
+	ship.dock_time = -1.0
+	ship.hold_reason = ""
+
+
+# --- Recovery --------------------------------------------------------------
+
+## How the nearest free Mammoth would recover a lost ship: {mammoth, segments,
+## tow_port, approach_nm, seconds, fuel, cost}, or {error} saying why none can.
+func recovery_plan(lost: Ship) -> Dictionary:
+	if not lost.is_lost() or lost.rescuer != null:
+		return {error = "This ship doesn't need recovering."}
+	var mammoths := ships.filter(func(ship: Ship) -> bool: return ship.is_recovery())
+	if mammoths.is_empty():
+		return {error = "Buy a Mammoth in the Shop to recover lost ships."}
+	var best := {}
+	var reason := "Every Mammoth is busy."
+	for mammoth: Ship in mammoths:
+		if mammoth.is_on_job() or not mammoth.is_docked() or mammoth.is_docking():
+			continue
+		var plan := _plan_for(mammoth, lost)
+		if mammoth.fuel < plan.fuel:
+			reason = "No free Mammoth has the fuel and maintenance to reach it."
+			continue
+		if best.is_empty() or plan.approach_nm < best.approach_nm:
+			best = plan
+	return best if not best.is_empty() else {error = reason}
+
+
+## Sends the nearest free Mammoth to recover a lost ship. Returns why it
+## couldn't, or "".
+func send_recovery(lost: Ship) -> String:
+	var plan := recovery_plan(lost)
+	if plan.has("error"):
+		return plan.error
+	var mammoth: Ship = plan.mammoth
+	_leave_port(mammoth)
+	mammoth.docked_at = ""
+	mammoth.rescuing = lost
+	lost.rescuer = mammoth
+	mammoth.tow_port = plan.tow_port
+	mammoth.job_segments = plan.segments.duplicate(true)
+	mammoth.job_phase = Ship.JOB_APPROACH
+	_start_segment(mammoth, mammoth.job_segments.pop_front())
+	ship_changed.emit(mammoth)
+	ship_changed.emit(lost)
+	return ""
+
+
+## The Mammoth sails the lanes to the lost ship's position (via whichever end of
+## its leg is closer), then carries it to the nearer end of its leg.
+func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
+	var start := mammoth.docked_at
+	var a := lost.from_port
+	var b := lost.to_port
+	var done := lost.traveled_nm
+	var left := lost.leg_length() - done
+	var via_a := (0.0 if start == a else GameData.distance_nm(start, a)) + done
+	var via_b := (0.0 if start == b else GameData.distance_nm(start, b)) + left
+	var segments := []
+	if via_a <= via_b:
+		if start != a:
+			segments.append([start, a, 0.0, GameData.distance_nm(start, a)])
+		segments.append([a, b, 0.0, done])
+	else:
+		if start != b:
+			segments.append([start, b, 0.0, GameData.distance_nm(start, b)])
+		segments.append([b, a, 0.0, left])
+	var tow_port := a if done <= left else b
+	if tow_port == a:
+		segments.append([b, a, left, left + done])
+	else:
+		segments.append([a, b, done, done + left])
+	var approach_nm := minf(via_a, via_b)
+	var seconds := mammoth.sailing_seconds(approach_nm + minf(done, left), mammoth.maintenance)
+	var home_seconds := 0.0
+	if tow_port != home_port:
+		home_seconds = mammoth.sailing_seconds(GameData.distance_nm(tow_port, home_port), 1.0)
+	var running := seconds + home_seconds
+	return {
+		mammoth = mammoth,
+		segments = segments,
+		tow_port = tow_port,
+		approach_nm = approach_nm,
+		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if tow_port == a else 1.0),
+		fuel = mammoth.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S),
+		cost = mammoth.fuel_per_s() * running * float(GameData.config.get("fuel_price", 0))
+			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost(),
+	}
+
+
+func _start_segment(ship: Ship, segment: Array) -> void:
+	ship.from_port = segment[0]
+	ship.to_port = segment[1]
+	ship.traveled_nm = segment[2]
+	ship.segment_end = segment[3]
+
+
+## A Mammoth on a job: sail to the lost ship, line up with it, carry it to port.
+func _advance_job(mammoth: Ship, delta: float) -> void:
+	if mammoth.job_phase == Ship.JOB_ALIGN:
+		mammoth.align_time += delta
+		if mammoth.align_time >= mammoth.align_seconds():
+			mammoth.job_phase = Ship.JOB_TOW
+			_start_segment(mammoth, mammoth.job_segments.pop_front())
+			ship_changed.emit(mammoth)
+			ship_changed.emit(mammoth.rescuing)
+		return
+	_sail(mammoth, delta)
+	if mammoth.traveled_nm < mammoth.segment_end:
+		return
+	mammoth.traveled_nm = mammoth.segment_end
+	if mammoth.job_phase == Ship.JOB_TOW:
+		_deliver(mammoth)
+	elif mammoth.job_segments.size() > 1:
+		_start_segment(mammoth, mammoth.job_segments.pop_front())
+	else:
+		mammoth.job_phase = Ship.JOB_ALIGN
+		mammoth.align_time = 0.0
+		ship_changed.emit(mammoth)
+
+
+## Drops the carried ship at the tow port. It's paid as usual if that's where
+## it was going, and nothing if it was taken back to where it came from.
+func _deliver(mammoth: Ship) -> void:
+	var lost := mammoth.rescuing
+	var port := mammoth.tow_port
+	var to_destination := port == lost.to_port
+	mammoth.rescuing = null
+	mammoth.job_phase = Ship.JOB_NONE
+	mammoth.job_segments.clear()
+	mammoth.tow_port = ""
+	lost.rescuer = null
+	lost.lost_reason = ""
+	_arrive(mammoth, port, false)
+	_arrive(lost, port, to_destination)
+	ship_recovered.emit(lost, mammoth, port, to_destination)
 
 
 ## Restores up to `amount` of maintenance, as far as money allows.
@@ -355,7 +571,7 @@ func new_game(new_company_name: String, new_home_port: String) -> void:
 	home_port = new_home_port
 	money = int(GameData.config.get("starting_money", 10000))
 	containers_delivered = 0
-	ships.clear()
+	_clear_ships()
 	_begin_session()
 	save_game()
 
@@ -372,9 +588,10 @@ func continue_game() -> String:
 	home_port = data.get("home_port", "")
 	money = int(data.get("money", 0))
 	containers_delivered = int(data.get("containers_delivered", 0))
-	ships.clear()
+	_clear_ships()
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
+	Ship.link_rescues(ships)
 	_begin_session()
 	return ""
 
@@ -395,6 +612,15 @@ func save_game() -> void:
 		push_error("GameState: could not write save (%s)" % error_string(FileAccess.get_open_error()))
 		return
 	file.store_string(JSON.stringify(data, "\t"))
+
+
+## Ships and the Mammoths recovering them point at each other; break those
+## links so the old ships are freed.
+func _clear_ships() -> void:
+	for ship in ships:
+		ship.rescuer = null
+		ship.rescuing = null
+	ships.clear()
 
 
 func _begin_session() -> void:
