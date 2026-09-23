@@ -1,8 +1,28 @@
 {
-	"_comment": "World coordinates in nautical miles: x = east, y = north. Port C sits north of the A-B midpoint, 1,800 nm from each. On arrival a ship is paid per container it carries (its capacity), at the higher pay_per_container of the leg's two ports.",
+	"_comment": "Real-world ports. lat/lon in degrees (north/east positive), placed at the harbor entrance. rank orders label priority on the map (1 = shown first). Sea lanes between every pair of ports are generated into data/sea_lanes.json by tools/build_map_data.gd - rerun it after changing this file.",
 	"ports": [
-		{ "id": "A", "name": "Port A", "x": -450, "y": 0, "pay_per_container": 100 },
-		{ "id": "B", "name": "Port B", "x": 450, "y": 0, "pay_per_container": 100 },
-		{ "id": "C", "name": "Port C", "x": 0, "y": 1742.84, "pay_per_container": 200 }
+		{ "id": "TNG", "name": "Tanger Med", "country": "Morocco", "lat": 35.889, "lon": -5.500, "rank": 1 },
+		{ "id": "VLC", "name": "Valencia", "country": "Spain", "lat": 39.440, "lon": -0.310, "rank": 2 },
+		{ "id": "PIR", "name": "Piraeus", "country": "Greece", "lat": 37.935, "lon": 23.590, "rank": 3 },
+		{ "id": "ALG", "name": "Algeciras", "country": "Spain", "lat": 36.130, "lon": -5.420, "rank": 4 },
+		{ "id": "PSD", "name": "Port Said", "country": "Egypt", "lat": 31.270, "lon": 32.310, "rank": 5 },
+		{ "id": "GIT", "name": "Gioia Tauro", "country": "Italy", "lat": 38.450, "lon": 15.890, "rank": 6 },
+		{ "id": "BCN", "name": "Barcelona", "country": "Spain", "lat": 41.340, "lon": 2.170, "rank": 7 },
+		{ "id": "IST", "name": "Istanbul", "country": "Turkey", "lat": 40.960, "lon": 28.690, "rank": 8 },
+		{ "id": "MLA", "name": "Marsaxlokk", "country": "Malta", "lat": 35.820, "lon": 14.550, "rank": 9 },
+		{ "id": "GOA", "name": "Genoa", "country": "Italy", "lat": 44.400, "lon": 8.900, "rank": 10 },
+		{ "id": "MER", "name": "Mersin", "country": "Turkey", "lat": 36.780, "lon": 34.640, "rank": 11 },
+		{ "id": "ALY", "name": "Alexandria", "country": "Egypt", "lat": 31.190, "lon": 29.860, "rank": 12 },
+		{ "id": "MRS", "name": "Marseille-Fos", "country": "France", "lat": 43.400, "lon": 4.900, "rank": 13 },
+		{ "id": "HFA", "name": "Haifa", "country": "Israel", "lat": 32.830, "lon": 35.000, "rank": 14 },
+		{ "id": "IZM", "name": "Izmir", "country": "Turkey", "lat": 38.820, "lon": 26.920, "rank": 15 },
+		{ "id": "ASH", "name": "Ashdod", "country": "Israel", "lat": 31.830, "lon": 34.630, "rank": 16 },
+		{ "id": "SPE", "name": "La Spezia", "country": "Italy", "lat": 44.090, "lon": 9.850, "rank": 17 },
+		{ "id": "KOP", "name": "Koper", "country": "Slovenia", "lat": 45.560, "lon": 13.720, "rank": 18 },
+		{ "id": "ROM", "name": "Rome", "country": "Italy", "lat": 42.095, "lon": 11.770, "rank": 19 },
+		{ "id": "TUN", "name": "Tunis", "country": "Tunisia", "lat": 36.820, "lon": 10.310, "rank": 20 },
+		{ "id": "BOS", "name": "Boston", "country": "United States", "lat": 42.350, "lon": -71.030, "rank": 21 },
+		{ "id": "NYC", "name": "New York", "country": "United States", "lat": 40.660, "lon": -74.050, "rank": 22 },
+		{ "id": "MIA", "name": "Miami", "country": "United States", "lat": 25.770, "lon": -80.160, "rank": 23 }
 	]
 }

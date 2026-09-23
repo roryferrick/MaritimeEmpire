@@ -1,8 +1,9 @@
 extends PanelContainer
-## Money and containers-delivered readout shown above the main screens.
+## Company name, money and containers delivered, shown above the main screens.
 
 
 func _ready() -> void:
+	%CompanyLabel.text = GameState.company_name
 	GameState.money_changed.connect(_on_money_changed)
 	GameState.containers_changed.connect(_on_containers_changed)
 	_on_money_changed(GameState.money)

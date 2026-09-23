@@ -37,6 +37,20 @@ func capacity() -> int:
 	return int(model().get("capacity", 0))
 
 
+## Longest single leg this ship can sail, in nautical miles.
+func range_nm() -> float:
+	return float(model().get("range_nm", 0))
+
+
+func can_sail(from: String, to: String) -> bool:
+	return from != to and GameData.distance_nm(from, to) <= range_nm()
+
+
+## The port a new route starts from: where it's docked, or where it's heading.
+func reference_port() -> String:
+	return docked_at if is_docked() else to_port
+
+
 func is_docked() -> bool:
 	return not docked_at.is_empty()
 
@@ -59,11 +73,22 @@ func leg_progress() -> float:
 	return clampf(traveled_nm / length, 0.0, 1.0) if length > 0.0 else 1.0
 
 
-## Position in world nautical miles.
+## Position in projected map coordinates.
 func world_position() -> Vector2:
 	if is_docked():
 		return GameData.port_position(docked_at)
-	return GameData.port_position(from_port).lerp(GameData.port_position(to_port), leg_progress())
+	var sea_lane = GameData.lane(from_port, to_port)
+	if sea_lane == null:
+		return GameData.port_position(from_port)
+	return sea_lane.sample(traveled_nm)[0]
+
+
+## Direction of travel in projected map coordinates (zero when docked).
+func heading() -> Vector2:
+	if is_docked():
+		return Vector2.ZERO
+	var sea_lane = GameData.lane(from_port, to_port)
+	return sea_lane.sample(traveled_nm)[1] if sea_lane else Vector2.ZERO
 
 
 ## Index of the route stop to sail to next from the port the ship is docked at.

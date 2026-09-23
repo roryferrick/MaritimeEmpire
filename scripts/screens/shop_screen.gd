@@ -18,7 +18,7 @@ func _ready() -> void:
 func _make_card(model: Dictionary) -> Control:
 	var card := PanelContainer.new()
 	card.theme_type_variation = &"CardPanel"
-	card.custom_minimum_size = Vector2(340, 0)
+	card.custom_minimum_size = Vector2(290, 0)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 12)
 	card.add_child(box)
@@ -33,7 +33,7 @@ func _make_card(model: Dictionary) -> Control:
 	stats.add_theme_constant_override(&"h_separation", 24)
 	box.add_child(stats)
 	var rows := [
-		["Top speed", "%s nm/s" % Fmt.thousands(int(model.get("speed_nm_per_s", 0)))],
+		["Top speed", "%s nm/s" % Fmt.decimal(float(model.get("speed_nm_per_s", 0)), 2)],
 		["Capacity", "%s containers" % Fmt.thousands(int(model.get("capacity", 0)))],
 		["Range", "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))],
 		["Price", Fmt.money(int(model.get("price", 0)))],

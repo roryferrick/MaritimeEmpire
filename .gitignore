@@ -6,3 +6,6 @@
 /build/
 *.exe
 *.pck
+
+# Raw map downloads (see tools/build_map_data.gd)
+/tools/source_data/

@@ -11,7 +11,7 @@ func _ready() -> void:
 	var model := ship.model()
 	%NameLabel.text = ship.name
 	%ModelValue.text = model.get("name", ship.model_id)
-	%SpeedValue.text = "%s nm/s" % Fmt.thousands(int(model.get("speed_nm_per_s", 0)))
+	%SpeedValue.text = "%s nm/s" % Fmt.decimal(float(model.get("speed_nm_per_s", 0)), 2)
 	%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 	%CapacityValue.text = "%s containers" % Fmt.thousands(ship.capacity())
 	%CloseButton.pressed.connect(queue_free)

@@ -14,8 +14,9 @@ signal ship_changed(ship: Ship)
 signal ship_arrived(ship: Ship, port_id: String, payment: int)
 
 const SAVE_PATH := "user://savegame.json"
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
 const MAX_NAME_LENGTH := 24
+const MAX_COMPANY_NAME_LENGTH := 32
 
 var money: int = 0:
 	set(value):
@@ -27,6 +28,9 @@ var containers_delivered: int = 0:
 		containers_delivered = value
 		containers_changed.emit(containers_delivered)
 
+var company_name := ""
+## New ships are delivered here.
+var home_port := ""
 var ships: Array[Ship] = []
 var in_session := false
 
@@ -58,7 +62,7 @@ func buy_ship(model_id: String, ship_name: String) -> Ship:
 	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty():
 		return null
 	money -= int(GameData.get_ship_model(model_id).get("price", 0))
-	var ship := Ship.new(ship_name, model_id, str(GameData.config.get("starting_port", "A")))
+	var ship := Ship.new(ship_name, model_id, home_port)
 	ships.append(ship)
 	ships_changed.emit()
 	save_game()
@@ -78,6 +82,10 @@ func buy_error(model_id: String) -> String:
 	if money < int(model.get("price", 0)):
 		return "You can't afford this ship."
 	return ""
+
+
+func company_name_error(new_company_name: String) -> String:
+	return "Enter a company name." if new_company_name.strip_edges().is_empty() else ""
 
 
 ## Why a ship name can't be used, or "" if it's fine.
@@ -105,9 +113,11 @@ func suggest_ship_name() -> String:
 	return "Ship %d" % n
 
 
-## Why a route can't be accepted, or "" if it's valid. Routes loop, so the
-## last stop also can't be the same as the first.
-func route_error(route: Array[String]) -> String:
+## Why a route can't be given to a ship, or "" if it's valid. Routes loop, so
+## the last stop also can't be the same as the first, and every leg (including
+## the one back to the start, and the trip from where the ship is now to the
+## route's first port) must be within the ship's range.
+func route_error(route: Array[String], ship: Ship) -> String:
 	if route.size() < 2:
 		return "A route needs at least 2 ports."
 	for i in range(1, route.size()):
@@ -115,13 +125,27 @@ func route_error(route: Array[String]) -> String:
 			return "A ship can't visit the same port twice in a row."
 	if route[-1] == route[0]:
 		return "The route loops back to %s, so it can't also end there." % GameData.port_name(route[0])
+	for i in route.size():
+		var from := route[i]
+		var to := route[(i + 1) % route.size()]
+		if not ship.can_sail(from, to):
+			return _range_error(ship, from, to)
+	var start := ship.reference_port()
+	if not route.has(start) and not ship.can_sail(start, route[0]):
+		return _range_error(ship, start, route[0])
 	return ""
+
+
+func _range_error(ship: Ship, from: String, to: String) -> String:
+	return "%s to %s is %s nm, beyond this ship's %s nm range." % [
+		GameData.port_name(from), GameData.port_name(to),
+		Fmt.thousands(roundi(GameData.distance_nm(from, to))), Fmt.thousands(roundi(ship.range_nm()))]
 
 
 ## Gives a ship a new route and sets it running. A ship at sea finishes its
 ## current leg first.
 func assign_route(ship: Ship, route: Array[String]) -> void:
-	if not route_error(route).is_empty():
+	if not route_error(route, ship).is_empty():
 		return
 	ship.paused = false
 	if ship.is_docked():
@@ -157,7 +181,7 @@ func _advance(ship: Ship, delta: float) -> void:
 
 func _arrive(ship: Ship) -> void:
 	var port := ship.to_port
-	var payment := GameData.pay_per_container(ship.from_port, port) * ship.capacity()
+	var payment := GameData.leg_payment(ship.from_port, port, ship.capacity())
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""
@@ -190,7 +214,9 @@ func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
 
-func new_game() -> void:
+func new_game(new_company_name: String, new_home_port: String) -> void:
+	company_name = new_company_name.strip_edges()
+	home_port = new_home_port
 	money = int(GameData.config.get("starting_money", 10000))
 	containers_delivered = 0
 	ships.clear()
@@ -198,19 +224,23 @@ func new_game() -> void:
 	save_game()
 
 
-## Loads the save file and starts a session. Returns false if it can't be read.
-func continue_game() -> bool:
+## Loads the save file and starts a session. Returns why it couldn't, or "".
+func continue_game() -> String:
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
 	if typeof(data) != TYPE_DICTIONARY:
 		push_error("GameState: save file %s is missing or corrupt" % SAVE_PATH)
-		return false
+		return "The saved game could not be read."
+	if int(data.get("version", 0)) != SAVE_VERSION:
+		return "This save is from an older version of the game and can't be loaded. Start a new game."
+	company_name = data.get("company_name", "")
+	home_port = data.get("home_port", "")
 	money = int(data.get("money", 0))
 	containers_delivered = int(data.get("containers_delivered", 0))
 	ships.clear()
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
 	_begin_session()
-	return true
+	return ""
 
 
 func save_game() -> void:
@@ -218,6 +248,8 @@ func save_game() -> void:
 		return
 	var data := {
 		"version": SAVE_VERSION,
+		"company_name": company_name,
+		"home_port": home_port,
 		"money": money,
 		"containers_delivered": containers_delivered,
 		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),

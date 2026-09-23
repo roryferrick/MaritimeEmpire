@@ -1,6 +1,7 @@
 extends Control
 
 const GAME_SCENE := "res://scenes/game.tscn"
+const NEW_COMPANY_SCENE := "res://scenes/new_company.tscn"
 
 
 func _ready() -> void:
@@ -19,12 +20,13 @@ func _on_new_game_pressed() -> void:
 
 
 func _start_new_game() -> void:
-	GameState.new_game()
-	get_tree().change_scene_to_file(GAME_SCENE)
+	get_tree().change_scene_to_file(NEW_COMPANY_SCENE)
 
 
 func _on_continue_pressed() -> void:
-	if GameState.continue_game():
+	var error := GameState.continue_game()
+	if error.is_empty():
 		get_tree().change_scene_to_file(GAME_SCENE)
 	else:
+		%ErrorDialog.dialog_text = error
 		%ErrorDialog.popup_centered()

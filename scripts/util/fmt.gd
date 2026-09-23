@@ -6,6 +6,11 @@ static func money(amount: int) -> String:
 	return ("-$" if amount < 0 else "$") + thousands(absi(amount))
 
 
+## 5.4 -> "5.40" with 2 places; trailing zeros are kept.
+static func decimal(value: float, places: int) -> String:
+	return String.num(value, places).pad_decimals(places)
+
+
 ## 45 -> "45 s", 90 -> "1 min 30 s"
 static func duration(seconds: float) -> String:
 	var total := roundi(seconds)

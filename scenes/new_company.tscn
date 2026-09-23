@@ -1,0 +1,87 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/new_company.gd" id="1_company"]
+
+[node name="NewCompany" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_company")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.08, 0.2, 0.36, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(460, 0)
+layout_mode = 2
+theme_type_variation = &"CardPanel"
+
+[node name="Content" type="VBoxContainer" parent="Center/Card"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Center/Card/Content"]
+layout_mode = 2
+theme_type_variation = &"HeaderLabel"
+text = "Found your company"
+
+[node name="NameLabel" type="Label" parent="Center/Card/Content"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Company name"
+
+[node name="NameEdit" type="LineEdit" parent="Center/Card/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+placeholder_text = "e.g. Blue Horizon Shipping"
+
+[node name="PortLabel" type="Label" parent="Center/Card/Content"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Home port (new ships are delivered here)"
+
+[node name="PortPicker" type="OptionButton" parent="Center/Card/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="Center/Card/Content"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Card/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BackButton" type="Button" parent="Center/Card/Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Back"
+
+[node name="StartButton" type="Button" parent="Center/Card/Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Start"
