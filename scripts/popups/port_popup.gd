@@ -1,6 +1,8 @@
 class_name PortPopup
 extends AnchoredPopup
-## Shows a port's name and the player's ships docked there.
+## Shows a port's name and the player's ships docked there, with their bars.
+
+const SHIP_BARS_WIDTH := 80.0
 
 ## Set before adding to the tree.
 var port_id := ""
@@ -24,11 +26,19 @@ func _refresh_ships() -> void:
 	for ship in GameState.ships:
 		if ship.docked_at != port_id:
 			continue
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override(&"separation", 10)
 		var button := Button.new()
 		button.text = ship.name
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(_open_ship.bind(ship))
-		%ShipList.add_child(button)
+		row.add_child(button)
+		var bars := ShipBars.new(ship, true)
+		bars.custom_minimum_size.x = SHIP_BARS_WIDTH
+		bars.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(bars)
+		%ShipList.add_child(row)
 		count += 1
 	%NoShipsLabel.visible = count == 0
 	reset_size.call_deferred()

@@ -1,7 +1,8 @@
 {
-	"_comment": "pay_per_container_nm: an arriving ship is paid capacity x leg distance (nm) x this rate; tuned so a Scooter 10 earns about $2,000 per minute of sailing. initial_view_width_deg: how many degrees of longitude the map shows across when it opens, centered on the home port.",
+	"_comment": "pay_per_container_nm: a ship is paid capacity x leg distance (nm) x this rate when it finishes unloading; tuned so a Scooter 10 earns about $2,000 per minute of sailing. fuel_price: dollars per fuel unit, the same at every port. initial_view_width_deg: how many degrees of longitude the map shows across when it opens, centered on the home port.",
 	"starting_money": 10000,
 	"autosave_seconds": 30,
 	"pay_per_container_nm": 0.6125,
+	"fuel_price": 2,
 	"initial_view_width_deg": 45
 }

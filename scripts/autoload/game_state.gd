@@ -9,9 +9,13 @@ signal money_changed(money: int)
 signal containers_changed(total: int)
 ## A ship was bought.
 signal ships_changed
-## A ship docked, departed, was paused/resumed, or got a new route.
+## A ship docked, finished docking, departed, was held in port, was
+## paused/resumed, got a new route, or had a refuel/repair toggle changed.
 signal ship_changed(ship: Ship)
+## A ship finished unloading at a port and was paid.
 signal ship_arrived(ship: Ship, port_id: String, payment: int)
+## A running ship is stuck in port, e.g. without enough fuel for its next leg.
+signal ship_held(ship: Ship, reason: String)
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 2
@@ -152,7 +156,6 @@ func assign_route(ship: Ship, route: Array[String]) -> void:
 		ship.route = route.duplicate()
 		ship.pending_route.clear()
 		ship.route_index = ship.route.find(ship.docked_at)
-		_depart(ship)
 	else:
 		ship.pending_route = route.duplicate()
 	ship_changed.emit(ship)
@@ -163,25 +166,36 @@ func set_paused(ship: Ship, paused: bool) -> void:
 	if not ship.has_route():
 		return
 	ship.paused = paused
-	if not paused and ship.is_docked():
-		_depart(ship)
+	ship_changed.emit(ship)
+
+
+func set_auto_refuel(ship: Ship, on: bool) -> void:
+	ship.auto_refuel = on
+	ship_changed.emit(ship)
+
+
+func set_auto_repair(ship: Ship, on: bool) -> void:
+	ship.auto_repair = on
 	ship_changed.emit(ship)
 
 
 func _advance(ship: Ship, delta: float) -> void:
-	var budget := ship.speed() * delta
-	while budget > 0.0 and not ship.is_docked():
-		var remaining := ship.leg_length() - ship.traveled_nm
-		if budget < remaining:
-			ship.traveled_nm += budget
-			return
-		budget -= remaining
+	if ship.is_docked():
+		_advance_docked(ship, delta)
+		return
+	if ship.is_running():
+		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * delta, 0.0)
+	# Ships only leave with enough fuel for the leg, so this only clips rounding.
+	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * delta, 0.0)
+	ship.traveled_nm += ship.speed() * delta
+	if ship.traveled_nm >= ship.leg_length():
 		_arrive(ship)
 
 
 func _arrive(ship: Ship) -> void:
 	var port := ship.to_port
-	var payment := GameData.leg_payment(ship.from_port, port, ship.capacity())
+	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.capacity())
+	ship.unloaded = false
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""
@@ -190,12 +204,85 @@ func _arrive(ship: Ship) -> void:
 		ship.route = ship.pending_route.duplicate()
 		ship.pending_route.clear()
 		ship.route_index = ship.route.find(port)
+	ship.dock_time = 0.0
+	var phase := ship.refill_phase_seconds()
+	ship.repair_rate = (1.0 - ship.maintenance) / phase
+	ship.refuel_rate = (ship.fuel_tank() - ship.fuel) / phase
+	ship.stop_fuel_cost = 0.0
+	ship.stop_repair_cost = 0.0
+	ship_changed.emit(ship)
 
-	money += payment
-	containers_delivered += ship.capacity()
-	ship_arrived.emit(ship, port, payment)
+
+## Docking runs on a fixed clock: repair for one refill phase, then refuel for
+## one, with unloading (and payment) over the first half of the dock time and
+## loading over the second. Afterwards a running ship leaves as soon as it has
+## the fuel for its next leg.
+func _advance_docked(ship: Ship, delta: float) -> void:
+	if ship.is_docking():
+		var phase := ship.refill_phase_seconds()
+		var start := ship.dock_time
+		var end := start + delta
+		if ship.auto_repair:
+			_repair(ship, ship.repair_rate * _overlap(start, end, 0.0, phase))
+		if ship.auto_refuel:
+			_refuel(ship, ship.refuel_rate * _overlap(start, end, phase, 2.0 * phase))
+		ship.dock_time = end
+		if not ship.unloaded and end >= ship.dock_seconds() / 2.0:
+			_unload(ship)
+		if end < ship.dock_seconds():
+			return
+		ship.dock_time = -1.0
+		ship_changed.emit(ship)
 	if ship.is_running():
-		_depart(ship)
+		_try_depart(ship, delta)
+	else:
+		_set_hold(ship, "")
+
+
+func _unload(ship: Ship) -> void:
+	ship.unloaded = true
+	money += ship.cargo_payment
+	containers_delivered += ship.capacity()
+	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
+
+
+## Leaves once it has fuel for the next leg. A ship that ran out of money while
+## refilling tops up (as the toggles and money allow) until its tank is full or
+## the money runs out, and is held in port while it lacks fuel for the leg.
+func _try_depart(ship: Ship, delta: float) -> void:
+	var to := ship.route[ship.next_route_index()]
+	var phase := ship.refill_phase_seconds()
+	var topping_up := ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
+	if topping_up or ship.fuel < ship.fuel_needed(ship.docked_at, to):
+		var too_worn := ship.fuel_needed(ship.docked_at, to) > ship.fuel_tank()
+		if too_worn and ship.auto_repair:
+			_repair(ship, delta / phase)
+		elif ship.auto_refuel:
+			_refuel(ship, ship.fuel_tank() / phase * delta)
+		var need := ship.fuel_needed(ship.docked_at, to)
+		if ship.fuel >= need and ship.fuel < ship.fuel_tank() and ship.auto_refuel and _can_spend(ship):
+			_set_hold(ship, "")
+			return  # Still topping up.
+		if ship.fuel < need:
+			var destination := GameData.port_name(to)
+			if need > ship.fuel_tank():
+				_set_hold(ship, "too worn to reach %s on a full tank%s" % [destination,
+					", waiting for money to repair" if ship.auto_repair else "; turn on repair"])
+			elif not ship.auto_refuel:
+				_set_hold(ship, "not enough fuel for %s; turn on refuel" % destination)
+			else:
+				_set_hold(ship, "waiting for money to buy fuel for %s" % destination)
+			return
+	_set_hold(ship, "")
+	_depart(ship)
+
+
+func _set_hold(ship: Ship, reason: String) -> void:
+	if ship.hold_reason == reason:
+		return
+	ship.hold_reason = reason
+	if not reason.is_empty():
+		ship_held.emit(ship, reason)
 	ship_changed.emit(ship)
 
 
@@ -206,6 +293,55 @@ func _depart(ship: Ship) -> void:
 	ship.to_port = ship.route[next]
 	ship.traveled_nm = 0.0
 	ship.docked_at = ""
+	ship.dock_time = -1.0
+	ship_changed.emit(ship)
+
+
+## Restores up to `amount` of maintenance, as far as money allows.
+func _repair(ship: Ship, amount: float) -> void:
+	amount = minf(amount, 1.0 - ship.maintenance)
+	if amount <= 0.0:
+		return
+	var cost := amount * ship.full_repair_cost()
+	var paid := _spend(ship, cost)
+	ship.stop_repair_cost += paid
+	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
+
+
+## Adds up to `amount` of fuel, as far as money allows.
+func _refuel(ship: Ship, amount: float) -> void:
+	amount = minf(amount, ship.fuel_tank() - ship.fuel)
+	if amount <= 0.0:
+		return
+	var cost := amount * float(GameData.config.get("fuel_price", 0))
+	var paid := _spend(ship, cost)
+	ship.stop_fuel_cost += paid
+	ship.fuel = minf(ship.fuel + amount * paid / cost, ship.fuel_tank())
+
+
+## Spends up to `cost` dollars without going below $0 and returns what was
+## spent. Money is whole dollars, so fractions build up on the ship's bill.
+func _spend(ship: Ship, cost: float) -> float:
+	if cost <= 0.0:
+		return 0.0
+	var paid := minf(cost, float(money) - ship.bill)
+	if paid <= 0.0:
+		return 0.0
+	ship.bill += paid
+	var whole := floori(ship.bill)
+	if whole > 0:
+		ship.bill -= whole
+		money -= whole
+	return paid
+
+
+func _can_spend(ship: Ship) -> bool:
+	return float(money) - ship.bill > 0.0
+
+
+## Length of the overlap between the time spans [a0, a1) and [b0, b1).
+static func _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
+	return maxf(minf(a1, b1) - maxf(a0, b0), 0.0)
 
 
 # --- Saving --------------------------------------------------------------

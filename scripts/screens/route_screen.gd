@@ -127,6 +127,6 @@ func _rebuild_list() -> void:
 
 
 func _leg_text(distance_nm: float) -> String:
-	var speed := _ship.speed()
+	var speed := _ship.top_speed()
 	var time := Fmt.duration(distance_nm / speed) if speed > 0.0 else "?"
 	return "%s nm · %s" % [Fmt.thousands(roundi(distance_nm)), time]

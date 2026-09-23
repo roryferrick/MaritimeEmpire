@@ -36,6 +36,7 @@ func _ready() -> void:
 		button.pressed.connect(show_screen.bind(screen))
 	%RouteScreen.finished.connect(_close_route_screen)
 	GameState.ship_arrived.connect(_on_ship_arrived)
+	GameState.ship_held.connect(_on_ship_held)
 	show_screen(Screen.WORLD)
 
 
@@ -66,4 +67,8 @@ func _close_route_screen() -> void:
 
 
 func _on_ship_arrived(ship: Ship, port_id: String, payment: int) -> void:
-	Toast.show_message("%s arrived at %s (+%s)" % [ship.name, GameData.port_name(port_id), Fmt.money(payment)])
+	Toast.show_message("%s delivered to %s (+%s)" % [ship.name, GameData.port_name(port_id), Fmt.money(payment)])
+
+
+func _on_ship_held(ship: Ship, reason: String) -> void:
+	Toast.show_message("%s is held at %s: %s" % [ship.name, GameData.port_name(ship.docked_at), reason])

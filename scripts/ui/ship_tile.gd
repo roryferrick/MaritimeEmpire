@@ -1,6 +1,7 @@
 class_name ShipTile
 extends Button
-## One tile on the Ships screen: status dot and ship name.
+## One tile on the Ships screen: status dot, ship name, and mini maintenance,
+## fuel and cargo bars.
 
 const THEME_TYPE := &"StatusDot"
 const DOT_RADIUS := 8.0
@@ -27,12 +28,18 @@ func _init(for_ship: Ship) -> void:
 	_dot.draw.connect(_draw_dot)
 	row.add_child(_dot)
 
+	var column := VBoxContainer.new()
+	column.mouse_filter = MOUSE_FILTER_IGNORE
+	column.size_flags_vertical = SIZE_SHRINK_CENTER
+	column.size_flags_horizontal = SIZE_EXPAND_FILL
+	column.add_theme_constant_override(&"separation", 6)
+	row.add_child(column)
+
 	var label := Label.new()
 	label.text = ship.name
-	label.size_flags_vertical = SIZE_SHRINK_CENTER
-	label.size_flags_horizontal = SIZE_EXPAND_FILL
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	row.add_child(label)
+	column.add_child(label)
+	column.add_child(ShipBars.new(ship, true))
 
 
 func _ready() -> void:
@@ -45,8 +52,9 @@ func _on_ship_changed(changed: Ship) -> void:
 
 
 func _draw_dot() -> void:
-	var color_name := &"running" if ship.is_running() else &"stopped"
-	var color := Color.GREEN if ship.is_running() else Color.RED
+	var running := ship.is_running() and not ship.is_held()  # Held ships show red.
+	var color_name := &"running" if running else &"stopped"
+	var color := Color.GREEN if running else Color.RED
 	if has_theme_color(color_name, THEME_TYPE):
 		color = get_theme_color(color_name, THEME_TYPE)
 	_dot.draw_circle(_dot.size / 2.0, DOT_RADIUS, color, true, -1.0, true)

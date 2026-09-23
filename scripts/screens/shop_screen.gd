@@ -36,6 +36,9 @@ func _make_card(model: Dictionary) -> Control:
 		["Top speed", "%s nm/s" % Fmt.decimal(float(model.get("speed_nm_per_s", 0)), 2)],
 		["Capacity", "%s containers" % Fmt.thousands(int(model.get("capacity", 0)))],
 		["Range", "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))],
+		["Fuel tank", "%s (%s)" % [Fmt.thousands(int(model.get("fuel_tank", 0))),
+			Fmt.duration(float(model.get("fuel_tank", 0)) / float(model.get("fuel_per_s", 1)))]],
+		["Port stop", Fmt.duration(float(model.get("dock_s", 0)))],
 		["Price", Fmt.money(int(model.get("price", 0)))],
 		["Owned", ""],
 	]
