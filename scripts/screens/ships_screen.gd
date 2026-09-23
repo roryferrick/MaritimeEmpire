@@ -5,13 +5,14 @@ extends Control
 ## don't jump around; the filter follows each ship's status as it changes.
 
 enum Sort { NAME, STATUS, PROFIT }
-enum Filter { ALL, ACTIVE, STOPPED, LOST, RECOVERY }
+enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY }
 
 const COLUMNS := 5
 const TILE_GAP := 12
 const SORT_NAMES := {Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit"}
 const FILTER_NAMES := {
-	Filter.ALL: "All ships", Filter.ACTIVE: "Running (green)", Filter.STOPPED: "Stopped (red)",
+	Filter.ALL: "All ships", Filter.ATTENTION: "Needs attention",
+	Filter.ACTIVE: "Running (green)", Filter.STOPPED: "Stopped (red)",
 	Filter.LOST: "Lost at sea", Filter.RECOVERY: "Recovery boats",
 }
 
@@ -120,6 +121,8 @@ func _apply_filter() -> void:
 
 static func _matches(ship: Ship, filter: int) -> bool:
 	match filter:
+		Filter.ATTENTION:
+			return not ship.attention_reason().is_empty()
 		Filter.ACTIVE:
 			return ship.is_active()
 		Filter.STOPPED:

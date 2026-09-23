@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/ui/popup_host.gd" id="6_popuphost"]
 [ext_resource type="PackedScene" path="res://scenes/screens/route_screen.tscn" id="7_route"]
 [ext_resource type="PackedScene" path="res://scenes/screens/finances_screen.tscn" id="8_finances"]
+[ext_resource type="Script" path="res://scripts/ui/activity_log_panel.gd" id="9_log"]
 
 [node name="Game" type="Control"]
 layout_mode = 3
@@ -77,35 +78,76 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Containers delivered: 0"
 
-[node name="Screens" type="Control" parent="Layout"]
+[node name="Main" type="HBoxContainer" parent="Layout"]
 layout_mode = 2
 size_flags_vertical = 3
+theme_override_constants/separation = 0
 
-[node name="WorldScreen" parent="Layout/Screens" instance=ExtResource("3_world")]
+[node name="ActivityLogPanel" type="PanelContainer" parent="Layout/Main"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+theme_type_variation = &"BarPanel"
+script = ExtResource("9_log")
+
+[node name="LogBox" type="VBoxContainer" parent="Layout/Main/ActivityLogPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LogTitle" type="Label" parent="Layout/Main/ActivityLogPanel/LogBox"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Activity"
+
+[node name="LogScroll" type="ScrollContainer" parent="Layout/Main/ActivityLogPanel/LogBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="LogList" type="VBoxContainer" parent="Layout/Main/ActivityLogPanel/LogBox/LogScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="EmptyLabel" type="Label" parent="Layout/Main/ActivityLogPanel/LogBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ActivityLog"
+text = "Deliveries, breakdowns and level-ups will show up here."
+autowrap_mode = 3
+
+[node name="Screens" type="Control" parent="Layout/Main"]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="WorldScreen" parent="Layout/Main/Screens" instance=ExtResource("3_world")]
 unique_name_in_owner = true
 layout_mode = 1
 
-[node name="ShipsScreen" parent="Layout/Screens" instance=ExtResource("4_ships")]
+[node name="ShipsScreen" parent="Layout/Main/Screens" instance=ExtResource("4_ships")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
-[node name="ShopScreen" parent="Layout/Screens" instance=ExtResource("5_shop")]
+[node name="ShopScreen" parent="Layout/Main/Screens" instance=ExtResource("5_shop")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
-[node name="FinancesScreen" parent="Layout/Screens" instance=ExtResource("8_finances")]
+[node name="FinancesScreen" parent="Layout/Main/Screens" instance=ExtResource("8_finances")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
-[node name="RouteScreen" parent="Layout/Screens" instance=ExtResource("7_route")]
+[node name="RouteScreen" parent="Layout/Main/Screens" instance=ExtResource("7_route")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
-[node name="PopupHost" type="Control" parent="Layout/Screens"]
+[node name="PopupHost" type="Control" parent="Layout/Main/Screens"]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15

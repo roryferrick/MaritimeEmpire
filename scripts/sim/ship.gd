@@ -292,6 +292,21 @@ func align_seconds() -> float:
 	return ALIGN_SECONDS * (2.0 if tow_turns_around() else 1.0)
 
 
+## What the player needs to do for this ship to run at its best, or "".
+func attention_reason() -> String:
+	if is_lost() and rescuer == null:
+		return "lost at sea"
+	if is_held():
+		return "held in port"
+	if not is_recovery() and is_docked() and not has_route():
+		return "no route"
+	if is_docked() and paused:
+		return "paused"
+	if skill_points() > 0:
+		return "skill points to spend"
+	return ""
+
+
 ## Green on the status dot.
 func is_active() -> bool:
 	if is_recovery():

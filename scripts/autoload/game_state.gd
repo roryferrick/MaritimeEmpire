@@ -839,5 +839,6 @@ func _clear_ships() -> void:
 
 
 func _begin_session() -> void:
+	ActivityLog.clear()
 	in_session = true
 	_autosave_timer.start()

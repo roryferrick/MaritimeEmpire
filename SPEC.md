@@ -115,6 +115,7 @@
 
 ### Bottom navigation bar
 - World | Ships | Finances | Shop. Hidden on the Route Assignment screen.
+- The Ships tab shows a red dot while any ship needs the player: lost with no recovery boat on the way, held in port, docked and paused, a docked cargo ship with no route, or unspent skill points. Its tooltip counts each reason. The Ships screen filter "Needs attention" shows just those ships.
 
 ### 1. World (map) screen
 - Pan (drag) and zoom (mouse wheel) supported.
@@ -134,7 +135,7 @@
 - The totals and the 10-minute window are saved with the game.
 
 ### 3. Shop screen
-- Two sections, "Cargo ships" and "Recovery boats", each a grid of cards 3 across, one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10").
+- Two sections, "Cargo ships" and "Recovery boats", each a grid of cards up to 3 across (as many as fit beside the activity log), one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10").
 - The cargo section shows the fleet slots used and the next slot benchmark. Models above the company's level show "Unlocks at level N" instead of Buy.
 - Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it; shows "Limit reached" at the ownership limit.
 
@@ -166,8 +167,9 @@
 - Buttons: Assign Route (opens Route Assignment screen), Pause/Go toggle (greyed out with no route), Sell (first click shows the price, second click sells).
 - Pause behavior: a ship paused at sea continues to its next port and stays docked there. Go resumes the route from that port.
 
-## Notifications
-- Small toast messages, e.g. "Sea Otter left Tunis: sold $1,990, profit $990", "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000".
+## Activity log
+- Messages go into an activity log down the left of the game screen (240 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text, each with the play time it happened (e.g. "02:10"). Bad news (breakdowns, lost ships, ships held in port or that won't make it) is red; good news (level-ups, recoveries) is green. It keeps the last 100 messages and starts empty each session.
+- Messages, e.g. "Sea Otter left Tunis: sold $1,990, profit $990", "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000".
 
 ## Explicitly NOT in beta
 - Crew wages, port fees, fuel prices that differ by port, cargo types, upgrades, speed controls, achievements, renaming ships, offline progress, audio, mobile, multiplayer and clans.

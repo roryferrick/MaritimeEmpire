@@ -4,13 +4,16 @@ extends Control
 ## above the company's level show the level that unlocks them.
 
 const SECTIONS := [["Cargo ships", false], ["Recovery boats", true]]
-const COLUMNS := 3
+## Cards per row, fewer if they don't fit.
+const MAX_COLUMNS := 3
+const CARD_GAP := 16
 
 const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
 var _buy_buttons: Dictionary = {}  # model id -> Button
 var _owned_labels: Dictionary = {}  # model id -> Label
 var _slots_label := Label.new()
+var _grids: Array[GridContainer] = []
 
 
 func _ready() -> void:
@@ -23,9 +26,10 @@ func _ready() -> void:
 			_slots_label.theme_type_variation = &"DimLabel"
 			%Items.add_child(_slots_label)
 		var grid := GridContainer.new()
-		grid.columns = COLUMNS
-		grid.add_theme_constant_override(&"h_separation", 16)
-		grid.add_theme_constant_override(&"v_separation", 16)
+		grid.columns = MAX_COLUMNS
+		grid.add_theme_constant_override(&"h_separation", CARD_GAP)
+		grid.add_theme_constant_override(&"v_separation", CARD_GAP)
+		_grids.append(grid)
 		%Items.add_child(grid)
 		for model: Dictionary in GameData.ship_models:
 			if bool(model.get("recovery", false)) == section[1]:
@@ -33,7 +37,20 @@ func _ready() -> void:
 	GameState.money_changed.connect(_update_cards.unbind(1))
 	GameState.ships_changed.connect(_update_cards)
 	GameState.company_leveled.connect(_update_cards.unbind(2))
+	resized.connect(_fit_columns)
 	_update_cards()
+
+
+## As many columns (up to MAX_COLUMNS) as the widest card allows.
+func _fit_columns() -> void:
+	var card_width := 0.0
+	for grid in _grids:
+		for card: Control in grid.get_children():
+			card_width = maxf(card_width, card.get_combined_minimum_size().x)
+	var margins := 60.0  # Page margins plus the scrollbar.
+	var columns := clampi(floori((size.x - margins + CARD_GAP) / (card_width + CARD_GAP)), 1, MAX_COLUMNS)
+	for grid in _grids:
+		grid.columns = columns
 
 
 func _make_card(model: Dictionary) -> Control:
