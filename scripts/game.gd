@@ -45,6 +45,8 @@ func _ready() -> void:
 	GameState.recovery_sent.connect(_on_recovery_sent)
 	GameState.ship_at_risk.connect(_on_ship_at_risk)
 	GameState.ship_sold.connect(_on_ship_sold)
+	GameState.company_leveled.connect(_on_company_leveled)
+	GameState.ship_leveled.connect(_on_ship_leveled)
 	show_screen(Screen.WORLD)
 
 
@@ -111,3 +113,14 @@ func _on_ship_at_risk(ship: Ship) -> void:
 
 func _on_ship_sold(ship: Ship, price: int) -> void:
 	Toast.show_message("Sold %s for %s" % [ship.name, Fmt.money(price)])
+
+
+func _on_company_leveled(level: int, unlocks: Array[String]) -> void:
+	var text := "Company level %d!" % level
+	if not unlocks.is_empty():
+		text += " Unlocked: %s" % ", ".join(unlocks)
+	Toast.show_message(text)
+
+
+func _on_ship_leveled(ship: Ship, level: int) -> void:
+	Toast.show_message("%s reached level %d: a skill point to spend" % [ship.name, level])

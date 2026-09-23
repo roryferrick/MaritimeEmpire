@@ -1,6 +1,7 @@
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections:
-## cargo ships, then recovery boats.
+## cargo ships (with the company's fleet slots), then recovery boats. Models
+## above the company's level show the level that unlocks them.
 
 const SECTIONS := [["Cargo ships", false], ["Recovery boats", true]]
 const COLUMNS := 3
@@ -9,6 +10,7 @@ const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
 var _buy_buttons: Dictionary = {}  # model id -> Button
 var _owned_labels: Dictionary = {}  # model id -> Label
+var _slots_label := Label.new()
 
 
 func _ready() -> void:
@@ -17,6 +19,9 @@ func _ready() -> void:
 		title.theme_type_variation = &"HeaderLabel"
 		title.text = section[0]
 		%Items.add_child(title)
+		if not section[1]:
+			_slots_label.theme_type_variation = &"DimLabel"
+			%Items.add_child(_slots_label)
 		var grid := GridContainer.new()
 		grid.columns = COLUMNS
 		grid.add_theme_constant_override(&"h_separation", 16)
@@ -27,6 +32,7 @@ func _ready() -> void:
 				grid.add_child(_make_card(model))
 	GameState.money_changed.connect(_update_cards.unbind(1))
 	GameState.ships_changed.connect(_update_cards)
+	GameState.company_leveled.connect(_update_cards.unbind(2))
 	_update_cards()
 
 
@@ -82,14 +88,26 @@ func _make_card(model: Dictionary) -> Control:
 
 
 func _update_cards() -> void:
+	var level := GameState.company_level()
+	var slots := Progression.fleet_slots(level)
+	var next := Progression.next_slots(level)
+	_slots_label.text = "Fleet slots: %d / %d used%s. Recovery boats don't use slots." % [
+		GameState.cargo_ship_count(), slots,
+		" (%d at level %d)" % [next[1], next[0]] if not next.is_empty() else ""]
 	for model_id: String in _buy_buttons:
 		var limit := int(GameData.get_ship_model(model_id).get("max_owned", 0))
 		var owned := GameState.owned_count(model_id)
 		_owned_labels[model_id].text = "%d / %d" % [owned, limit] if limit > 0 else str(owned)
 		var button: Button = _buy_buttons[model_id]
 		var at_limit := limit > 0 and owned >= limit
-		button.text = "Limit reached" if at_limit else "Buy"
-		button.disabled = not GameState.buy_error(model_id).is_empty()
+		var unlock := Progression.unlock_level(GameData.get_ship_model(model_id))
+		if level < unlock:
+			button.text = "Unlocks at level %d" % unlock
+		else:
+			button.text = "Limit reached" if at_limit else "Buy"
+		var error := GameState.buy_error(model_id)
+		button.disabled = not error.is_empty()
+		button.tooltip_text = error
 
 
 func _on_buy_pressed(model_id: String) -> void:

@@ -23,6 +23,14 @@ size_flags_horizontal = 3
 theme_type_variation = &"HeaderLabel"
 text = "Ship"
 
+[node name="SkillsButton" type="Button" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+toggle_mode = true
+tooltip_text = "Spend skill points on speed, durability and gas efficiency."
+text = "Skills"
+
 [node name="CloseButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -74,6 +82,16 @@ text = "Capacity"
 unique_name_in_owner = true
 layout_mode = 2
 
+[node name="LevelName" type="Label" parent="Content/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Level"
+
+[node name="LevelValue" type="Label" parent="Content/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="Separator2" type="HSeparator" parent="Content"]
 layout_mode = 2
 
@@ -81,7 +99,15 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 
+[node name="SkillsBox" type="GridContainer" parent="Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/h_separation = 12
+columns = 4
+
 [node name="Toggles" type="HBoxContainer" parent="Content"]
+unique_name_in_owner = true
 layout_mode = 2
 
 [node name="RepairToggle" type="CheckButton" parent="Content/Toggles"]

@@ -30,6 +30,12 @@ signal recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool)
 signal ship_at_risk(ship: Ship)
 ## A ship was sold.
 signal ship_sold(ship: Ship, price: int)
+## The company earned XP (from a delivery).
+signal company_xp_changed(total_xp: float)
+## The company reached a new level; unlocks lists what it opened up.
+signal company_leveled(level: int, unlocks: Array[String])
+## A ship reached a new level and has a skill point to spend.
+signal ship_leveled(ship: Ship, level: int)
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 2
@@ -66,6 +72,8 @@ var in_session := false
 
 ## Seconds the company has been playing (only counts while a session is open).
 var play_time := 0.0
+## Total company XP from deliveries; see Progression for levels.
+var company_xp := 0.0
 ## All-time totals for each of MONEY_KINDS.
 var totals := {}
 ## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
@@ -124,6 +132,12 @@ func owned_count(model_id: String) -> int:
 ## Why the player can't buy another of this model, or "" if they can.
 func buy_error(model_id: String) -> String:
 	var model := GameData.get_ship_model(model_id)
+	if company_level() < Progression.unlock_level(model):
+		return "Unlocks at company level %d." % Progression.unlock_level(model)
+	if not model.get("recovery", false) and cargo_ship_count() >= Progression.fleet_slots(company_level()):
+		var next := Progression.next_slots(company_level())
+		var more := " Reach level %d for %d." % next if not next.is_empty() else ""
+		return "All %d fleet slots are full.%s" % [Progression.fleet_slots(company_level()), more]
 	var limit := int(model.get("max_owned", 0))
 	if limit > 0 and owned_count(model_id) >= limit:
 		return "You already own the maximum of %d %s ships." % [limit, model.get("name", model_id)]
@@ -134,6 +148,23 @@ func buy_error(model_id: String) -> String:
 
 func company_name_error(new_company_name: String) -> String:
 	return "Enter a company name." if new_company_name.strip_edges().is_empty() else ""
+
+
+func company_level() -> int:
+	return int(Progression.company_level(company_xp).level)
+
+
+## Cargo ships owned (recovery boats don't use fleet slots).
+func cargo_ship_count() -> int:
+	return ships.filter(func(ship: Ship) -> bool: return not ship.is_recovery()).size()
+
+
+## Spends one of a ship's skill points on "speed", "durability" or "efficiency".
+func level_skill(ship: Ship, skill: String) -> void:
+	if not ship.can_level_skill(skill):
+		return
+	ship.skills[skill] = int(ship.skills[skill]) + 1
+	ship_changed.emit(ship)
 
 
 ## Why a ship name can't be used, or "" if it's fine.
@@ -321,6 +352,8 @@ func _roll_breakdowns(delta: float) -> void:
 		if candidates.is_empty():
 			continue
 		var ship: Ship = candidates.pick_random()
+		if randf() < ship.breakdown_resistance():
+			continue  # Its durability skill shrugged it off.
 		ship.maintenance = maxf(ship.maintenance - float(GameData.config.get("breakdown_hit", 0.5)), 0.0)
 		ship_broke_down.emit(ship)
 		if ship.maintenance <= 0.0:
@@ -386,6 +419,22 @@ func _unload(ship: Ship) -> void:
 	_record(ship, "income", ship.cargo_payment)
 	containers_delivered += ship.capacity()
 	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
+	var pay_rate := float(GameData.config.get("pay_per_container_nm", 1.0))
+	_gain_xp(ship, Progression.xp_for_delivery(1, ship.cargo_payment / pay_rate))
+
+
+## Adds delivery XP to the company and the ship, announcing any level-ups.
+func _gain_xp(ship: Ship, amount: float) -> void:
+	var company_before := company_level()
+	var ship_before := ship.level()
+	company_xp += amount
+	ship.xp += amount
+	company_xp_changed.emit(company_xp)
+	for level in range(company_before + 1, company_level() + 1):
+		company_leveled.emit(level, Progression.unlocks_at(level))
+	if ship.level() > ship_before:
+		ship_leveled.emit(ship, ship.level())
+		ship_changed.emit(ship)
 
 
 ## Fuel a ship must have to set off on a leg: enough for the leg, allowing for
@@ -724,6 +773,7 @@ func new_game(new_company_name: String, new_home_port: String) -> void:
 	_clear_ships()
 	play_time = 0.0
 	totals = {}
+	company_xp = 0.0
 	_window = []
 	_begin_session()
 	save_game()
@@ -744,6 +794,10 @@ func continue_game() -> String:
 	_clear_ships()
 	play_time = float(data.get("play_time", 0.0))
 	totals = data.get("totals", {})
+	# Saves from before XP: count the XP past deliveries would have earned.
+	var pay_rate := float(GameData.config.get("pay_per_container_nm", 1.0))
+	company_xp = float(data.get("company_xp",
+		Progression.xp_for_delivery(1, float(totals.get("income", 0.0)) / pay_rate)))
 	_window = data.get("finance_window", [])
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
@@ -761,6 +815,7 @@ func save_game() -> void:
 		"home_port": home_port,
 		"money": money,
 		"play_time": play_time,
+		"company_xp": company_xp,
 		"totals": totals,
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,

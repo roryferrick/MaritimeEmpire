@@ -1,7 +1,7 @@
 class_name ShipTile
 extends Button
-## One tile on the Ships screen: status dot, ship name, and mini maintenance,
-## fuel and cargo bars.
+## One tile on the Ships screen: status dot, ship name and level (highlighted
+## while it has skill points to spend), and mini maintenance, fuel and cargo bars.
 
 const THEME_TYPE := &"StatusDot"
 const DOT_RADIUS := 8.0
@@ -9,6 +9,7 @@ const DOT_RADIUS := 8.0
 var ship: Ship
 
 var _dot := Control.new()
+var _level := Label.new()
 
 
 func _init(for_ship: Ship) -> void:
@@ -35,10 +36,17 @@ func _init(for_ship: Ship) -> void:
 	column.add_theme_constant_override(&"separation", 6)
 	row.add_child(column)
 
+	var title_row := HBoxContainer.new()
+	title_row.mouse_filter = MOUSE_FILTER_IGNORE
+	column.add_child(title_row)
 	var label := Label.new()
 	label.text = ship.name
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	column.add_child(label)
+	title_row.add_child(label)
+	_level.visible = not ship.is_recovery()
+	title_row.add_child(_level)
+	_update_level()
 	column.add_child(ShipBars.new(ship, true))
 
 
@@ -49,6 +57,13 @@ func _ready() -> void:
 func _on_ship_changed(changed: Ship) -> void:
 	if changed == ship:
 		_dot.queue_redraw()
+		_update_level()
+
+
+func _update_level() -> void:
+	var points := ship.skill_points()
+	_level.text = "Lv %d%s" % [ship.level(), " +%d" % points if points > 0 else ""]
+	_level.theme_type_variation = &"GainLabel" if points > 0 else &"DimLabel"
 
 
 func _draw_dot() -> void:

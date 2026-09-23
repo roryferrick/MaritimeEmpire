@@ -54,6 +54,15 @@
 - The Mammoth then docks there (repair and refuel like any ship), sails home, and waits for the next job. Its bars show maintenance, fuel, and "Tow" (the ship it's carrying).
 - Recovery boats have no route and no Assign Route or Pause buttons, and never break down at random. What they spend from being sent until they've refilled back at home is charged to the ship they recovered.
 
+## Company and ship levels (XP)
+- Every delivery (when unloading finishes) gives XP to the company and to the ship: containers × leg distance (nm) ÷ 100. Rome→Tunis in a Scooter 10 gives about 32 XP. Ships carried back to their origin earn nothing; recovery boats earn no XP.
+- The company levels from 1 to 100 (Level and an XP bar in the top bar; toast on level-up with what it unlocked). Each level's cost is set so it takes roughly 3 minutes at level 1, rising to about 47 minutes at level 99, of what a full fleet at that level earns. So bigger ships don't make levels fly by, and level 100 takes about 40 hours (about 1 hour to level 10, 11 hours to 50, 24 hours to 75).
+- Fleet slots (cargo ships you can own in total): 3 at level 1, 4 at 3, 5 at 5, 6 at 8, 8 at 10, 10 at 15, 13 at 20, 16 at 25, 20 at 30, 25 at 40, 30 at 50, 35 at 60, 40 at 70, 44 at 80, 47 at 90, 50 at 100. The per-model limits still apply. Recovery boats don't use slots.
+- Models unlock by company level: Scooter 10 at 1, GE 100 at 5, Mini Mammoth at 8, Greenline 200 at 12, Trans Atlantic and Mammoth at 25, Dominator at 50. Ships already owned are kept even if they're above the current slots or unlocks.
+- Ships level from 0 to 30. A model's first level needs xp_first_level XP (Scooter 10: 100, GE 100: 1,250, Greenline 200: 6,000, Trans Atlantic: 75,000, Dominator: 900,000; growing faster than the price, so small ships level fastest), and each level after costs 5% more.
+- Each ship level gives a skill point, spent in the ship popup's Skills view on three paths of up to 10 levels each: Speed (+2% top speed per level), Durability (−5% wear and −5% chance of taking a random breakdown per level), and Gas efficiency (−3% fuel burn per level). Range on the route screen stays at the model's base range.
+- Saves from before XP get the XP their past income would have earned.
+
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
 - Map art: blue sea, sandy land with a darker coastline, thin country borders, and country names that appear as you zoom in (placeholder colors, all in the theme). Built from Natural Earth public-domain data by tools/build_map_data.gd.
@@ -102,7 +111,7 @@
 - Autosave on quit and every 30 s.
 
 ### Top bar (on World, Ships, Finances, Shop screens)
-- Company name, money, and total containers delivered.
+- Company name, company level with an XP bar (hover for XP to the next level), money, and total containers delivered.
 
 ### Bottom navigation bar
 - World | Ships | Finances | Shop. Hidden on the Route Assignment screen.
@@ -114,6 +123,7 @@
 
 ### 2. Ships screen
 - Scrolling list grouped by model (in shop order), each group under a divider with the model name, 5 tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
+- Each tile shows the ship's level ("Lv 7", in green with "+2" while it has skill points to spend).
 - Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); red = docked (paused at a port, no route, or held in port).
 - Clicking a tile opens the ship popup.
 - Sort (within each model) by name, status (lost, then at risk, then held, then stopped, then running) or profit; show all ships, running, stopped, lost, or recovery boats. A count shows how many are shown. Tiles re-sort when the fleet or the sort changes, not live.
@@ -125,6 +135,7 @@
 
 ### 3. Shop screen
 - Two sections, "Cargo ships" and "Recovery boats", each a grid of cards 3 across, one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10").
+- The cargo section shows the fleet slots used and the next slot benchmark. Models above the company's level show "Unlocks at level N" instead of Buy.
 - Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it; shows "Limit reached" at the ownership limit.
 
 ### 4. Route Assignment screen
@@ -146,7 +157,8 @@
 - Placeholder line: "Cargo market: coming soon".
 
 ### Ship popup (openable from map, Ships screen, and port popups)
-- Name (top), Model, current speed (with top speed), range, capacity.
+- Name (top) with a Skills button (showing unspent points) and X; Model, current speed (with top speed), range, capacity, and level with XP into it (cargo ships).
+- The Skills button swaps the bars and toggles for the three skill paths (10 pips each, the bonus so far, and a + button to spend a point).
 - Maintenance, Fuel and Cargo bars with live values (recovery boats: Tow instead of Cargo), then the Repair, Refuel and Rescue (auto-recovery) toggles. While docked: this stop's summary, e.g. "Sold $1,990 · Fuel −$800 · Repair −$200 / Profit $990".
 - Lost ships: a Send Recovery button (see Lost ships and recovery boats).
 - Status: e.g. "Docked at Rome" (with "(no route)", "(paused)", or why it's held when relevant), "Unloading at Tunis" / "Loading at Tunis", "En route to Tunis — 40%", "Stopping at Tunis" (paused while at sea).

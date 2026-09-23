@@ -2,10 +2,17 @@ class_name ShipPopup
 extends AnchoredPopup
 ## A ship's stats, live status, bars and route, with the repair/refuel/rescue
 ## toggles, Assign Route, Pause/Go and Sell. Lost ships get a Send Recovery
-## button; recovery boats have no route controls.
+## button; recovery boats have no route controls. Cargo ships show their level,
+## and the Skills button swaps the bars for spending skill points.
 
 ## Selling takes a second click within this many seconds.
 const SELL_CONFIRM_SECONDS := 3.0
+## Skill paths: [key, name, what each level does ("%d" is the total percent)].
+const SKILLS := [
+	["speed", "Speed", "+%d%%"],
+	["durability", "Durability", "-%d%% wear"],
+	["efficiency", "Efficiency", "-%d%% fuel"],
+]
 
 ## Set before adding to the tree.
 var ship: Ship
@@ -27,6 +34,9 @@ func _ready() -> void:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 		%CapacityValue.text = "%s containers" % Fmt.thousands(ship.capacity())
 	%BarsSlot.add_child(ShipBars.new(ship))
+	for node: Control in [%SkillsButton, %LevelName, %LevelValue]:
+		node.visible = not ship.is_recovery()
+	%SkillsButton.toggled.connect(_show_skills)
 	%CloseButton.pressed.connect(queue_free)
 	%AssignButton.pressed.connect(func() -> void: GameRoot.find(self).open_route_screen(ship))
 	%PauseButton.pressed.connect(func() -> void: GameState.set_paused(ship, not ship.paused))
@@ -57,7 +67,8 @@ func _update_live() -> void:
 	%SpeedValue.text = "%s nm/s (top %s)" % [Fmt.decimal(ship.speed(), 2), Fmt.decimal(ship.top_speed(), 2)]
 	var fuel := roundi(ship.stop_fuel_cost)
 	var repair := roundi(ship.stop_repair_cost)
-	_set_shown(%CostLabel, ship.is_docked() and (ship.stop_sale > 0 or fuel + repair > 0))
+	var has_costs := ship.is_docked() and (ship.stop_sale > 0 or fuel + repair > 0)
+	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed)
 	var costs := "Fuel %s · Repair %s" % [Fmt.money(-fuel), Fmt.money(-repair)]
 	if ship.is_recovery():
 		%CostLabel.text = "This stop: %s" % costs
@@ -66,6 +77,8 @@ func _update_live() -> void:
 			Fmt.money(ship.stop_sale), costs, Fmt.money(ship.stop_sale - fuel - repair)]
 	_update_recovery()
 	_update_sell()
+	if not ship.is_recovery():
+		_update_level_text()
 
 
 func _update_sell() -> void:
@@ -110,6 +123,62 @@ func _update_recovery() -> void:
 		mammoth.name, GameData.port_name(plan.tow_port), Fmt.duration(plan.seconds)]
 
 
+## Swaps the bars, toggles and stop summary for the skills panel.
+func _show_skills(on: bool) -> void:
+	%BarsSlot.visible = not on
+	%Toggles.visible = not on
+	%SkillsBox.visible = on
+	_update_live()
+	reset_size.call_deferred()
+
+
+func _update_level_text() -> void:
+	var info := ship.level_info()
+	if info.cost > 0:
+		%LevelValue.text = "%d · %s / %s XP" % [info.level, Fmt.thousands(floori(info.xp)), Fmt.thousands(ceili(info.cost))]
+	else:
+		%LevelValue.text = "%d (max)" % info.level
+
+
+## The Skills button's point count and the skills panel's rows.
+func _refresh_level() -> void:
+	var points := ship.skill_points()
+	%SkillsButton.text = "Skills (%d)" % points if points > 0 else "Skills"
+	for child in %SkillsBox.get_children():
+		%SkillsBox.remove_child(child)
+		child.queue_free()
+	for skill: Array in SKILLS:
+		var level := int(ship.skills[skill[0]])
+		var name_label := Label.new()
+		name_label.text = skill[1]
+		%SkillsBox.add_child(name_label)
+		var pips := HBoxContainer.new()
+		pips.add_theme_constant_override(&"separation", 3)
+		pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		for i in Progression.skill_max_level():
+			var pip := ColorRect.new()
+			pip.custom_minimum_size = Vector2(8, 12)
+			pip.color = _pip_color(i < level)
+			pips.add_child(pip)
+		%SkillsBox.add_child(pips)
+		var effect := Label.new()
+		effect.theme_type_variation = &"DimLabel"
+		effect.text = skill[2] % roundi(level * Progression.skill_step(skill[0]) * 100.0)
+		%SkillsBox.add_child(effect)
+		var add := Button.new()
+		add.text = "+"
+		add.disabled = not ship.can_level_skill(skill[0])
+		add.pressed.connect(GameState.level_skill.bind(ship, skill[0]))
+		%SkillsBox.add_child(add)
+
+
+func _pip_color(filled: bool) -> Color:
+	var color_name := &"filled" if filled else &"empty"
+	if has_theme_color(color_name, &"SkillPip"):
+		return get_theme_color(color_name, &"SkillPip")
+	return Color(0.45, 0.9, 0.5) if filled else Color(1, 1, 1, 0.15)
+
+
 func _set_shown(control: Control, shown: bool) -> void:
 	if control.visible != shown:
 		control.visible = shown
@@ -118,6 +187,8 @@ func _set_shown(control: Control, shown: bool) -> void:
 
 func _refresh() -> void:
 	_update_live()
+	if not ship.is_recovery():
+		_refresh_level()
 	%RepairToggle.set_pressed_no_signal(ship.auto_repair)
 	%RefuelToggle.set_pressed_no_signal(ship.auto_refuel)
 	%RescueToggle.set_pressed_no_signal(ship.auto_recover)

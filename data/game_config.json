@@ -1,5 +1,5 @@
 {
-	"_comment": "pay_per_container_nm: a ship is paid capacity x leg distance (nm) x this rate when it finishes unloading; tuned so a Scooter 10 earns about $2,000 per minute of sailing. fuel_price: dollars per fuel unit, the same at every port (fuel is about 40% of a leg's pay). Breakdowns: every breakdown_interval_s seconds there's a breakdown_chance that one random ship at sea (not a Mammoth) loses breakdown_hit of its maintenance (0.5 = 50 points). initial_view_width_deg: how many degrees of longitude the map shows across when it opens, centered on the home port.",
+	"_comment": "pay_per_container_nm: a ship is paid capacity x leg distance (nm) x this rate when it finishes unloading; tuned so a Scooter 10 earns about $2,000 per minute of sailing. fuel_price: dollars per fuel unit, the same at every port (fuel is about 40% of a leg's pay). Breakdowns: every breakdown_interval_s seconds there's a breakdown_chance that one random ship at sea (not a recovery boat) loses breakdown_hit of its maintenance (0.5 = 50 points). initial_view_width_deg: how many degrees of longitude the map shows across when it opens, centered on the home port.",
 	"starting_money": 10000,
 	"autosave_seconds": 30,
 	"pay_per_container_nm": 0.6125,
@@ -7,5 +7,16 @@
 	"breakdown_interval_s": 5,
 	"breakdown_chance": 0.01,
 	"breakdown_hit": 0.5,
-	"initial_view_width_deg": 45
+	"initial_view_width_deg": 45,
+
+	"_xp_comment": "XP: every delivery (when unloading finishes) gives the company and the ship capacity x leg distance (nm) x xp_per_container_nm. Company levels run 1 to max_company_level. Level L costs (company_level_minutes[0] + company_level_minutes[1] x (L - 1)) minutes of the XP a full fleet at that level would earn at sea (at_sea_share of the time): the best unlocked cargo models, max_owned of each, filling fleet_slots. So each level takes about as long no matter how big the fleet has become, and level 100 takes about 40 hours. fleet_slots: [company level, cargo ship slots] benchmarks; recovery boats don't use slots. Ships level 0 to ship_max_level, one skill point per level; see ship_models.json xp_first_level and ship_level_growth. skills: the bonus per skill level (speed: top speed +2%; durability: wear and breakdown chance -5%; efficiency: fuel burn -3%), up to skill_max_level each.",
+	"xp_per_container_nm": 0.01,
+	"max_company_level": 100,
+	"company_level_minutes": [3, 0.45],
+	"at_sea_share": 0.75,
+	"fleet_slots": [[1, 3], [3, 4], [5, 5], [8, 6], [10, 8], [15, 10], [20, 13], [25, 16], [30, 20], [40, 25], [50, 30], [60, 35], [70, 40], [80, 44], [90, 47], [100, 50]],
+	"ship_max_level": 30,
+	"ship_level_growth": 1.05,
+	"skill_max_level": 10,
+	"skills": {"speed": 0.02, "durability": 0.05, "efficiency": 0.03}
 }

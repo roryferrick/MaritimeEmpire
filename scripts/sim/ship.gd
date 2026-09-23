@@ -75,6 +75,10 @@ var at_risk := false
 ## Lifetime money in (income) and out (fuel, repair, and recovery: what a
 ## recovery boat spent saving this ship), in dollars.
 var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0, "recovery": 0.0}
+## Total XP from deliveries (cargo ships only), and skill levels bought with
+## the points its levels give: "speed", "durability", "efficiency".
+var xp := 0.0
+var skills := {"speed": 0, "durability": 0, "efficiency": 0}
 ## The Mammoth sent to recover this ship, if any.
 var rescuer: Ship = null
 
@@ -130,8 +134,9 @@ func profit() -> float:
 	return ledger.income - ledger.fuel - ledger.repair - ledger.recovery
 
 
+## Top speed, including the speed skill.
 func top_speed() -> float:
-	return float(model().get("speed_nm_per_s", 0))
+	return float(model().get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed"))
 
 
 ## Current speed: top speed scaled by maintenance.
@@ -152,14 +157,40 @@ func fuel_tank() -> float:
 	return float(model().get("fuel_tank", 0))
 
 
-## Fuel burned per second at sea.
+## Fuel burned per second at sea, less the efficiency skill.
 func fuel_per_s() -> float:
-	return float(model().get("fuel_per_s", 0))
+	return float(model().get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency"))
 
 
-## Maintenance lost per second of running at sea.
+## Maintenance lost per second of running at sea, less the durability skill.
 func wear_per_s() -> float:
-	return float(model().get("wear_pct_per_min", 0)) / 100.0 / 60.0
+	return float(model().get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability"))
+
+
+## Chance (0..1) that the durability skill shrugs off a random breakdown.
+func breakdown_resistance() -> float:
+	return _skill_bonus("durability")
+
+
+## {level, xp (into the level), cost (of the level)}; recovery boats stay at 0.
+func level_info() -> Dictionary:
+	return Progression.ship_level(model(), xp)
+
+
+func level() -> int:
+	return int(level_info().level)
+
+
+func skill_points() -> int:
+	return level() - int(skills.speed) - int(skills.durability) - int(skills.efficiency)
+
+
+func can_level_skill(skill: String) -> bool:
+	return skill_points() > 0 and int(skills.get(skill, 0)) < Progression.skill_max_level()
+
+
+func _skill_bonus(skill: String) -> float:
+	return int(skills.get(skill, 0)) * Progression.skill_step(skill)
 
 
 ## Cost of restoring 100% maintenance (from 0%).
@@ -422,6 +453,8 @@ func to_dict() -> Dictionary:
 		"auto_recover": auto_recover,
 		"lost_order": lost_order,
 		"ledger": ledger,
+		"xp": xp,
+		"skills": skills,
 	}
 
 
@@ -460,6 +493,12 @@ static func from_dict(data: Dictionary) -> Ship:
 	var saved_ledger: Dictionary = data.get("ledger", {})
 	for key: String in ship.ledger:
 		ship.ledger[key] = float(saved_ledger.get(key, 0.0))
+	# Saves from before XP: count the XP its past deliveries would have earned.
+	var pay_rate := float(GameData.config.get("pay_per_container_nm", 1.0))
+	ship.xp = float(data.get("xp", Progression.xp_for_delivery(1, ship.ledger.income / pay_rate)))
+	var saved_skills: Dictionary = data.get("skills", {})
+	for key: String in ship.skills:
+		ship.skills[key] = int(saved_skills.get(key, 0))
 	ship.set_meta(&"billing", data.get("billing", ""))
 	ship.set_meta(&"rescuing", data.get("rescuing", ""))
 	return ship
