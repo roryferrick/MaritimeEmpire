@@ -10,6 +10,7 @@ extends Control
 signal port_clicked(port_id: String)
 signal ship_clicked(ship: Ship)
 signal lock_clicked(canal_id: String, lock_index: int)
+signal canal_clicked(canal_id: String)
 signal empty_clicked
 ## Emitted whenever the view pans or zooms.
 signal view_changed
@@ -30,7 +31,7 @@ const ZOOM_STEP := 1.15
 ## Closest zoom, in pixels per projected degree.
 const MAX_ZOOM := 800.0
 ## Panning stops with the view centered at this latitude.
-const MAX_VIEW_LAT := 75.0
+const MAX_VIEW_LAT := 80.0
 const PORT_FONT_SIZE := 15
 const COUNTRY_FONT_SIZE := 13
 const LABEL_PADDING := 3.0
@@ -68,6 +69,13 @@ const CANAL_FONT_SIZE := 13
 ## Lock chamber water runs from this much darker than the ocean (low) to this
 ## much lighter (high) as it fills.
 const LOCK_WATER_SHADE := 0.3
+## A convoy canal's doubled stretches: how far apart its two channels are
+## (projected degrees); how close a click must be to its channel (px) or an
+## anchorage; and how far apart ships at anchor sit (px).
+const DOUBLE_CHANNEL_GAP := 0.012
+const CANAL_HIT_RADIUS := 8.0
+const ANCHORAGE_RADIUS := 30.0
+const ANCHORAGE_SPACING := 14.0
 
 const FALLBACK_COLORS := {
 	&"ocean": Color(0.16, 0.36, 0.56),
@@ -255,6 +263,10 @@ func port_screen_position(port_id: String) -> Vector2:
 ## so they don't cover it or each other.
 func ship_screen_position(ship: Ship) -> Vector2:
 	if not ship.is_docked():
+		if ship.canal_state in [Ship.CANAL_ANCHORED, Ship.CANAL_CONVOY, Ship.CANAL_TOLL]:
+			var crossing := GameData.crossing_ahead(ship.from_port, ship.to_port, ship.traveled_nm)
+			if not crossing.is_empty() and crossing.canal.get("type", "") == "convoy":
+				return _anchorage_slot_position(ship, crossing)
 		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
 	var slot := 0
 	for other in GameState.ships:
@@ -359,6 +371,8 @@ func _click(screen_pos: Vector2) -> void:
 	elif not _lock_at(screen_pos).is_empty():
 		var lock := _lock_at(screen_pos)
 		lock_clicked.emit(lock[0], lock[1])
+	elif not _convoy_canal_at(screen_pos).is_empty():
+		canal_clicked.emit(_convoy_canal_at(screen_pos))
 	else:
 		empty_clicked.emit()
 
@@ -577,9 +591,10 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 		_overlay.draw_polyline(points, color, width, true)
 
 
-## Each canal as a water channel across the land. Zoomed in, its lock chambers
-## too (two lanes each, the water rising or falling with a ship inside), and
-## its name, then its locks' names.
+## Each canal as a water channel across the land (a convoy canal doubled where
+## it has two channels). Zoomed in, lock chambers too (one lane per slot, the
+## water rising or falling with a ship inside), convoy anchorages with the time
+## to the next convoy, and names: the canal's, then its locks' and places'.
 func _draw_canals() -> void:
 	var view := Rect2(Vector2.ZERO, size).grow(40.0)
 	for canal in GameData.canals:
@@ -589,16 +604,65 @@ func _draw_canals() -> void:
 			bounds = bounds.expand(p)
 		if not view.intersects(bounds.grow(1.0)):
 			continue
-		_overlay.draw_polyline(points, _color(&"ocean"), maxf(CANAL_WIDTH * _zoom, CANAL_MIN_WIDTH), true)
+		var width := maxf(CANAL_WIDTH * _zoom, CANAL_MIN_WIDTH)
+		if canal.get("type", "") == "convoy":
+			_draw_convoy_channel(canal, points, width)
+		else:
+			_overlay.draw_polyline(points, _color(&"ocean"), width, true)
 		if _zoom >= LOCK_MIN_ZOOM:
 			for chamber: Dictionary in canal.chambers:
 				_draw_chamber(canal, chamber, points)
+			if canal.get("type", "") == "convoy":
+				_draw_anchorage_labels(canal)
 		if _zoom >= LOCK_LABEL_ZOOM:
-			for lock_index in canal.locks.size():
+			for lock_index in canal.get("locks", []).size():
 				var center := lock_screen_position(canal.id, lock_index)
 				_draw_canal_label(canal.locks[lock_index].name, center + Vector2(CHAMBER_LANE_WIDTH * _zoom * 1.5 + 6.0, 4.0))
+			for label: Array in canal.get("labels", []):
+				_draw_canal_label(label[0], world_to_screen(Geo.project(Vector2(label[1], label[2]))))
 		elif _web_zoom() >= CANAL_LABEL_WEB_ZOOM:
 			_draw_canal_label(canal.name, points[floori(points.size() / 2.0)] + Vector2(8.0, 4.0))
+
+
+## A convoy canal's channel: one line in the single-lane stretches, two side by
+## side (DOUBLE_CHANNEL_GAP apart) in the doubled ones.
+func _draw_convoy_channel(canal: Dictionary, points: PackedVector2Array, width: float) -> void:
+	var water := _color(&"ocean")
+	var gap := DOUBLE_CHANNEL_GAP * _zoom / 2.0
+	var previous := 0
+	for pair: Array in canal.get("double", []):
+		var i := int(pair[0])
+		var j := int(pair[1])
+		if i > previous:
+			_overlay.draw_polyline(points.slice(previous, i + 1), water, width, true)
+		for side: float in [-1.0, 1.0]:
+			var offset := PackedVector2Array()
+			for k in range(i, j + 1):
+				offset.append(points[k] + _path_normal(points, k) * gap * side)
+			_overlay.draw_polyline(offset, water, width, true)
+		previous = j
+	if previous < points.size() - 1:
+		_overlay.draw_polyline(points.slice(previous), water, width, true)
+
+
+## Unit vector to the right of a path at point k (on screen).
+static func _path_normal(points: PackedVector2Array, k: int) -> Vector2:
+	var along := (points[mini(k + 1, points.size() - 1)] - points[maxi(k - 1, 0)]).normalized()
+	return Vector2(-along.y, along.x)
+
+
+## "Port Said anchorage · next convoy 45 s" by each anchorage.
+func _draw_anchorage_labels(canal: Dictionary) -> void:
+	var names: Array = canal.get("anchorage_names", [])
+	var next := Fmt.duration(ceilf(GameState.canal_traffic.next_convoy_in(canal)))
+	for i in canal.get("anchorages", []).size():
+		var at := _anchorage_screen_position(canal, i == 0)
+		_draw_canal_label("%s · next convoy %s" % [names[i] if i < names.size() else "Anchorage", next], at + Vector2(14.0, -10.0))
+
+
+func _anchorage_screen_position(canal: Dictionary, forward: bool) -> Vector2:
+	var point: Array = canal.anchorages[0 if forward else 1]
+	return world_to_screen(Geo.project(Vector2(point[0], point[1])))
 
 
 ## A canal's path on screen, shifted as a whole to the copy of the world nearest the view.
@@ -611,39 +675,37 @@ func _canal_screen_path(canal: Dictionary) -> PackedVector2Array:
 	return points
 
 
-## One lock chamber: a lane each way side by side (ships keep right), walled,
-## with gates at both ends.
+## One lock chamber: a lane per slot side by side (with a lane each way, ships
+## keep right; shared chambers are one lane each), walled, with gates at both ends.
 func _draw_chamber(canal: Dictionary, chamber: Dictionary, points: PackedVector2Array) -> void:
 	var i: int = chamber.path_index
 	var center := points[i]
-	var along := (points[mini(i + 1, points.size() - 1)] - points[maxi(i - 1, 0)]).normalized()
-	var across := Vector2(-along.y, along.x)  # Right of a ship sailing along the path.
+	var across := _path_normal(points, i)  # Right of a ship sailing along the path.
+	var along := Vector2(across.y, -across.x)
 	var half := along * CHAMBER_LENGTH * _zoom / 2.0
 	var lane := across * CHAMBER_LANE_WIDTH * _zoom
-	for forward: bool in [true, false]:
-		var side := lane if forward else -lane
-		_overlay.draw_colored_polygon(PackedVector2Array([center - half, center + half, center + half + side, center - half + side]),
-			_chamber_water(canal, chamber, forward))
+	var slots := GameData.chamber_slots(canal, chamber)
+	var lanes := float(slots.size())
+	for k in slots.size():
+		var offset := lane * (float(k) - (lanes - 1.0) / 2.0)
+		if slots[k] in ["f", "b"]:
+			offset = lane * (0.5 if slots[k] == "f" else -0.5)
+		var water := _color(&"ocean")
+		var level := GameState.canal_traffic.slot_level(canal, chamber, slots[k])
+		var color := water.darkened(LOCK_WATER_SHADE).lerp(water.lightened(LOCK_WATER_SHADE), level)
+		var c := center + offset
+		_overlay.draw_colored_polygon(PackedVector2Array([c - half - lane / 2.0, c + half - lane / 2.0,
+			c + half + lane / 2.0, c - half + lane / 2.0]), color)
+	var outer := lane * lanes / 2.0
 	var wall := _color(&"coast")
-	_overlay.draw_polyline(PackedVector2Array([center - half - lane, center + half - lane, center + half + lane,
-		center - half + lane, center - half - lane]), wall, 1.0, true)
-	_overlay.draw_line(center - half, center + half, wall, 1.0, true)
+	_overlay.draw_polyline(PackedVector2Array([center - half - outer, center + half - outer, center + half + outer,
+		center - half + outer, center - half - outer]), wall, 1.0, true)
+	for k in range(1, slots.size()):
+		var divider := lane * (float(k) - lanes / 2.0)
+		_overlay.draw_line(center - half + divider, center + half + divider, wall, 1.0, true)
 	var gate := _color(&"lock_gate")
 	for end: Vector2 in [center - half, center + half]:
-		_overlay.draw_line(end - lane, end + lane, gate, 2.0, true)
-
-
-## A chamber lane's water: darker when low, lighter when high. With a ship in
-## it, it rises or falls over the ship's time there.
-func _chamber_water(canal: Dictionary, chamber: Dictionary, forward: bool) -> Color:
-	var water := _color(&"ocean")
-	var level := 0.5
-	var ship := GameState.chamber_ship(canal.id, chamber.index, forward)
-	if ship and ship.lock_chamber().get("index", -1) == chamber.index:
-		var t := clampf(ship.lock_time / float(canal.get("step_seconds", 3)), 0.0, 1.0)
-		var rises: bool = canal.locks[chamber.lock].rises_forward == forward
-		level = t if rises else 1.0 - t
-	return water.darkened(LOCK_WATER_SHADE).lerp(water.lightened(LOCK_WATER_SHADE), level)
+		_overlay.draw_line(end - outer, end + outer, gate, 2.0, true)
 
 
 func _draw_canal_label(text: String, at: Vector2) -> void:
@@ -663,13 +725,19 @@ func lock_screen_position(canal_id: String, lock_index: int) -> Vector2:
 	return total / count if count > 0 else Vector2.ZERO
 
 
+## Where a convoy canal's popup sits: the middle of its path.
+func canal_screen_position(canal_id: String) -> Vector2:
+	var points := _canal_screen_path(GameData.get_canal(canal_id))
+	return points[floori(points.size() / 2.0)] if not points.is_empty() else Vector2.ZERO
+
+
 ## [canal id, lock index] of the lock under a screen point, or [] (only once
 ## the chambers are drawn).
 func _lock_at(screen_pos: Vector2) -> Array:
 	if _zoom < LOCK_MIN_ZOOM:
 		return []
 	for canal in GameData.canals:
-		for lock_index in canal.locks.size():
+		for lock_index in canal.get("locks", []).size():
 			var center := lock_screen_position(canal.id, lock_index)
 			var reach := LOCK_HIT_RADIUS
 			for chamber: Dictionary in canal.chambers:
@@ -680,20 +748,64 @@ func _lock_at(screen_pos: Vector2) -> Array:
 	return []
 
 
-## Ships in a canal keep to the right-hand lane of the channel and its locks
-## (a ship riding on a recovery boat follows the boat).
+## The convoy canal whose channel or anchorages are under a screen point, or "".
+func _convoy_canal_at(screen_pos: Vector2) -> String:
+	for canal in GameData.canals:
+		if canal.get("type", "") != "convoy":
+			continue
+		var points := _canal_screen_path(canal)
+		for k in range(1, points.size()):
+			var closest := Geometry2D.get_closest_point_to_segment(screen_pos, points[k - 1], points[k])
+			if closest.distance_to(screen_pos) <= CANAL_HIT_RADIUS:
+				return canal.id
+		for forward: bool in [true, false]:
+			if _anchorage_screen_position(canal, forward).distance_to(screen_pos) <= ANCHORAGE_RADIUS:
+				return canal.id
+	return ""
+
+
+## Ships waiting for a convoy sit in a cluster round their anchorage, in rings.
+func _anchorage_slot_position(ship: Ship, crossing: Dictionary) -> Vector2:
+	var traffic := GameState.canal_traffic
+	var waiting: Array = traffic.anchored_ships(crossing.canal, crossing.forward) + traffic.released_ships(crossing.canal, crossing.forward)
+	var slot := maxi(waiting.find(ship), 0)
+	var radius := ANCHORAGE_SPACING
+	var per_ring := 6
+	while slot >= per_ring:
+		slot -= per_ring
+		radius += ANCHORAGE_SPACING
+		per_ring += 6
+	var angle := TAU * slot / per_ring
+	return _anchorage_screen_position(crossing.canal, crossing.forward) + Vector2.from_angle(angle) * radius
+
+
+## How far a ship in a canal sits to the side of the path: in the right-hand
+## lane of each-way locks and doubled convoy channels, in its own chamber of
+## a shared lock, and in the middle of single-lane stretches (a ship riding on
+## a recovery boat follows the boat).
 func _canal_lane_offset(ship: Ship) -> Vector2:
 	var sailing := ship.rescuer if ship.is_carried() else ship
 	if sailing.is_docked() or sailing.from_port.is_empty():
 		return Vector2.ZERO
-	var crossing := GameData.canal_crossing(sailing.from_port, sailing.to_port)
-	if crossing.is_empty() or sailing.traveled_nm < crossing.start_nm or sailing.traveled_nm > crossing.end_nm:
+	var crossing := GameData.crossing_at(sailing.from_port, sailing.to_port, sailing.traveled_nm)
+	if crossing.is_empty():
 		return Vector2.ZERO
 	var direction := sailing.heading()
 	if direction == Vector2.ZERO:
 		return Vector2.ZERO
 	var on_screen := Vector2(direction.x, -direction.y).normalized()
-	return Vector2(-on_screen.y, on_screen.x) * CHAMBER_LANE_WIDTH * _zoom / 2.0
+	var right := Vector2(-on_screen.y, on_screen.x)
+	var canal: Dictionary = crossing.canal
+	if canal.get("type", "") == "convoy":
+		if GameData.in_single_stretch(canal, GameData.canal_s(crossing, sailing.traveled_nm)):
+			return Vector2.ZERO
+		return right * DOUBLE_CHANNEL_GAP * _zoom / 2.0
+	var chamber := sailing.lock_chamber()
+	if not chamber.is_empty() and chamber.canal.locks[chamber.lock].get("lanes", "each_way") == "shared":
+		var slots := GameData.chamber_slots(chamber.canal, chamber)
+		var offset := (float(slots.find(sailing.lock_slot)) - (slots.size() - 1) / 2.0) * CHAMBER_LANE_WIDTH * _zoom
+		return right * (offset if chamber.forward else -offset)
+	return right * CHAMBER_LANE_WIDTH * _zoom / 2.0
 
 
 ## A red dot (like the nav tabs') by each HQ or hub with an upgrade that can be

@@ -4,6 +4,9 @@ extends Control
 ## ship's lifetime profit. Refreshes once a second while visible.
 
 const REFRESH_SECONDS := 1.0
+## Text size for the totals, canal and ship tables (smaller than the theme's, so
+## the eight-column ship table fits beside the activity log).
+const TABLE_FONT_SIZE := 14
 ## Table columns: [title, sort key]. Money columns sort biggest first.
 const COLUMNS := [
 	["Ship", "name"], ["Model", "model"], ["Income", "income"], ["Fuel", "fuel"],
@@ -25,6 +28,7 @@ var _canal_label := Label.new()
 func _ready() -> void:
 	_canal_card.theme_type_variation = &"CardPanel"
 	_canal_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_canal_label.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
 	_canal_card.add_child(_canal_label)
 	$Scroll/Margin/Content/TotalsCard.add_sibling(_canal_card)
 	visibility_changed.connect(_refresh)
@@ -89,6 +93,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 	for column: Array in COLUMNS:
 		var header := Button.new()
 		header.flat = true
+		header.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
 		header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		header.text = column[0]
 		if column[1] == _sort_key:
@@ -145,6 +150,8 @@ func _add_label(parent: Node, text: String, variation := &"") -> void:
 	var label := Label.new()
 	label.text = text
 	label.theme_type_variation = variation
+	if variation != &"HeaderLabel":
+		label.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
 	parent.add_child(label)
 
 

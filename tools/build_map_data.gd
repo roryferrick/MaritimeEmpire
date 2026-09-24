@@ -34,8 +34,10 @@ const TILE_SIZE := 5.0
 ## their real longitude and once 360 degrees further east.
 const GRID_WEST := -180.0
 const GRID_EAST := 320.0
-const GRID_SOUTH_LAT := -58.0
+const GRID_SOUTH_LAT := -79.0
 const GRID_NORTH_LAT := 66.0
+## Latitude where the pathfinder's distance weights stop growing (see _build_coarse_grid()).
+const WEIGHT_MAX_LAT := 66.0
 const GRID_CELL := 0.1
 ## Routes whose ends are further apart than this (in longitude) are not tried
 ## with that pairing of the two copies of the Americas.
@@ -55,6 +57,10 @@ const GREAT_CIRCLE_STEP_NM := 100.0
 ## follow the centerline and its locks exactly (see _splice_canal()). Lane
 ## points within this many degrees of a centerline count as on it.
 const CANAL_SNAP_DEG := 0.2
+## Lakes that are part of the sea lanes (the Great Lakes, reached up the St.
+## Lawrence Seaway). The land data covers every lake, so these are cut back
+## out of it as water, from their outlines in the lakes data.
+const SEA_LAKES: Array[String] = ["Lake Superior", "Lake Michigan", "Lake Huron", "Lake Erie", "Lake Ontario", "Lake Saint Clair"]
 ## Rivers and straits too narrow for the grid to see. Carved as water, like
 ## the canals in data/canals.json. Each is a list of [lon, lat] points.
 const CHANNELS := {
@@ -62,7 +68,6 @@ const CHANNELS := {
 	"Dardanelles": [[26.15, 40.00], [26.27, 40.07], [26.40, 40.15], [26.45, 40.22], [26.55, 40.30], [26.68, 40.41], [26.80, 40.48]],
 	"Strait of Messina": [[15.68, 38.31], [15.66, 38.25], [15.62, 38.18], [15.60, 38.10], [15.57, 38.00]],
 	"Strait of Bonifacio": [[9.0, 41.33], [9.25, 41.32], [9.5, 41.30]],
-	"Suez Canal": [[32.31, 31.30], [32.32, 31.00], [32.33, 30.70], [32.35, 30.45], [32.42, 30.20], [32.57, 29.95], [32.57, 29.80]],
 	"Singapore Strait": [[103.5, 1.20], [103.8, 1.20], [104.1, 1.25], [104.4, 1.30]],
 	"Great Belt": [[11.0, 56.10], [10.95, 55.70], [11.0, 55.35], [11.05, 55.05], [11.2, 54.70], [11.5, 54.55]],
 	"Elbe (Hamburg)": [[8.3, 53.95], [8.7, 53.88], [9.0, 53.85], [9.35, 53.72], [9.55, 53.60], [9.8, 53.54], [9.95, 53.54]],
@@ -85,6 +90,11 @@ const CHANNELS := {
 	"Oslofjord": [[10.55, 59.00], [10.58, 59.30], [10.60, 59.50], [10.62, 59.66], [10.68, 59.80], [10.74, 59.90]],
 	"Columbia River (Portland, Oregon)": [[-124.10, 46.24], [-123.90, 46.20], [-123.65, 46.22], [-123.40, 46.20], [-123.20, 46.15], [-123.05, 46.10], [-122.90, 45.95], [-122.82, 45.80], [-122.77, 45.63], [-122.73, 45.56]],
 	"Strait of Magellan (Punta Arenas)": [[-68.35, -52.40], [-68.80, -52.45], [-69.30, -52.52], [-69.65, -52.60], [-70.10, -52.80], [-70.50, -53.00], [-70.90, -53.16]],
+	"St. Lawrence River (estuary to Lake Ontario)": [[-69.30, 48.05], [-69.55, 47.88], [-69.80, 47.70], [-70.10, 47.45], [-70.40, 47.25], [-70.70, 47.05], [-70.95, 46.92], [-71.20, 46.81], [-71.45, 46.70], [-71.75, 46.62], [-72.05, 46.47], [-72.35, 46.37], [-72.55, 46.33], [-72.80, 46.22], [-73.05, 46.08], [-73.20, 45.90], [-73.40, 45.72], [-73.52, 45.55], [-73.65, 45.43], [-73.85, 45.38], [-74.05, 45.30], [-74.35, 45.15], [-74.70, 45.02], [-75.00, 44.92], [-75.30, 44.80], [-75.55, 44.66], [-75.80, 44.50], [-76.05, 44.33], [-76.30, 44.22], [-76.50, 44.15]],
+	"Welland Canal (Lake Ontario to Lake Erie)": [[-79.22, 43.27], [-79.21, 43.15], [-79.23, 43.00], [-79.25, 42.87]],
+	"Detroit and St. Clair rivers (Lake Erie to Lake Huron)": [[-83.12, 41.98], [-83.12, 42.10], [-83.10, 42.25], [-83.00, 42.33], [-82.90, 42.36], [-82.75, 42.45], [-82.60, 42.55], [-82.52, 42.62], [-82.47, 42.78], [-82.42, 42.95], [-82.42, 43.08]],
+	"St. Marys River (Lake Huron to Lake Superior)": [[-83.75, 45.98], [-83.95, 46.05], [-84.10, 46.18], [-84.20, 46.35], [-84.30, 46.48], [-84.38, 46.50], [-84.55, 46.50], [-84.70, 46.55]],
+	"Straits of Mackinac (Lake Michigan to Lake Huron)": [[-85.10, 45.80], [-84.73, 45.82], [-84.40, 45.90]],
 }
 
 var _cols := 0
@@ -390,6 +400,17 @@ func _build_grid(land_polygons: Array) -> void:
 		_fill_rings(rings, 0.0)
 		_fill_rings(rings, Geo.WORLD_WIDTH)
 
+	# Cut the sea lakes back out of the land (even-odd, so their islands stay land).
+	for feature: Dictionary in _read_geojson(LAKES_PATH):
+		if not str(feature.properties.get("name", "")) in SEA_LAKES:
+			continue
+		for polygon: Array in _feature_polygons(feature):
+			var lake_rings := []
+			for ring: Array in polygon:
+				lake_rings.append(_project_all(_to_points(ring)))
+			_fill_rings(lake_rings, 0.0)
+			_fill_rings(lake_rings, Geo.WORLD_WIDTH)
+
 	var channels: Array = CHANNELS.values().map(_to_points)
 	for canal in _canals:
 		channels.append(canal.path)
@@ -561,6 +582,9 @@ func _build_lanes() -> void:
 		if options.is_empty():
 			push_error("%s is not near any water" % port.id)
 		starts[port.id] = options
+	if "--check" in OS.get_cmdline_user_args():
+		_print_water_check()
+		return
 
 	var data := SeaLaneData.new()
 	var started := Time.get_ticks_msec()
@@ -641,12 +665,15 @@ func _build_coarse_grid() -> AStarGrid2D:
 	coarse.default_estimate_heuristic = AStarGrid2D.HEURISTIC_EUCLIDEAN
 	coarse.update()
 	# On a Mercator grid a cell spans cos(latitude) as much real distance at
-	# every latitude. Weights are normalized to >= 1 so the heuristic stays admissible.
-	var min_scale := cos(deg_to_rad(maxf(absf(GRID_NORTH_LAT), absf(GRID_SOUTH_LAT))))
+	# every latitude. Weights are normalized to >= 1 so the heuristic stays
+	# admissible; past WEIGHT_MAX_LAT (the far south, only reached going to
+	# Antarctica) they're held at 1, so paths there run slightly long rather than
+	# every search slowing down.
+	var min_scale := cos(deg_to_rad(WEIGHT_MAX_LAT))
 	_coarse_rep.resize(coarse_cols * coarse_rows)
 	for cy in coarse_rows:
 		var lat := Geo.unproject(_cell_center(Vector2i(0, mini(cy * COARSE + COARSE / 2, _rows - 1)))).y
-		var weight := cos(deg_to_rad(lat)) / min_scale
+		var weight := maxf(cos(deg_to_rad(lat)) / min_scale, 1.0)
 		for cx in coarse_cols:
 			var center := Vector2((cx + 0.5) * COARSE, (cy + 0.5) * COARSE)
 			var best := -1
@@ -961,3 +988,22 @@ func _print_stats(data: SeaLaneData) -> void:
 	print("Longest leg overall: %s %.1f nm" % [longest_key, longest])
 	for key: String in ["ALG-TNG", "ALG-NYC", "GIT-MLA", "IST-PIR", "BCN-VLC", "RTM-SHA", "LAX-SHA", "NYC-RTM", "HAM-SIN", "ANC-SEA", "BLB-CLN", "LAX-NYC", "PMO-TUN", "BIA-GOA"]:
 		print("  %s: %.1f nm" % [key, by_key.get(key, -1.0)])
+
+
+## "--check": whether some key spots are land, water, or water connected to the
+## ocean, without building any lanes (the port snapping above reports ports
+## that can't reach water).
+func _print_water_check() -> void:
+	var spots := {
+		"Lake Superior": Vector2(-87.5, 47.6), "Lake Michigan": Vector2(-87.0, 43.5), "Lake Huron": Vector2(-82.5, 44.5),
+		"Lake Erie": Vector2(-81.5, 42.2), "Lake Ontario": Vector2(-77.8, 43.6), "Lake St. Clair": Vector2(-82.7, 42.45),
+		"St. Lawrence at Quebec": Vector2(-71.2, 46.81), "St. Lawrence at Montreal": Vector2(-73.52, 45.55),
+		"St. Lawrence at Kingston": Vector2(-76.5, 44.15), "Welland mid": Vector2(-79.21, 43.15),
+		"Detroit River": Vector2(-83.10, 42.25), "St. Marys River": Vector2(-84.30, 46.48),
+		"McMurdo Sound": Vector2(166.4, -77.7), "Ross Sea": Vector2(175.0, -75.0),
+	}
+	for spot_name: String in spots:
+		var cell := _cell_of(Geo.project(spots[spot_name]))
+		var index := cell.y * _cols + cell.x
+		var state := "outside grid" if not _in_grid(cell) else ("LAND" if _land[index] else ("ocean" if _ocean[index] else "water, NOT connected"))
+		print("  %s: %s" % [spot_name, state])

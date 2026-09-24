@@ -149,9 +149,20 @@ func _on_ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, r
 		ActivityLog.add("%s left %s: fuel and repairs %s" % [ship.name, port, Fmt.money(-costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
+## "Ever Bright entered the Panama Canal: toll $4,200 (+50% XP on this delivery)";
+## a convoy canal says the ship joined its convoy.
 func _on_canal_entered(ship: Ship, canal: Dictionary, toll: int) -> void:
-	ActivityLog.add("%s entered the %s: toll %s (+%d%% XP on this delivery)" % [ship.name, canal.name, Fmt.money(toll),
-		roundi(float(canal.get("xp_bonus", 0.0)) * 100.0)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+	var what := "joined the %s convoy" % canal.name if canal.get("type", "") == "convoy" else "entered the %s" % canal.name
+	var parts := PackedStringArray()
+	if toll > 0:
+		parts.append("toll %s" % Fmt.money(toll))
+	var bonus := roundi(float(canal.get("xp_bonus", 0.0)) * 100.0)
+	if bonus > 0:
+		parts.append("+%d%% XP on this delivery" % bonus)
+	var text := "%s %s" % [ship.name, what]
+	if not parts.is_empty():
+		text += ": %s" % ", ".join(parts)
+	ActivityLog.add(text, ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 func _on_ship_held(ship: Ship, reason: String) -> void:

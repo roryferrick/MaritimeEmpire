@@ -103,6 +103,7 @@ func _rebuild_list() -> void:
 	var n := _waypoints.size()
 	var total_nm := 0.0
 	var total_lock_s := 0.0
+	var total_sailing_s := 0.0
 	for i in n:
 		var stop := Label.new()
 		stop.text = "%d. %s" % [i + 1, GameData.port_name(_waypoints[i])]
@@ -114,13 +115,15 @@ func _rebuild_list() -> void:
 			continue
 		var distance := GameData.distance_nm(_waypoints[i], next)
 		var lock_s := GameData.canal_lock_seconds(_waypoints[i], next)
+		var sailing_s := _sailing_seconds(_waypoints[i], next)
+		total_sailing_s += sailing_s
 		total_nm += distance
 		total_lock_s += lock_s
 		var leg := Label.new()
 		leg.theme_type_variation = &"DimLabel" if _ship.can_sail(_waypoints[i], next) else &"ErrorLabel"
 		leg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var prefix := "back to" if i == n - 1 else "to"
-		leg.text = "      %s %s · %s%s" % [prefix, GameData.port_name(next), _leg_text(distance, lock_s), _canal_text(_waypoints[i], next)]
+		leg.text = "      %s %s · %s%s" % [prefix, GameData.port_name(next), _leg_text(distance, sailing_s, lock_s), _canal_text(_waypoints[i], next)]
 		%WaypointList.add_child(leg)
 
 	if n == 0:
@@ -128,21 +131,47 @@ func _rebuild_list() -> void:
 	elif n == 1:
 		%TotalLabel.text = "Add at least one more port."
 	else:
-		%TotalLabel.text = "Full loop: %s" % _leg_text(total_nm, total_lock_s)
+		%TotalLabel.text = "Full loop: %s" % _leg_text(total_nm, total_sailing_s, total_lock_s)
 
 
-## Distance and sailing time at top speed, plus lock_s in canal locks (not
-## counting any wait for a free chamber).
-func _leg_text(distance_nm: float, lock_s := 0.0) -> String:
-	var speed := _ship.top_speed()
-	var time := Fmt.duration(distance_nm / speed + lock_s) if speed > 0.0 else "?"
+## Distance and time: sailing at top speed (slower in convoy canals), plus
+## extra_s in locks (not counting any wait for a free chamber or a convoy).
+func _leg_text(distance_nm: float, sailing_s: float, extra_s := 0.0) -> String:
+	var time := Fmt.duration(sailing_s + extra_s) if sailing_s < INF else "?"
 	return "%s nm · %s" % [Fmt.thousands(roundi(distance_nm)), time]
 
 
-## " · Panama Canal: toll $4,200, +50% XP" for a leg through a canal, else "".
+## Seconds to sail a leg at top speed, through its zones (convoy canals slow ships).
+func _sailing_seconds(from_port: String, to_port: String) -> float:
+	var speed := _ship.top_speed()
+	if speed <= 0.0:
+		return INF
+	var seconds := 0.0
+	var mile := 0.0
+	for zone: Array in GameData.lane_zones(from_port, to_port):
+		seconds += (float(zone[0]) - mile) / (speed * float(zone[1]))
+		mile = zone[0]
+	return seconds
+
+
+## Each canal on a leg, e.g. " · Panama Canal: toll $4,200, +50% XP", plus the
+## longest convoy wait and any cargo unloaded to pass; "" for none.
 func _canal_text(from_port: String, to_port: String) -> String:
-	var crossing := GameData.canal_crossing(from_port, to_port)
-	if crossing.is_empty():
-		return ""
-	return " · %s: toll %s, +%d%% XP" % [crossing.canal.name, Fmt.money(GameData.canal_toll(from_port, to_port, _ship.model())),
-		roundi(float(crossing.canal.get("xp_bonus", 0.0)) * 100.0)]
+	var text := ""
+	for crossing: Dictionary in GameData.canal_crossings(from_port, to_port):
+		var canal: Dictionary = crossing.canal
+		var parts := PackedStringArray()
+		var toll := GameData.canal_toll(from_port, to_port, _ship.model(), canal)
+		if toll > 0:
+			parts.append("toll %s" % Fmt.money(toll))
+		if float(canal.get("xp_bonus", 0.0)) > 0.0:
+			parts.append("+%d%% XP" % roundi(float(canal.xp_bonus) * 100.0))
+		if canal.get("type", "") == "convoy":
+			parts.append("up to %s waiting for a convoy" % Fmt.duration(float(canal.get("convoy_interval_s", 90))))
+		var lighten := float(canal.get("lighten", {}).get(_ship.model_id, 0.0))
+		if lighten > 0.0:
+			parts.append("unloads %d%% to pass (pay -%d%%)" % [roundi(lighten * 100.0), roundi(lighten * 100.0)])
+		text += " · %s: %s" % [canal.name, ", ".join(parts)] if not parts.is_empty() else " · %s" % canal.name
+	if GameData.is_rough_port(from_port) or GameData.is_rough_port(to_port):
+		text += " · rough seas: +%d%% pay and XP, 2x wear" % roundi(float(GameData.config.get("rough_seas", {}).get("pay_bonus", 0.0)) * 100.0)
+	return text

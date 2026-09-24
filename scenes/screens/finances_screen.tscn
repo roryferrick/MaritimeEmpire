@@ -30,7 +30,7 @@ theme_override_constants/margin_bottom = 24
 
 [node name="Content" type="VBoxContainer" parent="Scroll/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 12
 
 [node name="TotalsCard" type="PanelContainer" parent="Scroll/Margin/Content"]
 layout_mode = 2
@@ -40,8 +40,8 @@ theme_type_variation = &"CardPanel"
 [node name="Totals" type="GridContainer" parent="Scroll/Margin/Content/TotalsCard"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/h_separation = 40
-theme_override_constants/v_separation = 6
+theme_override_constants/h_separation = 24
+theme_override_constants/v_separation = 3
 columns = 3
 
 [node name="ShipsCard" type="PanelContainer" parent="Scroll/Margin/Content"]
@@ -65,8 +65,8 @@ text = "Click a column to sort. Recovery boats pay their own fuel and repairs."
 [node name="ShipTable" type="GridContainer" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/h_separation = 28
-theme_override_constants/v_separation = 6
+theme_override_constants/h_separation = 14
+theme_override_constants/v_separation = 3
 columns = 8
 
 [node name="EmptyLabel" type="Label" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]

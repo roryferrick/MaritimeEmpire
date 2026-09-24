@@ -75,16 +75,17 @@
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
 - Map art: blue sea, sandy land with a darker coastline, thin country borders, lakes (drawn as water with a shoreline; islands in them are land), thin blue rivers (the biggest show zoomed out, smaller ones appear as you zoom in; visual only, ships don't sail them), and country names that appear as you zoom in (placeholder colors, all in the theme). Built from Natural Earth public-domain data by tools/build_map_data.gd.
-- 200 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
+- 227 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
   - The world's biggest container ports (the top 100, plus the next several so that 100 are new beyond the original Mediterranean set). Ranks 1–25 follow the published 2023 figures; the rest follow recent Lloyd's List rankings as best known (the full list is paywalled), so a few borderline ports may differ from the official list.
   - The 18 biggest Mediterranean container ports, plus Rome (Civitavecchia) and Tunis (Radès).
   - Mediterranean islands: Limassol (Cyprus), Palermo (Sicily), Cagliari (Sardinia), Bastia (Corsica), Palma (Mallorca).
   - Also: Boston, Miami, Monterey, Anchorage, Seattle-Tacoma, Cabo San Lucas.
   - Added for coverage: New Orleans, Havana, Port-au-Prince, San Juan, Bridgetown, Cancun, Puerto Quetzal (Guatemala), Puntarenas (Costa Rica), Puerto Ayora (Galapagos); Honolulu, Nawiliwili (Kauai), Apia (Samoa), Pago Pago (American Samoa), Nuku'alofa (Tonga), Suva (Fiji), Papeete (French Polynesia), Auckland, Wellington, Apra Harbor (Guam), Port Moresby, Cebu, Muara (Brunei); Toamasina (Madagascar), Praia (Cabo Verde); Dublin, Douglas (Isle of Man), Reykjavik, Nuuk, Juneau, Dutch Harbor (Aleutians); Gothenburg, Oslo, Copenhagen, Aarhus, Bergen, Tallinn, Riga, Klaipeda; Durres; Constanta, Odesa, Novorossiysk.
   - Added to reach 200: Saint-Pierre, Portland (Maine), Nain (Labrador), Hamilton (Bermuda), Ponta Delgada and Faja Grande (Azores), Funchal (Madeira), Porto, Nantes-Saint-Nazaire; Portland (Oregon), Hilo and Kawaihae (Big Island of Hawaii), Malakal (Palau), Vladivostok, Korsakov (Sakhalin), Magadan, Petropavlovsk-Kamchatsky; Rio de Janeiro, Salvador, Fortaleza, Buenaventura, Antofagasta, Punta Arenas; Banjul, Freetown, Luanda, Maputo.
+  - Added with Suez and the Great Lakes: Ain Sokhna and Port Tewfik (Egypt, south end of the Suez Canal), Eilat (Israel), Noumea (New Caledonia), Flying Fish Cove (Christmas Island), Midway Atoll; the 15 biggest Great Lakes ports (Duluth-Superior, Two Harbors, Thunder Bay, Presque Isle on Superior; Chicago, Indiana Harbor, Burns Harbor, Gary, Milwaukee on Michigan; Calcite on Huron; Detroit, Toledo, Cleveland on Erie; Toronto, Hamilton on Ontario); and six Antarctic stations (King George Island, Palmer, Rothera, McMurdo, Davis, Mawson).
 - The map opens centered on the company's home port (45 degrees of longitude across); the route screen opens centered on the ship.
 - Ports are white circles with names; when names would overlap, the HQ's or a hub's name wins, then the bigger port's, and the other shows on zoom.
-- Ships follow real sea lanes around land, pre-computed for every pair of ports (19,900 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, the Bosphorus to the Black Sea, the Mississippi to New Orleans, Icy Strait to Juneau, the Oslofjord, the Columbia River to Portland, the Strait of Magellan, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
+- Ships follow real sea lanes around land, pre-computed for every pair of ports (25,651 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, the Bosphorus to the Black Sea, the Mississippi to New Orleans, Icy Strait to Juneau, the Oslofjord, the Columbia River to Portland, the Strait of Magellan, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
 
 ## Panama Canal
 - The canal is defined in data/canals.json: its centerline (Limón Bay → Gatún Locks → Gatún Lake → Culebra Cut → Pedro Miguel Locks → Miraflores Locks → Balboa), its locks, and its tuning. Every lane through it follows that centerline exactly.
@@ -97,6 +98,33 @@
 - On the map the canal is always drawn as a water channel across the isthmus, wider as you zoom in. From 120 px per degree its chambers appear: two lanes each, with gates at the ends, the water darkening or lightening as a ship inside is lowered or lifted. Ships in the canal keep to the right-hand lane. "Panama Canal" is labeled at mid zoom, and each lock's name when zoomed in close.
 - Clicking a lock (once its chambers are drawn) opens a popup: for each direction, each chamber's ship ("Ever Bright, rising (2 s)", "coming in", "waiting to move on" or "empty") and who's waiting in line.
 - Saves from before the canal load fine; ships already partway through it carry on without paying a toll.
+
+- A leg can pass several canals (Duluth to Rotterdam goes through the Soo Locks, the Welland Canal and the St. Lawrence Seaway). Each charges its own toll as the ship enters it, and each adds its XP bonus to the delivery.
+
+## Suez Canal
+- A sea-level canal with no locks, in data/canals.json like Panama: its centerline from the Mediterranean off Port Said to Suez Bay (about 96 nm), with the doubled stretches (the Port Said approaches, the Ballah bypass through the New Suez Canal to the Great Bitter Lake, and Suez Bay) and two single-lane stretches (El Qantara, and the Little Bitter Lake to Suez).
+- Convoys: ships reaching the canal drop anchor in a cluster at the Port Said anchorage (southbound) or the Suez Bay anchorage (northbound), engines off. Every 90 s a convoy leaves each way at once; a ship arriving within 10 s after its convoy left still joins it. The toll (25% of the leg's base pay) is paid as the convoy leaves; a ship without the money stays at anchor for the next one ("waiting for toll money", red dot on the Ships tab). Recovery boats join convoys but pay nothing.
+- Convoy ships enter one after another, fastest first, and sail at half their own speed. In the single-lane stretches they keep 1.6 nm behind the ship ahead (no overtaking); in the doubled stretches they can pass. A ship won't enter a single-lane stretch while a ship the other way is in it, and waits in the doubled stretch before it. The two convoys normally meet in the long doubled middle. A ship held up behind a slower one burns fuel and wears only for the distance it makes, so the fuel check before leaving port (which counts the half-speed canal) always holds.
+- Supertankers are too deep for Suez fully loaded: they unload 25% of their cargo to pass (like the real SUMED pipeline), so the leg pays 25% less, and the toll is on the reduced pay.
+- Deliveries through Suez get +50% XP. No breakdowns between the anchorages and the exit.
+- On the map: the canal is drawn as one channel in single-lane stretches and two side by side in doubled ones (ships keep right); ships at anchor sit in rings round the anchorage. Zoomed in: "Port Said anchorage · next convoy 45 s" and "Suez Bay anchorage · ...", plus Great Bitter Lake, New Suez Canal and Ismailia. Clicking the canal or an anchorage opens a popup: time to the next convoys, and each way the ships at anchor, those waiting for toll money, those entering, and the convoy under way.
+- Ship status: "At Port Said anchorage, next southbound convoy in 45 s", "Joining the southbound Suez Canal convoy (2nd in line to enter)", "In the southbound Suez Canal convoy (3rd of 7), held behind Big Blue", "Waiting in a passing stretch for the northbound convoy to clear".
+- The route screen shows each Suez leg's toll, +50% XP, "up to 1 min 30 s waiting for a convoy", and a Supertanker's "unloads 25% to pass".
+
+## Great Lakes
+- The five Great Lakes (and Lake St. Clair) are water, reached up the St. Lawrence from its estuary, with the Welland Canal (Ontario to Erie), the Detroit and St. Clair rivers (Erie to Huron), the Straits of Mackinac (Huron to Michigan) and the St. Marys River (Huron to Superior).
+- Only ships that fit the St. Lawrence Seaway (about 226 m long) can sail to a Great Lakes port: the Scooter 10, GE 100, Greenline 200 and Coastal, and the Buffalo so lake ships can be rescued. Bigger ships can't be given routes there, can't be bought at a lake hub, and Mammoths are never based at one. Only a Buffalo can recover a ship lost on a lake route.
+- Three lock systems (type locks in data/canals.json), 3 s per lock step as at Panama:
+  - St. Lawrence Seaway (Montreal to Lake Ontario): 7 single-chamber locks (St. Lambert, Côte-Sainte-Catherine, Lower and Upper Beauharnois, Snell, Eisenhower, Iroquois). Toll 10% of the leg's base pay, +25% XP.
+  - Welland Canal (Lake Ontario to Lake Erie): single-chamber Locks 1–3, 7 and 8, and the twinned Flight Locks 4–6 (a lane each way). Toll 10%, +25% XP.
+  - Soo Locks (Lake Huron to Lake Superior): one step with 3 parallel chambers, each taking a ship either way. No toll, +25% XP.
+- Single (shared) chambers take one ship at a time either way. A chamber is left at the level for the other way, so a ship the same way waits 3 s while it's turned around; with ships waiting both ways, a lock alternates direction. Otherwise the Panama rules apply: lines, engines off, no breakdowns in the lock systems, toll on entering (or wait at the entrance).
+- Legs between two ports on the upper lakes (Superior, Michigan, Huron) pay +20% (the ore and grain trade).
+
+## Rough seas
+- South of 60°S, ships wear twice as fast. The fuel check before leaving port and route ranges allow for it, so some long Antarctic legs within a ship's nominal range are refused ("too far for one tank").
+- Legs to or from a port south of 60°S (the Antarctic stations) pay +50%, and so earn +50% XP for the ship, the company and the hub where they're unloaded.
+- The route screen marks those legs "rough seas: +50% pay and XP, 2x wear".
 
 ## Ship models (data file)
 | Model | Price | Speed (nm/s) | Capacity | Range per leg | Max owned |

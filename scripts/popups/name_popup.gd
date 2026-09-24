@@ -20,10 +20,13 @@ func _ready() -> void:
 	%RandomButton.pressed.connect(_suggest)
 	%CancelButton.pressed.connect(queue_free)
 	%BuyButton.pressed.connect(_confirm)
+	# Ships too big for the St. Lawrence Seaway can't start on the Great Lakes.
 	for hub in GameState.hubs:
+		if not model.get("seaway", false) and GameData.get_port(hub.port_id).get("seaway", false):
+			continue
 		%PortOption.add_item(hub.title())
 		%PortOption.set_item_metadata(%PortOption.item_count - 1, hub.port_id)
-	%PortOption.disabled = GameState.hubs.size() < 2
+	%PortOption.disabled = %PortOption.item_count < 2
 	%PortOption.tooltip_text = "Build hubs to launch ships from more ports." if %PortOption.disabled else ""
 	_suggest()
 
@@ -39,6 +42,8 @@ func _validate() -> bool:
 	var error := GameState.ship_name_error(%NameEdit.text)
 	if error.is_empty():
 		error = GameState.buy_error(model_id)
+	if error.is_empty() and %PortOption.item_count == 0:
+		error = "Too big for the St. Lawrence Seaway: found a hub on the open sea to launch it from."
 	%ErrorLabel.text = error
 	%BuyButton.disabled = not error.is_empty()
 	return error.is_empty()

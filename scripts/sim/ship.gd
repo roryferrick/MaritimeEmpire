@@ -31,11 +31,14 @@ const JOB_TOW := "tow"
 ## A ship sells for this fraction of its price, times its maintenance.
 const SELL_FRACTION := 0.5
 
-## Canal states (canal_state): heading into a lock chamber it has reserved,
-## waiting in line for one, or waiting at the canal entrance for toll money.
-const CANAL_RESERVED := "reserved"
-const CANAL_QUEUED := "queued"
-const CANAL_TOLL := "toll"
+## Canal states (canal_state; see CanalTraffic): heading into a lock chamber
+## it has reserved, waiting in line for one, waiting for toll money, at anchor
+## for a convoy, or in a convoy that has left and waiting its turn to enter.
+const CANAL_RESERVED := CanalTraffic.RESERVED
+const CANAL_QUEUED := CanalTraffic.QUEUED
+const CANAL_TOLL := CanalTraffic.TOLL
+const CANAL_ANCHORED := CanalTraffic.ANCHORED
+const CANAL_CONVOY := CanalTraffic.CONVOY
 
 var name := ""
 var model_id := ""
@@ -70,22 +73,23 @@ var bill := 0.0
 ## Why a running ship is stuck in port, or "".
 var hold_reason := ""
 
-## Going through a canal (see data/canals.json) on the current leg or job
-## segment: how many of the lane's lock chambers the ship has entered (-1 until
-## worked out after loading an old save), seconds in the chamber it's in (-1
-## when not in one), CANAL_* or "", when it joined the line for a chamber,
-## whether it has entered the canal (paying its toll), and the tolls paid on
-## this leg.
+## Going through canals (see CanalTraffic) on the current leg or job segment:
+## how many of the lane's lock chambers (GameData.lane_chambers()) the ship has
+## entered (-1 until worked out after loading an old save), seconds in the
+## chamber it's in (-1 when not in one), which of a shared lock's parallel
+## chambers it uses, CANAL_* or "", when it joined a line or anchorage, the
+## canals it has entered (paying their tolls), and the tolls paid on this leg.
 var canal_step := 0
 var lock_time := -1.0
+var lock_slot := ""
 var canal_state := ""
 var canal_queue_since := 0.0
-var canal_entered := false
+var canals_entered: Array[String] = []
 var leg_toll := 0
-## Toll paid on the leg that ended at this stop (counted in the stop's
-## profit), and the canal whose XP bonus the cargo being unloaded earns, or "".
+## Tolls paid on the leg that ended at this stop (counted in the stop's
+## profit), and the canals whose XP bonus the cargo being unloaded earns.
 var stop_toll := 0
-var delivery_canal := ""
+var delivery_canals: Array[String] = []
 
 ## Why this ship is stranded at sea ("out of fuel", "engine failure"), or "".
 var lost_reason := ""
@@ -141,8 +145,16 @@ func is_recovery() -> bool:
 ## Whether a full tank at full maintenance gets this ship from one port to
 ## another (with the departure margin to spare).
 func can_reach(from: String, to: String) -> bool:
-	var seconds := sailing_seconds(GameData.distance_nm(from, to), 1.0) + GameState.DEPARTURE_MARGIN_S
+	if not fits_lane(from, to):
+		return false
+	var seconds := leg_seconds(from, to, 0.0, GameData.distance_nm(from, to), 1.0) + GameState.DEPARTURE_MARGIN_S
 	return fuel_per_s() * seconds <= fuel_tank()
+
+
+## False if the lane needs the St. Lawrence Seaway (a Great Lakes port) and the
+## model is too big for it.
+func fits_lane(from: String, to: String) -> bool:
+	return bool(model().get("seaway", false)) or not GameData.needs_seaway(from, to)
 
 
 ## Recovery boat only: whether it can carry this ship (models listed in
@@ -256,8 +268,10 @@ func _hub_stop_factor() -> float:
 	return 1.0 - GameState.hub_bonus(docked_at, "speed") if is_docked() else 1.0
 
 
+## A leg within the ship's range that it fits (the Seaway) and can sail on one
+## tank (slow canal stretches and rough seas can make a leg in range too long).
 func can_sail(from: String, to: String) -> bool:
-	return from != to and GameData.distance_nm(from, to) <= range_nm()
+	return from != to and GameData.distance_nm(from, to) <= range_nm() and can_reach(from, to)
 
 
 ## Seconds to sail a distance starting at a given maintenance, slowing as the
@@ -278,9 +292,46 @@ func sailing_seconds(distance: float, start_maintenance: float) -> float:
 	return (m - sqrt(discriminant)) / w
 
 
+## Seconds sailing a lane from one mile to another, starting at a given
+## maintenance: sailing_seconds() over each of its zones (GameData.lane_zones():
+## slower in convoy canals, faster wear in rough seas) in turn, carrying the
+## wear over. Time held in locks, lines and anchorages doesn't count (engines off).
+func leg_seconds(from: String, to: String, start_mile: float, end_mile: float, start_maintenance: float) -> float:
+	var seconds := 0.0
+	var m := start_maintenance
+	var mile := start_mile
+	for zone: Array in GameData.lane_zones(from, to):
+		if mile >= end_mile - 0.0001:
+			break
+		if zone[0] <= mile:
+			continue
+		var piece := minf(float(zone[0]), end_mile) - mile
+		var t := _seconds_at(piece, m, top_speed() * float(zone[1]), wear_per_s() * float(zone[2]))
+		if t == INF:
+			return INF
+		seconds += t
+		m -= wear_per_s() * float(zone[2]) * t
+		mile += piece
+	return seconds
+
+
+## sailing_seconds() at a given top speed and wear rate.
+static func _seconds_at(distance: float, m: float, v: float, w: float) -> float:
+	if distance <= 0.0:
+		return 0.0
+	if v <= 0.0 or m <= 0.0:
+		return INF
+	if w <= 0.0:
+		return distance / (v * m)
+	var discriminant := m * m - 2.0 * w * distance / v
+	if discriminant < 0.0:
+		return INF
+	return (m - sqrt(discriminant)) / w
+
+
 ## Fuel needed to sail between two ports, leaving at the current maintenance.
 func fuel_needed(from: String, to: String) -> float:
-	return fuel_per_s() * sailing_seconds(GameData.distance_nm(from, to), maintenance)
+	return fuel_per_s() * leg_seconds(from, to, 0.0, GameData.distance_nm(from, to), maintenance)
 
 
 ## The port a new route starts from: where it's docked, or where it's heading.
@@ -469,44 +520,76 @@ func status_text() -> String:
 	return text + " — won't make it!" if at_risk else text
 
 
-## The lock chamber the ship is sitting in ({index, lock, mile} from
-## GameData.canal_crossing()), or {} if it isn't in one.
+## The lock chamber the ship is sitting in ({index, lock, mile, canal, forward}
+## from GameData.lane_chambers()), or {} if it isn't in one.
 func lock_chamber() -> Dictionary:
 	if lock_time < 0.0 or canal_step <= 0 or from_port.is_empty():
 		return {}
-	var crossing := GameData.canal_crossing(from_port, to_port)
-	return crossing.chambers[canal_step - 1] if canal_step <= crossing.get("chambers", []).size() else {}
+	var chambers := GameData.lane_chambers(from_port, to_port)
+	return chambers[canal_step - 1] if canal_step <= chambers.size() else {}
 
 
-## Where the ship is in a canal's locks, e.g. "In Gatún Locks (chamber 2 of 3),
-## rising", "Waiting for Pedro Miguel Locks (2nd in line)" or "Waiting for toll
-## money at the Panama Canal"; "" when it isn't held up in one.
+## Where the ship is in a canal, e.g. "In Gatún Locks (chamber 2 of 3),
+## rising", "Waiting for Pedro Miguel Locks (2nd in line)", "At anchor off Port
+## Said, next southbound convoy in 45 s" or "Waiting for toll money at the
+## Panama Canal"; "" when it isn't in or held up at one.
 func canal_status_text() -> String:
 	if is_docked() or is_lost() or from_port.is_empty():
 		return ""
-	var crossing := GameData.canal_crossing(from_port, to_port)
+	var crossing := GameData.crossing_ahead(from_port, to_port, traveled_nm)
 	if crossing.is_empty():
 		return ""
 	var canal: Dictionary = crossing.canal
-	var chambers: Array = crossing.chambers
+	if canal.get("type", "") == "convoy":
+		return _convoy_status_text(crossing)
 	if canal_state == CANAL_TOLL:
 		return "Waiting for toll money at the %s" % canal.name
+	var chambers := GameData.lane_chambers(from_port, to_port)
 	if lock_time >= 0.0 and canal_step > 0:
 		var chamber: Dictionary = chambers[canal_step - 1]
-		var lock: Dictionary = canal.locks[chamber.lock]
-		var in_lock := chambers.filter(func(c: Dictionary) -> bool: return c.lock == chamber.lock)
-		if canal_state == CANAL_QUEUED:
+		var lock: Dictionary = chamber.canal.locks[chamber.lock]
+		var in_lock := chambers.filter(func(c: Dictionary) -> bool: return c.canal == chamber.canal and c.lock == chamber.lock)
+		if lock_time >= float(chamber.canal.get("step_seconds", 3)) and canal_step < chambers.size():
 			var next: Dictionary = chambers[canal_step]
-			if next.lock == chamber.lock:
+			if next.canal == chamber.canal and next.lock == chamber.lock:
 				return "In %s, waiting for the next chamber" % lock.name
-			return "In %s, waiting for %s" % [lock.name, canal.locks[next.lock].name]
-		var rising: bool = lock.rises_forward == crossing.forward
-		return "In %s (chamber %d of %d), %s" % [lock.name, in_lock.find(chamber) + 1, in_lock.size(),
-			"rising" if rising else "lowering"]
-	if canal_state == CANAL_QUEUED and canal_step < chambers.size():
-		var lock_name: String = canal.locks[chambers[canal_step].lock].name
-		return "Waiting for %s (%s in line)" % [lock_name, Fmt.ordinal(GameState.canal_line_position(self))]
+			return "In %s, waiting for %s" % [lock.name, next.canal.locks[next.lock].name]
+		var rising: bool = lock.rises_forward == chamber.forward
+		var of := " (chamber %d of %d)" % [in_lock.find(chamber) + 1, in_lock.size()] if in_lock.size() > 1 else ""
+		return "In %s%s, %s" % [lock.name, of, "rising" if rising else "lowering"]
+	if canal_step < chambers.size():
+		var next: Dictionary = chambers[canal_step]
+		var lock_name: String = next.canal.locks[next.lock].name
+		if canal_state == CANAL_QUEUED:
+			return "Waiting for %s (%s in line)" % [lock_name, Fmt.ordinal(GameState.canal_traffic.line_position(self))]
+		if canal_state == CANAL_RESERVED and GameState.canal_traffic.slot_turn(next.canal.id, next.index, lock_slot) > 0.0:
+			return "Waiting for %s to be made ready" % lock_name
 	return ""
+
+
+func _convoy_status_text(crossing: Dictionary) -> String:
+	var canal: Dictionary = crossing.canal
+	var traffic: CanalTraffic = GameState.canal_traffic
+	var way: String = ("southbound" if crossing.forward else "northbound") if canal.id == "suez" else ("forward" if crossing.forward else "return")
+	var anchorage: String = canal.get("anchorage_names", ["the anchorage", "the anchorage"])[0 if crossing.forward else 1]
+	match canal_state:
+		CANAL_ANCHORED:
+			return "At %s, next %s convoy in %s" % [anchorage, way, Fmt.duration(ceilf(traffic.next_convoy_in(canal)))]
+		CANAL_TOLL:
+			return "At %s, waiting for toll money for the next %s convoy" % [anchorage, way]
+		CANAL_CONVOY:
+			var place := traffic.released_ships(canal, crossing.forward).find(self) + 1
+			return "Joining the %s %s convoy (%s in line to enter)" % [way, canal.name, Fmt.ordinal(place)]
+	if not canals_entered.has(canal.id):
+		return ""
+	if not traffic.blocked_stretch(self).is_empty():
+		return "Waiting in a passing stretch for the %s convoy to clear" % ("northbound" if crossing.forward else "southbound")
+	var leader := traffic.convoy_leader(self)
+	var ships := traffic.convoy_ships(canal, crossing.forward)
+	var text := "In the %s %s convoy (%s of %d)" % [way, canal.name, Fmt.ordinal(ships.find(self) + 1), ships.size()]
+	if leader != null and speed() * float(canal.get("speed_factor", 1.0)) > leader.speed() * float(canal.get("speed_factor", 1.0)):
+		text += ", held behind %s" % leader.name
+	return text
 
 
 func _recovery_status_text() -> String:
@@ -556,10 +639,11 @@ func to_dict() -> Dictionary:
 		"lock_time": lock_time,
 		"canal_state": canal_state,
 		"canal_queue_since": canal_queue_since,
-		"canal_entered": canal_entered,
+		"lock_slot": lock_slot,
+		"canals_entered": canals_entered,
 		"leg_toll": leg_toll,
 		"stop_toll": stop_toll,
-		"delivery_canal": delivery_canal,
+		"delivery_canals": delivery_canals,
 		"lost_reason": lost_reason,
 		"rescuing": rescuing.name if rescuing else "",
 		"job_phase": job_phase,
@@ -601,15 +685,18 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.stop_fuel_cost = float(data.get("stop_fuel_cost", 0.0))
 	ship.stop_repair_cost = float(data.get("stop_repair_cost", 0.0))
 	ship.bill = float(data.get("bill", 0.0))
-	# Saves from before canals: worked out from where the ship is (GameState._rebuild_canal_lines()).
+	# Saves from before canals: worked out from where the ship is (CanalTraffic.rebuild()).
 	ship.canal_step = int(data.get("canal_step", -1))
 	ship.lock_time = float(data.get("lock_time", -1.0))
 	ship.canal_state = data.get("canal_state", "")
 	ship.canal_queue_since = float(data.get("canal_queue_since", 0.0))
-	ship.canal_entered = bool(data.get("canal_entered", false))
+	ship.lock_slot = str(data.get("lock_slot", ""))
+	ship.canals_entered.assign(data.get("canals_entered", []))
 	ship.leg_toll = int(data.get("leg_toll", 0))
 	ship.stop_toll = int(data.get("stop_toll", 0))
-	ship.delivery_canal = data.get("delivery_canal", "")
+	ship.delivery_canals.assign(data.get("delivery_canals", []))
+	if not str(data.get("delivery_canal", "")).is_empty():  # Saves from before several canals.
+		ship.delivery_canals.append(data.delivery_canal)
 	ship.lost_reason = data.get("lost_reason", "")
 	ship.job_phase = data.get("job_phase", JOB_NONE)
 	ship.segment_end = float(data.get("segment_end", 0.0))

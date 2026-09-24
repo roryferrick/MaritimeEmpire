@@ -11,6 +11,7 @@ func _ready() -> void:
 	_map.port_clicked.connect(_open_port_popup)
 	_map.ship_clicked.connect(_open_ship_popup)
 	_map.lock_clicked.connect(_open_lock_popup)
+	_map.canal_clicked.connect(_open_convoy_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -33,6 +34,14 @@ func _open_lock_popup(canal_id: String, lock_index: int) -> void:
 	popup.lock_index = lock_index
 	popup.follow = func() -> Vector2:
 		return _map.get_global_transform() * _map.lock_screen_position(canal_id, lock_index)
+	PopupHost.find(self).open(popup)
+
+
+func _open_convoy_popup(canal_id: String) -> void:
+	var popup := ConvoyPopup.new()
+	popup.canal_id = canal_id
+	popup.follow = func() -> Vector2:
+		return _map.get_global_transform() * _map.canal_screen_position(canal_id)
 	PopupHost.find(self).open(popup)
 
 

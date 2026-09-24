@@ -1,5 +1,5 @@
 {
-	"_comment": "Real-world ports, ordered roughly by container volume (rank sets label priority on the map: lower shows first). lat/lon in degrees (north/east positive), placed at the harbor. Sea lanes between every pair are generated into data/sea_lanes.res by tools/build_map_data.gd - rerun it after changing this file.",
+	"_comment": "Real-world ports, ordered roughly by container volume (rank sets label priority on the map: lower shows first). lat/lon in degrees (north/east positive), placed at the harbor. seaway: true marks Great Lakes ports, lake says which Great Lake a port is on (superior, michigan, huron, erie, ontario), reached through the St. Lawrence Seaway, which only ships small enough for it can reach (ship_models.json seaway). Sea lanes between every pair are generated into data/sea_lanes.res by tools/build_map_data.gd - rerun it after changing this file.",
 	"ports": [
 		{ "id": "SHA", "name": "Shanghai", "country": "China", "lat": 30.62, "lon": 122.07, "rank": 1 },
 		{ "id": "SIN", "name": "Singapore", "country": "Singapore", "lat": 1.26, "lon": 103.82, "rank": 2 },
@@ -200,6 +200,33 @@
 		{ "id": "ROR", "name": "Malakal", "country": "Palau", "lat": 7.33, "lon": 134.45, "rank": 197 },
 		{ "id": "FSP", "name": "Saint-Pierre", "country": "St Pierre and Miquelon", "lat": 46.78, "lon": -56.17, "rank": 198 },
 		{ "id": "YDP", "name": "Nain", "country": "Canada", "lat": 56.54, "lon": -61.69, "rank": 199 },
-		{ "id": "FLW", "name": "Faja Grande", "country": "Azores", "lat": 39.45, "lon": -31.27, "rank": 200 }
+		{ "id": "FLW", "name": "Faja Grande", "country": "Azores", "lat": 39.45, "lon": -31.27, "rank": 200 },
+		{ "id": "SOK", "name": "Ain Sokhna", "country": "Egypt", "lat": 29.62, "lon": 32.36, "rank": 201 },
+		{ "id": "TEW", "name": "Port Tewfik", "country": "Egypt", "lat": 29.953, "lon": 32.566, "rank": 202 },
+		{ "id": "ETH", "name": "Eilat", "country": "Israel", "lat": 29.54, "lon": 34.95, "rank": 203 },
+		{ "id": "NOU", "name": "Noumea", "country": "New Caledonia", "lat": -22.27, "lon": 166.43, "rank": 204 },
+		{ "id": "CHI", "name": "Chicago", "country": "USA", "lat": 41.72, "lon": -87.53, "rank": 205, "seaway": true, "lake": "michigan" },
+		{ "id": "DLH", "name": "Duluth-Superior", "country": "USA", "lat": 46.76, "lon": -92.10, "rank": 206, "seaway": true, "lake": "superior" },
+		{ "id": "DET", "name": "Detroit", "country": "USA", "lat": 42.30, "lon": -83.09, "rank": 207, "seaway": true, "lake": "erie" },
+		{ "id": "TOR", "name": "Toronto", "country": "Canada", "lat": 43.63, "lon": -79.35, "rank": 208, "seaway": true, "lake": "ontario" },
+		{ "id": "CLE", "name": "Cleveland", "country": "USA", "lat": 41.51, "lon": -81.71, "rank": 209, "seaway": true, "lake": "erie" },
+		{ "id": "YHM", "name": "Hamilton", "country": "Canada", "lat": 43.28, "lon": -79.84, "rank": 210, "seaway": true, "lake": "ontario" },
+		{ "id": "MKE", "name": "Milwaukee", "country": "USA", "lat": 43.02, "lon": -87.89, "rank": 211, "seaway": true, "lake": "michigan" },
+		{ "id": "TOL", "name": "Toledo", "country": "USA", "lat": 41.69, "lon": -83.47, "rank": 212, "seaway": true, "lake": "erie" },
+		{ "id": "YQT", "name": "Thunder Bay", "country": "Canada", "lat": 48.43, "lon": -89.21, "rank": 213, "seaway": true, "lake": "superior" },
+		{ "id": "IHB", "name": "Indiana Harbor", "country": "USA", "lat": 41.68, "lon": -87.44, "rank": 214, "seaway": true, "lake": "michigan" },
+		{ "id": "BUH", "name": "Burns Harbor", "country": "USA", "lat": 41.64, "lon": -87.15, "rank": 215, "seaway": true, "lake": "michigan" },
+		{ "id": "GRY", "name": "Gary", "country": "USA", "lat": 41.61, "lon": -87.33, "rank": 216, "seaway": true, "lake": "michigan" },
+		{ "id": "TWH", "name": "Two Harbors", "country": "USA", "lat": 47.01, "lon": -91.67, "rank": 217, "seaway": true, "lake": "superior" },
+		{ "id": "MQT", "name": "Presque Isle", "country": "USA", "lat": 46.58, "lon": -87.38, "rank": 218, "seaway": true, "lake": "superior" },
+		{ "id": "CAL", "name": "Calcite", "country": "USA", "lat": 45.40, "lon": -83.78, "rank": 219, "seaway": true, "lake": "huron" },
+		{ "id": "XCH", "name": "Flying Fish Cove", "country": "Christmas Island", "lat": -10.42, "lon": 105.67, "rank": 220 },
+		{ "id": "MDY", "name": "Midway Atoll", "country": "USA", "lat": 28.21, "lon": -177.37, "rank": 221 },
+		{ "id": "KGI", "name": "King George Island", "country": "Antarctica", "lat": -62.20, "lon": -58.95, "rank": 222 },
+		{ "id": "MCM", "name": "McMurdo Station", "country": "Antarctica", "lat": -77.85, "lon": 166.67, "rank": 223 },
+		{ "id": "PAL", "name": "Palmer Station", "country": "Antarctica", "lat": -64.77, "lon": -64.05, "rank": 224 },
+		{ "id": "ROT", "name": "Rothera", "country": "Antarctica", "lat": -67.57, "lon": -68.13, "rank": 225 },
+		{ "id": "DAV", "name": "Davis Station", "country": "Antarctica", "lat": -68.58, "lon": 77.97, "rank": 226 },
+		{ "id": "MAW", "name": "Mawson Station", "country": "Antarctica", "lat": -67.60, "lon": 62.87, "rank": 227 }
 	]
 }
