@@ -81,7 +81,7 @@ static func unlock_level(model: Dictionary) -> int:
 	return int(model.get("unlock_level", 1))
 
 
-## What reaching this company level unlocks, e.g. ["GE 100", "+1 slot: Scooter 10"].
+## What reaching this company level unlocks, e.g. ["GE 100", "+1 slot: Scooter 20"].
 static func unlocks_at(level: int) -> Array[String]:
 	var unlocked: Array[String] = []
 	var more_slots := PackedStringArray()
