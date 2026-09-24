@@ -80,8 +80,8 @@ func _process(delta: float) -> void:
 func _update_alerts() -> void:
 	var hub_notes := PackedStringArray()
 	for hub in GameState.hubs:
-		if hub.upgrade_points() > 0:
-			hub_notes.append("%s has upgrades to spend" % hub.title())
+		if GameState.hub_can_upgrade(hub):
+			hub_notes.append("%s has an upgrade you can buy" % hub.title())
 	if GameState.hubs_available() > 0:
 		hub_notes.append("a new hub can be founded (click a port)")
 	_hubs_alert.visible = not hub_notes.is_empty()

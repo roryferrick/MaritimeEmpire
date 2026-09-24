@@ -1,8 +1,8 @@
 class_name HubTree
 extends GridContainer
 ## An HQ's or hub's upgrade tree: one row per path with its name, point pips,
-## the bonus so far and a + button to spend a point. Rebuilds itself when hubs
-## change. Used by the port popup and the Hubs screen.
+## the bonus so far and a button to buy the next point (showing its price).
+## Rebuilds itself when hubs change. Used by the port popup and the Hubs screen.
 
 const PIP_SIZE := Vector2(6, 10)
 
@@ -17,6 +17,7 @@ func _init(for_hub: Hub) -> void:
 
 func _ready() -> void:
 	GameState.hubs_changed.connect(_rebuild)
+	GameState.money_changed.connect(_on_money_changed)
 	_rebuild()
 
 
@@ -43,10 +44,21 @@ func _rebuild() -> void:
 		effect.text = path[2] % roundi(hub.bonus(path[0]) * 100.0)
 		add_child(effect)
 		var add := Button.new()
-		add.text = "+"
-		add.disabled = not hub.can_upgrade(path[0])
+		var error := GameState.upgrade_hub_error(hub, path[0])
+		add.text = "Max" if points >= Hub.max_path_level() else "+ $%s" % Fmt.short(hub.upgrade_cost(path[0]))
+		add.disabled = not error.is_empty()
+		add.tooltip_text = error if not error.is_empty() else "Spend a point and %s" % Fmt.money(hub.upgrade_cost(path[0]))
 		add.pressed.connect(GameState.upgrade_hub.bind(hub, path[0]))
 		add_child(add)
+
+
+## Affordability changes the buttons; only rebuild if it flips.
+func _on_money_changed(_money: int) -> void:
+	for path: Array in Hub.PATHS:
+		var index: int = Hub.PATHS.find(path) * 4 + 3
+		if index < get_child_count() and (get_child(index) as Button).disabled != not GameState.upgrade_hub_error(hub, path[0]).is_empty():
+			_rebuild()
+			return
 
 
 func _pip_color(filled: bool) -> Color:

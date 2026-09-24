@@ -36,7 +36,7 @@ func _rebuild() -> void:
 	_live.clear()
 	var settings := Hub.settings()
 	%Intro.text = ("Your HQ and hubs level up from every delivery unloaded at their port. Each level is an upgrade "
-		+ "point for bonuses that help every ship docking there; the HQ's bonuses are %d%% stronger. You get a new "
+		+ "point you can buy a bonus with (from $1M, rising $250k each time within a path) that helps every ship docking there; the HQ's bonuses are %d%% stronger. You get a new "
 		+ "hub every %d company levels.") % [roundi((float(settings.get("hq_multiplier", 1.5)) - 1.0) * 100.0),
 		int(settings.get("every_company_levels", 15))]
 	for hub in GameState.hubs:

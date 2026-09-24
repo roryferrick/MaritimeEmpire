@@ -58,7 +58,7 @@ const WINDOW_SECONDS := 600.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "bought", "sold"]
+const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "bought", "sold", "hubs"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 
@@ -252,10 +252,29 @@ func build_hub(port_id: String) -> String:
 	return ""
 
 
-## Spends one of a hub's upgrade points on a path.
+## Why a hub can't take its next point in a path right now, or "".
+func upgrade_hub_error(hub: Hub, path: String) -> String:
+	if int(hub.upgrades.get(path, 0)) >= Hub.max_path_level():
+		return "This path is maxed."
+	if hub.upgrade_points() <= 0:
+		return "No upgrade points: the hub gets one each level."
+	if money < hub.upgrade_cost(path):
+		return "Costs %s." % Fmt.money(hub.upgrade_cost(path))
+	return ""
+
+
+## Whether any of a hub's paths can be upgraded right now (points and money).
+func hub_can_upgrade(hub: Hub) -> bool:
+	return Hub.PATHS.any(func(path: Array) -> bool: return upgrade_hub_error(hub, path[0]).is_empty())
+
+
+## Spends one of a hub's upgrade points on a path, and its price.
 func upgrade_hub(hub: Hub, path: String) -> void:
-	if not hub.can_upgrade(path):
+	if not upgrade_hub_error(hub, path).is_empty():
 		return
+	var cost := hub.upgrade_cost(path)
+	money -= cost
+	_record(null, "hubs", cost)
 	hub.upgrades[path] = int(hub.upgrades[path]) + 1
 	hubs_changed.emit()
 
@@ -888,7 +907,7 @@ static func _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
 # --- Finances ------------------------------------------------------------
 
 ## Tallies money of a kind (see MONEY_KINDS) for a ship (null for the company
-## as a whole: buying and selling ships). Recovery boats pay for their own
+## as a whole: buying and selling ships, hub upgrades). Recovery boats pay for their own
 ## fuel and repairs.
 func _record(ship: Ship, kind: String, amount: float) -> void:
 	totals[kind] = float(totals.get(kind, 0.0)) + amount

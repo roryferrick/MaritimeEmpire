@@ -4,7 +4,8 @@ extends RefCounted
 ## more every hubs.every_company_levels company levels, placed at any port for
 ## good). Levels 0 to hubs.max_level from the XP of deliveries unloaded at its
 ## port; each level is an upgrade point for its tree, which boosts every ship
-## docking there. The HQ's bonuses are hubs.hq_multiplier times a hub's.
+## docking there, and costs money (see upgrade_cost()). The HQ's bonuses are
+## hubs.hq_multiplier times a hub's.
 
 ## Upgrade paths: [key, name, what each point does ("%d" is the total percent)].
 const PATHS := [
@@ -43,6 +44,13 @@ func upgrade_points() -> int:
 
 func can_upgrade(path: String) -> bool:
 	return upgrade_points() > 0 and int(upgrades.get(path, 0)) < Hub.max_path_level()
+
+
+## Money for the next point in a path: upgrade_cost, plus upgrade_cost_step for
+## each point it already has.
+func upgrade_cost(path: String) -> int:
+	var settings := Hub.settings()
+	return int(settings.get("upgrade_cost", 1000000)) + int(settings.get("upgrade_cost_step", 250000)) * int(upgrades.get(path, 0))
 
 
 ## The bonus from a path (e.g. 0.15 for +15%), counting the HQ multiplier.

@@ -11,7 +11,7 @@ const COLUMNS := [
 ## Totals rows: [title, money kind, is a cost].
 const TOTAL_ROWS := [
 	["Cargo income", "income", false], ["Fuel", "fuel", true], ["Repairs", "repair", true],
-	["Ships bought", "bought", true], ["Ships sold", "sold", false],
+	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true],
 ]
 
 var _sort_key := "profit"

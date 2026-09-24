@@ -41,6 +41,11 @@ const LOST_MARKER_OFFSET := 12.0
 ## The gold ring around the HQ's and hubs' ports.
 const HQ_RING_WIDTH := 3.0
 const HUB_RING_WIDTH := 2.0
+## The red dot on an HQ or hub with an upgrade to buy: its size and where it
+## sits from the port's center (up and to the right, outside the first ring of
+## docked ships).
+const HUB_ALERT_RADIUS := 4.5
+const HUB_ALERT_OFFSET := Vector2(15, -15)
 ## The faint route lanes drawn with show_active_lanes.
 const ACTIVE_LANE_ALPHA := 0.3
 const ACTIVE_LANE_WIDTH := 1.5
@@ -68,6 +73,8 @@ const FALLBACK_COLORS := {
 	&"river": Color(0.3, 0.5, 0.72),
 	&"hub_ring": Color(0.96, 0.78, 0.25),
 	&"hub_ring_gray": Color(0.75, 0.75, 0.75),
+	&"hub_alert": Color(0.92, 0.22, 0.2),
+	&"hub_alert_outline": Color(1, 1, 1),
 	&"river_gray": Color(0.34, 0.35, 0.38),
 	&"route": Color(1.0, 0.6, 0.15),
 }
@@ -395,6 +402,7 @@ func _draw_overlay() -> void:
 	_draw_ports(port_labels)
 	if show_ships:
 		_draw_ships()
+		_draw_hub_alerts()
 
 
 ## Port labels in rank order, skipping any that would overlap one already placed.
@@ -536,6 +544,16 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 			_overlay.draw_dashed_line(points[i - 1], points[i], color, width, 8.0)
 	else:
 		_overlay.draw_polyline(points, color, width, true)
+
+
+## A red dot (like the nav tabs') by each HQ or hub with an upgrade that can be
+## bought now. Drawn after the ships so docked ships don't hide it.
+func _draw_hub_alerts() -> void:
+	for hub in GameState.hubs:
+		if GameState.hub_can_upgrade(hub):
+			var dot := port_screen_position(hub.port_id) + HUB_ALERT_OFFSET
+			_overlay.draw_circle(dot, HUB_ALERT_RADIUS + 1.0, _color(&"hub_alert_outline"), true, -1.0, true)
+			_overlay.draw_circle(dot, HUB_ALERT_RADIUS, _color(&"hub_alert"), true, -1.0, true)
 
 
 ## Ships at sea are rectangles with a pointed bow; docked ships are small dots.
