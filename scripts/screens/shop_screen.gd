@@ -1,15 +1,15 @@
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
-## category: container ships, tankers, ore, grain, livestock and vehicle
-## carriers, then recovery boats. Each section
+## category: container ships, ore, grain and livestock carriers, tankers,
+## vehicle carriers, then recovery boats. Each section
 ## title runs through its models' map colors, smallest ship first, and each
 ## card's name is in its model's map color. Each card shows how many of the
 ## model the company's level allows, and the level that unlocks the model or its
 ## next slot. A red dot marks every Buy button that can be used right now.
 
 ## [title, ship_models.json category]
-const SECTIONS := [["Container ships", "container"], ["Tankers", "tanker"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"]]
+const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"]]
 ## Cards per row, fewer if they don't fit. Five fit beside the activity log
 ## at the default window size.
 const MAX_COLUMNS := 5
