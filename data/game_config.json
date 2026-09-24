@@ -1,6 +1,6 @@
 {
 	"_comment": "Ships trade: they buy a commodity at one port and sell it at the next (see data/markets.json, where ships also buy their own fuel at a price that follows the local oil price). starting_money covers a first ship and its first cargo. Breakdowns (from company level min_company_level): every interval_s seconds, each ship at sea (not recovery boats) rolls its own chance of losing hit of its maintenance (0.5 = 50 points). The chance runs from chance_at_full at 100% maintenance to chance_at_empty at 0%, times the model's breakdown_factor (bigger ships are sturdier), times an age factor (1 + age_per_hour_at_sea for each hour the ship has spent at sea, up to max_age_factor), less the durability skill. initial_view_width_deg: how many degrees of longitude the map shows across when it opens, centered on the home port.",
-	"starting_money": 500000,
+	"starting_money": 2500000,
 	"_company_colors_comment": "Colors a new company can choose (its name in the top bar and the rings around its HQ and hubs): [id, name, hex], in picker order.",
 	"company_colors": [["red", "Red", "#e5484d"], ["orange", "Orange", "#f5a524"], ["yellow", "Yellow", "#f2d64b"], ["green", "Green", "#46c37b"], ["blue", "Blue", "#4a9df8"], ["purple", "Purple", "#b67cf2"]],
 	"autosave_seconds": 30,
