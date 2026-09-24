@@ -39,7 +39,7 @@ func _on_level_input(event: InputEvent) -> void:
 	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var host := PopupHost.find(self)
-	if host.current is LevelPopup:
+	if is_instance_valid(host.current) and host.current is LevelPopup:
 		host.close()
 		return
 	var popup := LevelPopup.new()
