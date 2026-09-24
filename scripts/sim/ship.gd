@@ -113,6 +113,9 @@ var full_loads := true
 ## Why it is waiting in port for a full load ("waiting for money for a full
 ## load"), or "". Not a problem, so not a hold.
 var load_wait := ""
+## Set by "Send waiting ships": leave on the next try with whatever cargo the
+## money buys, even with full loads on. Cleared when it leaves; not saved.
+var sail_now := false
 ## When it was lost, relative to other lost ships (lower = earlier), for the recovery queue.
 var lost_order := 0
 ## At sea without the fuel (or maintenance) to reach the end of its leg.

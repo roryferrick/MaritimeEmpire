@@ -1,5 +1,6 @@
 extends Control
-## Company totals (last 10 minutes and all time), a card per canal the fleet
+## The "Keep in the bank" setting (money cargo purchases leave alone), company
+## totals (last 10 minutes and all time), a card per canal the fleet
 ## has used (crossings, tolls and bonus XP), and a sortable table of each
 ## ship's lifetime profit. Refreshes once a second while visible.
 
@@ -18,12 +19,15 @@ const TOTAL_ROWS := [
 	["Canal tolls", "tolls", true],
 	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true],
 ]
+## Choices for "Keep in the bank" (0 = spend everything on cargo).
+const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000]
 
 var _sort_key := "profit"
 var _sort_descending := true
 var _clock := 0.0
 var _canal_card := PanelContainer.new()
 var _canal_label := Label.new()
+var _bank_picker := OptionButton.new()
 
 
 func _ready() -> void:
@@ -32,6 +36,7 @@ func _ready() -> void:
 	_canal_label.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
 	_canal_card.add_child(_canal_label)
 	$Scroll/Margin/Content/TotalsCard.add_sibling(_canal_card)
+	_add_bank_row()
 	visibility_changed.connect(_refresh)
 	GameState.ships_changed.connect(_refresh)
 	_refresh()
@@ -49,6 +54,7 @@ func _process(delta: float) -> void:
 func _refresh() -> void:
 	if not is_visible_in_tree():
 		return
+	_show_bank_reserve()
 	var recent := GameState.recent_finances()
 	_fill_totals(recent.fleet)
 	_fill_canals()
@@ -162,3 +168,35 @@ static func _clear(parent: Node) -> void:
 	for child in parent.get_children():
 		parent.remove_child(child)
 		child.queue_free()
+
+
+## "Keep in the bank: [amount]" above the totals, with a note on what it does.
+func _add_bank_row() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 12)
+	var title := Label.new()
+	title.text = "Keep in the bank"
+	row.add_child(title)
+	for amount in BANK_RESERVES:
+		_bank_picker.add_item("Nothing" if amount == 0 else Fmt.money(amount))
+		_bank_picker.set_item_metadata(_bank_picker.item_count - 1, amount)
+	_bank_picker.item_selected.connect(func(index: int) -> void:
+		GameState.set_bank_reserve(int(_bank_picker.get_item_metadata(index))))
+	row.add_child(_bank_picker)
+	var hint := Label.new()
+	hint.theme_type_variation = &"DimLabel"
+	hint.text = "Ships won't spend this on cargo (fuel and repairs still can)."
+	row.add_child(hint)
+	$Scroll/Margin/Content.add_child(row)
+	$Scroll/Margin/Content.move_child(row, 0)
+
+
+## Shows the current setting (a saved amount not in the list is added to it).
+func _show_bank_reserve() -> void:
+	for i in _bank_picker.item_count:
+		if int(_bank_picker.get_item_metadata(i)) == GameState.bank_reserve:
+			_bank_picker.select(i)
+			return
+	_bank_picker.add_item(Fmt.money(GameState.bank_reserve))
+	_bank_picker.set_item_metadata(_bank_picker.item_count - 1, GameState.bank_reserve)
+	_bank_picker.select(_bank_picker.item_count - 1)

@@ -1,14 +1,15 @@
 extends Control
 ## The player's ships, grouped by model (in shop order) under a labeled
-## divider, five tiles wide, with sort (within each model) and filter options.
+## divider, eight tiles wide, with sort (within each model) and filter options,
+## "Upgrade all", and "Send waiting" for ships stuck in port waiting for full loads.
 ## Tiles are re-sorted when the fleet or the sort changes, not live, so they
 ## don't jump around; the filter follows each ship's status as it changes.
 
 enum Sort { NAME, STATUS, PROFIT }
 enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY }
 
-const COLUMNS := 4
-const TILE_GAP := 12
+const COLUMNS := 8
+const TILE_GAP := 6
 const SORT_NAMES := {Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit"}
 const FILTER_NAMES := {
 	Filter.ALL: "All ships", Filter.ATTENTION: "Needs attention",
@@ -20,6 +21,8 @@ const FILTER_NAMES := {
 var _groups := {}
 ## Spends every ship's upgrade points (see GameState.upgrade_all()).
 var _upgrade_all := Button.new()
+## Sends ships waiting in port for full loads off now (see GameState.send_waiting_ships()).
+var _send_waiting := Button.new()
 
 
 func _ready() -> void:
@@ -38,6 +41,12 @@ func _ready() -> void:
 	GameState.ship_changed.connect(_update_upgrade_all.unbind(1))
 	GameState.ships_changed.connect(_update_upgrade_all)
 	_update_upgrade_all()
+	_send_waiting.pressed.connect(func() -> void: GameState.send_waiting_ships())
+	%Header.add_child(_send_waiting)
+	%Header.move_child(_send_waiting, %CountLabel.get_index())
+	GameState.ship_changed.connect(_update_send_waiting.unbind(1))
+	GameState.ships_changed.connect(_update_send_waiting)
+	_update_send_waiting()
 	%Groups.resized.connect(_size_tiles)
 	_rebuild()
 
@@ -70,7 +79,22 @@ func _update_upgrade_all() -> void:
 	_upgrade_all.disabled = points == 0
 
 
-## Every tile is a fifth of the row wide, so part-filled rows line up.
+## "Send waiting (3)": its tooltip names the waiting ships, and any held in port
+## for other reasons (fuel, range, wear), which it can't send.
+func _update_send_waiting() -> void:
+	var waiting := GameState.ships_waiting_for_loads()
+	_send_waiting.text = "Send waiting (%d)" % waiting.size() if not waiting.is_empty() else "Send waiting"
+	_send_waiting.disabled = waiting.is_empty()
+	var lines: Array[String] = ["Ships waiting in port for money for a full load leave now with whatever cargo the money buys (just this once)."]
+	if not waiting.is_empty():
+		lines.append("Waiting: %s" % ", ".join(PackedStringArray(waiting.map(func(ship: Ship) -> String: return ship.name))))
+	for ship in GameState.ships:
+		if ship.is_held():
+			lines.append("%s can't be sent: %s" % [ship.name, ship.hold_reason])
+	_send_waiting.tooltip_text = "\n".join(lines)
+
+
+## Every tile is an eighth of the row wide, so part-filled rows line up.
 func _size_tiles() -> void:
 	var width := floorf((%Groups.size.x - (COLUMNS - 1) * TILE_GAP) / COLUMNS)
 	for entry: Array in _groups.values():
@@ -81,7 +105,7 @@ func _size_tiles() -> void:
 ## A model's divider (name, then a rule) and its tile grid.
 func _add_group(model: Dictionary) -> GridContainer:
 	var group := VBoxContainer.new()
-	group.add_theme_constant_override(&"separation", 8)
+	group.add_theme_constant_override(&"separation", 4)
 	var title := Label.new()
 	title.theme_type_variation = &"DimLabel"
 	title.text = model.get("name", model.id)

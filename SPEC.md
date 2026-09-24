@@ -43,7 +43,8 @@
   - With auto-repair on, maintenance refills to 100% over the first 5 s, paid as it goes. With auto-refuel on, the tank refills over the next 5 s. The Scooter 20 does each in 2.5 s to fit its 5 s stop.
   - The ship can leave when the stop ends.
 - Auto-repair, auto-refuel and auto-recovery are per-ship toggles in the ship popup, all on for new ships (and for saved ships from before a toggle existed).
-- Full loads (the ship popup's Full toggle, on for new and saved cargo ships): a ship only buys a full hold (less anything a canal makes it leave behind), never a part load, and with an empty hold it waits in port until it can afford one ("Docked at Rome — waiting for money for a full load to Marsaxlokk", or "... no cargo makes a profit to ..." if nothing pays on that leg). Waiting isn't treated as a problem (no red dot or log message). With it off, a ship buys as much as the money allows and sails.
+- Ships buy cargo only with money beyond the fleet's fuel reserve: what it would cost to top up every ship's tank where it is (or, for a cargo ship at sea, where it's going, counting the fuel it will burn getting there). A ship already full in port reserves nothing, so big idle tanks (a Buffalo's 645,000 units) don't lock up the money.
+- Full loads (the ship popup's Full toggle, on for new and saved cargo ships): a ship only buys a full hold (less anything a canal makes it leave behind), never a part load, and with an empty hold it waits in port until it can afford one ("Docked at Rome — waiting for money for a full load to Marsaxlokk"). A leg where no cargo makes a profit is sailed empty straight away. Waiting isn't treated as a problem (no red dot or log message). With it off, a ship buys as much as the money allows and sails.
 - A ship only leaves if it has enough fuel for the whole next leg (plus 1 s spare), allowing for the wear it will pick up on the way. So only a breakdown can leave it stranded at sea. Otherwise it is held in port (red dot, a toast, and the reason in its status): refuel is off, it's waiting for money, it's too worn to make the leg on a full tank (turn on repair), or the leg is beyond its range (for routes set before ranges shrank; assign a new one).
 - Money never goes below $0. Refills buy what the player can afford, and held ships keep buying as money comes in, until they have enough fuel (with auto-refuel on, until the tank is full or the money runs out).
 
@@ -181,6 +182,7 @@
 - Calendar: a new company starts on 1 January 2000 at midnight. The clock runs 20 calendar minutes per second of play at 1x (game_config calendar), matched to real ship speeds (a Scooter's 5.44 nm a second is about 16 knots), so voyages take realistic calendar times: Rome to Tunis about 20 hours, Shanghai to Rotterdam about a month; a calendar day passes in about 72 seconds. It follows the game speed (stops when paused). The route screen shows each leg's calendar time too ("1 min 1 s (about 20 h)"), a ship at sea shows when it arrives ("arrives 3 Jan 09:10"), and activity log lines are stamped with the calendar time.
 - Game speed: the button (or the F key) cycles Paused, 1x, 2x, 4x, 8x. Paused freezes the world; faster speeds run it that much faster (ships, breakdowns, XP, finances, prices); each session starts at 1x.
 - Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ...", "a new hub"), each with an estimate of how long until you reach it at that rate. Refreshes every second.
+- Clicking the money opens the Finances screen.
 
 ### Bottom navigation bar
 - World | Ships | Finances | Hubs | Shop. Hidden on the Route Assignment screen.
@@ -194,9 +196,10 @@
 - Only one popup open at a time; opening a new one closes the old one.
 
 ### 2. Ships screen
-- Scrolling list grouped by model (in shop order), each group under a divider with the model name, 4 tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
-- Each tile shows the ship's level ("Lv 7", in green with "+2" while it has upgrade points to spend).
-- Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); red = docked (paused at a port, no route, or held in port).
+- Scrolling list grouped by model (in shop order), each group under a divider with the model name, 8 compact tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
+- Each tile has two lines: the ship name (cut short with "..." if it doesn't fit; hover for the full name), then its cargo and level in smaller text ("Coffee · Lv 7", in green with "+2" while it has upgrade points to spend; recovery boats say "Recovery").
+- Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); amber = waiting in port for money for a full load; red = docked (paused at a port, no route, or held in port).
+- "Send waiting (N)" in the header sends every ship waiting in port for money for a full load off now, with whatever cargo the money buys (just this once; it may sail empty if the money is short). Its tooltip names them, and any ships held in port for other reasons (fuel, range, wear) that it can't send.
 - Clicking a tile opens the ship popup.
 - Sort (within each model) by name, status (lost, then at risk, then held, then stopped, then running) or profit; show all ships, running, stopped, lost, or recovery boats. A count shows how many are shown. Tiles re-sort when the fleet or the sort changes, not live.
 - An "Upgrade all (N)" button spends every ship's upgrade points at once, round-robin: each point goes to the ship's lowest skill path, ties in the order speed, efficiency, durability (so speed 1, efficiency 1, durability 1, speed 2, ... up to all 30). Greyed out when there are none.
@@ -206,6 +209,7 @@
 - Then a "New hub available" card (how to found one, with a button to the map) while a hub can be founded, and a "Next hub" card with the company level that unlocks the next one.
 
 ### Finances screen
+- At the top, "Keep in the bank" (Nothing, $100,000, $250,000, $500,000, $1M, $2.5M, $5M, $10M, $25M, $50M or $100M; saved with the company, default Nothing): ships won't spend that money on cargo, so it builds up for buying ships or upgrades. Fuel and repairs can still use it, so no ship is stranded. A ship waiting for a full load says so ("... (keeping $250,000 in the bank)").
 - Totals for the last 10 minutes and all time: cargo sales, cargo bought, fuel, repairs, canal tolls, ships bought, ships sold, hub upgrades, and operating profit (sales − cargo bought − fuel − repairs − tolls). Smaller text and tighter columns so it all fits.
 - Then a card per canal the fleet has used: "Panama Canal: 12 crossings · tolls −$48,000 · bonus XP 3,100" (bonus XP is the extra company XP from the canal bonus).
 - A table of every ship: model, sales, cargo bought, fuel, repairs, tolls, lifetime profit and profit over the last 10 minutes. Click a column to sort. Refreshes every second.

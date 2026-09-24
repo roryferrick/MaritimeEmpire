@@ -105,6 +105,9 @@ var play_time := 0.0
 var company_xp := 0.0
 ## The map's Routes switch: show the fleet's route lanes faintly.
 var show_active_routes := true
+## Money cargo purchases leave in the bank (set on the Finances screen). Fuel
+## and repairs can still use it, so no ship is stranded by it.
+var bank_reserve := 0
 ## The HQ (at the home port, first) and the hubs placed since.
 var hubs: Array[Hub] = []
 ## All-time totals for each of MONEY_KINDS.
@@ -118,6 +121,9 @@ var _window: Array = []
 var _autosave_timer := Timer.new()
 var _breakdown_clock := 0.0
 var _auto_recovery_clock := 0.0
+## fuel_reserve(), and the play_time it was worked out at.
+var _fuel_reserve := 0.0
+var _fuel_reserve_time := -1.0
 ## Moves ships through canals: tolls, locks and convoys.
 var canal_traffic := CanalTraffic.new(self)
 ## Commodity prices: drift and the impact of the player's own trades.
@@ -541,6 +547,25 @@ func set_full_loads(ship: Ship, on: bool) -> void:
 	ship_changed.emit(ship)
 
 
+func set_bank_reserve(amount: int) -> void:
+	bank_reserve = maxi(amount, 0)
+
+
+## Ships in port waiting for money for a full load (see _waiting_for_load()).
+func ships_waiting_for_loads() -> Array[Ship]:
+	return ships.filter(func(ship: Ship) -> bool: return ship.is_docked() and not ship.load_wait.is_empty() and not ship.sail_now)
+
+
+## Sends every ship waiting for a full load off now, with whatever cargo the
+## money buys (just this once). Returns how many.
+func send_waiting_ships() -> int:
+	var waiting := ships_waiting_for_loads()
+	for ship in waiting:
+		ship.sail_now = true
+		ship_changed.emit(ship)
+	return waiting.size()
+
+
 ## Why a ship can't be sold right now, or "".
 func sell_error(ship: Ship) -> String:
 	if ship.is_lost():
@@ -765,8 +790,8 @@ func _sell_cargo(ship: Ship) -> void:
 ## Buys the most profitable cargo the ship can carry to its next port (see
 ## Market.best_cargo()): a full hold (less what a canal makes it leave behind),
 ## or as much as the money allows while keeping the fleet's fuel reserve (see
-## fuel_reserve()), unless full loads are on, when it buys nothing short of a
-## full hold. Nothing if no cargo makes a profit.
+## fuel_reserve()) and the bank_reserve, unless full loads are on, when it buys
+## nothing short of a full hold. Nothing if no cargo makes a profit.
 func _load_cargo(ship: Ship, to: String) -> void:
 	if ship.is_recovery() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return
@@ -776,8 +801,8 @@ func _load_cargo(ship: Ship, to: String) -> void:
 	var price := market.buy_price(ship.docked_at, best[0])
 	var fuel_reserve := fuel_reserve()
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
-	var quantity := mini(room, floori((float(money) - ship.bill - fuel_reserve) / price))
-	if quantity <= 0 or (ship.full_loads and quantity < room):
+	var quantity := mini(room, floori((float(money) - ship.bill - fuel_reserve - bank_reserve) / price))
+	if quantity <= 0 or (ship.full_loads and not ship.sail_now and quantity < room):
 		return
 	var cost := roundi(quantity * price)
 	money -= cost
@@ -852,19 +877,20 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 
 
 ## With full loads on, a cargo ship with an empty hold stays in port until it
-## can buy a full one (see _load_cargo()), saying why in its load_wait.
+## can buy a full one (see _load_cargo()), saying why in its load_wait. A leg
+## where no cargo makes a profit is sailed empty straight away.
 func _waiting_for_load(ship: Ship, to: String) -> bool:
 	if not ship.is_recovery() and ship.full_loads and ship.cargo_id.is_empty():
 		_load_cargo(ship, to)
-	if ship.is_recovery() or not ship.full_loads or not ship.cargo_id.is_empty():
+	if ship.is_recovery() or not ship.full_loads or ship.sail_now or not ship.cargo_id.is_empty() \
+			or market.best_cargo(ship.model(), ship.docked_at, to)[0] == "":
 		_set_load_wait(ship, "")
 		return false
 	_set_hold(ship, "")
-	var destination := GameData.port_name(to)
-	if market.best_cargo(ship.model(), ship.docked_at, to)[0] == "":
-		_set_load_wait(ship, "waiting for a full load: no cargo makes a profit to %s" % destination)
-	else:
-		_set_load_wait(ship, "waiting for money for a full load to %s" % destination)
+	var reason := "waiting for money for a full load to %s" % GameData.port_name(to)
+	if bank_reserve > 0:
+		reason += " (keeping %s in the bank)" % Fmt.money(bank_reserve)
+	_set_load_wait(ship, reason)
 	return true
 
 
@@ -910,6 +936,7 @@ func _leave_port(ship: Ship) -> void:
 	ship.dock_time = -1.0
 	ship.hold_reason = ""
 	ship.load_wait = ""
+	ship.sail_now = false
 
 
 # --- Canals ----------------------------------------------------------------
@@ -924,13 +951,24 @@ func trade_bonus(from_port: String, to_port: String, profit: float) -> float:
 
 
 ## Money cargo purchases leave alone so no ship is stranded for fuel: what
-## filling every ship's tank would cost at the port it's at or heading to.
+## topping up every ship's tank would cost at the port it's at or heading to (a
+## cargo ship at sea counting the fuel it will burn to get there). Worked out
+## once per step, as ships waiting for a full load ask every frame.
 func fuel_reserve() -> float:
+	if _fuel_reserve_time == play_time:
+		return _fuel_reserve
 	var total := 0.0
 	for ship in ships:
 		var port := ship.docked_at if ship.is_docked() else ship.to_port
-		if not port.is_empty():
-			total += ship.fuel_tank() * market.fuel_price(port)
+		if port.is_empty():
+			continue
+		var fuel_left := ship.fuel
+		if not ship.is_docked() and not ship.is_recovery() and not ship.from_port.is_empty():
+			var seconds := ship.leg_seconds(ship.from_port, ship.to_port, ship.traveled_nm, ship.leg_length(), ship.maintenance)
+			fuel_left -= ship.fuel_per_s() * seconds
+		total += clampf(ship.fuel_tank() - fuel_left, 0.0, ship.fuel_tank()) * market.fuel_price(port)
+	_fuel_reserve = total
+	_fuel_reserve_time = play_time
 	return total
 
 
@@ -1226,6 +1264,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	market.clear()
 	company_xp = 0.0
 	show_active_routes = true
+	bank_reserve = 0
 	hubs.assign([Hub.new(home_port, true)])
 	_window = []
 	_begin_session()
@@ -1255,6 +1294,7 @@ func continue_game() -> String:
 	company_xp = float(data.get("company_xp", 0.0))
 	_window = data.get("finance_window", [])
 	show_active_routes = bool(data.get("show_active_routes", true))
+	bank_reserve = int(data.get("bank_reserve", 0))
 	hubs.clear()
 	for hub_data: Dictionary in data.get("hubs", []):
 		hubs.append(Hub.from_dict(hub_data))
@@ -1284,6 +1324,7 @@ func save_game() -> void:
 		"play_time": play_time,
 		"company_xp": company_xp,
 		"show_active_routes": show_active_routes,
+		"bank_reserve": bank_reserve,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
 		"totals": totals,
 		"canal_stats": canal_stats,

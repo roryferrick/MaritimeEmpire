@@ -96,6 +96,7 @@ ActivityLogPanel/styles/panel = SubResource("StyleBoxFlat_log")
 AlertDot/colors/color = Color(0.92, 0.22, 0.2, 1)
 StatusDot/colors/running = Color(0.3, 0.85, 0.35, 1)
 StatusDot/colors/stopped = Color(0.9, 0.3, 0.25, 1)
+StatusDot/colors/waiting = Color(0.95, 0.7, 0.2, 1)
 TitleLabel/base_type = &"Label"
 TitleLabel/font_sizes/font_size = 56
 MapView/colors/at_risk_marker = Color(1, 0.7, 0.1, 1)

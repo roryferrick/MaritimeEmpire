@@ -2,8 +2,9 @@ extends PanelContainer
 ## Above the main screens: the level (with an XP bar) and money on the left;
 ## the company name (in the company's color) over the calendar date and time
 ## in the middle; the game speed button (or F) and containers delivered on the
-## right. Clicking the level opens (or closes) the level popup with XP
-## progress, upcoming unlocks and time estimates.
+## right. Clicking the money opens the Finances screen; clicking the level
+## opens (or closes) the level popup with XP progress, upcoming unlocks and
+## time estimates.
 
 
 func _ready() -> void:
@@ -16,6 +17,10 @@ func _ready() -> void:
 		control.mouse_filter = Control.MOUSE_FILTER_STOP
 		control.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		control.gui_input.connect(_on_level_input)
+	%MoneyLabel.mouse_filter = Control.MOUSE_FILTER_STOP
+	%MoneyLabel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	%MoneyLabel.tooltip_text = "Open Finances"
+	%MoneyLabel.gui_input.connect(_on_money_input)
 	_on_money_changed(GameState.money)
 	_on_containers_changed(GameState.containers_delivered)
 	_on_xp_changed(GameState.company_xp)
@@ -70,3 +75,9 @@ func _on_level_input(event: InputEvent) -> void:
 	var popup := LevelPopup.new()
 	popup.follow = func() -> Vector2: return %LevelBar.get_global_rect().get_center() + Vector2(0, 14)
 	host.open(popup)
+
+
+func _on_money_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if click and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+		GameRoot.find(self).show_screen(GameRoot.Screen.FINANCES)

@@ -1,29 +1,31 @@
 class_name ShipTile
 extends Button
-## One tile on the Ships screen: status dot, ship name, what it's carrying,
-## level (highlighted while it has skill points to spend), and mini
-## maintenance, fuel and cargo bars.
+## One compact tile on the Ships screen: status dot, ship name, what it's
+## carrying and its level (highlighted while it has skill points to spend), and
+## mini maintenance, fuel and cargo bars. Hovering shows the full name.
 
 const THEME_TYPE := &"StatusDot"
-const DOT_RADIUS := 8.0
-const CARGO_FONT_SIZE := 12
+const DOT_RADIUS := 5.0
+const NAME_FONT_SIZE := 13
+const INFO_FONT_SIZE := 11
+const PADDING := 5
 
 var ship: Ship
 
 var _dot := Control.new()
-var _level := Label.new()
-var _cargo := Label.new()
+var _info := Label.new()
 
 
 func _init(for_ship: Ship) -> void:
 	ship = for_ship
-	custom_minimum_size = Vector2(0, 72)
+
 	size_flags_horizontal = SIZE_EXPAND_FILL
+	tooltip_text = ship.name
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = MOUSE_FILTER_IGNORE
-	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT, PRESET_MODE_MINSIZE, 16)
-	row.add_theme_constant_override(&"separation", 12)
+	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT, PRESET_MODE_MINSIZE, PADDING)
+	row.add_theme_constant_override(&"separation", 5)
 	add_child(row)
 
 	_dot.custom_minimum_size = Vector2.ONE * DOT_RADIUS * 2.0
@@ -36,53 +38,59 @@ func _init(for_ship: Ship) -> void:
 	column.mouse_filter = MOUSE_FILTER_IGNORE
 	column.size_flags_vertical = SIZE_SHRINK_CENTER
 	column.size_flags_horizontal = SIZE_EXPAND_FILL
-	column.add_theme_constant_override(&"separation", 6)
+	column.add_theme_constant_override(&"separation", 1)
 	row.add_child(column)
 
-	var title_row := HBoxContainer.new()
-	title_row.mouse_filter = MOUSE_FILTER_IGNORE
-	column.add_child(title_row)
 	var label := Label.new()
 	label.text = ship.name
-	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.add_theme_font_size_override(&"font_size", NAME_FONT_SIZE)
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	title_row.add_child(label)
-	_cargo.theme_type_variation = &"DimLabel"
-	_cargo.add_theme_font_size_override(&"font_size", CARGO_FONT_SIZE)
-	_cargo.visible = not ship.is_recovery()
-	title_row.add_child(_cargo)
-	_level.visible = not ship.is_recovery()
-	title_row.add_child(_level)
-	_update_level()
-	column.add_child(ShipBars.new(ship, true))
-	_update_cargo()
+	label.custom_minimum_size.x = 1  # Lets the name shrink (with an ellipsis) to fit the tile.
+	column.add_child(label)
+	_info.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
+	_info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_info.custom_minimum_size.x = 1
+	column.add_child(_info)
+	var bars := ShipBars.new(ship, true)
+	column.add_child(bars)
+	_update_info()
 
 
 func _ready() -> void:
 	GameState.ship_changed.connect(_on_ship_changed)
+	# A Button doesn't size itself to its children: fit the tile to its content.
+	var row: Control = get_child(0)
+	custom_minimum_size.y = row.get_combined_minimum_size().y + 2.0 * PADDING
 
 
 func _on_ship_changed(changed: Ship) -> void:
 	if changed == ship:
 		_dot.queue_redraw()
-		_update_level()
-		_update_cargo()
+		_update_info()
 
 
-func _update_level() -> void:
+## "Coffee · Lv 3" (green, with "+2", while it has skill points to spend);
+## recovery boats just say what they are.
+func _update_info() -> void:
+	if ship.is_recovery():
+		_info.text = "Recovery"
+		_info.theme_type_variation = &"DimLabel"
+		return
+	var cargo: String = GameData.commodity(ship.cargo_id).get("name", "") if not ship.cargo_id.is_empty() else "empty"
 	var points := ship.skill_points()
-	_level.text = "Lv %d%s" % [ship.level(), " +%d" % points if points > 0 else ""]
-	_level.theme_type_variation = &"GainLabel" if points > 0 else &"DimLabel"
+	_info.text = "%s · Lv %d%s" % [cargo, ship.level(), " +%d" % points if points > 0 else ""]
+	_info.theme_type_variation = &"GainLabel" if points > 0 else &"DimLabel"
 
 
+## Green while running, amber while waiting in port for a full load, red when
+## stopped.
 func _draw_dot() -> void:
 	var running := ship.is_active()
 	var color_name := &"running" if running else &"stopped"
 	var color := Color.GREEN if running else Color.RED
+	if ship.is_docked() and not ship.load_wait.is_empty():
+		color_name = &"waiting"
+		color = Color(0.95, 0.7, 0.2)
 	if has_theme_color(color_name, THEME_TYPE):
 		color = get_theme_color(color_name, THEME_TYPE)
 	_dot.draw_circle(_dot.size / 2.0, DOT_RADIUS, color, true, -1.0, true)
-
-
-func _update_cargo() -> void:
-	_cargo.text = GameData.commodity(ship.cargo_id).get("name", "") if not ship.cargo_id.is_empty() else "empty"
