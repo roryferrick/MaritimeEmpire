@@ -94,6 +94,9 @@ var segment_end := 0.0
 var job_segments: Array = []
 var align_time := 0.0
 var tow_port := ""
+## Recovery boat only: the HQ or hub port it's based at, returns to after a
+## job, and sails to when the boats are rebalanced across hubs.
+var base_port := ""
 
 
 func _init(ship_name := "", ship_model_id := "", start_port := "") -> void:
@@ -110,6 +113,13 @@ func model() -> Dictionary:
 ## A recovery boat (Mammoth or Buffalo): recovers lost ships instead of sailing routes.
 func is_recovery() -> bool:
 	return bool(model().get("recovery", false))
+
+
+## Whether a full tank at full maintenance gets this ship from one port to
+## another (with the departure margin to spare).
+func can_reach(from: String, to: String) -> bool:
+	var seconds := sailing_seconds(GameData.distance_nm(from, to), 1.0) + GameState.DEPARTURE_MARGIN_S
+	return fuel_per_s() * seconds <= fuel_tank()
 
 
 ## Recovery boat only: whether it can carry this ship (models listed in
@@ -209,13 +219,18 @@ func full_repair_cost() -> float:
 	return float(model().get("repair_cost_per_pct", 0)) * 100.0
 
 
+## How long a port stop takes, shorter at a hub with the port stops upgrade.
 func dock_seconds() -> float:
-	return float(model().get("dock_s", 0))
+	return float(model().get("dock_s", 0)) * _hub_stop_factor()
 
 
 ## How long the repair phase takes, and then the refuel phase, while docked.
 func refill_phase_seconds() -> float:
-	return float(model().get("refill_phase_s", 5))
+	return float(model().get("refill_phase_s", 5)) * _hub_stop_factor()
+
+
+func _hub_stop_factor() -> float:
+	return 1.0 - GameState.hub_bonus(docked_at, "speed") if is_docked() else 1.0
 
 
 func can_sail(from: String, to: String) -> bool:
@@ -440,7 +455,7 @@ func _recovery_status_text() -> String:
 		if is_held():
 			return "Docked at %s — %s" % [port, hold_reason]
 		return "Standing by at %s" % port
-	return "Returning to %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
+	return "Heading to base at %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
 
 
 func to_dict() -> Dictionary:
@@ -475,6 +490,7 @@ func to_dict() -> Dictionary:
 		"job_segments": job_segments,
 		"align_time": align_time,
 		"tow_port": tow_port,
+		"base_port": base_port,
 		"auto_recover": auto_recover,
 		"lost_order": lost_order,
 		"sea_time": sea_time,
@@ -514,6 +530,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.job_segments = data.get("job_segments", [])
 	ship.align_time = float(data.get("align_time", 0.0))
 	ship.tow_port = data.get("tow_port", "")
+	ship.base_port = data.get("base_port", "")
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.lost_order = int(data.get("lost_order", 0))
 	ship.sea_time = float(data.get("sea_time", 0.0))

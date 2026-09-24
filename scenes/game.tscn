@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" path="res://scenes/screens/route_screen.tscn" id="7_route"]
 [ext_resource type="PackedScene" path="res://scenes/screens/finances_screen.tscn" id="8_finances"]
 [ext_resource type="Script" path="res://scripts/ui/activity_log_panel.gd" id="9_log"]
+[ext_resource type="PackedScene" path="res://scenes/screens/hubs_screen.tscn" id="10_hubs"]
 
 [node name="Game" type="Control"]
 layout_mode = 3
@@ -142,6 +143,11 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
+[node name="HubsScreen" parent="Layout/Main/Screens" instance=ExtResource("10_hubs")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
 [node name="RouteScreen" parent="Layout/Main/Screens" instance=ExtResource("7_route")]
 unique_name_in_owner = true
 visible = false
@@ -187,6 +193,13 @@ custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Finances"
+
+[node name="HubsButton" type="Button" parent="Layout/BottomNav/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Hubs"
 
 [node name="ShopButton" type="Button" parent="Layout/BottomNav/Buttons"]
 unique_name_in_owner = true

@@ -1,13 +1,64 @@
 {
-	"_comment": "Suggested names for new ships are a random word from each list.",
+	"_comment": "Suggested names for new ships are a random word from each list (combinations over the 24-character name limit are skipped). first: general and aquatic words, then real bird-name descriptors (as in 'Red-winged Blackbird'). second: the original words, then bird family and group names.",
 	"first": [
 		"Sea", "Swift", "Northern", "Silver", "Iron", "Golden", "Brave", "Salty",
 		"Misty", "Coral", "Storm", "Harbor", "Lucky", "Crimson", "Quiet", "Wild",
-		"Amber", "Steady", "Bold", "Blue"
+		"Amber", "Steady", "Bold", "Blue",
+
+		"Tidal", "Coastal", "Deepwater", "Seaward", "Windward", "Leeward", "Offshore", "Pelagic",
+		"Abyssal", "Benthic", "Briny", "Brackish", "Saltwater", "Seafoam", "Spindrift", "Surging",
+		"Rolling", "Foaming", "Cresting", "Drifting", "Glassy", "Choppy", "Swelling", "Undertow",
+		"Riptide", "Breaker", "Aquamarine", "Turquoise", "Cobalt", "Azure", "Sea-green", "Kelp",
+		"Reef", "Atoll", "Lagoon", "Fjord", "Cove", "Inlet", "Gulf", "Estuary",
+		"Tidewater", "Maritime", "Marine", "Oceanic", "Nautical", "Neptune", "Triton", "Poseidon",
+		"Nautilus", "Mermaid", "Siren", "Kraken", "Leviathan", "Tsunami", "Monsoon", "Squall",
+		"Gale", "Typhoon", "Halcyon", "Barnacle",
+
+		"Pileated", "Rough-legged", "Yellow-breasted", "Red-winged", "Black-capped", "White-throated", "Ruby-throated", "Blue-footed",
+		"Red-footed", "Crested", "Ruffed", "Ring-necked", "Red-tailed", "Sharp-shinned", "Scissor-tailed", "Fork-tailed",
+		"Long-billed", "Short-billed", "Broad-winged", "Red-shouldered", "Chestnut-sided", "Black-throated", "Golden-winged", "Blue-winged",
+		"Cerulean", "Prothonotary", "Hooded", "Hermit", "Olive-sided", "Least", "Lesser", "Greater",
+		"Snowy", "Tufted", "Horned", "Eared", "Pied-billed", "Double-crested", "Brown-headed", "Rose-breasted",
+		"Scarlet", "Painted", "Indigo", "Lazuli", "Vermilion", "Ash-throated", "Barred", "Spotted",
+		"Streaked", "Laughing", "Mourning", "Whooping", "Trumpeter", "Tundra", "Mute", "Sooty",
+		"Bridled", "Royal", "Arctic", "Roseate", "Caspian", "Elegant", "Wandering", "Black-browed",
+		"Wedge-tailed", "Magnificent", "Masked", "Red-billed", "Yellow-billed", "Black-necked", "Whiskered", "Harlequin",
+		"Long-tailed", "Bar-tailed", "Semipalmated", "Ruddy", "Cinnamon", "Green-winged", "Belted", "Red-headed",
+		"Red-bellied", "Downy", "Ivory-billed", "Yellow-rumped", "Bay-breasted", "Buff-breasted", "Rufous", "Violet-green",
+		"Crowned", "White-crowned", "Scaly-breasted", "Speckled", "Dusky", "Sulphur-bellied", "Tricolored", "Glossy",
+		"White-faced", "Solitary", "Marbled", "Short-eared"
 	],
 	"second": [
 		"Otter", "Gull", "Tern", "Heron", "Dolphin", "Marlin", "Pelican", "Voyager",
 		"Star", "Wind", "Wave", "Mariner", "Albatross", "Puffin", "Seal", "Current",
-		"Anchor", "Compass", "Horizon", "Tide"
+		"Anchor", "Compass", "Horizon", "Tide",
+
+		"Antbird", "Auk", "Avocet", "Barbet", "Bee-eater", "Bittern", "Blackbird", "Bluebird",
+		"Bobolink", "Booby", "Bowerbird", "Brant", "Bulbul", "Bunting", "Bushtit", "Bustard",
+		"Buzzard", "Canary", "Caracara", "Cardinal", "Cassowary", "Catbird", "Chachalaca", "Chat",
+		"Chickadee", "Chough", "Cisticola", "Condor", "Coot", "Cormorant", "Coucal", "Cowbird",
+		"Crake", "Crane", "Creeper", "Crossbill", "Crow", "Cuckoo", "Curassow", "Curlew",
+		"Dipper", "Dotterel", "Dove", "Dowitcher", "Drongo", "Duck", "Dunlin", "Dunnock",
+		"Eagle", "Egret", "Eider", "Emu", "Falcon", "Finch", "Flamingo", "Flicker",
+		"Flycatcher", "Francolin", "Frigatebird", "Fulmar", "Gadwall", "Gannet", "Gnatcatcher", "Godwit",
+		"Goldeneye", "Goldfinch", "Goose", "Goshawk", "Grackle", "Grebe", "Grosbeak", "Grouse",
+		"Guillemot", "Guineafowl", "Gyrfalcon", "Harrier", "Hawk", "Hoatzin", "Honeyeater", "Hoopoe",
+		"Hornbill", "Hummingbird", "Ibis", "Jacana", "Jackdaw", "Jaeger", "Jay", "Junco",
+		"Kestrel", "Killdeer", "Kingbird", "Kingfisher", "Kinglet", "Kite", "Kittiwake", "Kiwi",
+		"Knot", "Kookaburra", "Lapwing", "Lark", "Loon", "Lorikeet", "Lyrebird", "Macaw",
+		"Magpie", "Mallard", "Manakin", "Martin", "Meadowlark", "Merganser", "Merlin", "Mockingbird",
+		"Moorhen", "Motmot", "Murre", "Murrelet", "Mynah", "Nighthawk", "Nightingale", "Nightjar",
+		"Noddy", "Nuthatch", "Oriole", "Osprey", "Ostrich", "Ovenbird", "Owl", "Oystercatcher",
+		"Parakeet", "Parrot", "Partridge", "Peafowl", "Penguin", "Petrel", "Phalarope", "Pheasant",
+		"Phoebe", "Pigeon", "Pintail", "Pipit", "Plover", "Potoo", "Ptarmigan", "Quail",
+		"Quetzal", "Rail", "Raven", "Razorbill", "Redstart", "Rhea", "Roadrunner", "Robin",
+		"Rook", "Ruff", "Sanderling", "Sandpiper", "Sapsucker", "Scaup", "Scoter", "Secretarybird",
+		"Shearwater", "Shoebill", "Shoveler", "Shrike", "Siskin", "Skimmer", "Skua", "Skylark",
+		"Snipe", "Sparrow", "Sparrowhawk", "Spoonbill", "Starling", "Stilt", "Stork", "Storm-petrel",
+		"Sunbird", "Swallow", "Swan", "Swift", "Tanager", "Teal", "Thrasher", "Thrush",
+		"Tit", "Titmouse", "Toucan", "Towhee", "Trogon", "Tropicbird", "Turaco", "Turkey",
+		"Turnstone", "Vireo", "Vulture", "Wagtail", "Warbler", "Waxwing", "Weaver", "Wheatear",
+		"Whimbrel", "Whip-poor-will", "Wigeon", "Willet", "Woodcock", "Woodpecker", "Wren", "Wryneck",
+		"Yellowlegs", "Yellowthroat"
 	]
 }

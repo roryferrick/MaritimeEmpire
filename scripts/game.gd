@@ -1,9 +1,9 @@
 class_name GameRoot
 extends Control
-## Root of an active game: top bar, activity log, the four main screens, the
+## Root of an active game: top bar, activity log, the five main screens, the
 ## bottom nav, and the full-screen Route Assignment screen.
 
-enum Screen { WORLD, SHIPS, FINANCES, SHOP }
+enum Screen { WORLD, SHIPS, FINANCES, HUBS, SHOP }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -15,12 +15,14 @@ var _current_screen := Screen.WORLD
 	Screen.WORLD: %WorldScreen,
 	Screen.SHIPS: %ShipsScreen,
 	Screen.FINANCES: %FinancesScreen,
+	Screen.HUBS: %HubsScreen,
 	Screen.SHOP: %ShopScreen,
 }
 @onready var _nav_buttons := {
 	Screen.WORLD: %WorldButton,
 	Screen.SHIPS: %ShipsButton,
 	Screen.FINANCES: %FinancesButton,
+	Screen.HUBS: %HubsButton,
 	Screen.SHOP: %ShopButton,
 }
 @onready var _popup_host: PopupHost = %PopupHost
@@ -29,6 +31,8 @@ var _current_screen := Screen.WORLD
 ## Ship.attention_reason()), and on the Shop tab while any ship can be bought.
 var _ships_alert := AlertDot.new()
 var _shop_alert := AlertDot.new()
+## On the Hubs tab while a hub has upgrade points to spend or can be founded.
+var _hubs_alert := AlertDot.new()
 var _alert_clock := 0.0
 
 
@@ -57,6 +61,9 @@ func _ready() -> void:
 	GameState.ship_leveled.connect(_on_ship_leveled)
 	%ShipsButton.add_child(_ships_alert)
 	%ShopButton.add_child(_shop_alert)
+	%HubsButton.add_child(_hubs_alert)
+	GameState.hub_leveled.connect(_on_hub_leveled)
+	GameState.hub_built.connect(_on_hub_built)
 	_update_alerts()
 	show_screen(Screen.WORLD)
 
@@ -71,6 +78,14 @@ func _process(delta: float) -> void:
 ## Red dots on the Ships tab if any ship needs the player (the tooltip says
 ## why), and on the Shop tab if anything can be bought.
 func _update_alerts() -> void:
+	var hub_notes := PackedStringArray()
+	for hub in GameState.hubs:
+		if hub.upgrade_points() > 0:
+			hub_notes.append("%s has upgrades to spend" % hub.title())
+	if GameState.hubs_available() > 0:
+		hub_notes.append("a new hub can be founded (click a port)")
+	_hubs_alert.visible = not hub_notes.is_empty()
+	%HubsButton.tooltip_text = "; ".join(hub_notes)
 	var buyable := PackedStringArray()
 	for model: Dictionary in GameData.ship_models:
 		if GameState.buy_error(model.id).is_empty():
@@ -87,6 +102,12 @@ func _update_alerts() -> void:
 	for reason: String in reasons:
 		parts.append("%d %s" % [reasons[reason], reason])
 	%ShipsButton.tooltip_text = "Ships needing you: %s" % ", ".join(parts) if not reasons.is_empty() else ""
+
+
+## Switches to the World map, centered on a port.
+func show_port_on_map(port_id: String) -> void:
+	show_screen(Screen.WORLD)
+	(%WorldScreen.find_child("MapView") as MapView).focus_port(port_id)
 
 
 func show_screen(screen: Screen) -> void:
@@ -165,3 +186,11 @@ func _on_company_leveled(level: int, unlocks: Array[String]) -> void:
 
 func _on_ship_leveled(ship: Ship, level: int) -> void:
 	ActivityLog.add("%s reached level %d: an upgrade to spend" % [ship.name, level], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
+
+
+func _on_hub_leveled(hub: Hub, level: int) -> void:
+	ActivityLog.add("%s reached level %d: an upgrade to spend" % [hub.title(), level], ActivityLog.Kind.GOOD)
+
+
+func _on_hub_built(hub: Hub) -> void:
+	ActivityLog.add("Founded a hub at %s" % GameData.port_name(hub.port_id), ActivityLog.Kind.GOOD)

@@ -36,6 +36,12 @@ signal company_xp_changed(total_xp: float)
 signal company_leveled(level: int, unlocks: Array[String])
 ## A ship reached a new level and has a skill point to spend.
 signal ship_leveled(ship: Ship, level: int)
+## The HQ or a hub was built, upgraded or leveled up.
+signal hubs_changed
+## An HQ or hub reached a new level and has an upgrade point to spend.
+signal hub_leveled(hub: Hub, level: int)
+## A new hub was founded at a port.
+signal hub_built(hub: Hub)
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 2
@@ -78,6 +84,8 @@ var play_time := 0.0
 var company_xp := 0.0
 ## The map's Routes switch: show the fleet's route lanes faintly.
 var show_active_routes := true
+## The HQ (at the home port, first) and the hubs placed since.
+var hubs: Array[Hub] = []
 ## All-time totals for each of MONEY_KINDS.
 var totals := {}
 ## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
@@ -124,6 +132,9 @@ func buy_ship(model_id: String, ship_name: String) -> Ship:
 	_record(null, "bought", price)
 	var ship := Ship.new(ship_name, model_id, home_port)
 	ships.append(ship)
+	if ship.is_recovery():
+		ship.base_port = home_port
+		_rebalance_recovery_boats()
 	ships_changed.emit()
 	save_game()
 	return ship
@@ -195,6 +206,132 @@ func unspent_skill_points() -> int:
 	return points
 
 
+# --- Headquarters and hubs ---------------------------------------------
+
+## The HQ or hub at a port, or null.
+func hub_at(port_id: String) -> Hub:
+	for hub in hubs:
+		if hub.port_id == port_id:
+			return hub
+	return null
+
+
+## A hub bonus for ships at a port (0 if there's no hub there): "xp", "costs",
+## "speed" or "pay".
+func hub_bonus(port_id: String, path: String) -> float:
+	var hub := hub_at(port_id)
+	return hub.bonus(path) if hub else 0.0
+
+
+## Hubs the company can still place.
+func hubs_available() -> int:
+	return maxi(Progression.hub_slots(company_level()) - hubs.size(), 0)
+
+
+## Why a hub can't be built at a port, or "".
+func build_hub_error(port_id: String) -> String:
+	if hub_at(port_id):
+		return "There's already a hub here."
+	if hubs_available() <= 0:
+		var every := int(Hub.settings().get("every_company_levels", 15))
+		return "A new hub unlocks every %d company levels." % every
+	return ""
+
+
+## Founds a hub at a port, for good. Returns why it couldn't, or "".
+func build_hub(port_id: String) -> String:
+	var error := build_hub_error(port_id)
+	if not error.is_empty():
+		return error
+	var hub := Hub.new(port_id)
+	hubs.append(hub)
+	_rebalance_recovery_boats()
+	hub_built.emit(hub)
+	hubs_changed.emit()
+	save_game()
+	return ""
+
+
+## Spends one of a hub's upgrade points on a path.
+func upgrade_hub(hub: Hub, path: String) -> void:
+	if not hub.can_upgrade(path):
+		return
+	hub.upgrades[path] = int(hub.upgrades[path]) + 1
+	hubs_changed.emit()
+
+
+## Spreads recovery boats evenly across the HQ and hubs, model by model: each
+## port gets its share (the ports with the most boats already keep any extra
+## one), boats already at a port within its share stay, and the rest are
+## re-based to the nearest port still short that a full tank can reach. A
+## re-based boat sails there once it's free.
+func _rebalance_recovery_boats() -> void:
+	var ports := hubs.map(func(hub: Hub) -> String: return hub.port_id)
+	if ports.is_empty():
+		return
+	var models := {}
+	for ship in ships:
+		if ship.is_recovery():
+			models.get_or_add(ship.model_id, []).append(ship)
+	for boats: Array in models.values():
+		var count := {}
+		for port: String in ports:
+			count[port] = boats.filter(func(boat: Ship) -> bool: return boat.base_port == port).size()
+		var by_count := ports.duplicate()
+		by_count.sort_custom(func(a: String, b: String) -> bool: return count[a] > count[b])
+		var quota := {}
+		for i in by_count.size():
+			quota[by_count[i]] = floori(float(boats.size()) / ports.size()) + (1 if i < boats.size() % ports.size() else 0)
+		var kept := {}
+		var surplus := []
+		for boat: Ship in boats:
+			var port := boat.base_port
+			if quota.has(port) and int(kept.get(port, 0)) < int(quota[port]):
+				kept[port] = int(kept.get(port, 0)) + 1
+			else:
+				surplus.append(boat)
+		for boat: Ship in surplus:
+			var here: String = boat.docked_at if boat.is_docked() else (boat.to_port if not boat.to_port.is_empty() else boat.base_port)
+			var best := ""
+			for port: String in ports:
+				if int(kept.get(port, 0)) >= int(quota[port]) or not (port == here or boat.can_reach(here, port)):
+					continue
+				if best.is_empty() or GameData.distance_nm(here, port) < GameData.distance_nm(here, best):
+					best = port
+			if best.is_empty():
+				continue  # No short port it can reach: it stays where it's based.
+			kept[best] = int(kept.get(best, 0)) + 1
+			if boat.base_port != best:
+				boat.base_port = best
+				ship_changed.emit(boat)
+
+
+## Recovery boats based at a port.
+func recovery_boats_at(port_id: String) -> Array:
+	return ships.filter(func(ship: Ship) -> bool: return ship.is_recovery() and ship.base_port == port_id)
+
+
+## XP a hub needs for its next level (0 at the max level).
+func hub_level_cost(hub: Hub) -> float:
+	return Progression.hub_level_cost(hub.level, company_level()) if hub.level < Hub.max_level() else 0.0
+
+
+func _gain_hub_xp(hub: Hub, amount: float) -> void:
+	if hub.level >= Hub.max_level():
+		return
+	hub.xp += amount
+	var leveled := false
+	while hub.level < Hub.max_level() and hub.xp >= hub_level_cost(hub):
+		hub.xp -= hub_level_cost(hub)
+		hub.level += 1
+		leveled = true
+		hub_leveled.emit(hub, hub.level)
+	if hub.level >= Hub.max_level():
+		hub.xp = 0.0
+	if leveled:
+		hubs_changed.emit()
+
+
 ## Why a ship name can't be used, or "" if it's fine.
 func ship_name_error(ship_name: String) -> String:
 	ship_name = ship_name.strip_edges()
@@ -212,7 +349,7 @@ func suggest_ship_name() -> String:
 	if not first.is_empty() and not second.is_empty():
 		for attempt in 100:
 			var candidate := "%s %s" % [first.pick_random(), second.pick_random()]
-			if ship_name_error(candidate).is_empty():
+			if candidate.length() <= MAX_NAME_LENGTH and ship_name_error(candidate).is_empty():
 				return candidate
 	var n := ships.size() + 1
 	while not ship_name_error("Ship %d" % n).is_empty():
@@ -303,6 +440,8 @@ func sell_ship(ship: Ship) -> String:
 		return error
 	var price := ship.sell_price()
 	ships.erase(ship)
+	if ship.is_recovery():
+		_rebalance_recovery_boats()
 	money += price
 	_record(null, "sold", price)
 	ship_sold.emit(ship, price)
@@ -388,6 +527,7 @@ func _roll_breakdowns(delta: float) -> void:
 func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.at_risk = false
 	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.model()) if paid else 0
+	ship.cargo_payment = roundi(ship.cargo_payment * (1.0 + hub_bonus(port, "pay")))
 	ship.unloaded = ship.cargo_payment <= 0
 	ship.docked_at = port
 	ship.from_port = ""
@@ -427,8 +567,8 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 			return
 		ship.dock_time = -1.0
 		ship_changed.emit(ship)
-	if ship.is_recovery() and ship.docked_at != home_port:
-		_try_depart(ship, delta, home_port)
+	if ship.is_recovery() and ship.docked_at != ship.base_port:
+		_try_depart(ship, delta, ship.base_port)
 	elif ship.is_running():
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
 	else:
@@ -443,15 +583,21 @@ func _unload(ship: Ship) -> void:
 	if ship.model().get("category", "") == "container":
 		containers_delivered += ship.capacity()
 	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
-	_gain_xp(ship, Progression.xp_for_payment(ship.cargo_payment))
+	var hub := hub_at(ship.docked_at)
+	_gain_xp(ship, Progression.xp_for_payment(ship.cargo_payment), 1.0 + (hub.bonus("xp") if hub else 0.0))
+	if hub:
+		hub.deliveries += 1
+		hub.income += ship.cargo_payment
+		_gain_hub_xp(hub, Progression.xp_for_payment(ship.cargo_payment))
 
 
-## Adds delivery XP to the company and the ship, announcing any level-ups.
-func _gain_xp(ship: Ship, amount: float) -> void:
+## Adds delivery XP to the company and (times ship_multiplier, from a hub's
+## XP bonus) to the ship, announcing any level-ups.
+func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0) -> void:
 	var company_before := company_level()
 	var ship_before := ship.level()
 	company_xp += amount
-	ship.xp += amount
+	ship.xp += amount * ship_multiplier
 	var bucket := _current_bucket()
 	bucket.fleet["xp"] = float(bucket.fleet.get("xp", 0.0)) + amount
 	company_xp_changed.emit(company_xp)
@@ -537,8 +683,8 @@ func _leave_port(ship: Ship) -> void:
 
 # --- Recovery --------------------------------------------------------------
 
-## How the cheapest free recovery boat able to carry a lost ship would recover
-## it: {mammoth, segments, tow_port, approach_nm, seconds, fuel, cost}, or
+## How the nearest free recovery boat able to carry a lost ship (the cheapest,
+## if two are as near) would recover it: {mammoth, segments, tow_port, approach_nm, seconds, fuel, cost}, or
 ## {error} saying why none can.
 func recovery_plan(lost: Ship) -> Dictionary:
 	if not lost.is_lost() or lost.rescuer != null:
@@ -558,7 +704,8 @@ func recovery_plan(lost: Ship) -> Dictionary:
 		if boat.fuel < plan.fuel:
 			reason = "No free recovery boat has the fuel and maintenance to reach it."
 			continue
-		if best.is_empty() or plan.cost < best.cost:
+		if best.is_empty() or plan.approach_nm < best.approach_nm \
+				or (is_equal_approx(plan.approach_nm, best.approach_nm) and plan.cost < best.cost):
 			best = plan
 	return best if not best.is_empty() else {error = reason}
 
@@ -573,13 +720,13 @@ func _send_queued_recoveries() -> void:
 		_send_recovery(ship, true)
 
 
-## Sends the cheapest free recovery boat that can carry a lost ship. Returns
+## Sends the nearest free recovery boat that can carry a lost ship. Returns
 ## why it couldn't, or "".
 func send_recovery(lost: Ship) -> String:
 	return _send_recovery(lost, false)
 
 
-## Sends the cheapest free capable boat; auto says whether auto-recovery sent it.
+## Sends the nearest free capable boat; auto says whether auto-recovery sent it.
 func _send_recovery(lost: Ship, auto: bool) -> String:
 	var plan := recovery_plan(lost)
 	if plan.has("error"):
@@ -626,8 +773,8 @@ func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
 	var approach_nm := minf(via_a, via_b)
 	var seconds := mammoth.sailing_seconds(approach_nm + minf(done, left), mammoth.maintenance)
 	var home_seconds := 0.0
-	if tow_port != home_port:
-		home_seconds = mammoth.sailing_seconds(GameData.distance_nm(tow_port, home_port), 1.0)
+	if tow_port != mammoth.base_port:
+		home_seconds = mammoth.sailing_seconds(GameData.distance_nm(tow_port, mammoth.base_port), 1.0)
 	var running := seconds + home_seconds
 	return {
 		mammoth = mammoth,
@@ -694,7 +841,7 @@ func _repair(ship: Ship, amount: float) -> void:
 	amount = minf(amount, 1.0 - ship.maintenance)
 	if amount <= 0.0:
 		return
-	var cost := amount * ship.full_repair_cost()
+	var cost := amount * ship.full_repair_cost() * (1.0 - hub_bonus(ship.docked_at, "costs"))
 	var paid := _spend(ship, cost, "repair")
 	ship.stop_repair_cost += paid
 	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
@@ -705,7 +852,7 @@ func _refuel(ship: Ship, amount: float) -> void:
 	amount = minf(amount, ship.fuel_tank() - ship.fuel)
 	if amount <= 0.0:
 		return
-	var cost := amount * float(GameData.config.get("fuel_price", 0))
+	var cost := amount * float(GameData.config.get("fuel_price", 0)) * (1.0 - hub_bonus(ship.docked_at, "costs"))
 	var paid := _spend(ship, cost, "fuel")
 	ship.stop_fuel_cost += paid
 	ship.fuel = minf(ship.fuel + amount * paid / cost, ship.fuel_tank())
@@ -802,6 +949,7 @@ func new_game(new_company_name: String, new_home_port: String) -> void:
 	totals = {}
 	company_xp = 0.0
 	show_active_routes = true
+	hubs.assign([Hub.new(home_port, true)])
 	_window = []
 	_begin_session()
 	save_game()
@@ -826,9 +974,18 @@ func continue_game() -> String:
 	company_xp = float(data.get("company_xp", Progression.xp_for_payment(float(totals.get("income", 0.0)))))
 	_window = data.get("finance_window", [])
 	show_active_routes = bool(data.get("show_active_routes", true))
+	hubs.clear()
+	for hub_data: Dictionary in data.get("hubs", []):
+		hubs.append(Hub.from_dict(hub_data))
+	if hubs.is_empty():  # Saves from before hubs: the HQ at the home port.
+		hubs.append(Hub.new(home_port, true))
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
 	Ship.link_rescues(ships)
+	for ship in ships:
+		if ship.is_recovery() and ship.base_port.is_empty():  # Saves from before bases.
+			ship.base_port = home_port
+	_rebalance_recovery_boats()
 	_begin_session()
 	return ""
 
@@ -844,6 +1001,7 @@ func save_game() -> void:
 		"play_time": play_time,
 		"company_xp": company_xp,
 		"show_active_routes": show_active_routes,
+		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
 		"totals": totals,
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,

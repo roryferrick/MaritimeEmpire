@@ -44,7 +44,7 @@
 - The Mammoth is a recovery boat ($2,000,000, at most 5). It's the biggest ship, as fast as a Trans Atlantic (6.35 nm/s), and the most expensive to run: 4,500 fuel units/s ($10,800/s) and $300,000 per 1% of repair.
 - The Buffalo is a smaller recovery boat ($250,000, at most 5), the size of a Trans Atlantic and as fast. It can only carry Scooter 10s, GE 100s, Greenline 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
 - A lost ship's popup has a Send Recovery button. It shows the estimated cost (the recovery boat's fuel and repairs, including its trip home), which boat would go, where it would take the ship, and about how long. You choose whether it's worth it.
-- The cheapest free boat that can carry the ship goes: one that's docked, not refueling, and not on a job. Boats sailing home count as busy. A boat only sets off if it has the fuel and maintenance to finish the job.
+- The nearest free boat that can carry the ship goes (the cheaper one if two are as near): one that's docked, not refueling, and not on a job. Boats sailing to their base count as busy. A boat only sets off if it has the fuel and maintenance to finish the job.
 - Auto-recovery ("Rescue" toggle in the ship popup, on for new ships): when the ship is lost, the cheapest capable free boat is sent automatically. If none is free, lost ships wait in a queue (longest-lost first) and the next free boat takes them.
 - A ship at sea that no longer has the fuel or maintenance to reach port (usually after a breakdown) gets an amber "!" on the map, "won't make it!" in its status, and a toast.
 - The Mammoth sails the sea lanes to the lost ship's position, through whichever end of the ship's leg is closer. It stops over the ship, turns to line up with it (2 s), and takes it aboard. If it's carrying the ship back the way it came, the pair then turn around (2 s more).
@@ -52,6 +52,7 @@
   - At the ship's destination, it unloads and is paid as usual.
   - Back at its origin, it gets no pay. It docks (repair and refuel as its toggles say) and tries the leg again.
 - The Mammoth then docks there (repair and refuel like any ship), sails home, and waits for the next job. Its bars show maintenance, fuel, and "Tow" (the ship it's carrying).
+- Each recovery boat is based at the HQ or a hub, and returns there after a job. Boats are spread evenly across the HQ and hubs, model by model (each location gets its share; locations that already have the most keep any extra one). It rebalances when a hub is founded or a recovery boat is bought or sold: boats already at a location within its share stay, and the rest are re-based to the nearest location still short that a full tank can reach. A re-based boat sails there (paying its own fuel and repairs) once it's free. The Hubs screen lists the boats based at each location.
 - Recovery boats have no route and no Assign Route or Pause buttons, and never break down at random. They pay their own fuel and repairs: those show on the recovery boat's own line in the Finances tab.
 
 ## Company and ship levels (XP)
@@ -62,6 +63,13 @@
 - Ships level from 0 to 30. A model's first level needs xp_first_level XP (Scooter 10: 100, GE 100: 1,250, Greenline 200: 6,000, Trans Atlantic: 75,000, Dominator: 900,000; growing faster than the price, so small ships level fastest), and each level after costs 5% more.
 - Each ship level gives a skill point, spent in the ship popup's Skills view on three paths of up to 10 levels each: Speed (+2% top speed per level), Durability (−5% wear and −5% chance of taking a random breakdown per level), and Gas efficiency (−3% fuel burn per level). Range on the route screen stays at the model's base range.
 - Saves from before XP get the XP their past income would have earned.
+
+## Headquarters and hubs
+- The company starts with its headquarters (HQ) at its home port. It gets one more hub every 15 company levels (15, 30, 45, 60, 75, 90: 7 locations in all). A hub is founded from any port's popup ("Build a hub here", click again to confirm) and is permanent.
+- Each HQ/hub levels from 0 to 40 on the XP of every delivery unloaded at its port (the same XP the company gets). Level L to L+1 costs (10 + 1.4 x L) minutes of a quarter of a full fleet's XP at the current company level, so a hub taking about a quarter of the fleet's deliveries maxes out in about 25 hours.
+- Each level is an upgrade point, spent in the port popup on four paths of up to 10 points each. They boost every ship docking there: Ship XP +5% per point (ship XP only, not company or hub XP), Fuel & repairs -3% price, Port stops -5% time (unloading, repairs and refueling all speed up), Pay +2% on deliveries unloaded there. The HQ's bonuses are 1.5x a hub's.
+- On the map, the HQ and hubs have a gold ring around their port (heavier for the HQ). The Hubs tab shows a red dot while a hub has upgrade points to spend or a new hub can be founded.
+- New ships launch at the HQ (home port); recovery boats are then re-based across the hubs (see Lost ships and recovery boats). Saves from before hubs get an HQ at their home port.
 
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
@@ -120,10 +128,10 @@
 
 ### Top bar (on World, Ships, Finances, Shop screens)
 - Company name, company level with an XP bar, money, and total containers delivered.
-- Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ..."), each with an estimate of how long until you reach it at that rate. Refreshes every second.
+- Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ...", "a new hub"), each with an estimate of how long until you reach it at that rate. Refreshes every second.
 
 ### Bottom navigation bar
-- World | Ships | Finances | Shop. Hidden on the Route Assignment screen.
+- World | Ships | Finances | Hubs | Shop. Hidden on the Route Assignment screen.
 - The Ships tab shows a red dot while any ship needs the player: lost with no recovery boat on the way, held in port, docked and paused, a docked cargo ship with no route, or upgrade points to spend. Its tooltip counts each reason. The Ships screen filter "Needs attention" shows just those ships.
 - The Shop tab shows a red dot while any ship can be bought (unlocked, a free slot, and affordable); its tooltip lists them.
 
@@ -140,6 +148,10 @@
 - Clicking a tile opens the ship popup.
 - Sort (within each model) by name, status (lost, then at risk, then held, then stopped, then running) or profit; show all ships, running, stopped, lost, or recovery boats. A count shows how many are shown. Tiles re-sort when the fleet or the sort changes, not live.
 - An "Upgrade all (N)" button spends every ship's upgrade points at once, round-robin: each point goes to the ship's lowest skill path, ties in the order speed, efficiency, durability (so speed 1, efficiency 1, durability 1, speed 2, ... up to all 30). Greyed out when there are none.
+
+### Hubs screen
+- A card for the HQ, then each hub: port name, Headquarters/Hub, level (of 40) with an XP bar and XP to the next level, the upgrade tree (points to spend, the four paths with pips, their bonuses and + buttons), and traffic (ships docked there now, deliveries unloaded there, pay received there), with a "Show on map" button that centers the World map on it.
+- Then a "New hub available" card (how to found one, with a button to the map) while a hub can be founded, and a "Next hub" card with the company level that unlocks the next one.
 
 ### Finances screen
 - Totals for the last 10 minutes and all time: cargo income, fuel, repairs, ships bought, ships sold, and operating profit (income − fuel − repairs).

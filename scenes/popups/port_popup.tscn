@@ -33,6 +33,15 @@ flat = true
 [node name="Separator" type="HSeparator" parent="Content"]
 layout_mode = 2
 
+[node name="HubBox" type="VBoxContainer" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HubSeparator" type="HSeparator" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="DockedLabel" type="Label" parent="Content"]
 layout_mode = 2
 text = "Your ships docked here:"

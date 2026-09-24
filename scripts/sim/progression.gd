@@ -84,6 +84,8 @@ static func unlocks_at(level: int) -> Array[String]:
 			more_slots.append(String(model.get("name", model.id)))
 	if not more_slots.is_empty():
 		unlocked.append("+1 slot: %s" % ", ".join(more_slots))
+	if hub_slots(level) > hub_slots(level - 1):
+		unlocked.append("a new hub")
 	return unlocked
 
 
@@ -148,3 +150,20 @@ static func _xp_per_minute(model: Dictionary) -> float:
 static func _round_to_2_figures(value: float) -> int:
 	var magnitude := pow(10.0, floorf(log(value) / log(10.0)) - 1.0)
 	return int(roundf(value / magnitude) * magnitude)
+
+
+## How many HQ + hub locations the company can have at a level: the HQ, plus
+## one hub every hubs.every_company_levels levels, up to hubs.max_hubs.
+static func hub_slots(level: int) -> int:
+	var settings: Dictionary = GameData.config.get("hubs", {})
+	return 1 + mini(floori(float(level) / int(settings.get("every_company_levels", 15))), int(settings.get("max_hubs", 6)))
+
+
+## XP a hub needs to go from `level` to the next, at the company's current
+## level: (level_minutes[0] + level_minutes[1] x level) minutes of traffic_share
+## of a full fleet's XP.
+static func hub_level_cost(level: int, company_level: int) -> float:
+	var settings: Dictionary = GameData.config.get("hubs", {})
+	var minutes: Array = settings.get("level_minutes", [10, 1.4])
+	var per_minute := _full_fleet_xp_per_minute(company_level) * float(settings.get("traffic_share", 0.25))
+	return maxf((float(minutes[0]) + float(minutes[1]) * level) * per_minute, 50.0)

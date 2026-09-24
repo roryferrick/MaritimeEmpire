@@ -21,7 +21,7 @@ const SHIP_HIT_RADIUS := 12.0
 ## port: the first ring this far out, each next ring DOCK_RING_GAP further,
 ## with dots about DOCK_DOT_SPACING apart (so outer rings hold more).
 const DOCK_DOT_RADIUS := 3.5
-const DOCK_FIRST_RING := PORT_RADIUS + 6.0
+const DOCK_FIRST_RING := PORT_RADIUS + 7.5
 const DOCK_RING_GAP := 7.5
 const DOCK_DOT_SPACING := 8.0
 const DRAG_THRESHOLD := 5.0
@@ -38,6 +38,9 @@ const BOW_LENGTH_FACTOR := 0.6
 const LOST_MARKER_SIZE := 26
 ## How far above a lost ship its "!" sits.
 const LOST_MARKER_OFFSET := 12.0
+## The gold ring around the HQ's and hubs' ports.
+const HQ_RING_WIDTH := 3.0
+const HUB_RING_WIDTH := 2.0
 ## The faint route lanes drawn with show_active_lanes.
 const ACTIVE_LANE_ALPHA := 0.3
 const ACTIVE_LANE_WIDTH := 1.5
@@ -63,6 +66,8 @@ const FALLBACK_COLORS := {
 	&"lost_marker_outline": Color(1, 1, 1),
 	&"at_risk_marker": Color(1.0, 0.7, 0.1),
 	&"river": Color(0.3, 0.5, 0.72),
+	&"hub_ring": Color(0.96, 0.78, 0.25),
+	&"hub_ring_gray": Color(0.75, 0.75, 0.75),
 	&"river_gray": Color(0.34, 0.35, 0.38),
 	&"route": Color(1.0, 0.6, 0.15),
 }
@@ -239,6 +244,12 @@ func ship_screen_position(ship: Ship) -> Vector2:
 		per_ring = floori(TAU * radius / DOCK_DOT_SPACING)
 	var angle := -PI / 2.0 + TAU * slot / per_ring
 	return port_screen_position(ship.docked_at) + Vector2.from_angle(angle) * radius
+
+
+## Centers the view on a port, keeping the zoom.
+func focus_port(port_id: String) -> void:
+	_center = GameData.port_position(port_id)
+	_changed()
 
 
 ## Centers on a port (by default the company's home port), showing
@@ -446,6 +457,10 @@ func _draw_ports(labels: Array) -> void:
 		var is_dimmed := dimmed_ports.has(port.id)
 		_overlay.draw_circle(pos, PORT_RADIUS, dimmed if is_dimmed else fill)
 		_overlay.draw_arc(pos, PORT_RADIUS, 0.0, TAU, 24, outline, 1.5, true)
+	# The HQ and hubs get a gold ring (heavier for the HQ).
+	for hub in GameState.hubs:
+		var width := HQ_RING_WIDTH if hub.is_hq else HUB_RING_WIDTH
+		_overlay.draw_arc(port_screen_position(hub.port_id), PORT_RADIUS + 1.0 + width / 2.0, 0.0, TAU, 32, _color(&"hub_ring"), width, true)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
 		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
