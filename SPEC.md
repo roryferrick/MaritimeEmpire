@@ -58,7 +58,7 @@
 ## Company and ship levels (XP)
 - Every delivery (when unloading finishes) gives XP to the company and to the ship in proportion to its pay: pay ÷ $0.6125 ÷ 100, which for container ships is containers × leg distance (nm) ÷ 100. Rome→Tunis in a Scooter 10 gives about 32 XP. Ships carried back to their origin earn nothing; recovery boats earn no XP.
 - The company levels from 1 to 100 (Level and an XP bar in the top bar; toast on level-up with what it unlocked). Each level's cost is set so it takes roughly 3 minutes at level 1, rising to about 47 minutes at level 99, of what a full fleet at that level earns. So bigger ships don't make levels fly by, and level 100 takes about 40 hours (about 1 hour to level 10, 11 hours to 50, 24 hours to 75).
-- Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 10 (so 21 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 5. Level-up messages say which models got a slot ("+1 slot: Scooter 10, GE 100").
+- Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 10 (so 21 levels after unlocking). The Scooter 10 and GE 100 gain a slot every 2 levels instead (full 14 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 5. Level-up messages say which models got a slot ("+1 slot: Scooter 10, GE 100").
 - Models unlock by company level: Scooter 10 at 1, GE 100 at 5, Buffalo at 8, Greenline 200 at 12, Coastal at 15, Trans Atlantic and Mammoth at 25, Aframax at 35, Dominator at 50, Supertanker at 60. Ships already owned are kept even if they're above the current slots or unlocks.
 - Ships level from 0 to 30. A model's first level needs xp_first_level XP (Scooter 10: 100, GE 100: 1,250, Greenline 200: 6,000, Trans Atlantic: 75,000, Dominator: 900,000; growing faster than the price, so small ships level fastest), and each level after costs 5% more.
 - Each ship level gives a skill point, spent in the ship popup's Skills view on three paths of up to 10 levels each: Speed (+2% top speed per level), Durability (−5% wear and −5% chance of taking a random breakdown per level), and Gas efficiency (−3% fuel burn per level). Range on the route screen stays at the model's base range.
@@ -67,10 +67,10 @@
 ## Headquarters and hubs
 - The company starts with its headquarters (HQ) at its home port. It gets one more hub every 15 company levels (15, 30, 45, 60, 75, 90: 7 locations in all). A hub is founded from any port's popup ("Build a hub here", click again to confirm) and is permanent.
 - Each HQ/hub levels from 0 to 40 on the XP of every delivery unloaded at its port (the same XP the company gets). Level L to L+1 costs (5 + 0.7 x L) minutes of a quarter of a full fleet's XP at the current company level, so a hub taking about a quarter of the fleet's deliveries maxes out in about 12.5 hours.
-- Each level is an upgrade point, spent in the port popup on four paths of up to 10 points each. Each point also costs money: $1M for a path's first point, then $250k more for each point already in that path ($1.25M, $1.5M ... $3.25M for the 10th; $21.25M for a full path). The buttons show the price and grey out when you can't afford it; the Finances tab totals it as "Hub upgrades". They boost every ship docking there: Ship XP +5% per point (ship XP only, not company or hub XP), Fuel & repairs -3% price, Port stops -5% time (unloading, repairs and refueling all speed up), Pay +2% on deliveries unloaded there. The HQ's bonuses are 1.5x a hub's.
+- Each level is an upgrade point, spent in the port popup on four paths of up to 10 points each. Each point also costs money: $2M for a path's first point, then $500k more for each point already in that path ($2.5M, $3M ... $6.5M for the 10th; $42.5M for a full path). The buttons show the price and grey out when you can't afford it; the Finances tab totals it as "Hub upgrades". They boost every ship docking there: Ship XP +5% per point (ship XP only, not company or hub XP), Fuel & repairs -3% price, Port stops -5% time (unloading, repairs and refueling all speed up), Pay +2% on deliveries unloaded there. The HQ's bonuses are 1.5x a hub's.
 - Every delivery unloaded at an HQ or hub also earns the company extra XP, free with the hub's level: +10%, plus 10% more for every 10 hub levels (+20% at level 10 ... +50% at level 40). The HQ's is 1.5x (+15% up to +75%). The hub's own XP and the ship's aren't boosted by it. The Hubs cards and port popup show it, e.g. "Company XP +30% on deliveries here (+40% at level 30)".
 - On the map, the HQ and hubs have a ring in the company color around their port (heavier for the HQ; gray on the Route Assignment map). A small red dot sits just up and to the right of any HQ or hub with an upgrade you can buy now. The Hubs tab shows a red dot while a hub has an upgrade you can buy (a point and the money) or a new hub can be founded.
-- New ships launch at the HQ (home port); recovery boats are then re-based across the hubs (see Lost ships and recovery boats). Saves from before hubs get an HQ at their home port.
+- New ships launch at the HQ or any hub, chosen when buying; recovery boats are then re-based across the hubs (see Lost ships and recovery boats). Saves from before hubs get an HQ at their home port.
 
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
@@ -119,7 +119,7 @@
 - The player can own at most 10 of each container ship and gas tanker, and 5 of each recovery boat, once the company level has opened all their slots.
 - Ship names must be unique (case-insensitive). No renaming in beta.
 - Selling: a docked ship (not lost, not on a recovery job) sells for 50% of its price × its maintenance, from the ship popup's Sell button (click again to confirm).
-- Newly bought ships spawn docked at the company's home port with no route.
+- Newly bought ships spawn docked with no route at the port picked in the buy popup ("Launch at": the HQ, the default, or any hub).
 
 ## Screens
 
@@ -129,7 +129,8 @@
 - Autosave on quit and every 30 s.
 
 ### Top bar (on World, Ships, Finances, Shop screens)
-- Company name (in the company color), company level with an XP bar, money, and total containers delivered.
+- Company name (in the company color), company level with an XP bar, money, a fast-forward button, and total containers delivered.
+- Fast forward: the button (or the F key) cycles 1x, 2x, 4x. The whole world runs that much faster (ships, breakdowns, XP, finances); each session starts at 1x.
 - Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ...", "a new hub"), each with an estimate of how long until you reach it at that rate. Refreshes every second.
 
 ### Bottom navigation bar

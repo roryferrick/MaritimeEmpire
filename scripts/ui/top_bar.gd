@@ -1,7 +1,8 @@
 extends PanelContainer
-## Company name (in the company's color) and level (with an XP bar), money and containers delivered,
-## shown above the main screens. Clicking the level opens (or closes) the
-## level popup with XP progress, upcoming unlocks and time estimates.
+## Company name (in the company's color) and level (with an XP bar), money, the
+## fast-forward button (or F) and containers delivered, shown above the main
+## screens. Clicking the level opens (or closes) the level popup with XP
+## progress, upcoming unlocks and time estimates.
 
 
 func _ready() -> void:
@@ -17,6 +18,17 @@ func _ready() -> void:
 	_on_money_changed(GameState.money)
 	_on_containers_changed(GameState.containers_delivered)
 	_on_xp_changed(GameState.company_xp)
+	%SpeedButton.pressed.connect(GameState.cycle_time_speed)
+	GameState.time_speed_changed.connect(_on_time_speed_changed)
+	_on_time_speed_changed(GameState.time_speed)
+
+
+## F cycles the fast-forward speed (not while typing: text fields take the key first).
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key and key.pressed and not key.echo and key.keycode == KEY_F:
+		GameState.cycle_time_speed()
+		get_viewport().set_input_as_handled()
 
 
 func _on_money_changed(money: int) -> void:
@@ -25,6 +37,12 @@ func _on_money_changed(money: int) -> void:
 
 func _on_containers_changed(total: int) -> void:
 	%ContainersLabel.text = "Containers delivered: %s" % Fmt.thousands(total)
+
+
+func _on_time_speed_changed(speed: int) -> void:
+	%SpeedButton.text = "%dx" % speed
+	%SpeedButton.tooltip_text = "Fast forward: the game runs at %dx speed. Click to change (also the F key)." % speed
+
 
 
 func _on_xp_changed(total_xp: float) -> void:

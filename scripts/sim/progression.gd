@@ -63,10 +63,12 @@ static func next_slot_level(model: Dictionary, level: int) -> int:
 	return level + every - (level - unlock_level(model)) % every
 
 
-## [start, every] from game_config ship_slots, for cargo ships or recovery boats.
+## [start, every] from game_config ship_slots, for cargo ships or recovery boats;
+## a model's own slot_every replaces "every".
 static func _slot_growth(model: Dictionary) -> Array:
 	var slots: Dictionary = GameData.config.get("ship_slots", {})
-	return slots.get("recovery" if model.get("recovery", false) else "cargo", [3, 3])
+	var growth: Array = slots.get("recovery" if model.get("recovery", false) else "cargo", [3, 3])
+	return [growth[0], int(model.get("slot_every", growth[1]))]
 
 
 static func unlock_level(model: Dictionary) -> int:

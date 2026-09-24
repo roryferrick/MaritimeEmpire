@@ -59,7 +59,7 @@ func company_xp_bonus() -> float:
 ## each point it already has.
 func upgrade_cost(path: String) -> int:
 	var settings := Hub.settings()
-	return int(settings.get("upgrade_cost", 1000000)) + int(settings.get("upgrade_cost_step", 250000)) * int(upgrades.get(path, 0))
+	return int(settings.get("upgrade_cost", 2000000)) + int(settings.get("upgrade_cost_step", 500000)) * int(upgrades.get(path, 0))
 
 
 ## The bonus from a path (e.g. 0.15 for +15%), counting the HQ multiplier.

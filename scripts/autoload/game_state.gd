@@ -42,6 +42,8 @@ signal hubs_changed
 signal hub_leveled(hub: Hub, level: int)
 ## A new hub was founded at a port.
 signal hub_built(hub: Hub)
+## The fast-forward speed changed.
+signal time_speed_changed(speed: int)
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 2
@@ -61,6 +63,8 @@ const AUTO_RECOVERY_INTERVAL := 0.5
 const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "bought", "sold", "hubs"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
+## Fast-forward speeds the top bar button cycles through.
+const TIME_SPEEDS: Array[int] = [1, 2, 4]
 
 var money: int = 0:
 	set(value):
@@ -80,6 +84,12 @@ var company_color := "purple"
 var home_port := ""
 var ships: Array[Ship] = []
 var in_session := false
+## Fast forward: the world advances this many times per frame. Not saved;
+## every session starts at 1x.
+var time_speed := 1:
+	set(value):
+		time_speed = value
+		time_speed_changed.emit(time_speed)
 
 ## Seconds the company has been playing (only counts while a session is open).
 var play_time := 0.0
@@ -114,6 +124,13 @@ func _notification(what: int) -> void:
 func _process(delta: float) -> void:
 	if not in_session:
 		return
+	# Fast forward runs whole extra steps rather than one longer one, so ships
+	# arrive, dock and break down exactly as they would at 1x.
+	for step in time_speed:
+		_step(delta)
+
+
+func _step(delta: float) -> void:
 	play_time += delta
 	for ship in ships:
 		_advance(ship, delta)
@@ -124,19 +141,28 @@ func _process(delta: float) -> void:
 		_send_queued_recoveries()
 
 
+## Steps to the next of TIME_SPEEDS, back to 1x after the fastest.
+func cycle_time_speed() -> void:
+	time_speed = TIME_SPEEDS[(TIME_SPEEDS.find(time_speed) + 1) % TIME_SPEEDS.size()]
+
+
 # --- Ships ---------------------------------------------------------------
 
-func buy_ship(model_id: String, ship_name: String) -> Ship:
+## Buys a ship and launches it docked at port_id, which must be the HQ or a hub
+## (the HQ if empty).
+func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	ship_name = ship_name.strip_edges()
-	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty():
+	if port_id.is_empty():
+		port_id = home_port
+	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty() or not hub_at(port_id):
 		return null
 	var price := int(GameData.get_ship_model(model_id).get("price", 0))
 	money -= price
 	_record(null, "bought", price)
-	var ship := Ship.new(ship_name, model_id, home_port)
+	var ship := Ship.new(ship_name, model_id, port_id)
 	ships.append(ship)
 	if ship.is_recovery():
-		ship.base_port = home_port
+		ship.base_port = port_id
 		_rebalance_recovery_boats()
 	ships_changed.emit()
 	save_game()
@@ -1060,5 +1086,6 @@ func _clear_ships() -> void:
 
 func _begin_session() -> void:
 	ActivityLog.clear()
+	time_speed = 1
 	in_session = true
 	_autosave_timer.start()

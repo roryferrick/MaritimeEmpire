@@ -39,6 +39,21 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Random"
 
+[node name="PortRow" type="HBoxContainer" parent="Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PortLabel" type="Label" parent="Content/PortRow"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Launch at"
+
+[node name="PortOption" type="OptionButton" parent="Content/PortRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+
 [node name="ErrorLabel" type="Label" parent="Content"]
 unique_name_in_owner = true
 layout_mode = 2

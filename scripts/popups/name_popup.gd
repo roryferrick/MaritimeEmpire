@@ -1,6 +1,7 @@
 class_name NamePopup
 extends PanelContainer
-## Names and buys a new ship. Suggests a random unused name.
+## Names and buys a new ship and picks where it launches: the HQ (the default)
+## or any hub. Suggests a random unused name.
 
 ## Set before adding to the tree.
 var model_id := ""
@@ -19,6 +20,11 @@ func _ready() -> void:
 	%RandomButton.pressed.connect(_suggest)
 	%CancelButton.pressed.connect(queue_free)
 	%BuyButton.pressed.connect(_confirm)
+	for hub in GameState.hubs:
+		%PortOption.add_item(hub.title())
+		%PortOption.set_item_metadata(%PortOption.item_count - 1, hub.port_id)
+	%PortOption.disabled = GameState.hubs.size() < 2
+	%PortOption.tooltip_text = "Build hubs to launch ships from more ports." if %PortOption.disabled else ""
 	_suggest()
 
 
@@ -41,7 +47,7 @@ func _validate() -> bool:
 func _confirm() -> void:
 	if not _validate():
 		return
-	var ship := GameState.buy_ship(model_id, %NameEdit.text)
+	var ship := GameState.buy_ship(model_id, %NameEdit.text, %PortOption.get_selected_metadata())
 	if ship:
 		ActivityLog.add("Bought %s. It's docked at %s." % [ship.name, GameData.port_name(ship.docked_at)],
 			ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
