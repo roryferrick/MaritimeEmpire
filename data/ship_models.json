@@ -19,7 +19,7 @@
 			"refill_phase_s": 2.5,
 			"breakdown_factor": 1.0,
 			"max_owned": 10,
-			"map_size": [6, 2.5],
+			"map_size": [9, 3.75],
 			"map_color": "#f7e463"
 		},
 		{
@@ -40,7 +40,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.87,
 			"max_owned": 10,
-			"map_size": [8, 3],
+			"map_size": [12, 4.5],
 			"map_color": "#f5c542"
 		},
 		{
@@ -61,7 +61,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.77,
 			"max_owned": 10,
-			"map_size": [10, 3.5],
+			"map_size": [15, 5.25],
 			"map_color": "#f29a38"
 		},
 		{
@@ -82,7 +82,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.68,
 			"max_owned": 10,
-			"map_size": [13, 4.5],
+			"map_size": [19.5, 6.75],
 			"map_color": "#ea5f2e"
 		},
 		{
@@ -103,7 +103,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.59,
 			"max_owned": 10,
-			"map_size": [17, 6],
+			"map_size": [25.5, 9],
 			"map_color": "#cc2222"
 		},
 		{
@@ -125,7 +125,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.77,
 			"max_owned": 10,
-			"map_size": [10, 3.5],
+			"map_size": [15, 5.25],
 			"map_color": "#a6e88f"
 		},
 		{
@@ -147,7 +147,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.68,
 			"max_owned": 10,
-			"map_size": [13, 4.5],
+			"map_size": [19.5, 6.75],
 			"map_color": "#3aa39a"
 		},
 		{
@@ -169,7 +169,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.59,
 			"max_owned": 10,
-			"map_size": [17, 6],
+			"map_size": [25.5, 9],
 			"map_color": "#2a55b8"
 		},
 		{
@@ -191,7 +191,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.68,
 			"max_owned": 5,
-			"map_size": [13, 4.5],
+			"map_size": [19.5, 6.75],
 			"map_color": "#c49a6c"
 		},
 		{
@@ -212,7 +212,7 @@
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.59,
 			"max_owned": 5,
-			"map_size": [20, 7.5],
+			"map_size": [30, 11.25],
 			"map_color": "#6b4226"
 		}
 	]

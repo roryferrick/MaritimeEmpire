@@ -20,10 +20,10 @@ const SHIP_HIT_RADIUS := 12.0
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring this far out, each next ring DOCK_RING_GAP further,
 ## with dots about DOCK_DOT_SPACING apart (so outer rings hold more).
-const DOCK_DOT_RADIUS := 3.5
+const DOCK_DOT_RADIUS := 2.75
 const DOCK_FIRST_RING := PORT_RADIUS + 7.5
-const DOCK_RING_GAP := 7.5
-const DOCK_DOT_SPACING := 8.0
+const DOCK_RING_GAP := 6.0
+const DOCK_DOT_SPACING := 6.5
 const DRAG_THRESHOLD := 5.0
 const ZOOM_STEP := 1.15
 ## Closest zoom, in pixels per projected degree.
