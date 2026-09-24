@@ -13,6 +13,7 @@ const SHIP_NAMES_PATH := "res://data/ship_names.json"
 const WORLD_MAP_PATH := "res://data/world_map.res"
 const CANALS_PATH := "res://data/canals.json"
 const MARKETS_PATH := "res://data/markets.json"
+const STARTS_PATH := "res://data/starts.json"
 ## How close (in projected degrees) a lane must pass a lock chamber to go through it.
 const CHAMBER_ON_LANE := 0.002
 const _NO_LANE := 1 << 30
@@ -31,6 +32,8 @@ var canals: Array[Dictionary] = []
 ## Commodities, regions and prices from data/markets.json.
 var markets: Dictionary = {}
 var commodities: Array[Dictionary] = []
+## Recommended HQ ports from data/starts.json: {great: [{port, note}], harder: [...]}.
+var starts: Dictionary = {}
 
 var _ports_by_id: Dictionary = {}
 var _port_positions: Dictionary = {}  # id -> projected Vector2
@@ -103,6 +106,7 @@ func _ready() -> void:
 	_load_lanes()
 	_load_canals()
 	_load_markets()
+	starts = _load_json(STARTS_PATH)
 
 
 func get_port(id: String) -> Dictionary:
@@ -118,6 +122,16 @@ func ports_by_name() -> Array[Dictionary]:
 	var sorted: Array[Dictionary] = ports.duplicate()
 	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.name < b.name)
 	return sorted
+
+
+## A port's place in data/starts.json: {kind ("great" or "harder"), note}, or
+## {} if it isn't a recommended HQ.
+func start_info(port_id: String) -> Dictionary:
+	for kind: String in ["great", "harder"]:
+		for entry: Dictionary in starts.get(kind, []):
+			if entry.port == port_id:
+				return {kind = kind, note = entry.get("note", "")}
+	return {}
 
 
 ## Port position in projected map coordinates.
@@ -509,7 +523,8 @@ func base_price(port_id: String, commodity_id: String) -> float:
 ## the weight falling off with sea distance over smoothing_nm), so neighbours
 ## price alike and differences build up with distance. Last, a gentle local
 ## variation (spread over local_variation, varying smoothly across the map
-## rather than port by port) is applied.
+## rather than port by port), a coastal variation (typically coastal_variation,
+## varying over a few sailing days) and any island_markets multipliers are applied.
 func _build_prices() -> void:
 	var sigma := float(markets.get("smoothing_nm", 700.0))
 	var weights := []  # Per port: [[other index, weight], ...]
@@ -521,6 +536,10 @@ func _build_prices() -> void:
 				row.append([j, exp(-(d * d) / (sigma * sigma))])
 		weights.append(row)
 	var variation := float(markets.get("local_variation", 0.0))
+	var coastal := float(markets.get("coastal_variation", 0.0))
+	var islands := {}  # Port id -> {commodity id: multiplier}, from island_markets.
+	for group: Dictionary in markets.get("island_markets", []):
+		islands.merge(group.prices)
 	for item: Dictionary in commodities:
 		var raw := PackedFloat64Array()
 		for port in ports:
@@ -534,6 +553,8 @@ func _build_prices() -> void:
 				total += raw[pair[0]] * pair[1]
 				weight += pair[1]
 			var local := 1.0 + variation * 0.5 * _smooth_noise(ports[i], item.id)
+			local *= 1.0 + coastal * _coastal_noise(ports[i], item.id)
+			local *= float(islands.get(ports[i].id, {}).get(item.id, 1.0))
 			_base_prices["%s/%s" % [ports[i].id, item.id]] = total / weight * local
 	_world_prices.clear()
 
@@ -546,6 +567,28 @@ func _smooth_noise(port: Dictionary, commodity_id: String) -> float:
 	var lon := deg_to_rad(float(port.lon))
 	var lat := deg_to_rad(float(port.lat))
 	return 0.5 * sin(lon * 3.0 + a) * cos(lat * 2.0 + b) + 0.5 * sin(lon * 5.0 + lat * 4.0 + a + b)
+
+
+## A value that varies over coastal_wavelength_nm (a few sailing days),
+## differently for each commodity, typically within [-1, 1]: a sum of
+## coastal_waves waves across the globe in random directions. It gives
+## neighbouring coasts small price differences that grow with distance, so
+## short runs can pay without very short hops paying more a minute.
+func _coastal_noise(port: Dictionary, commodity_id: String) -> float:
+	var wavelength := float(markets.get("coastal_wavelength_nm", 1600.0))
+	var waves := int(markets.get("coastal_waves", 6))
+	var lon := deg_to_rad(float(port.lon))
+	var lat := deg_to_rad(float(port.lat))
+	var point := Vector3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat)) * Geo.EARTH_RADIUS_NM
+	var total := 0.0
+	for i in waves:
+		var key := "%s/wave%d" % [commodity_id, i]
+		var z := _hash01(key + "z") * 2.0 - 1.0
+		var angle := _hash01(key + "a") * TAU
+		var r := sqrt(1.0 - z * z)
+		var direction := Vector3(r * cos(angle), r * sin(angle), z)
+		total += sin(point.dot(direction) * TAU / wavelength + _hash01(key + "p") * TAU)
+	return total / sqrt(waves / 2.0)
 
 
 ## A commodity's average steady price across all ports.

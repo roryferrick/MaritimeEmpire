@@ -5,7 +5,8 @@ extends Control
 ## title runs through its models' map colors, smallest ship first, and each
 ## card's name is in its model's map color. Each card shows how many of the
 ## model the company's level allows, and the level that unlocks the model or its
-## next slot. A red dot marks every Buy button that can be used right now.
+## next slot. A red dot marks every Buy button that can be used right now;
+## hovering one the company can't afford shows a small note saying so.
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
@@ -24,8 +25,13 @@ const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
 var _buy_buttons: Dictionary = {}  # model id -> Button
 var _owned_labels: Dictionary = {}  # model id -> Label
+var _price_labels: Dictionary = {}  # model id -> Label
 var _buy_alerts: Dictionary = {}  # model id -> AlertDot, shown while it can be bought
 var _grids: Array[GridContainer] = []
+## The "can't afford" note shown above a hovered Buy button, and that model's id ("" when none is hovered).
+var _hint := PanelContainer.new()
+var _hint_label := Label.new()
+var _hovered := ""
 
 
 func _ready() -> void:
@@ -44,6 +50,13 @@ func _ready() -> void:
 	GameState.ships_changed.connect(_update_cards)
 	GameState.company_leveled.connect(_update_cards.unbind(2))
 	resized.connect(_fit_columns)
+	_hint.theme_type_variation = &"MapPopup"
+	_hint.top_level = true
+	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint.visible = false
+	_hint_label.add_theme_font_size_override(&"font_size", 13)
+	_hint.add_child(_hint_label)
+	add_child(_hint)
 	_update_cards()
 
 
@@ -124,7 +137,7 @@ func _make_card(model: Dictionary) -> Control:
 		["Range", "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))],
 		["Tank", "%s · %s" % [Fmt.short(tank), Fmt.rough_duration(tank / float(model.get("fuel_per_s", 1)))]],
 		["Stop", Fmt.duration(float(model.get("dock_s", 0)))],
-		["Price", Fmt.money(int(model.get("price", 0)))],
+		["Price", ""],
 		["Owned", ""],
 	]
 	if model.get("recovery", false):
@@ -146,6 +159,8 @@ func _make_card(model: Dictionary) -> Control:
 		value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		value_label.text = row[1]
 		line.add_child(value_label)
+		if row[0] == "Price":
+			_price_labels[model.id] = value_label
 		if row[0] == "Owned":
 			_owned_labels[model.id] = value_label
 
@@ -154,6 +169,8 @@ func _make_card(model: Dictionary) -> Control:
 	buy.custom_minimum_size = Vector2(0, 34)
 	buy.size_flags_vertical = Control.SIZE_SHRINK_END | Control.SIZE_EXPAND
 	buy.pressed.connect(_on_buy_pressed.bind(model.id))
+	buy.mouse_entered.connect(_on_buy_hovered.bind(model.id))
+	buy.mouse_exited.connect(_on_buy_hovered.bind(""))
 	box.add_child(buy)
 	_buy_buttons[model.id] = buy
 	var alert := AlertDot.new(5.0, Vector2(9, 9))
@@ -171,6 +188,10 @@ func _update_cards() -> void:
 		var max_owned := int(model.get("max_owned", 0))
 		var owned := GameState.owned_count(model_id)
 		var next := Progression.next_slot_level(model, level)
+		var price := GameState.ship_price(model_id)
+		_price_labels[model_id].text = Fmt.money(price)
+		if price < int(model.get("price", 0)):
+			_price_labels[model_id].text += " for your first, then %s" % Fmt.money(int(model.price))
 		_owned_labels[model_id].text = "%d / %d" % [owned, slots]
 		if slots < max_owned and level >= Progression.unlock_level(model):
 			_owned_labels[model_id].text += " (max %d)" % max_owned
@@ -184,10 +205,44 @@ func _update_cards() -> void:
 		var error := GameState.buy_error(model_id)
 		button.disabled = not error.is_empty()
 		_buy_alerts[model_id].visible = error.is_empty()
-		button.tooltip_text = error
+		button.tooltip_text = "" if _short_of_money(model_id) > 0 else error
+	_update_hint()
 
 
 func _on_buy_pressed(model_id: String) -> void:
 	var popup: NamePopup = NamePopupScene.instantiate()
 	popup.model_id = model_id
 	PopupHost.find(self).open(popup)
+
+
+## How much more money buying this model needs, or 0 if money isn't what's
+## stopping it (it's affordable, locked or out of slots).
+func _short_of_money(model_id: String) -> int:
+	var model := GameData.get_ship_model(model_id)
+	var slots := Progression.model_slots(model, GameState.company_level())
+	if GameState.owned_count(model_id) >= slots:
+		return 0
+	return maxi(GameState.ship_price(model_id) - GameState.money, 0)
+
+
+func _on_buy_hovered(model_id: String) -> void:
+	_hovered = model_id
+	_update_hint()
+
+
+## Shows the note above the hovered Buy button if the company can't afford it.
+func _update_hint() -> void:
+	var short := _short_of_money(_hovered) if not _hovered.is_empty() else 0
+	_hint.visible = short > 0 and is_visible_in_tree()
+	if not _hint.visible:
+		return
+	_hint_label.text = "You can't afford this ship (%s short)." % Fmt.money(short)
+	_hint.reset_size()
+	var button: Button = _buy_buttons[_hovered]
+	var hint_size := _hint.get_combined_minimum_size()
+	_hint.global_position = button.global_position + Vector2((button.size.x - hint_size.x) / 2.0, -hint_size.y - 6.0)
+
+
+func _process(_delta: float) -> void:
+	if _hint.visible:
+		_update_hint()  # Follows the button if the list scrolls.

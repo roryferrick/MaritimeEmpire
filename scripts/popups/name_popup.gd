@@ -11,7 +11,7 @@ var _price := 0
 
 func _ready() -> void:
 	var model := GameData.get_ship_model(model_id)
-	_price = int(model.get("price", 0))
+	_price = GameState.ship_price(model_id)
 	%TitleLabel.text = "Name your new %s" % model.get("name", model_id)
 	%BuyButton.text = "Buy for %s" % Fmt.money(_price)
 	%NameEdit.max_length = GameState.MAX_NAME_LENGTH

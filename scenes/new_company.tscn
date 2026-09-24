@@ -64,6 +64,14 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 
+[node name="StartNote" type="Label" parent="Center/Card/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Great start"
+autowrap_mode = 3
+
 [node name="ColorLabel" type="Label" parent="Center/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"

@@ -1,6 +1,9 @@
 {
-	"_comment": "Commodity markets. Every port buys and sells every commodity. A commodity's price at a port starts as its base price x its region's multiplier (or the port's own, from sources); it's then evened out with nearby ports (a weighted average over sea distance, the weight falling off over smoothing_nm, as competing traders would) so neighbours price alike and differences grow with distance; then x a gentle local variation (up to local_variation between ports, varying smoothly across the map) x a slow drift (up to drift, over about drift_period_s) x the market impact of the player's own trades. Region multipliers run from 0.5 (where it's produced) to 2.0 (where it's scarce), a 4x spread. That's what a port pays you for it (the sell price); buying there costs spread more. impact: selling a load lowers the port's sell price by up to impact_max (for a load worth impact_ref_value or more; smaller loads move it less) and buying raises it the same way, recovering with a half-life of impact_half_life_s. base prices are per unit of hold space in each ship line's unit (containers, tons, head, vehicles), set so similar ships earn alike. xp_ref_price: a commodity's XP per unit per nm is its base price / xp_ref_price x game_config xp_per_container_nm. fuel_per_oil: ships buy their own fuel at the port's oil sell price x this.",
+	"_comment": "Commodity markets. Every port buys and sells every commodity. A commodity's price at a port starts as its base price x its region's multiplier (or the port's own, from sources); it's then evened out with nearby ports (a weighted average over sea distance, the weight falling off over smoothing_nm, as competing traders would) so neighbours price alike and differences grow with distance; then x a gentle local variation (up to local_variation between ports, varying smoothly across the map) x a coastal variation (typically up to coastal_variation either way, from coastal_waves waves across the globe about coastal_wavelength_nm long, different for each commodity, so neighbouring coasts differ a little and short runs can pay) x a slow drift (up to drift, over about drift_period_s) x the market impact of the player's own trades. Region multipliers run from 0.5 (where it's produced) to 2.0 (where it's scarce), a 4x spread. That's what a port pays you for it (the sell price); buying there costs spread more. impact: selling a load lowers the port's sell price by up to impact_max (for a load worth impact_ref_value or more; smaller loads move it less) and buying raises it the same way, recovering with a half-life of impact_half_life_s. base prices are per unit of hold space in each ship line's unit (containers, tons, head, vehicles), set so similar ships earn alike. xp_ref_price: a commodity's XP per unit per nm is its base price / xp_ref_price x game_config xp_per_container_nm. fuel_per_oil: ships buy their own fuel at the port's oil sell price x this.",
 	"local_variation": 0.16,
+	"coastal_variation": 0.027,
+	"coastal_wavelength_nm": 1600,
+	"coastal_waves": 6,
 	"smoothing_nm": 1200,
 	"spread": 0.05,
 	"drift": 0.05,
@@ -75,5 +78,28 @@
 		"grain": {"ODS": 0.5, "NVS": 0.55, "CND": 0.6, "MSY": 0.5, "BUE": 0.5, "PNG": 0.55, "PDX": 0.55, "SEA": 0.6, "YQT": 0.5, "DLH": 0.55},
 		"livestock": {"BUE": 0.5, "SSZ": 0.55, "MEL": 0.5, "BNE": 0.5, "AKL": 0.55, "WLG": 0.55, "JIB": 0.7},
 		"vehicles": {"TYO": 0.5, "YOK": 0.5, "NGO": 0.5, "UKB": 0.55, "PUS": 0.5, "ICN": 0.55, "BRV": 0.55, "DET": 0.5, "TOL": 0.6, "VER": 0.7, "LCH": 0.8}
-	}
+	},
+	"_island_markets_comment": "Island groups whose ports would otherwise price alike (smoothing evens out neighbours): each port's multipliers are applied last, after smoothing, so short inter-island hops can pay. Imports land cheaper at the group's main port and cost more on the outer islands; local products are cheaper where they're made.",
+	"island_markets": [
+		{"name": "Hawaii", "note": "Imports land at Honolulu; Kona coffee from the Big Island; coal for Oahu's power plant.", "prices": {
+			"HNL": {"toys": 0.976, "clothing": 0.976, "furniture": 0.976, "coffee": 1.025, "coal": 0.968, "iron": 0.97},
+			"LIH": {"toys": 1.025, "clothing": 1.025, "furniture": 1.025, "coffee": 1.025, "coal": 1.033, "iron": 1.025},
+			"ITO": {"toys": 1.025, "clothing": 1.025, "furniture": 1.025, "coffee": 0.976, "coal": 1.033, "iron": 1.025},
+			"KWH": {"toys": 1.025, "clothing": 1.025, "furniture": 1.025, "coffee": 0.976, "coal": 1.033, "iron": 1.025}}},
+		{"name": "Japan", "note": "Kobe roasts Japan's coffee and Osaka makes clothing; Tokyo Bay's import terminals land coal for Nagoya's steelworks.", "prices": {
+			"TYO": {"coffee": 1.028, "clothing": 1.028, "coal": 0.971, "iron": 0.975},
+			"YOK": {"coffee": 1.028, "clothing": 1.028, "coal": 0.971, "iron": 0.975},
+			"NGO": {"coffee": 1.015, "clothing": 1.01, "coal": 1.03, "iron": 1.025},
+			"OSA": {"coffee": 0.985, "clothing": 0.973},
+			"UKB": {"coffee": 0.973, "clothing": 0.985}}},
+		{"name": "Fiji, Tonga and Samoa", "note": "Imports land at Suva and Pago Pago; gold from Fiji's Vatukoula mine.", "prices": {
+			"SUV": {"toys": 0.965, "clothing": 0.965, "furniture": 0.965, "gold": 0.965},
+			"TBU": {"toys": 1.035, "clothing": 1.035, "furniture": 1.035, "gold": 1.035},
+			"PPG": {"toys": 0.97, "clothing": 0.97, "furniture": 0.97, "gold": 1.035},
+			"APW": {"toys": 1.03, "clothing": 1.03, "furniture": 1.03, "gold": 1.035}}},
+		{"name": "Azores and Madeira", "note": "Coal lands at Ponta Delgada and goes out to Madeira and the western islands.", "prices": {
+			"PDL": {"coal": 0.968},
+			"FLW": {"coal": 1.035},
+			"FNC": {"coal": 1.035}}}
+	]
 }

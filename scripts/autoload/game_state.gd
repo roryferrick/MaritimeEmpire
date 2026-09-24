@@ -86,6 +86,8 @@ var company_name := ""
 ## The company's color id (see game_config company_colors): its name in the
 ## top bar and the rings around its HQ and hubs.
 var company_color := "purple"
+## Models whose first-purchase price (first_price in ship_models.json) has been used.
+var first_prices_used: Array[String] = []
 ## New ships are delivered here.
 var home_port := ""
 var ships: Array[Ship] = []
@@ -188,10 +190,13 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	var too_big: bool = not model.get("seaway", false) and GameData.get_port(port_id).get("seaway", false)
 	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty() or not hub_at(port_id) or too_big:
 		return null
-	var price := int(model.get("price", 0))
+	var price := ship_price(model_id)
+	if price < int(model.get("price", 0)):
+		first_prices_used.append(model_id)
 	money -= price
 	_record(null, "bought", price)
 	var ship := Ship.new(ship_name, model_id, port_id)
+	ship.purchase_price = price
 	ships.append(ship)
 	if ship.is_recovery():
 		ship.base_port = port_id
@@ -203,6 +208,16 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 
 func owned_count(model_id: String) -> int:
 	return ships.filter(func(ship: Ship) -> bool: return ship.model_id == model_id).size()
+
+
+## What the next ship of this model costs: its first_price if it has one and
+## the company has never bought one (and owns none, for saves from before
+## first prices), otherwise its price.
+func ship_price(model_id: String) -> int:
+	var model := GameData.get_ship_model(model_id)
+	if model.has("first_price") and not first_prices_used.has(model_id) and owned_count(model_id) == 0:
+		return int(model.first_price)
+	return int(model.get("price", 0))
 
 
 ## Why the player can't buy another of this model, or "" if they can.
@@ -217,7 +232,7 @@ func buy_error(model_id: String) -> String:
 		if next < 0:
 			return "You already own the maximum of %d %s ships." % [slots, model.get("name", model_id)]
 		return "All %d %s slots are full. Level %d gives another." % [slots, model.get("name", model_id), next]
-	if money < int(model.get("price", 0)):
+	if money < ship_price(model_id):
 		return "You can't afford this ship."
 	return ""
 
@@ -1170,6 +1185,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	home_port = new_home_port
 	money = int(GameData.config.get("starting_money", 10000))
 	containers_delivered = 0
+	first_prices_used = []
 	_clear_ships()
 	play_time = 0.0
 	totals = {}
@@ -1197,6 +1213,7 @@ func continue_game() -> String:
 	home_port = data.get("home_port", "")
 	money = int(data.get("money", 0))
 	containers_delivered = int(data.get("containers_delivered", 0))
+	first_prices_used.assign(data.get("first_prices_used", []))
 	_clear_ships()
 	play_time = float(data.get("play_time", 0.0))
 	totals = data.get("totals", {})
@@ -1241,6 +1258,7 @@ func save_game() -> void:
 		"market": market.to_dict(),
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,
+		"first_prices_used": first_prices_used,
 		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)

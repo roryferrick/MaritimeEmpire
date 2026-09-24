@@ -54,6 +54,9 @@ var traveled_nm := 0.0
 
 var fuel := 0.0
 var maintenance := 1.0
+## What the company paid for it (a first-purchase discount makes it less than
+## the model's price); selling returns part of this.
+var purchase_price := 0
 var auto_refuel := true
 var auto_repair := true
 ## Seconds since the ship docked at the end of a leg; -1 when not unloading/loading.
@@ -142,6 +145,7 @@ func _init(ship_name := "", ship_model_id := "", start_port := "") -> void:
 	model_id = ship_model_id
 	docked_at = start_port
 	fuel = fuel_tank()
+	purchase_price = int(model().get("price", 0))
 
 
 func model() -> Dictionary:
@@ -175,9 +179,9 @@ func can_carry(other: Ship) -> bool:
 	return is_recovery() and (carries.is_empty() or carries.has(other.model_id))
 
 
-## What the ship sells for: half its price, scaled by maintenance.
+## What the ship sells for: half what was paid for it, scaled by maintenance.
 func sell_price() -> int:
-	return floori(float(model().get("price", 0)) * SELL_FRACTION * clampf(maintenance, 0.0, 1.0))
+	return floori(float(purchase_price) * SELL_FRACTION * clampf(maintenance, 0.0, 1.0))
 
 
 ## Docked and not busy recovering (or being recovered).
@@ -648,6 +652,7 @@ func to_dict() -> Dictionary:
 		"traveled_nm": traveled_nm,
 		"fuel": fuel,
 		"maintenance": maintenance,
+		"purchase_price": purchase_price,
 		"auto_refuel": auto_refuel,
 		"auto_repair": auto_repair,
 		"dock_time": dock_time,
@@ -704,6 +709,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.traveled_nm = float(data.get("traveled_nm", 0.0))
 	ship.fuel = float(data.get("fuel", ship.fuel_tank()))
 	ship.maintenance = float(data.get("maintenance", 1.0))
+	ship.purchase_price = int(data.get("purchase_price", ship.model().get("price", 0)))
 	ship.auto_refuel = bool(data.get("auto_refuel", true))
 	ship.auto_repair = bool(data.get("auto_repair", true))
 	ship.dock_time = float(data.get("dock_time", -1.0))
