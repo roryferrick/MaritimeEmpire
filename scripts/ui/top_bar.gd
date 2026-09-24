@@ -1,7 +1,8 @@
 extends PanelContainer
-## Company name (in the company's color) and level (with an XP bar), money, the
-## fast-forward button (or F) and containers delivered, shown above the main
-## screens. Clicking the level opens (or closes) the level popup with XP
+## Above the main screens: the level (with an XP bar) and money on the left;
+## the company name (in the company's color) over the calendar date and time
+## in the middle; the game speed button (or F) and containers delivered on the
+## right. Clicking the level opens (or closes) the level popup with XP
 ## progress, upcoming unlocks and time estimates.
 
 
@@ -33,6 +34,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _on_money_changed(money: int) -> void:
 	%MoneyLabel.text = Fmt.money(money)
+
+
+func _process(_delta: float) -> void:
+	%DateLabel.text = Fmt.calendar(GameState.calendar_time())
 
 
 func _on_containers_changed(total: int) -> void:

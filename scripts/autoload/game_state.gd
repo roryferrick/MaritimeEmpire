@@ -154,6 +154,23 @@ func _step(delta: float) -> void:
 		_send_queued_recoveries()
 
 
+## The calendar date and time now, as a Unix time (see game_config calendar).
+func calendar_time() -> int:
+	return calendar_time_at(play_time)
+
+
+## The calendar date and time at a play time.
+func calendar_time_at(at_play_time: float) -> int:
+	var calendar: Dictionary = GameData.config.get("calendar", {})
+	var start := Time.get_unix_time_from_datetime_string(str(calendar.get("start", "2000-01-01T00:00:00")))
+	return int(start + at_play_time * calendar_seconds_per_second())
+
+
+## Calendar seconds that pass per second of play (at 1x).
+func calendar_seconds_per_second() -> float:
+	return float(GameData.config.get("calendar", {}).get("minutes_per_second", 20)) * 60.0
+
+
 ## Steps to the next of TIME_SPEEDS, back to paused after the fastest.
 func cycle_time_speed() -> void:
 	time_speed = TIME_SPEEDS[(TIME_SPEEDS.find(time_speed) + 1) % TIME_SPEEDS.size()]

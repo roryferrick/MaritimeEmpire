@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/popups/ship_popup.gd" id="1_ship"]
 
 [node name="ShipPopup" type="PanelContainer"]
-custom_minimum_size = Vector2(320, 0)
+custom_minimum_size = Vector2(420, 0)
 offset_right = 320.0
 offset_bottom = 200.0
 theme_type_variation = &"MapPopup"

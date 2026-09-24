@@ -95,11 +95,10 @@ func _update_live() -> void:
 
 
 ## What's aboard: its cost and what it should sell for where it's going, at
-## today's prices; "Empty hold" otherwise.
+## today's prices; hidden when the hold is empty (the cargo bar says so).
 func _update_cargo() -> void:
-	_set_shown(_cargo_label, not ship.is_recovery() and not %SkillsButton.button_pressed)
+	_set_shown(_cargo_label, not ship.is_recovery() and not %SkillsButton.button_pressed and not ship.cargo_id.is_empty())
 	if ship.cargo_id.is_empty():
-		_cargo_label.text = "Empty hold"
 		return
 	var commodity := GameData.commodity(ship.cargo_id)
 	var from := ship.cargo_from

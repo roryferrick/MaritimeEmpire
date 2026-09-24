@@ -176,7 +176,8 @@
 - Autosave on quit and every 30 s.
 
 ### Top bar (on World, Ships, Finances, Shop screens)
-- Company name (in the company color), company level with an XP bar, money, a fast-forward button, and total containers delivered.
+- Left: company level with an XP bar, and money. Middle: the company name (in the company color) above the calendar date and time ("Sat 1 Jan 2000, 14:30"). Right: the game speed button and total containers delivered.
+- Calendar: a new company starts on 1 January 2000 at midnight. The clock runs 20 calendar minutes per second of play at 1x (game_config calendar), matched to real ship speeds (a Scooter's 5.44 nm a second is about 16 knots), so voyages take realistic calendar times: Rome to Tunis about 20 hours, Shanghai to Rotterdam about a month; a calendar day passes in about 72 seconds. It follows the game speed (stops when paused). The route screen shows each leg's calendar time too ("1 min 1 s (about 20 h)"), a ship at sea shows when it arrives ("arrives 3 Jan 09:10"), and activity log lines are stamped with the calendar time.
 - Game speed: the button (or the F key) cycles Paused, 1x, 2x, 4x, 8x. Paused freezes the world; faster speeds run it that much faster (ships, breakdowns, XP, finances, prices); each session starts at 1x.
 - Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ...", "a new hub"), each with an estimate of how long until you reach it at that rate. Refreshes every second.
 

@@ -529,7 +529,7 @@ func status_text() -> String:
 		return "%s — to %s" % [canal, destination]
 	if paused:
 		return "Stopping at %s" % destination
-	var text := "En route to %s — %d%%" % [destination, int(leg_progress() * 100.0)]
+	var text := "En route to %s — %d%% · arrives %s" % [destination, int(leg_progress() * 100.0), Fmt.calendar_short(arrival_time())]
 	return text + " — won't make it!" if at_risk else text
 
 
@@ -603,6 +603,17 @@ func _convoy_status_text(crossing: Dictionary) -> String:
 	if leader != null and speed() * float(canal.get("speed_factor", 1.0)) > leader.speed() * float(canal.get("speed_factor", 1.0)):
 		text += ", held behind %s" % leader.name
 	return text
+
+
+## When the ship should reach the end of its leg, as a calendar Unix time: the
+## rest of the leg at its current wear, plus its remaining lock steps (not
+## counting waits in line or for a convoy).
+func arrival_time() -> int:
+	var seconds := leg_seconds(from_port, to_port, traveled_nm, leg_length(), maintenance)
+	var chambers := GameData.lane_chambers(from_port, to_port)
+	for i in range(maxi(canal_step, 0), chambers.size()):
+		seconds += float(chambers[i].canal.get("step_seconds", 3))
+	return GameState.calendar_time_at(GameState.play_time + (seconds if seconds < INF else 0.0))
 
 
 func _recovery_status_text() -> String:

@@ -140,10 +140,14 @@ func _rebuild_list() -> void:
 
 
 ## Distance and time: sailing at top speed (slower in convoy canals), plus
-## extra_s in locks (not counting any wait for a free chamber or a convoy).
+## extra_s in locks (not counting any wait for a free chamber or a convoy), in
+## play time and, in brackets, calendar time.
 func _leg_text(distance_nm: float, sailing_s: float, extra_s := 0.0) -> String:
-	var time := Fmt.duration(sailing_s + extra_s) if sailing_s < INF else "?"
-	return "%s nm · %s" % [Fmt.thousands(roundi(distance_nm)), time]
+	if sailing_s == INF:
+		return "%s nm · ?" % Fmt.thousands(roundi(distance_nm))
+	var seconds := sailing_s + extra_s
+	return "%s nm · %s (about %s)" % [Fmt.thousands(roundi(distance_nm)), Fmt.duration(seconds),
+		Fmt.calendar_duration(seconds * GameState.calendar_seconds_per_second())]
 
 
 ## Seconds to sail a leg at top speed, through its zones (convoy canals slow ships).

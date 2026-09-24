@@ -1,7 +1,7 @@
 class_name ActivityLogPanel
 extends PanelContainer
 ## The activity log down the left of the game screen: ActivityLog's messages,
-## newest at the top, in small text with the play time they happened at. Text
+## newest at the top, in small text with the calendar time they happened at. Text
 ## takes the ship's color (lightened if too dark to read); good and bad news
 ## get a green or red highlight behind it.
 
@@ -70,9 +70,6 @@ func _color(color_name: StringName, fallback: Color) -> Color:
 	return get_theme_color(color_name, THEME_TYPE) if has_theme_color(color_name, THEME_TYPE) else fallback
 
 
-## Play time as "12:34" or "1:02:34".
-static func _clock(seconds: float) -> String:
-	var total := floori(seconds)
-	var hours := floori(total / 3600.0)
-	var clock := "%02d:%02d" % [floori(total / 60.0) % 60, total % 60]
-	return "%d:%s" % [hours, clock] if hours > 0 else clock
+## The calendar time at a play time, as "3 Jan 09:10".
+static func _clock(play_time: float) -> String:
+	return Fmt.calendar_short(GameState.calendar_time_at(play_time))

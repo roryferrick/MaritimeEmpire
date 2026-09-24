@@ -57,3 +57,32 @@ static func ordinal(n: int) -> String:
 	if n % 100 < 11 or n % 100 > 13:
 		suffix = ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]
 	return "%d%s" % [n, suffix]
+
+
+const _DAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const _MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+## A Unix time as "Sat 1 Jan 2000, 14:30".
+static func calendar(unix_time: int) -> String:
+	var d := Time.get_datetime_dict_from_unix_time(unix_time)
+	return "%s %d %s %d, %02d:%02d" % [_DAYS[d.weekday], d.day, _MONTHS[d.month - 1], d.year, d.hour, d.minute]
+
+
+## A Unix time as "3 Jan 09:10" (no weekday or year), for arrivals and log lines.
+static func calendar_short(unix_time: int) -> String:
+	var d := Time.get_datetime_dict_from_unix_time(unix_time)
+	return "%d %s %02d:%02d" % [d.day, _MONTHS[d.month - 1], d.hour, d.minute]
+
+
+## Calendar seconds as "45 min", "20 h" or "31 days 4 h".
+static func calendar_duration(seconds: float) -> String:
+	var minutes := roundi(seconds / 60.0)
+	if minutes < 60:
+		return "%d min" % minutes
+	var hours := roundi(seconds / 3600.0)
+	if hours < 48:
+		return "%d h" % hours
+	var days := floori(seconds / 86400.0)
+	var rest := roundi((seconds - days * 86400.0) / 3600.0)
+	return "%d days" % days if rest == 0 else "%d days %d h" % [days, rest]

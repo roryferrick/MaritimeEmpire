@@ -39,22 +39,16 @@ script = ExtResource("2_topbar")
 [node name="Row" type="HBoxContainer" parent="Layout/TopBar"]
 layout_mode = 2
 
-[node name="CompanyLabel" type="Label" parent="Layout/TopBar/Row"]
-unique_name_in_owner = true
+[node name="Left" type="HBoxContainer" parent="Layout/TopBar/Row"]
 layout_mode = 2
-theme_type_variation = &"DimLabel"
-text = "Company"
+size_flags_horizontal = 3
 
-[node name="CompanyLevelGap" type="Control" parent="Layout/TopBar/Row"]
-custom_minimum_size = Vector2(16, 0)
-layout_mode = 2
-
-[node name="LevelLabel" type="Label" parent="Layout/TopBar/Row"]
+[node name="LevelLabel" type="Label" parent="Layout/TopBar/Row/Left"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Level 1"
 
-[node name="LevelBar" type="ProgressBar" parent="Layout/TopBar/Row"]
+[node name="LevelBar" type="ProgressBar" parent="Layout/TopBar/Row/Left"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(140, 10)
 layout_mode = 2
@@ -62,20 +56,40 @@ size_flags_vertical = 4
 max_value = 1.0
 show_percentage = false
 
-[node name="CompanySpacer" type="Control" parent="Layout/TopBar/Row"]
+[node name="MoneyGap" type="Control" parent="Layout/TopBar/Row/Left"]
 custom_minimum_size = Vector2(24, 0)
 layout_mode = 2
 
-[node name="MoneyLabel" type="Label" parent="Layout/TopBar/Row"]
+[node name="MoneyLabel" type="Label" parent="Layout/TopBar/Row/Left"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "$0"
 
-[node name="Spacer" type="Control" parent="Layout/TopBar/Row"]
+[node name="Middle" type="VBoxContainer" parent="Layout/TopBar/Row"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="CompanyLabel" type="Label" parent="Layout/TopBar/Row/Middle"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Company"
+horizontal_alignment = 1
+
+[node name="DateLabel" type="Label" parent="Layout/TopBar/Row/Middle"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+theme_override_font_sizes/font_size = 13
+text = "Sat 1 Jan 2000, 00:00"
+horizontal_alignment = 1
+
+[node name="Right" type="HBoxContainer" parent="Layout/TopBar/Row"]
 layout_mode = 2
 size_flags_horizontal = 3
+alignment = 2
 
-[node name="SpeedButton" type="Button" parent="Layout/TopBar/Row"]
+[node name="SpeedButton" type="Button" parent="Layout/TopBar/Row/Right"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(84, 0)
 layout_mode = 2
@@ -83,11 +97,11 @@ size_flags_vertical = 4
 focus_mode = 0
 text = "1x"
 
-[node name="SpeedGap" type="Control" parent="Layout/TopBar/Row"]
+[node name="SpeedGap" type="Control" parent="Layout/TopBar/Row/Right"]
 custom_minimum_size = Vector2(24, 0)
 layout_mode = 2
 
-[node name="ContainersLabel" type="Label" parent="Layout/TopBar/Row"]
+[node name="ContainersLabel" type="Label" parent="Layout/TopBar/Row/Right"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Containers delivered: 0"
