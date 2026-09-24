@@ -1,6 +1,7 @@
 extends Control
-## The main map: ports, ships and canal locks, with their popups, and a switch
-## in the top right for showing the fleet's route lanes faintly, and a price picker.
+## The main map: ports, ships and canal locks, with their popups, and the Routes switch
+## and price picker in one panel in the top right (the fleet's route lanes shown
+## faintly; ports colored by a commodity's price).
 
 ## Commodity colors (their ship line's) are brightened to at least this
 ## luminance so they read on the dark panel.
@@ -61,24 +62,16 @@ func open_ship_popup(ship: Ship) -> void:
 	PopupHost.find(self).show_ship(ship, follow)
 
 
-## "Prices: Toys ▾" below the Routes switch: colors the ports by that
-## commodity's price (see MapView.price_commodity), or "Prices: off". Its menu
-## groups the commodities by the ship line that carries them, each group on a
-## faint tint of the line's color, each commodity with a swatch in it; the
+## "Prices: Toys ▾" under the Routes switch, in the same panel: colors the ports
+## by that commodity's price (see MapView.price_commodity), or "Prices: off". Its
+## menu groups the commodities by the ship line that carries them, each group on
+## a faint tint of the line's color, each commodity with a swatch in it; the
 ## chosen one's name is shown in that color too.
 func _add_price_picker() -> void:
-	var panel := PanelContainer.new()
-	panel.theme_type_variation = &"MapPopup"
-	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	panel.offset_left = -210.0
-	panel.offset_right = -12.0
-	panel.offset_top = 60.0
-	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	add_child(panel)
 	_price_button.tooltip_text = "Color the ports by a commodity's price: green where it's cheap, red where it's dear."
 	_price_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_price_button.pressed.connect(_open_price_menu)
-	panel.add_child(_price_button)
+	%MapControls.add_child(_price_button)
 
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override(&"separation", 3)

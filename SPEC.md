@@ -192,7 +192,7 @@
 ### 1. World (map) screen
 - Pan (drag) and zoom (mouse wheel) supported.
 - Ports are clickable circles; ships are clickable pointed rectangles moving along their routes.
-- A "Routes" switch in the map's top-right corner (on by default, saved with the game) draws every sea lane the fleet uses as a faint line in the color of a ship using it: each cargo ship's route loop, any new route waiting to replace it, and the leg it's sailing now. A lane shared by several ships is drawn once.
+- A panel in the map's top-right corner holds the Routes switch and, under it, the Prices picker. The "Routes" switch (on by default, saved with the game) draws every sea lane the fleet uses as a faint line in the color of a ship using it: each cargo ship's route loop, any new route waiting to replace it, and the leg it's sailing now. A lane shared by several ships is drawn once.
 - Only one popup open at a time; opening a new one closes the old one.
 
 ### 2. Ships screen
