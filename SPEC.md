@@ -48,8 +48,8 @@
 
 ## Lost ships and recovery boats
 - A ship at sea that runs out of fuel or hits 0% maintenance is lost. It stops where it is, gets a red "!" above it on the map and a red dot on the Ships screen, and a toast says so.
-- The Mammoth is a recovery boat ($2,000,000, at most 5). It's the biggest ship, as fast as a Trans Atlantic (6.35 nm/s), and the most expensive to run: 4,500 fuel units/s ($10,800/s) and $300,000 per 1% of repair.
-- The Buffalo is a smaller recovery boat ($250,000, but only $30,000 for the company's first ever Buffalo; at most 5), the size of a Trans Atlantic and as fast. It can only carry Scooter 20s, GE 100s, Greenline 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
+- The Mammoth is a recovery boat ($10,000,000, at most 5). It's the biggest ship, as fast as a Trans Atlantic (6.35 nm/s), and the most expensive to run: 4,500 fuel units/s ($10,800/s) and $300,000 per 1% of repair.
+- The Buffalo is a smaller recovery boat ($1,250,000, but only $150,000 for the company's first ever Buffalo; at most 5), the size of a Trans Atlantic and as fast. It can only carry Scooter 20s, GE 100s, Greenline 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
 - A lost ship's popup has a Send Recovery button. It shows the estimated cost (the recovery boat's fuel and repairs, including its trip home), which boat would go, where it would take the ship, and about how long. You choose whether it's worth it.
 - The nearest free boat that can carry the ship goes (the cheaper one if two are as near): one that's docked, not refueling, and not on a job. Boats sailing to their base count as busy. A boat only sets off if it has the fuel and maintenance to finish the job.
 - Auto-recovery ("Rescue" toggle in the ship popup, on for new ships): when the ship is lost, the cheapest capable free boat is sent automatically. If none is free, lost ships wait in a queue (longest-lost first) and the next free boat takes them.
@@ -65,7 +65,7 @@
 ## Company and ship levels (XP)
 - Every delivery (when unloading finishes) gives XP to the company and to the ship for the work done: units delivered × leg distance × 0.01, weighted by the commodity's base price against a container of toys (a ton of oil counts for less). It doesn't depend on the profit, so a trade at a loss still earns XP. Levelling is about twice as fast as before the trading update (company level costs, hub level costs and each model's first ship level all halved), so level 100 takes about 20 hours.
 - The company levels from 1 to 100 (Level and an XP bar in the top bar; toast on level-up with what it unlocked). Each level's cost is set so it takes roughly 3 minutes at level 1, rising to about 47 minutes at level 99, of what a full fleet at that level earns. So bigger ships don't make levels fly by, and level 100 takes about 40 hours (about 1 hour to level 10, 11 hours to 50, 24 hours to 75).
-- Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 10 (so 21 levels after unlocking). The Scooter 20 and GE 100 gain a slot every 2 levels instead (full 14 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 5. Level-up messages say which models got a slot ("+1 slot: Scooter 20, GE 100").
+- Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 8 (so 15 levels after unlocking). The Scooter 20 and GE 100 gain a slot every 2 levels instead (full 10 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 5. Level-up messages say which models got a slot ("+1 slot: Scooter 20, GE 100").
 - Models unlock by company level: Scooter 20 at 1, GE 100 at 5, Buffalo at 8, Greenline 200 at 12, Coastal at 15, Trans Atlantic and Mammoth at 25, Aframax at 35, Dominator at 50, Supertanker at 60. Ships already owned are kept even if they're above the current slots or unlocks.
 - Ships level from 0 to 30. A model's first level needs xp_first_level XP (Scooter 20: 100, GE 100: 1,250, Greenline 200: 6,000, Trans Atlantic: 75,000, Dominator: 900,000; growing faster than the price, so small ships level fastest), and each level after costs 5% more.
 - Each ship level gives a skill point, spent in the ship popup's Skills view on three paths of up to 10 levels each: Speed (+2% top speed per level), Durability (−5% wear and −5% chance of taking a random breakdown per level), and Gas efficiency (−3% fuel burn per level). Range on the route screen stays at the model's base range.
@@ -137,16 +137,16 @@
 - Six lines: container ships (Scooter 20, GE 100, Greenline 200, Trans Atlantic, Dominator), tankers (Coastal, Aframax, Supertanker), and new ore carriers (Laker L2, Panamax Bulker L20, Capesize L45), grain carriers (Grain Laker L8, Kamsarmax L28, Post-Panamax Bulker L52), livestock carriers (Cattle Coaster L12, Livestock Carrier L30, Ocean Shearer L55) and vehicle carriers (Car Hopper L18, Car Carrier L38, Giant Car Carrier L58), plus the recovery boats. The Scooter 20 now carries 20 containers (up from 15, with no change to its fuel use). Seaway-sized models (by length): Scooter, GE, Greenline, Coastal, Laker, Grain Laker, Cattle Coaster, Livestock Carrier, Car Hopper and the Buffalo (which can now also carry the small new models).
 | Model | Price | Speed (nm/s) | Capacity | Range per leg | Max owned |
 |---|---|---|---|---|---|
-| Scooter 20 | $2,500 | 5.44 | 20 | 490 nm (≈1 min 30 s) | 10 |
-| GE 100 | $25,000 | 4.82 | 100 | 760 nm (≈2 min 40 s) | 10 |
-| Greenline 200 | $100,000 | 3.27 | 200 | 1,175 nm (≈6 min) | 10 |
-| Trans Atlantic | $1,000,000 | 6.35 | 1,250 | 4,080 nm (Rome→New York is 4,073 nm) | 10 |
-| Dominator | $10,000,000 | 3.99 | 10,000 | 9,000 nm | 10 |
-| Buffalo | $250,000 | 6.35 | carries 1 lost Scooter 20, GE 100, Greenline 200 or Coastal | recovery jobs up to 8,000 nm | 5 |
-| Coastal (gas tanker) | $300,000 | 6.35 | 5,000 tons of fuel | 1,175 nm | 10 |
-| Aframax (gas tanker) | $3,000,000 | 5.40 | 50,000 tons of fuel | 4,080 nm | 10 |
-| Supertanker (gas tanker) | $30,000,000 | 4.59 | 500,000 tons of fuel | 9,000 nm | 10 |
-| Mammoth | $2,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 23,300 nm | 5 |
+| Scooter 20 | $12,500 | 5.44 | 20 | 490 nm (≈1 min 30 s) | 8 |
+| GE 100 | $125,000 | 4.82 | 100 | 760 nm (≈2 min 40 s) | 8 |
+| Greenline 200 | $500,000 | 3.27 | 200 | 1,175 nm (≈6 min) | 8 |
+| Trans Atlantic | $5,000,000 | 6.35 | 1,250 | 4,080 nm (Rome→New York is 4,073 nm) | 8 |
+| Dominator | $50,000,000 | 3.99 | 10,000 | 9,000 nm | 8 |
+| Buffalo | $1,250,000 | 6.35 | carries 1 lost Scooter 20, GE 100, Greenline 200 or Coastal | recovery jobs up to 8,000 nm | 5 |
+| Coastal (gas tanker) | $1,500,000 | 6.35 | 5,000 tons of fuel | 1,175 nm | 8 |
+| Aframax (gas tanker) | $15,000,000 | 5.40 | 50,000 tons of fuel | 4,080 nm | 8 |
+| Supertanker (gas tanker) | $150,000,000 | 4.59 | 500,000 tons of fuel | 9,000 nm | 8 |
+| Mammoth | $10,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 23,300 nm | 5 |
 
 | Model | Fuel tank (units) | Burn (units/s) | Wear (%/min) | Repair per 1% | Port stop |
 |---|---|---|---|---|---|
@@ -165,7 +165,7 @@
 - On the map each model is a differently sized and colored rectangle with a pointed bow. Smaller ships are drawn on top of bigger ones where they overlap (and a click there picks the smaller one). Colors by family, smallest to biggest: container ships yellow to red (Scooter 20, GE 100, Greenline 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Buffalo, Mammoth). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
 - The player can own at most 10 of each container ship and gas tanker, and 5 of each recovery boat, once the company level has opened all their slots.
 - Ship names must be unique (case-insensitive). No renaming in beta.
-- Selling: a docked ship (not lost, not on a recovery job) sells for 50% of what was paid for it × its maintenance (so a first Buffalo bought for $30,000 sells for up to $15,000), from the ship popup's Sell button (click again to confirm).
+- Selling: a docked ship (not lost, not on a recovery job) sells for 50% of what was paid for it × its maintenance (so a first Buffalo bought for $150,000 sells for up to $75,000), from the ship popup's Sell button (click again to confirm).
 - Newly bought ships spawn docked with no route at the port picked in the buy popup ("Launch at": the HQ, the default, or any hub).
 
 ## Screens
@@ -193,7 +193,7 @@
 - Only one popup open at a time; opening a new one closes the old one.
 
 ### 2. Ships screen
-- Scrolling list grouped by model (in shop order), each group under a divider with the model name, 5 tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
+- Scrolling list grouped by model (in shop order), each group under a divider with the model name, 4 tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
 - Each tile shows the ship's level ("Lv 7", in green with "+2" while it has upgrade points to spend).
 - Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); red = docked (paused at a port, no route, or held in port).
 - Clicking a tile opens the ship popup.
@@ -213,7 +213,7 @@
 ### 3. Shop screen
 - Three sections, "Container ships", "Gas tankers" and "Recovery boats", each a grid of compact cards up to 5 across (as many as fit beside the activity log: 5 at the default window, so 5 container ships, then 3 tankers, then 2 recovery boats, cheapest first), one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10"). Each section title fades letter by letter through its models' map colors, smallest ship first, and each card's name is in its model's map color (dark colors brightened a little so they read on the cards).
 - Each card shows owned / slots at the current level (and the max, while it can still grow). A full model shows "Next slot at level N"; a locked model shows "Unlocks at level N". A red dot sits on each Buy button that can be used right now (unlocked, a free slot, and affordable).
-- A model with a first-purchase price shows it on the card ("$30,000 for your first, then $250,000"). Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it: hovering it then shows a small note straight away, "You can't afford this ship ($1,300 short)." Shows "Limit reached" at the ownership limit.
+- A model with a first-purchase price shows it on the card ("$150,000 for your first, then $1,250,000"). Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it: hovering it then shows a small note straight away, "You can't afford this ship ($1,300 short)." Shows "Limit reached" at the ownership limit.
 
 ### 4. Route Assignment screen
 - Full-screen gray version of the map; no top bar or nav bar. The side panel shows the ship's current route, its range, and the port it starts from.

@@ -7,7 +7,7 @@ extends Control
 enum Sort { NAME, STATUS, PROFIT }
 enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY }
 
-const COLUMNS := 5
+const COLUMNS := 4
 const TILE_GAP := 12
 const SORT_NAMES := {Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit"}
 const FILTER_NAMES := {
