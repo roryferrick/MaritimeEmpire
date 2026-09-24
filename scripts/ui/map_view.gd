@@ -327,7 +327,7 @@ func _click(screen_pos: Vector2) -> void:
 			nearest_dist = dist
 			nearest_port = port.id
 	if show_ships:
-		for ship in GameState.ships:
+		for ship in _ships_topmost_first():
 			var dist := ship_screen_position(ship).distance_to(screen_pos)
 			if dist <= SHIP_HIT_RADIUS and dist < nearest_dist:
 				nearest_dist = dist
@@ -557,12 +557,13 @@ func _draw_hub_alerts() -> void:
 
 
 ## Ships at sea are rectangles with a pointed bow; docked ships are small dots.
+## Smaller ships are drawn over bigger ones.
 ## Ships riding on a recovery boat are drawn after it, so they sit in its
 ## middle. Lost ships get a red "!" above them, and ships that won't make it
 ## to port an amber one.
 func _draw_ships() -> void:
 	var outline := _color(&"ship_outline")
-	for ship in GameState.ships:
+	for ship in _ships_biggest_first():
 		if not ship.is_carried():
 			_draw_ship(ship, outline)
 	for ship in GameState.ships:
@@ -574,6 +575,27 @@ func _draw_ships() -> void:
 			_draw_marker(ship_screen_position(ship), _color(&"lost_marker"))
 		elif ship.at_risk:
 			_draw_marker(ship_screen_position(ship), _color(&"at_risk_marker"))
+
+
+## Ships top-drawn first, so a click on overlapping ships picks the one on top.
+func _ships_topmost_first() -> Array[Ship]:
+	var order := _ships_biggest_first()
+	order.reverse()
+	return order
+
+
+## Ships in drawing order: biggest (by map length) first, so smaller ships are
+## drawn on top of bigger ones; same-sized ships keep their fleet order.
+func _ships_biggest_first() -> Array[Ship]:
+	var order: Array[Ship] = GameState.ships.duplicate()
+	var index := {}
+	for i in order.size():
+		index[order[i]] = i
+	order.sort_custom(func(a: Ship, b: Ship) -> bool:
+		var length_a := float(a.model().get("map_size", [0])[0])
+		var length_b := float(b.model().get("map_size", [0])[0])
+		return length_a > length_b if length_a != length_b else index[a] < index[b])
+	return order
 
 
 func _draw_ship(ship: Ship, outline: Color) -> void:

@@ -21,7 +21,7 @@
 - Payment for every leg, credited when the ship finishes unloading at the far port: containers (the ship's capacity) × leg distance in nm × $0.6125. The rate is tuned so a Scooter 10 earns about $2,000 per minute of sailing; Rome→Tunis pays a Scooter 10 about $2,000.
 - Every delivery adds the ship's capacity to the "Containers delivered" total.
 - Fuel costs $2.40 per unit at every port (game_config.json). Fuel costs about 40% of a leg's pay, and repairs about 10%.
-- When a ship leaves a port, a toast shows what it sold its cargo for and its profit there (sale − (fuel + repair)).
+- When a ship leaves a port, the activity log shows its profit there (sale − (fuel + repair)).
 - Endless sandbox — no win condition.
 
 ## Fuel, maintenance and port stops
@@ -74,15 +74,16 @@
 ## World
 - The whole Earth, drawn flat in Web Mercator, wrapping east–west. Pan with drag, zoom with the mouse wheel, from the whole world down to a close view of a harbor.
 - Map art: blue sea, sandy land with a darker coastline, thin country borders, lakes (drawn as water with a shoreline; islands in them are land), thin blue rivers (the biggest show zoomed out, smaller ones appear as you zoom in; visual only, ships don't sail them), and country names that appear as you zoom in (placeholder colors, all in the theme). Built from Natural Earth public-domain data by tools/build_map_data.gd.
-- 173 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
+- 200 real ports, in data/ports.json with real latitude/longitude, ranked roughly by container volume:
   - The world's biggest container ports (the top 100, plus the next several so that 100 are new beyond the original Mediterranean set). Ranks 1–25 follow the published 2023 figures; the rest follow recent Lloyd's List rankings as best known (the full list is paywalled), so a few borderline ports may differ from the official list.
   - The 18 biggest Mediterranean container ports, plus Rome (Civitavecchia) and Tunis (Radès).
   - Mediterranean islands: Limassol (Cyprus), Palermo (Sicily), Cagliari (Sardinia), Bastia (Corsica), Palma (Mallorca).
   - Also: Boston, Miami, Monterey, Anchorage, Seattle-Tacoma, Cabo San Lucas.
   - Added for coverage: New Orleans, Havana, Port-au-Prince, San Juan, Bridgetown, Cancun, Puerto Quetzal (Guatemala), Puntarenas (Costa Rica), Puerto Ayora (Galapagos); Honolulu, Nawiliwili (Kauai), Apia (Samoa), Pago Pago (American Samoa), Nuku'alofa (Tonga), Suva (Fiji), Papeete (French Polynesia), Auckland, Wellington, Apra Harbor (Guam), Port Moresby, Cebu, Muara (Brunei); Toamasina (Madagascar), Praia (Cabo Verde); Dublin, Douglas (Isle of Man), Reykjavik, Nuuk, Juneau, Dutch Harbor (Aleutians); Gothenburg, Oslo, Copenhagen, Aarhus, Bergen, Tallinn, Riga, Klaipeda; Durres; Constanta, Odesa, Novorossiysk.
+  - Added to reach 200: Saint-Pierre, Portland (Maine), Nain (Labrador), Hamilton (Bermuda), Ponta Delgada and Faja Grande (Azores), Funchal (Madeira), Porto, Nantes-Saint-Nazaire; Portland (Oregon), Hilo and Kawaihae (Big Island of Hawaii), Malakal (Palau), Vladivostok, Korsakov (Sakhalin), Magadan, Petropavlovsk-Kamchatsky; Rio de Janeiro, Salvador, Fortaleza, Buenaventura, Antofagasta, Punta Arenas; Banjul, Freetown, Luanda, Maputo.
 - The map opens centered on the company's home port (45 degrees of longitude across); the route screen opens centered on the ship.
 - Ports are white circles with names; when names would overlap, the bigger port's name wins and the other shows on zoom.
-- Ships follow real sea lanes around land, pre-computed for every pair of ports (14,878 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, the Bosphorus to the Black Sea, the Mississippi to New Orleans, Icy Strait to Juneau, the Oslofjord, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
+- Ships follow real sea lanes around land, pre-computed for every pair of ports (19,900 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, the Bosphorus to the Black Sea, the Mississippi to New Orleans, Icy Strait to Juneau, the Oslofjord, the Columbia River to Portland, the Strait of Magellan, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
 
 ## Ship models (data file)
 | Model | Price | Speed (nm/s) | Capacity | Range per leg | Max owned |
@@ -96,7 +97,7 @@
 | Coastal (gas tanker) | $300,000 | 6.35 | 5,000 tons of fuel | 1,175 nm | 10 |
 | Aframax (gas tanker) | $3,000,000 | 5.40 | 50,000 tons of fuel | 4,080 nm | 10 |
 | Supertanker (gas tanker) | $30,000,000 | 4.59 | 500,000 tons of fuel | 9,000 nm | 10 |
-| Mammoth | $2,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 23,200 nm | 5 |
+| Mammoth | $2,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 23,300 nm | 5 |
 
 | Model | Fuel tank (units) | Burn (units/s) | Wear (%/min) | Repair per 1% | Port stop |
 |---|---|---|---|---|---|
@@ -109,11 +110,11 @@
 | Coastal | 50,500 | 265 | 1 | $9,500 | 15 s |
 | Aframax | 1,830,000 | 2,250 | 1 | $81,000 | 30 s |
 | Supertanker | 41,300,000 | 19,125 | 0.5 | $1,375,000 | 1 min |
-| Mammoth | 20,300,000 | 4,500 | 0.5 | $300,000 | 10 s |
+| Mammoth | 20,400,000 | 4,500 | 0.5 | $300,000 | 10 s |
 - Gas tankers carry fuel as paid cargo: $0.05 per ton per nm (container ships: $0.6125 per container per nm), paid when unloading finishes like any cargo. Each size carries 10x the last and is 15% slower. They earn a little more per dollar of price than the container ships nearest them in price (Coastal about $95k a minute gross, Aframax $810k, Supertanker $6.9M), with fuel still about 40% and repairs 10% of pay. They're the size of the Greenline 200, Trans Atlantic and Dominator, and their deliveries don't count toward "Containers delivered".
 - Speeds keep a 30 : 20 : 18 : 35 : 22 ratio, scaled so a Scooter 10 sails Rome→Tunis (324.9 nm) in about 60 s. A Dominator's longest leg (9,000 nm) takes about 42 minutes with wear.
 - Range is the longest single leg a ship can sail at 100% maintenance. It's enforced when assigning routes; fuel is checked again at every departure.
-- On the map each model is a differently sized and colored rectangle with a pointed bow. Colors by family, smallest to biggest: container ships yellow to red (Scooter 10, GE 100, Greenline 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Buffalo, Mammoth). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
+- On the map each model is a differently sized and colored rectangle with a pointed bow. Smaller ships are drawn on top of bigger ones where they overlap (and a click there picks the smaller one). Colors by family, smallest to biggest: container ships yellow to red (Scooter 10, GE 100, Greenline 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Buffalo, Mammoth). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
 - The player can own at most 10 of each container ship and gas tanker, and 5 of each recovery boat, once the company level has opened all their slots.
 - Ship names must be unique (case-insensitive). No renaming in beta.
 - Selling: a docked ship (not lost, not on a recovery job) sells for 50% of its price × its maintenance, from the ship popup's Sell button (click again to confirm).
@@ -192,8 +193,8 @@
 - Pause behavior: a ship paused at sea continues to its next port and stays docked there. Go resumes the route from that port.
 
 ## Activity log
-- Messages go into an activity log down the left of the game screen (272 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text (size 7, chosen so about 90% of messages fit on one line; long port names can wrap to two), each with the play time it happened (e.g. "02:10"). Text is in the color of the ship it's about (lightened if too dark to read; company-wide messages stay white). Bad news (breakdowns, lost ships, ships held in port or that won't make it) has a red highlight behind it; good news (level-ups, recoveries) a green one. It keeps the last 100 messages and starts empty each session.
-- Messages, e.g. "Sea Otter left Tunis: sold $1,990, profit $990", "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000".
+- Messages go into an activity log down the left of the game screen (272 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text (size 8; about three-quarters of messages fit on one line, and longer ones like "held at" warnings wrap to two), each with the play time it happened (e.g. "02:10"). Text is in the color of the ship it's about (lightened if too dark to read; company-wide messages stay white). Bad news (breakdowns, lost ships, ships held in port or that won't make it) has a red highlight behind it; good news (level-ups, recoveries) a green one. It keeps the last 100 messages and starts empty each session.
+- Messages, e.g. "Sea Otter left Tunis: profit $990" (the sale and costs are in the ship popup and Finances), "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000".
 
 ## Explicitly NOT in beta
 - Crew wages, port fees, fuel prices that differ by port, cargo types, upgrades, speed controls, achievements, renaming ships, offline progress, audio, mobile, multiplayer and clans.

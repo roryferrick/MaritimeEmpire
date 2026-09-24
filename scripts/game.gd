@@ -142,7 +142,7 @@ func _on_ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, r
 	var port := GameData.port_name(port_id)
 	var costs := fuel_cost + repair_cost
 	if sale > 0:
-		ActivityLog.add("%s left %s: sold %s, profit %s" % [ship.name, port, Fmt.money(sale), Fmt.money(sale - costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+		ActivityLog.add("%s left %s: profit %s" % [ship.name, port, Fmt.money(sale - costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 	else:
 		ActivityLog.add("%s left %s: fuel and repairs %s" % [ship.name, port, Fmt.money(-costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
