@@ -1,8 +1,8 @@
 class_name ShipPopup
 extends AnchoredPopup
-## A ship's stats, live status, bars and route, with the repair/refuel/rescue
-## toggles, Assign Route, Pause/Go and Sell. Lost ships get a Send Recovery
-## button; recovery boats have no route controls. Cargo ships show their level,
+## A ship's stats, live status, bars and route, with the repair, refuel, rescue
+## and full-load toggles, Assign Route, Pause/Go and Sell. Lost ships get a Send
+## Recovery button; recovery boats have no route controls. Cargo ships show their level,
 ## and the Upgrades button (red dot while points are unspent) swaps the bars
 ## for spending upgrade points on the skill paths.
 
@@ -53,6 +53,7 @@ func _ready() -> void:
 	%RepairToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_repair(ship, on))
 	%RefuelToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_refuel(ship, on))
 	%RescueToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_recover(ship, on))
+	%FullToggle.toggled.connect(func(on: bool) -> void: GameState.set_full_loads(ship, on))
 	%SellButton.pressed.connect(_on_sell_pressed)
 	GameState.ship_sold.connect(func(sold: Ship, _price: int) -> void:
 		if sold == ship:
@@ -226,7 +227,9 @@ func _refresh() -> void:
 	%RepairToggle.set_pressed_no_signal(ship.auto_repair)
 	%RefuelToggle.set_pressed_no_signal(ship.auto_refuel)
 	%RescueToggle.set_pressed_no_signal(ship.auto_recover)
+	%FullToggle.set_pressed_no_signal(ship.full_loads)
 	%RescueToggle.visible = not ship.is_recovery()
+	%FullToggle.visible = not ship.is_recovery()
 	%AssignButton.visible = not ship.is_recovery()
 	%PauseButton.visible = not ship.is_recovery()
 	%RouteLabel.visible = not ship.is_recovery()

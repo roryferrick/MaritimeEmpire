@@ -137,6 +137,13 @@ size_flags_horizontal = 3
 tooltip_text = "Auto-recovery: if this ship is lost at sea, send the cheapest free recovery boat that can carry it (waiting for one if none is free)."
 text = "Rescue"
 
+[node name="FullToggle" type="CheckButton" parent="Content/Toggles"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Full loads: wait in port until it can buy a full hold before leaving, instead of sailing with a part load."
+text = "Full"
+
 [node name="CostLabel" type="Label" parent="Content"]
 unique_name_in_owner = true
 layout_mode = 2

@@ -536,6 +536,11 @@ func set_auto_recover(ship: Ship, on: bool) -> void:
 	ship_changed.emit(ship)
 
 
+func set_full_loads(ship: Ship, on: bool) -> void:
+	ship.full_loads = on
+	ship_changed.emit(ship)
+
+
 ## Why a ship can't be sold right now, or "".
 func sell_error(ship: Ship) -> String:
 	if ship.is_lost():
@@ -760,7 +765,8 @@ func _sell_cargo(ship: Ship) -> void:
 ## Buys the most profitable cargo the ship can carry to its next port (see
 ## Market.best_cargo()): a full hold (less what a canal makes it leave behind),
 ## or as much as the money allows while keeping the fleet's fuel reserve (see
-## fuel_reserve()). Nothing if no cargo makes a profit.
+## fuel_reserve()), unless full loads are on, when it buys nothing short of a
+## full hold. Nothing if no cargo makes a profit.
 func _load_cargo(ship: Ship, to: String) -> void:
 	if ship.is_recovery() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return
@@ -771,7 +777,7 @@ func _load_cargo(ship: Ship, to: String) -> void:
 	var fuel_reserve := fuel_reserve()
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
 	var quantity := mini(room, floori((float(money) - ship.bill - fuel_reserve) / price))
-	if quantity <= 0:
+	if quantity <= 0 or (ship.full_loads and quantity < room):
 		return
 	var cost := roundi(quantity * price)
 	money -= cost
@@ -839,8 +845,33 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 			else:
 				_set_hold(ship, "waiting for money to buy fuel for %s" % destination)
 			return
+	if _waiting_for_load(ship, to):
+		return
 	_set_hold(ship, "")
 	_depart(ship, to)
+
+
+## With full loads on, a cargo ship with an empty hold stays in port until it
+## can buy a full one (see _load_cargo()), saying why in its load_wait.
+func _waiting_for_load(ship: Ship, to: String) -> bool:
+	if not ship.is_recovery() and ship.full_loads and ship.cargo_id.is_empty():
+		_load_cargo(ship, to)
+	if ship.is_recovery() or not ship.full_loads or not ship.cargo_id.is_empty():
+		_set_load_wait(ship, "")
+		return false
+	_set_hold(ship, "")
+	var destination := GameData.port_name(to)
+	if market.best_cargo(ship.model(), ship.docked_at, to)[0] == "":
+		_set_load_wait(ship, "waiting for a full load: no cargo makes a profit to %s" % destination)
+	else:
+		_set_load_wait(ship, "waiting for money for a full load to %s" % destination)
+	return true
+
+
+func _set_load_wait(ship: Ship, reason: String) -> void:
+	if ship.load_wait != reason:
+		ship.load_wait = reason
+		ship_changed.emit(ship)
 
 
 func _set_hold(ship: Ship, reason: String) -> void:
@@ -878,6 +909,7 @@ func _leave_port(ship: Ship) -> void:
 	ship.stop_repair_cost = 0.0
 	ship.dock_time = -1.0
 	ship.hold_reason = ""
+	ship.load_wait = ""
 
 
 # --- Canals ----------------------------------------------------------------

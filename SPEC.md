@@ -43,13 +43,14 @@
   - With auto-repair on, maintenance refills to 100% over the first 5 s, paid as it goes. With auto-refuel on, the tank refills over the next 5 s. The Scooter 20 does each in 2.5 s to fit its 5 s stop.
   - The ship can leave when the stop ends.
 - Auto-repair, auto-refuel and auto-recovery are per-ship toggles in the ship popup, all on for new ships (and for saved ships from before a toggle existed).
+- Full loads (the ship popup's Full toggle, on for new and saved cargo ships): a ship only buys a full hold (less anything a canal makes it leave behind), never a part load, and with an empty hold it waits in port until it can afford one ("Docked at Rome — waiting for money for a full load to Marsaxlokk", or "... no cargo makes a profit to ..." if nothing pays on that leg). Waiting isn't treated as a problem (no red dot or log message). With it off, a ship buys as much as the money allows and sails.
 - A ship only leaves if it has enough fuel for the whole next leg (plus 1 s spare), allowing for the wear it will pick up on the way. So only a breakdown can leave it stranded at sea. Otherwise it is held in port (red dot, a toast, and the reason in its status): refuel is off, it's waiting for money, it's too worn to make the leg on a full tank (turn on repair), or the leg is beyond its range (for routes set before ranges shrank; assign a new one).
 - Money never goes below $0. Refills buy what the player can afford, and held ships keep buying as money comes in, until they have enough fuel (with auto-refuel on, until the tank is full or the money runs out).
 
 ## Lost ships and recovery boats
 - A ship at sea that runs out of fuel or hits 0% maintenance is lost. It stops where it is, gets a red "!" above it on the map and a red dot on the Ships screen, and a toast says so.
-- The Mammoth is a recovery boat ($10,000,000, at most 5). It's the biggest ship, as fast as a Trans Atlantic (6.35 nm/s), and the most expensive to run: 4,500 fuel units/s ($10,800/s) and $300,000 per 1% of repair.
-- The Buffalo is a smaller recovery boat ($1,250,000, but only $150,000 for the company's first ever Buffalo; at most 5), the size of a Trans Atlantic and as fast. It can only carry Scooter 20s, GE 100s, Greenline 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
+- The Mammoth is a recovery boat ($10,000,000, at most 8). It's the biggest ship, as fast as a Trans Atlantic (6.35 nm/s), and the most expensive to run: 4,500 fuel units/s ($10,800/s) and $300,000 per 1% of repair.
+- The Buffalo is a smaller recovery boat ($1,250,000, but only $150,000 for the company's first ever Buffalo; at most 8), the size of a Trans Atlantic and as fast. It can only carry Scooter 20s, GE 100s, Greenline 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
 - A lost ship's popup has a Send Recovery button. It shows the estimated cost (the recovery boat's fuel and repairs, including its trip home), which boat would go, where it would take the ship, and about how long. You choose whether it's worth it.
 - The nearest free boat that can carry the ship goes (the cheaper one if two are as near): one that's docked, not refueling, and not on a job. Boats sailing to their base count as busy. A boat only sets off if it has the fuel and maintenance to finish the job.
 - Auto-recovery ("Rescue" toggle in the ship popup, on for new ships): when the ship is lost, the cheapest capable free boat is sent automatically. If none is free, lost ships wait in a queue (longest-lost first) and the next free boat takes them.
@@ -65,7 +66,7 @@
 ## Company and ship levels (XP)
 - Every delivery (when unloading finishes) gives XP to the company and to the ship for the work done: units delivered × leg distance × 0.01, weighted by the commodity's base price against a container of toys (a ton of oil counts for less). It doesn't depend on the profit, so a trade at a loss still earns XP. Levelling is about twice as fast as before the trading update (company level costs, hub level costs and each model's first ship level all halved), so level 100 takes about 20 hours.
 - The company levels from 1 to 100 (Level and an XP bar in the top bar; toast on level-up with what it unlocked). Each level's cost is set so it takes roughly 3 minutes at level 1, rising to about 47 minutes at level 99, of what a full fleet at that level earns. So bigger ships don't make levels fly by, and level 100 takes about 40 hours (about 1 hour to level 10, 11 hours to 50, 24 hours to 75).
-- Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 8 (so 15 levels after unlocking). The Scooter 20 and GE 100 gain a slot every 2 levels instead (full 10 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 5. Level-up messages say which models got a slot ("+1 slot: Scooter 20, GE 100").
+- Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 8 (so 15 levels after unlocking). The Scooter 20 and GE 100 gain a slot every 2 levels instead (full 10 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 8. Level-up messages say which models got a slot ("+1 slot: Scooter 20, GE 100").
 - Models unlock by company level: Scooter 20 at 1, GE 100 at 5, Buffalo at 8, Greenline 200 at 12, Coastal at 15, Trans Atlantic and Mammoth at 25, Aframax at 35, Dominator at 50, Supertanker at 60. Ships already owned are kept even if they're above the current slots or unlocks.
 - Ships level from 0 to 30. A model's first level needs xp_first_level XP (Scooter 20: 100, GE 100: 1,250, Greenline 200: 6,000, Trans Atlantic: 75,000, Dominator: 900,000; growing faster than the price, so small ships level fastest), and each level after costs 5% more.
 - Each ship level gives a skill point, spent in the ship popup's Skills view on three paths of up to 10 levels each: Speed (+2% top speed per level), Durability (−5% wear and −5% chance of taking a random breakdown per level), and Gas efficiency (−3% fuel burn per level). Range on the route screen stays at the model's base range.
@@ -142,11 +143,11 @@
 | Greenline 200 | $500,000 | 3.27 | 200 | 1,175 nm (≈6 min) | 8 |
 | Trans Atlantic | $5,000,000 | 6.35 | 1,250 | 4,080 nm (Rome→New York is 4,073 nm) | 8 |
 | Dominator | $50,000,000 | 3.99 | 10,000 | 9,000 nm | 8 |
-| Buffalo | $1,250,000 | 6.35 | carries 1 lost Scooter 20, GE 100, Greenline 200 or Coastal | recovery jobs up to 8,000 nm | 5 |
+| Buffalo | $1,250,000 | 6.35 | carries 1 lost Scooter 20, GE 100, Greenline 200 or Coastal | recovery jobs up to 8,000 nm | 8 |
 | Coastal (gas tanker) | $1,500,000 | 6.35 | 5,000 tons of fuel | 1,175 nm | 8 |
 | Aframax (gas tanker) | $15,000,000 | 5.40 | 50,000 tons of fuel | 4,080 nm | 8 |
 | Supertanker (gas tanker) | $150,000,000 | 4.59 | 500,000 tons of fuel | 9,000 nm | 8 |
-| Mammoth | $10,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 23,300 nm | 5 |
+| Mammoth | $10,000,000 | 6.35 | carries 1 lost ship | recovery jobs up to 23,300 nm | 8 |
 
 | Model | Fuel tank (units) | Burn (units/s) | Wear (%/min) | Repair per 1% | Port stop |
 |---|---|---|---|---|---|
@@ -236,7 +237,7 @@
 ### Ship popup (openable from map, Ships screen, and port popups)
 - Name (top) with an Upgrades button (showing unspent points, with a red dot while there are any) and X; Model, current speed (with top speed), range, capacity, and level with XP into it (cargo ships).
 - The Upgrades button swaps the bars and toggles for the three skill paths (10 pips each, the bonus so far, and a + button to spend a point). Paths are listed Speed, Efficiency, Durability.
-- Maintenance, Fuel and Cargo bars with live values (recovery boats: Tow instead of Cargo), then the Repair, Refuel and Rescue (auto-recovery) toggles. While docked: this stop's summary, e.g. "Sold $1,990 · Fuel −$800 · Repair −$200 / Profit $990".
+- Maintenance, Fuel and Cargo bars with live values (recovery boats: Tow instead of Cargo), then the Repair, Refuel, Rescue (auto-recovery) and Full (full loads) toggles. While docked: this stop's summary, e.g. "Sold $1,990 · Fuel −$800 · Repair −$200 / Profit $990".
 - Lost ships: a Send Recovery button (see Lost ships and recovery boats).
 - Status: e.g. "Docked at Rome" (with "(no route)", "(paused)", or why it's held when relevant), "Unloading at Tunis" / "Loading at Tunis", "En route to Tunis — 40%", "Stopping at Tunis" (paused while at sea). In a canal: "In Gatún Locks (chamber 2 of 3), rising — to Balboa", "In Pedro Miguel Locks, waiting for Miraflores Locks", "Waiting for Gatún Locks (2nd in line)", "Waiting for toll money at the Panama Canal". A stop's summary includes the toll paid on the leg that brought the ship there.
 - Current route listed if one exists.

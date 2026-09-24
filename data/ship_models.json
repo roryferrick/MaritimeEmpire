@@ -472,7 +472,7 @@
 			"dock_s": 10,
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.68,
-			"max_owned": 5,
+			"max_owned": 8,
 			"map_size": [19.5, 6.75],
 			"map_color": "#c49a6c"
 		},
@@ -493,7 +493,7 @@
 			"dock_s": 10,
 			"refill_phase_s": 5,
 			"breakdown_factor": 0.59,
-			"max_owned": 5,
+			"max_owned": 8,
 			"map_size": [30, 11.25],
 			"map_color": "#6b4226"
 		}

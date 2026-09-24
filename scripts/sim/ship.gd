@@ -108,6 +108,11 @@ var delivery_canals: Array[String] = []
 var lost_reason := ""
 ## Send the cheapest capable recovery boat automatically when lost.
 var auto_recover := true
+## Wait in port until it can buy a full hold before leaving (cargo ships).
+var full_loads := true
+## Why it is waiting in port for a full load ("waiting for money for a full
+## load"), or "". Not a problem, so not a hold.
+var load_wait := ""
 ## When it was lost, relative to other lost ships (lower = earlier), for the recovery queue.
 var lost_order := 0
 ## At sea without the fuel (or maintenance) to reach the end of its leg.
@@ -527,6 +532,8 @@ func status_text() -> String:
 			text += " (paused)"
 		elif is_held():
 			text += " — %s" % hold_reason
+		elif not load_wait.is_empty():
+			text += " — %s" % load_wait
 		return text
 	var destination := GameData.port_name(to_port)
 	if not canal.is_empty():
@@ -688,6 +695,7 @@ func to_dict() -> Dictionary:
 		"tow_port": tow_port,
 		"base_port": base_port,
 		"auto_recover": auto_recover,
+		"full_loads": full_loads,
 		"lost_order": lost_order,
 		"sea_time": sea_time,
 		"ledger": ledger,
@@ -747,6 +755,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.tow_port = data.get("tow_port", "")
 	ship.base_port = data.get("base_port", "")
 	ship.auto_recover = bool(data.get("auto_recover", true))
+	ship.full_loads = bool(data.get("full_loads", true))
 	ship.lost_order = int(data.get("lost_order", 0))
 	ship.sea_time = float(data.get("sea_time", 0.0))
 	var saved_ledger: Dictionary = data.get("ledger", {})
