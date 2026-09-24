@@ -15,7 +15,7 @@
 - Saves record port and model ids, so renaming models or adding ports keeps existing saves working; removing or renaming a port id does not.
 
 ## Economy & time
-- Starting money: $150,000 (enough for a first ship and its first cargoes). Saves from before trading can't be loaded.
+- Starting money: $500,000 (enough for a few ships and their first cargoes). Saves from before trading can't be loaded.
 - NOT an idle game (for beta): time only passes while the game is open, at a constant speed, or 2x or 4x with fast forward (see Top bar).
 - On quit, the game saves and the world freezes. On Continue, everything resumes exactly where it left off. Ships do not move and no money is earned while the game is closed.
 - Ships trade (see Trading): they buy a commodity at one port and sell it at the next. Profit is the price difference, less fuel, repairs and canal tolls.
