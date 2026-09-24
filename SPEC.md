@@ -52,7 +52,7 @@
   - At the ship's destination, it unloads and is paid as usual.
   - Back at its origin, it gets no pay. It docks (repair and refuel as its toggles say) and tries the leg again.
 - The Mammoth then docks there (repair and refuel like any ship), sails home, and waits for the next job. Its bars show maintenance, fuel, and "Tow" (the ship it's carrying).
-- Recovery boats have no route and no Assign Route or Pause buttons, and never break down at random. What they spend from being sent until they've refilled back at home is charged to the ship they recovered.
+- Recovery boats have no route and no Assign Route or Pause buttons, and never break down at random. They pay their own fuel and repairs: those show on the recovery boat's own line in the Finances tab.
 
 ## Company and ship levels (XP)
 - Every delivery (when unloading finishes) gives XP to the company and to the ship in proportion to its pay: pay ÷ $0.6125 ÷ 100, which for container ships is containers × leg distance (nm) ÷ 100. Rome→Tunis in a Scooter 10 gives about 32 XP. Ships carried back to their origin earn nothing; recovery boats earn no XP.
@@ -130,6 +130,7 @@
 ### 1. World (map) screen
 - Pan (drag) and zoom (mouse wheel) supported.
 - Ports are clickable circles; ships are clickable pointed rectangles moving along their routes.
+- A "Routes" switch in the map's top-right corner (on by default, saved with the game) draws every sea lane the fleet uses as a faint line in the color of a ship using it: each cargo ship's route loop, any new route waiting to replace it, and the leg it's sailing now. A lane shared by several ships is drawn once.
 - Only one popup open at a time; opening a new one closes the old one.
 
 ### 2. Ships screen
@@ -141,13 +142,13 @@
 - An "Upgrade all (N)" button spends every ship's upgrade points at once, round-robin: each point goes to the ship's lowest skill path, ties in the order speed, efficiency, durability (so speed 1, efficiency 1, durability 1, speed 2, ... up to all 30). Greyed out when there are none.
 
 ### Finances screen
-- Totals for the last 10 minutes and all time: cargo income, fuel, repairs, recoveries, ships bought, ships sold, and operating profit (income − fuel − repairs − recoveries).
-- A table of every ship: model, income, fuel, repairs, recoveries, lifetime profit and profit over the last 10 minutes. Click a column to sort. Refreshes every second.
+- Totals for the last 10 minutes and all time: cargo income, fuel, repairs, ships bought, ships sold, and operating profit (income − fuel − repairs).
+- A table of every ship: model, income, fuel, repairs, lifetime profit and profit over the last 10 minutes. Click a column to sort. Refreshes every second.
 - The totals and the 10-minute window are saved with the game.
 
 ### 3. Shop screen
 - Three sections, "Container ships", "Gas tankers" and "Recovery boats", each a grid of compact cards up to 5 across (as many as fit beside the activity log: 5 at the default window, so 5 container ships, then 3 tankers, then 2 recovery boats, cheapest first), one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10").
-- Each card shows owned / slots at the current level (and the max, while it can still grow). A full model shows "Next slot at level N"; a locked model shows "Unlocks at level N".
+- Each card shows owned / slots at the current level (and the max, while it can still grow). A full model shows "Next slot at level N"; a locked model shows "Unlocks at level N". A red dot sits on each Buy button that can be used right now (unlocked, a free slot, and affordable).
 - Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it; shows "Limit reached" at the ownership limit.
 
 ### 4. Route Assignment screen

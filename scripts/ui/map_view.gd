@@ -38,6 +38,9 @@ const BOW_LENGTH_FACTOR := 0.6
 const LOST_MARKER_SIZE := 26
 ## How far above a lost ship its "!" sits.
 const LOST_MARKER_OFFSET := 12.0
+## The faint route lanes drawn with show_active_lanes.
+const ACTIVE_LANE_ALPHA := 0.3
+const ACTIVE_LANE_WIDTH := 1.5
 
 const FALLBACK_COLORS := {
 	&"ocean": Color(0.16, 0.36, 0.56),
@@ -76,6 +79,12 @@ const FALLBACK_COLORS := {
 
 ## Draw the player's ships and let them be clicked.
 @export var show_ships := false
+## With show_ships: draw every lane the fleet's routes use, faintly, in each
+## ship's color.
+var show_active_lanes := false:
+	set(value):
+		show_active_lanes = value
+		_overlay.queue_redraw()
 
 ## Port ids drawn as a looping route along its sea lanes, each stop numbered.
 var route: Array[String] = []:
@@ -369,6 +378,8 @@ func _draw_overlay() -> void:
 	var placed_labels: Array[Rect2] = []
 	var port_labels := _place_port_labels(placed_labels)
 	_draw_country_labels(placed_labels)
+	if show_ships and show_active_lanes:
+		_draw_active_lanes()
 	_draw_route()
 	_draw_ports(port_labels)
 	if show_ships:
@@ -470,7 +481,32 @@ func _draw_route() -> void:
 		_overlay.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 
 
-func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool) -> void:
+## Every lane the fleet sails: each cargo ship's route loop, any route waiting
+## to replace it, and the leg it's on now. A lane shared by several ships is
+## drawn once, in the first one's color.
+func _draw_active_lanes() -> void:
+	var lanes := {}  # "A-B" (sorted) -> [from, to, color]
+	for ship in GameState.ships:
+		if ship.is_recovery():
+			continue
+		var color := Color.from_string(ship.model().get("map_color", "#ffffff"), Color.WHITE)
+		color.a = ACTIVE_LANE_ALPHA
+		var legs: Array = []
+		for stops: Array[String] in [ship.route, ship.pending_route]:
+			for i in stops.size():
+				if stops.size() >= 2:
+					legs.append([stops[i], stops[(i + 1) % stops.size()]])
+		if not ship.is_docked() and not ship.is_on_job():
+			legs.append([ship.from_port, ship.to_port])
+		for leg: Array in legs:
+			var key := "%s-%s" % ([leg[0], leg[1]] if leg[0] < leg[1] else [leg[1], leg[0]])
+			if not lanes.has(key):
+				lanes[key] = [leg[0], leg[1], color]
+	for lane: Array in lanes.values():
+		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH)
+
+
+func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, width := 2.5) -> void:
 	var sea_lane = GameData.lane(from_port, to_port)
 	if sea_lane == null:
 		return
@@ -482,9 +518,9 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool) 
 		points.append(size / 2.0 + Vector2(p.x + shift - _center.x, _center.y - p.y) * _zoom)
 	if dashed:
 		for i in range(1, points.size()):
-			_overlay.draw_dashed_line(points[i - 1], points[i], color, 2.5, 8.0)
+			_overlay.draw_dashed_line(points[i - 1], points[i], color, width, 8.0)
 	else:
-		_overlay.draw_polyline(points, color, 2.5, true)
+		_overlay.draw_polyline(points, color, width, true)
 
 
 ## Ships at sea are rectangles with a pointed bow; docked ships are small dots.

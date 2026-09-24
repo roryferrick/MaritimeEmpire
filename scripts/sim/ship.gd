@@ -74,9 +74,9 @@ var lost_order := 0
 var at_risk := false
 ## Seconds spent sailing since it was bought; older ships break down more.
 var sea_time := 0.0
-## Lifetime money in (income) and out (fuel, repair, and recovery: what a
-## recovery boat spent saving this ship), in dollars.
-var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0, "recovery": 0.0}
+## Lifetime money in (income) and out (fuel and repair), in dollars. A
+## recovery boat's own running costs go on its own ledger.
+var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0}
 ## Total XP from deliveries (cargo ships only), and skill levels bought with
 ## the points its levels give: "speed", "durability", "efficiency".
 var xp := 0.0
@@ -94,9 +94,6 @@ var segment_end := 0.0
 var job_segments: Array = []
 var align_time := 0.0
 var tow_port := ""
-## Recovery boat only: the ship its spending is charged to, from being sent
-## on a job until it has refilled back at home.
-var billing: Ship = null
 
 
 func _init(ship_name := "", ship_model_id := "", start_port := "") -> void:
@@ -133,7 +130,7 @@ func can_sell() -> bool:
 
 
 func profit() -> float:
-	return ledger.income - ledger.fuel - ledger.repair - ledger.recovery
+	return ledger.income - ledger.fuel - ledger.repair
 
 
 ## Top speed, including the speed skill.
@@ -478,7 +475,6 @@ func to_dict() -> Dictionary:
 		"job_segments": job_segments,
 		"align_time": align_time,
 		"tow_port": tow_port,
-		"billing": billing.name if billing else "",
 		"auto_recover": auto_recover,
 		"lost_order": lost_order,
 		"sea_time": sea_time,
@@ -529,23 +525,18 @@ static func from_dict(data: Dictionary) -> Ship:
 	var saved_skills: Dictionary = data.get("skills", {})
 	for key: String in ship.skills:
 		ship.skills[key] = int(saved_skills.get(key, 0))
-	ship.set_meta(&"billing", data.get("billing", ""))
 	ship.set_meta(&"rescuing", data.get("rescuing", ""))
 	return ship
 
 
-## Reconnects recovery boats to the ships they're recovering (and billing) after loading.
+## Reconnects recovery boats to the ships they're recovering after loading.
 static func link_rescues(all: Array[Ship]) -> void:
 	for mammoth in all:
 		var target: String = mammoth.get_meta(&"rescuing", "")
-		var billed: String = mammoth.get_meta(&"billing", "")
 		mammoth.remove_meta(&"rescuing")
-		mammoth.remove_meta(&"billing")
 		for ship in all:
 			if not target.is_empty() and ship.name == target:
 				mammoth.rescuing = ship
 				ship.rescuer = mammoth
-			if not billed.is_empty() and ship.name == billed:
-				mammoth.billing = ship
 		if mammoth.rescuing == null:
 			mammoth.job_phase = JOB_NONE

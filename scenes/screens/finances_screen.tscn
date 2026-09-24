@@ -60,14 +60,14 @@ text = "Profit by ship"
 [node name="ShipsHint" type="Label" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
-text = "Click a column to sort. A recovery's cost goes on the books of the ship it saved."
+text = "Click a column to sort. Recovery boats pay their own fuel and repairs."
 
 [node name="ShipTable" type="GridContainer" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 28
 theme_override_constants/v_separation = 6
-columns = 8
+columns = 7
 
 [node name="EmptyLabel" type="Label" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
 unique_name_in_owner = true

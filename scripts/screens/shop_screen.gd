@@ -2,7 +2,8 @@ extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
 ## category: container ships, gas tankers, then recovery boats. Each card shows
 ## how many of the model the company's level allows, and the level that unlocks
-## the model or its next slot.
+## the model or its next slot. A red dot marks every Buy button that can be used
+## right now.
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Gas tankers", "tanker"], ["Recovery boats", "recovery"]]
@@ -17,6 +18,7 @@ const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
 var _buy_buttons: Dictionary = {}  # model id -> Button
 var _owned_labels: Dictionary = {}  # model id -> Label
+var _buy_alerts: Dictionary = {}  # model id -> AlertDot, shown while it can be bought
 var _grids: Array[GridContainer] = []
 
 
@@ -105,6 +107,9 @@ func _make_card(model: Dictionary) -> Control:
 	buy.pressed.connect(_on_buy_pressed.bind(model.id))
 	box.add_child(buy)
 	_buy_buttons[model.id] = buy
+	var alert := AlertDot.new(5.0, Vector2(9, 9))
+	buy.add_child(alert)
+	_buy_alerts[model.id] = alert
 	return card
 
 
@@ -129,6 +134,7 @@ func _update_cards() -> void:
 			button.text = "Limit reached" if next < 0 else "Next slot at level %d" % next
 		var error := GameState.buy_error(model_id)
 		button.disabled = not error.is_empty()
+		_buy_alerts[model_id].visible = error.is_empty()
 		button.tooltip_text = error
 
 

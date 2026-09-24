@@ -6,12 +6,12 @@ const REFRESH_SECONDS := 1.0
 ## Table columns: [title, sort key]. Money columns sort biggest first.
 const COLUMNS := [
 	["Ship", "name"], ["Model", "model"], ["Income", "income"], ["Fuel", "fuel"],
-	["Repairs", "repair"], ["Recoveries", "recovery"], ["Profit", "profit"], ["Last 10 min", "recent"],
+	["Repairs", "repair"], ["Profit", "profit"], ["Last 10 min", "recent"],
 ]
 ## Totals rows: [title, money kind, is a cost].
 const TOTAL_ROWS := [
 	["Cargo income", "income", false], ["Fuel", "fuel", true], ["Repairs", "repair", true],
-	["Recoveries", "recovery", true], ["Ships bought", "bought", true], ["Ships sold", "sold", false],
+	["Ships bought", "bought", true], ["Ships sold", "sold", false],
 ]
 
 var _sort_key := "profit"
@@ -57,10 +57,9 @@ func _fill_totals(recent: Dictionary) -> void:
 		_add_label(%Totals, Fmt.money(roundi(profit)), &"GainLabel" if profit >= 0.0 else &"ErrorLabel")
 
 
-## Income minus fuel, repairs and recoveries (not buying or selling ships).
+## Income minus fuel and repairs (not buying or selling ships).
 static func _operating_profit(source: Dictionary) -> float:
-	return float(source.get("income", 0.0)) - float(source.get("fuel", 0.0)) \
-		- float(source.get("repair", 0.0)) - float(source.get("recovery", 0.0))
+	return float(source.get("income", 0.0)) - float(source.get("fuel", 0.0)) - float(source.get("repair", 0.0))
 
 
 func _fill_ship_table(recent_profit: Dictionary) -> void:
@@ -82,7 +81,6 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 			income = ship.ledger.income,
 			fuel = ship.ledger.fuel,
 			repair = ship.ledger.repair,
-			recovery = ship.ledger.recovery,
 			profit = ship.profit(),
 			recent = float(recent_profit.get(ship.name, 0.0)),
 		})
@@ -91,7 +89,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 		_add_label(%ShipTable, row.name)
 		_add_label(%ShipTable, row.model, &"DimLabel")
 		_add_label(%ShipTable, Fmt.money(roundi(row.income)))
-		for key: String in ["fuel", "repair", "recovery"]:
+		for key: String in ["fuel", "repair"]:
 			_add_label(%ShipTable, Fmt.money(-roundi(row[key])))
 		for key: String in ["profit", "recent"]:
 			_add_label(%ShipTable, Fmt.money(roundi(row[key])), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel")

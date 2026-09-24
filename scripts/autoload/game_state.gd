@@ -52,7 +52,7 @@ const WINDOW_SECONDS := 600.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "recovery", "bought", "sold"]
+const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "bought", "sold"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 
@@ -76,6 +76,8 @@ var in_session := false
 var play_time := 0.0
 ## Total company XP from deliveries; see Progression for levels.
 var company_xp := 0.0
+## The map's Routes switch: show the fleet's route lanes faintly.
+var show_active_routes := true
 ## All-time totals for each of MONEY_KINDS.
 var totals := {}
 ## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
@@ -300,9 +302,6 @@ func sell_ship(ship: Ship) -> String:
 	if not error.is_empty():
 		return error
 	var price := ship.sell_price()
-	for other in ships:
-		if other.billing == ship:
-			other.billing = null
 	ships.erase(ship)
 	money += price
 	_record(null, "sold", price)
@@ -427,8 +426,6 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		if end < ship.dock_seconds():
 			return
 		ship.dock_time = -1.0
-		if ship.docked_at == home_port:
-			ship.billing = null
 		ship_changed.emit(ship)
 	if ship.is_recovery() and ship.docked_at != home_port:
 		_try_depart(ship, delta, home_port)
@@ -582,8 +579,7 @@ func send_recovery(lost: Ship) -> String:
 	return _send_recovery(lost, false)
 
 
-## From sending until it has refilled back at home, the boat's spending is
-## charged to the ship it's recovering.
+## Sends the cheapest free capable boat; auto says whether auto-recovery sent it.
 func _send_recovery(lost: Ship, auto: bool) -> String:
 	var plan := recovery_plan(lost)
 	if plan.has("error"):
@@ -592,7 +588,6 @@ func _send_recovery(lost: Ship, auto: bool) -> String:
 	_leave_port(mammoth)
 	mammoth.docked_at = ""
 	mammoth.rescuing = lost
-	mammoth.billing = lost
 	lost.rescuer = mammoth
 	recovery_sent.emit(lost, mammoth, roundi(plan.cost), auto)
 	mammoth.tow_port = plan.tow_port
@@ -746,12 +741,9 @@ static func _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
 # --- Finances ------------------------------------------------------------
 
 ## Tallies money of a kind (see MONEY_KINDS) for a ship (null for the company
-## as a whole: buying and selling ships). A recovery boat's spending goes on
-## the books of the ship it's recovering.
+## as a whole: buying and selling ships). Recovery boats pay for their own
+## fuel and repairs.
 func _record(ship: Ship, kind: String, amount: float) -> void:
-	if ship and ship.billing:
-		ship = ship.billing
-		kind = "recovery"
 	totals[kind] = float(totals.get(kind, 0.0)) + amount
 	var bucket := _current_bucket()
 	bucket.fleet[kind] = float(bucket.fleet.get(kind, 0.0)) + amount
@@ -789,7 +781,7 @@ func recent_finances() -> Dictionary:
 			fleet[kind] = float(fleet.get(kind, 0.0)) + bucket.fleet[kind]
 		for ship_name: String in bucket.ships:
 			var tally: Dictionary = bucket.ships[ship_name]
-			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0)) + float(tally.get("recovery", 0.0))
+			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0))
 			ship_profit[ship_name] = float(ship_profit.get(ship_name, 0.0)) + float(tally.get("income", 0.0)) - costs
 	return {fleet = fleet, ships = ship_profit}
 
@@ -809,6 +801,7 @@ func new_game(new_company_name: String, new_home_port: String) -> void:
 	play_time = 0.0
 	totals = {}
 	company_xp = 0.0
+	show_active_routes = true
 	_window = []
 	_begin_session()
 	save_game()
@@ -832,6 +825,7 @@ func continue_game() -> String:
 	# Saves from before XP: count the XP past deliveries would have earned.
 	company_xp = float(data.get("company_xp", Progression.xp_for_payment(float(totals.get("income", 0.0)))))
 	_window = data.get("finance_window", [])
+	show_active_routes = bool(data.get("show_active_routes", true))
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
 	Ship.link_rescues(ships)
@@ -849,6 +843,7 @@ func save_game() -> void:
 		"money": money,
 		"play_time": play_time,
 		"company_xp": company_xp,
+		"show_active_routes": show_active_routes,
 		"totals": totals,
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,
@@ -867,7 +862,6 @@ func _clear_ships() -> void:
 	for ship in ships:
 		ship.rescuer = null
 		ship.rescuing = null
-		ship.billing = null
 	ships.clear()
 
 
