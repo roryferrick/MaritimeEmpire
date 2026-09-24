@@ -5,11 +5,11 @@ extends Control
 ## Compact bars are thin unlabeled strips, for tiles and lists.
 
 const THEME_TYPE := &"ShipBars"
-const BAR_HEIGHT := 10.0
+const BAR_HEIGHT := 8.0
 const COMPACT_BAR_HEIGHT := 4.0
 const COMPACT_GAP := 3.0
-const LABEL_GAP := 2.0
-const ROW_GAP := 8.0
+const LABEL_GAP := 1.0
+const ROW_GAP := 4.0
 
 var ship: Ship
 var compact := false

@@ -2,16 +2,21 @@
 
 [ext_resource type="Script" path="res://scripts/popups/ship_popup.gd" id="1_ship"]
 
+[sub_resource type="Theme" id="Theme_compact"]
+default_font_size = 15
+HeaderLabel/font_sizes/font_size = 21
+
 [node name="ShipPopup" type="PanelContainer"]
-custom_minimum_size = Vector2(420, 0)
+custom_minimum_size = Vector2(410, 0)
 offset_right = 320.0
 offset_bottom = 200.0
+theme = SubResource("Theme_compact")
 theme_type_variation = &"MapPopup"
 script = ExtResource("1_ship")
 
 [node name="Content" type="VBoxContainer" parent="."]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 4
 
 [node name="Header" type="HBoxContainer" parent="Content"]
 layout_mode = 2
@@ -43,6 +48,7 @@ layout_mode = 2
 
 [node name="Stats" type="GridContainer" parent="Content"]
 layout_mode = 2
+theme_override_constants/v_separation = 1
 theme_override_constants/h_separation = 20
 columns = 2
 
@@ -169,7 +175,7 @@ autowrap_mode = 3
 
 [node name="RecoveryButton" type="Button" parent="Content"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 tooltip_text = "Estimated fuel and repairs for the Mammoth, including its trip home."
 text = "Send Recovery"
@@ -181,21 +187,21 @@ theme_override_constants/separation = 8
 
 [node name="AssignButton" type="Button" parent="Content/Buttons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Assign Route"
 
 [node name="PauseButton" type="Button" parent="Content/Buttons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Pause"
 
 [node name="SellButton" type="Button" parent="Content/Buttons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Sell"
