@@ -5,7 +5,8 @@ extends Control
 ## title runs through its models' map colors, smallest ship first, and each
 ## card's name is in its model's map color. Each card shows how many of the
 ## model the company's level allows, and the level that unlocks the model or its
-## next slot. A red dot marks every Buy button that can be used right now;
+## next slot. Each section sits on a faint tint of its ship line's color. A red
+## dot marks every Buy button that can be used right now;
 ## hovering one the company can't afford shows a small note saying so.
 
 ## [title, ship_models.json category]
@@ -20,6 +21,10 @@ const CARD_LABEL_WIDTH := 44.0
 ## Ship names and section titles use the models' map colors, brightened to at
 ## least this luminance.
 const MIN_TEXT_LUMINANCE := 0.5
+## Each section sits on a faint tint of its ship line's color, with this much
+## padding inside.
+const SECTION_TINT := 0.08
+const SECTION_PADDING := 12
 
 const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
@@ -36,13 +41,14 @@ var _hovered := ""
 
 func _ready() -> void:
 	for section: Array in SECTIONS:
-		%Items.add_child(_section_title(section[0], section[1]))
+		var box := _section_box(section[1])
+		box.add_child(_section_title(section[0], section[1]))
 		var grid := GridContainer.new()
 		grid.columns = MAX_COLUMNS
 		grid.add_theme_constant_override(&"h_separation", CARD_GAP)
 		grid.add_theme_constant_override(&"v_separation", CARD_GAP)
 		_grids.append(grid)
-		%Items.add_child(grid)
+		box.add_child(grid)
 		for model: Dictionary in GameData.ship_models:
 			if model.get("category", "container") == section[1]:
 				grid.add_child(_make_card(model))
@@ -66,10 +72,26 @@ func _fit_columns() -> void:
 	for grid in _grids:
 		for card: Control in grid.get_children():
 			card_width = maxf(card_width, card.get_combined_minimum_size().x)
-	var margins := 60.0  # Page margins plus the scrollbar.
+	var margins := 60.0 + 2.0 * SECTION_PADDING  # Page margins, the scrollbar and the section tint's padding.
 	var columns := clampi(floori((size.x - margins + CARD_GAP) / (card_width + CARD_GAP)), 1, MAX_COLUMNS)
 	for grid in _grids:
 		grid.columns = columns
+
+
+## A section's panel, on a faint tint of its ship line's color (see
+## GameData.category_color()), added to the page; returns the box inside it.
+func _section_box(category: String) -> VBoxContainer:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(GameData.category_color(category), SECTION_TINT)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(SECTION_PADDING)
+	panel.add_theme_stylebox_override(&"panel", style)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 8)
+	panel.add_child(box)
+	%Items.add_child(panel)
+	return box
 
 
 ## A section title shaded letter by letter through the map colors of the

@@ -14,6 +14,7 @@ var ship: Ship
 
 var _dot := Control.new()
 var _info := Label.new()
+var _name := Label.new()
 
 
 func _init(for_ship: Ship) -> void:
@@ -41,12 +42,11 @@ func _init(for_ship: Ship) -> void:
 	column.add_theme_constant_override(&"separation", 1)
 	row.add_child(column)
 
-	var label := Label.new()
-	label.text = ship.name
-	label.add_theme_font_size_override(&"font_size", NAME_FONT_SIZE)
-	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	label.custom_minimum_size.x = 1  # Lets the name shrink (with an ellipsis) to fit the tile.
-	column.add_child(label)
+	_name.text = ship.name
+	_name.add_theme_font_size_override(&"font_size", NAME_FONT_SIZE)
+	_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_name.custom_minimum_size.x = 1  # Lets the name shrink (with an ellipsis) to fit the tile.
+	column.add_child(_name)
 	_info.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
 	_info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_info.custom_minimum_size.x = 1
@@ -66,6 +66,8 @@ func _ready() -> void:
 func _on_ship_changed(changed: Ship) -> void:
 	if changed == ship:
 		_dot.queue_redraw()
+		_name.text = ship.name
+		tooltip_text = ship.name
 		_update_info()
 
 

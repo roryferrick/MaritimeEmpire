@@ -2,7 +2,9 @@ extends Control
 ## The "Keep in the bank" setting (money cargo purchases leave alone), company
 ## totals (last 10 minutes and all time), a card per canal the fleet
 ## has used (crossings, tolls and bonus XP), and a sortable table of each
-## ship's lifetime profit. Refreshes once a second while visible.
+## ship's lifetime profit, grouped by ship line (each with a total row); click a
+## ship's name to open its popup.
+## Refreshes once a second while visible.
 
 const REFRESH_SECONDS := 1.0
 ## Text size for the totals, canal and ship tables (smaller than the theme's, so
@@ -17,8 +19,16 @@ const COLUMNS := [
 const TOTAL_ROWS := [
 	["Cargo sales", "income", false], ["Cargo bought", "cargo", true], ["Fuel", "fuel", true], ["Repairs", "repair", true],
 	["Canal tolls", "tolls", true],
-	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true],
+	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Mega upgrades", "mega", true],
 ]
+## Ship table groups, in shop order: [title, ship_models.json category].
+const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"]]
+## Money columns summed in each group's total row.
+const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "profit", "recent"]
+## Each group's rows sit on a faint band of its ship line's color.
+const BAND_TINT := 0.1
+const BAND_MARGIN := 2.0
 ## Choices for "Keep in the bank" (0 = spend everything on cargo).
 const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000]
 
@@ -28,6 +38,9 @@ var _clock := 0.0
 var _canal_card := PanelContainer.new()
 var _canal_label := Label.new()
 var _bank_picker := OptionButton.new()
+## Per ship line in the table: [its total row's first label, its last ship's
+## first label, the line's color], for the tinted band drawn behind its rows.
+var _bands: Array = []
 
 
 func _ready() -> void:
@@ -37,6 +50,7 @@ func _ready() -> void:
 	_canal_card.add_child(_canal_label)
 	$Scroll/Margin/Content/TotalsCard.add_sibling(_canal_card)
 	_add_bank_row()
+	%ShipTable.draw.connect(_draw_bands)
 	visibility_changed.connect(_refresh)
 	GameState.ships_changed.connect(_refresh)
 	_refresh()
@@ -98,6 +112,7 @@ func _fill_canals() -> void:
 
 func _fill_ship_table(recent_profit: Dictionary) -> void:
 	_clear(%ShipTable)
+	_bands.clear()
 	for column: Array in COLUMNS:
 		var header := Button.new()
 		header.flat = true
@@ -122,15 +137,72 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 			recent = float(recent_profit.get(ship.name, 0.0)),
 		})
 	rows.sort_custom(_row_before)
-	for row: Dictionary in rows:
-		_add_label(%ShipTable, row.name)
-		_add_label(%ShipTable, row.model, &"DimLabel")
-		_add_label(%ShipTable, Fmt.money(roundi(row.income)))
-		for key: String in ["cargo", "fuel", "repair", "tolls"]:
-			_add_label(%ShipTable, Fmt.money(-roundi(row[key])))
-		for key: String in ["profit", "recent"]:
-			_add_label(%ShipTable, Fmt.money(roundi(row[key])), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel")
+	for category: Array in CATEGORIES:
+		var group := rows.filter(func(row: Dictionary) -> bool: return row.ship.model().get("category", "") == category[1])
+		if group.is_empty():
+			continue
+		var total := {name = category[0], model = "%d ship%s" % [group.size(), "" if group.size() == 1 else "s"]}
+		for key: String in MONEY_COLUMNS:
+			total[key] = group.reduce(func(sum: float, row: Dictionary) -> float: return sum + float(row[key]), 0.0)
+		var color := GameData.category_color(category[1])
+		var first: Label = _add_row(total, color)[0]
+		var last := first
+		for row: Dictionary in group:
+			last = _add_row(row)[0]
+		_bands.append([first, last, color])
 	%EmptyLabel.visible = rows.is_empty()
+	%ShipTable.queue_redraw()
+
+
+## One table row: name, model, sales, costs (as negatives), profit and last 10
+## min. A category total row (title_color set) has its name in the line's color
+## and its figures in a bigger font.
+func _add_row(row: Dictionary, title_color := Color.TRANSPARENT) -> Array[Label]:
+	var is_total := title_color.a > 0.0
+	var cells: Array[Label] = []
+	cells.append(_add_label(%ShipTable, row.name))
+	cells.append(_add_label(%ShipTable, row.model, &"DimLabel"))
+	cells.append(_add_label(%ShipTable, Fmt.money(roundi(row.income))))
+	for key: String in ["cargo", "fuel", "repair", "tolls"]:
+		cells.append(_add_label(%ShipTable, Fmt.money(-roundi(row[key]))))
+	for key: String in ["profit", "recent"]:
+		cells.append(_add_label(%ShipTable, Fmt.money(roundi(row[key])), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel"))
+	if is_total:
+		cells[0].add_theme_color_override(&"font_color", title_color)
+		for cell in cells:
+			cell.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE + 2)
+	elif row.has("ship"):
+		var name_cell := cells[0]
+		name_cell.mouse_filter = Control.MOUSE_FILTER_STOP
+		name_cell.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		name_cell.tooltip_text = "Open %s" % row.name
+		name_cell.gui_input.connect(_on_ship_name_input.bind(row.ship, name_cell))
+	return cells
+
+
+## Clicking a ship's name opens its popup there (the table redraws every
+## second, so it stays where the name was when clicked).
+func _on_ship_name_input(event: InputEvent, ship: Ship, cell: Label) -> void:
+	var click := event as InputEventMouseButton
+	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var rect := cell.get_global_rect()
+	var anchor := Vector2(rect.position.x + minf(rect.size.x, 120.0) / 2.0, rect.get_center().y)
+	PopupHost.find(self).show_ship(ship, func() -> Vector2: return anchor, rect.size.y / 2.0 + 6.0)
+
+
+## A faint band of each ship line's color behind its rows (its total row down to
+## its last ship), drawn under the table's labels.
+func _draw_bands() -> void:
+	var table: GridContainer = %ShipTable
+	for band: Array in _bands:
+		var first: Label = band[0]
+		var last: Label = band[1]
+		if not is_instance_valid(first) or not is_instance_valid(last):
+			continue
+		var top := first.position.y - BAND_MARGIN
+		var bottom := last.position.y + last.size.y + BAND_MARGIN
+		table.draw_rect(Rect2(-BAND_MARGIN * 2.0, top, table.size.x + BAND_MARGIN * 4.0, bottom - top), Color(band[2], BAND_TINT))
 
 
 func _row_before(a: Dictionary, b: Dictionary) -> bool:
@@ -155,13 +227,14 @@ func _sort_by(key: String) -> void:
 	_refresh()
 
 
-func _add_label(parent: Node, text: String, variation := &"") -> void:
+func _add_label(parent: Node, text: String, variation := &"") -> Label:
 	var label := Label.new()
 	label.text = text
 	label.theme_type_variation = variation
 	if variation != &"HeaderLabel":
 		label.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
 	parent.add_child(label)
+	return label
 
 
 static func _clear(parent: Node) -> void:

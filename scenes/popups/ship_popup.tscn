@@ -27,6 +27,17 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"HeaderLabel"
 text = "Ship"
+mouse_filter = 0
+mouse_default_cursor_shape = 1
+tooltip_text = "Click to rename"
+
+[node name="RenameEdit" type="LineEdit" parent="Content/Header"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+max_length = 24
+placeholder_text = "New name"
 
 [node name="SkillsButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
@@ -212,3 +223,11 @@ custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Sell"
+
+[node name="MapButton" type="Button" parent="Content/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Show this ship on the World map."
+text = "View on Map"

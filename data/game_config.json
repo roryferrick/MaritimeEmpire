@@ -19,6 +19,8 @@
 	"at_sea_share": 0.75,
 	"ship_slots": {"cargo": [3, 3], "recovery": [1, 5]},
 	"ship_max_level": 30,
+	"_mega_comment": "Mega upgrade: once a model has max_owned ships, all at ship_max_level, it can be bought once for cost_factor x the model's price (Scooter 20: $1,000,000). Every ship of that model then gets speed_bonus more top speed and profit_bonus more profit on each profitable trade. Not for recovery boats.",
+	"mega": {"cost_factor": 80, "speed_bonus": 0.5, "profit_bonus": 0.5},
 	"ship_level_growth": 1.05,
 	"skill_max_level": 10,
 	"skills": {"speed": 0.02, "durability": 0.05, "efficiency": 0.03},

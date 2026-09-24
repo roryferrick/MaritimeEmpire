@@ -35,7 +35,7 @@ func _rebuild() -> void:
 		child.queue_free()
 	_live.clear()
 	var settings := Hub.settings()
-	%Intro.text = ("Your HQ and hubs level up from every delivery unloaded at their port. Each level is an upgrade "
+	%Intro.text = ("Your HQ and hubs level up from every delivery unloaded at their port, and from full loads shipped out by ships that arrived empty (one-way routes). Each level is an upgrade "
 		+ "point you can buy a bonus with (from $%s, rising $%s each time within a path) that helps every ship docking there; the HQ's bonuses are %d%% stronger. You get a new "
 		+ "hub every %d company levels.") % [Fmt.short(settings.get("upgrade_cost", 2000000)),
 		Fmt.short(settings.get("upgrade_cost_step", 500000)), roundi((float(settings.get("hq_multiplier", 1.5)) - 1.0) * 100.0),

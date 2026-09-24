@@ -134,6 +134,19 @@ func start_info(port_id: String) -> Dictionary:
 	return {}
 
 
+## A ship line's color (e.g. "container"): the map color of its middle-sized
+## model, brightened to at least min_luminance so it reads on dark panels.
+func category_color(category: String, min_luminance := 0.5) -> Color:
+	var line := ship_models.filter(func(model: Dictionary) -> bool: return model.get("category", "") == category)
+	if line.is_empty():
+		return Color.WHITE
+	var color := Color.from_string(line[line.size() / 2].get("map_color", "#ffffff"), Color.WHITE)
+	var luminance := color.get_luminance()
+	if luminance < min_luminance:
+		color = color.lerp(Color.WHITE, (min_luminance - luminance) / (1.0 - luminance))
+	return color
+
+
 ## Port position in projected map coordinates.
 func port_position(id: String) -> Vector2:
 	return _port_positions.get(id, Vector2.ZERO)

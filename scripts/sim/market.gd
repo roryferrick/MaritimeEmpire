@@ -80,7 +80,7 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String) -> Array:
 	for commodity_id: String in model.get("cargo", []):
 		var sell := sell_price(to_port, commodity_id)
 		var margin := sell - buy_price(from_port, commodity_id)
-		var profit: float = margin + _state.trade_bonus(from_port, to_port, margin) - sell * toll_share
+		var profit: float = margin + _state.trade_bonus(from_port, to_port, margin, str(model.get("id", ""))) - sell * toll_share
 		if profit > best_profit:
 			best = commodity_id
 			best_profit = profit

@@ -1,10 +1,11 @@
 class_name ShipPopup
 extends AnchoredPopup
 ## A ship's stats, live status, bars and route, with the repair, refuel, rescue
-## and full-load toggles, Assign Route, Pause/Go and Sell. Lost ships get a Send
-## Recovery button; recovery boats have no route controls. Cargo ships show their level,
-## and the Upgrades button (red dot while points are unspent) swaps the bars
-## for spending upgrade points on the skill paths.
+## and full-load toggles, Assign Route, Pause/Go, Sell and View on Map. Click the
+## name to rename the ship. Lost ships get a Send Recovery button; recovery boats
+## have no route controls. Cargo ships show their level, and the Upgrades button
+## (red dot while points are unspent) swaps the bars for spending upgrade points
+## on the skill paths.
 
 ## Selling takes a second click within this many seconds.
 const SELL_CONFIRM_SECONDS := 3.0
@@ -47,7 +48,12 @@ func _ready() -> void:
 	%SkillsButton.toggled.connect(_show_skills)
 	%SkillsButton.add_child(_upgrades_alert)
 	%CloseButton.pressed.connect(queue_free)
+	%NameLabel.gui_input.connect(_on_name_input)
+	%RenameEdit.text_submitted.connect(_finish_rename.unbind(1))
+	%RenameEdit.focus_exited.connect(_finish_rename.bind(true))
+	%RenameEdit.gui_input.connect(_on_rename_input)
 	%AssignButton.pressed.connect(func() -> void: GameRoot.find(self).open_route_screen(ship))
+	%MapButton.pressed.connect(func() -> void: GameRoot.find(self).show_ship_on_map(ship))
 	%PauseButton.pressed.connect(func() -> void: GameState.set_paused(ship, not ship.paused))
 	%RecoveryButton.pressed.connect(func() -> void: GameState.send_recovery(ship))
 	%RepairToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_repair(ship, on))
@@ -110,7 +116,7 @@ func _update_cargo() -> void:
 		commodity.get("name", ship.cargo_id), Fmt.money(ship.cargo_cost), GameData.port_name(from)]
 	if not to.is_empty():
 		var sale := ship.cargo_qty * GameState.market.sell_price(to, ship.cargo_id)
-		var worth: float = sale + GameState.trade_bonus(from, to, sale - ship.cargo_cost)
+		var worth: float = sale + GameState.trade_bonus(from, to, sale - ship.cargo_cost, ship.model_id)
 		text += ", worth about %s at %s" % [Fmt.money(roundi(worth)), GameData.port_name(to)]
 	_cargo_label.text = text
 
@@ -221,6 +227,7 @@ func _set_shown(control: Control, shown: bool) -> void:
 
 
 func _refresh() -> void:
+	%NameLabel.text = ship.name
 	_update_live()
 	if not ship.is_recovery():
 		_refresh_level()
@@ -242,3 +249,43 @@ func _refresh() -> void:
 	%PauseButton.disabled = not ship.has_route()
 	%PauseButton.text = "Go" if ship.paused else "Pause"
 	reset_size.call_deferred()
+
+
+## Clicking the name swaps it for a text box to rename the ship.
+func _on_name_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	%RenameEdit.text = ship.name
+	%RenameEdit.tooltip_text = "Enter to rename, Esc to cancel."
+	%RenameEdit.remove_theme_color_override(&"font_color")
+	%NameLabel.visible = false
+	%RenameEdit.visible = true
+	%RenameEdit.grab_focus()
+	%RenameEdit.select_all()
+
+
+func _on_rename_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key and key.pressed and key.keycode == KEY_ESCAPE:
+		%RenameEdit.accept_event()
+		_end_rename()
+
+
+## Enter renames the ship (or, if the name can't be used, says why in red and
+## keeps the box open); clicking away with a bad name just cancels.
+func _finish_rename(cancel_on_error := false) -> void:
+	if not %RenameEdit.visible:
+		return
+	var error := GameState.rename_ship(ship, %RenameEdit.text)
+	if error.is_empty() or cancel_on_error:
+		_end_rename()
+		return
+	%RenameEdit.tooltip_text = error
+	%RenameEdit.add_theme_color_override(&"font_color", Color(1.0, 0.45, 0.4))
+
+
+func _end_rename() -> void:
+	%RenameEdit.visible = false
+	%NameLabel.visible = true
+	%NameLabel.text = ship.name

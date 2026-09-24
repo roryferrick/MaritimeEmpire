@@ -21,6 +21,8 @@ func _ready() -> void:
 	%MoneyLabel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	%MoneyLabel.tooltip_text = "Open Finances"
 	%MoneyLabel.gui_input.connect(_on_money_input)
+	%CompanyLabel.mouse_filter = Control.MOUSE_FILTER_STOP  # The hidden gem: no cursor or tooltip.
+	%CompanyLabel.gui_input.connect(_on_company_input)
 	_on_money_changed(GameState.money)
 	_on_containers_changed(GameState.containers_delivered)
 	_on_xp_changed(GameState.company_xp)
@@ -81,3 +83,16 @@ func _on_money_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
 	if click and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
 		GameRoot.find(self).show_screen(GameRoot.Screen.FINANCES)
+
+
+## The hidden gem: clicking the company name opens its popup, until it's claimed.
+func _on_company_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT or GameState.hidden_gem_claimed:
+		return
+	var host := PopupHost.find(self)
+	if is_instance_valid(host.current) and host.current is GemPopup:
+		return
+	var popup := GemPopup.new()
+	popup.follow = func() -> Vector2: return %CompanyLabel.get_global_rect().get_center() + Vector2(0, 30)
+	host.open(popup)

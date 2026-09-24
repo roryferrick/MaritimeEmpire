@@ -29,7 +29,7 @@
 - Halfway through each stop a ship sells its cargo, then buys the most profitable cargo it can carry to its next stop (after the canal tolls on the way): a full hold (less what a canal makes it leave behind), or as much as the money allows, always keeping enough for the whole fleet to fill its fuel tanks. Nothing if no cargo makes a profit (it sails empty).
 - Canal tolls are a share of the cargo's value at the destination (none for an empty ship). The rough-seas bonus (+50%), the upper-lakes bonus (+20%) and a hub's Sale prices upgrade add to a profitable trade's profit.
 - Balance: a good route earns about what the same ship earned under the old flat pay, the best about twice that; short hops earn a little, long hauls between the right regions a lot.
-- Markets tab: pick a commodity to see the cheapest ports to buy it, the dearest to sell, and the best trades anywhere and within 800 nm (port names go to the map). The port popup shows every commodity's buy and sell price there (green cheap, red dear). The World map's Prices picker colors every port by a commodity's price. The route screen shows what each leg would load and its expected profit.
+- Markets tab: pick a commodity to see the cheapest ports to buy it, the dearest to sell, and the best trades anywhere and within 800 nm (port names go to the map). The port popup shows every commodity's buy and sell price there (green cheap, red dear). The World map's Prices picker colors every port by a commodity's price; its menu groups the commodities by ship line, each group on a faint tint of the line's color and each commodity with a swatch in it (containers orange, tankers teal, ore grey, grain gold, livestock pink, vehicles blue: the line's middle ship's map color, brightened a little), and the chosen one's name is shown in that color. The route screen shows what each leg would load and its expected profit.
 
 ## Fuel, maintenance and port stops
 - Every ship has a fuel tank and a maintenance level (0–100%). Both start full when the ship is bought.
@@ -75,7 +75,7 @@
 
 ## Headquarters and hubs
 - The company starts with its headquarters (HQ) at its home port. It gets one more hub every 15 company levels (15, 30, 45, 60, 75, 90: 7 locations in all). A hub is founded from any port's popup ("Build a hub here", click again to confirm) and is permanent.
-- Each HQ/hub levels from 0 to 40 on the XP of every delivery unloaded at its port (the same XP the company gets). Level L to L+1 costs (5 + 0.7 x L) minutes of a quarter of a full fleet's XP at the current company level, so a hub taking about a quarter of the fleet's deliveries maxes out in about 12.5 hours.
+- Each HQ/hub levels from 0 to 40 on the XP of every delivery unloaded at its port (the same XP the company gets), and of every full load shipped out of it by a ship that arrived empty (a one-way route out of the hub: the hub gets the XP the load will earn where it's delivered, when it's loaded; the company and ship still get theirs on delivery). Level L to L+1 costs (5 + 0.7 x L) minutes of a quarter of a full fleet's XP at the current company level, so a hub taking about a quarter of the fleet's deliveries maxes out in about 12.5 hours.
 - Each level is an upgrade point, spent in the port popup on four paths of up to 10 points each. Each point also costs money: $2M for a path's first point, then $500k more for each point already in that path ($2.5M, $3M ... $6.5M for the 10th; $42.5M for a full path). The buttons show the price and grey out when you can't afford it; the Finances tab totals it as "Hub upgrades". They boost every ship docking there: Ship XP +5% per point (ship XP only, not company or hub XP), Fuel & repairs -3% price, Port stops -5% time (unloading, repairs and refueling all speed up), Pay +2% on deliveries unloaded there. The HQ's bonuses are 1.5x a hub's.
 - Every delivery unloaded at an HQ or hub also earns the company extra XP, free with the hub's level: +10%, plus 10% more for every 10 hub levels (+20% at level 10 ... +50% at level 40). The HQ's is 1.5x (+15% up to +75%). The hub's own XP and the ship's aren't boosted by it. The Hubs cards and port popup show it, e.g. "Company XP +30% on deliveries here (+40% at level 30)".
 - On the map, the HQ and hubs have a ring in the company color around their port (heavier for the HQ; gray on the Route Assignment map). A small red dot sits just up and to the right of any HQ or hub with an upgrade you can buy now. The Hubs tab shows a red dot while a hub has an upgrade you can buy (a point and the money) or a new hub can be founded.
@@ -196,13 +196,13 @@
 - Only one popup open at a time; opening a new one closes the old one.
 
 ### 2. Ships screen
-- Scrolling list grouped by model (in shop order), each group under a divider with the model name, 8 compact tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
+- Scrolling list grouped by model (in shop order), each group on a faint tint of its ship line's color (the same colors as the Prices menu and Finances) under the model name in that color, 8 compact tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
 - Each tile has two lines: the ship name (cut short with "..." if it doesn't fit; hover for the full name), then its cargo and level in smaller text ("Coffee · Lv 7", in green with "+2" while it has upgrade points to spend; recovery boats say "Recovery").
 - Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); amber = waiting in port for money for a full load; red = docked (paused at a port, no route, or held in port).
-- "Send waiting (N)" in the header sends every ship waiting in port for money for a full load off now, with whatever cargo the money buys (just this once; it may sail empty if the money is short). Its tooltip names them, and any ships held in port for other reasons (fuel, range, wear) that it can't send.
 - Clicking a tile opens the ship popup.
 - Sort (within each model) by name, status (lost, then at risk, then held, then stopped, then running) or profit; show all ships, running, stopped, lost, or recovery boats. A count shows how many are shown. Tiles re-sort when the fleet or the sort changes, not live.
-- An "Upgrade all (N)" button spends every ship's upgrade points at once, round-robin: each point goes to the ship's lowest skill path, ties in the order speed, efficiency, durability (so speed 1, efficiency 1, durability 1, speed 2, ... up to all 30). Greyed out when there are none.
+- An "Upgrade all (N)" button (with a red dot while any ship has points to spend) spends every ship's upgrade points at once, round-robin: each point goes to the ship's lowest skill path, ties in the order speed, efficiency, durability (so speed 1, efficiency 1, durability 1, speed 2, ... up to all 30). Greyed out when there are none.
+- Mega upgrade: once the company owns all 8 of a cargo model and every one is at level 30, a "Mega upgrade: $1,000,000" button appears to the right of the model's name (red dot when affordable; greyed, with the reason, when not). It costs 80x the model's price (Scooter 20 $1,000,000, GE 100 $10,000,000, Greenline 200 $40,000,000...; game_config mega) and can be bought once per model. Every ship of that model, including later ones, then gets +50% top speed and +50% profit on each profitable trade (on top of other bonuses). The name then shows a gold "★ Mega: +50% speed and profit" badge, and the activity log announces it. Recovery boats can't have one. Mega upgrades are a line in the Finances totals and are saved.
 
 ### Hubs screen
 - A card for the HQ, then each hub: port name, Headquarters/Hub, level (of 40) with an XP bar and XP to the next level, the upgrade tree (points to spend, the four paths with pips, their bonuses and + buttons), and traffic (ships docked there now, deliveries unloaded there, pay received there), with a "Show on map" button that centers the World map on it.
@@ -210,13 +210,13 @@
 
 ### Finances screen
 - At the top, "Keep in the bank" (Nothing, $100,000, $250,000, $500,000, $1M, $2.5M, $5M, $10M, $25M, $50M or $100M; saved with the company, default Nothing): ships won't spend that money on cargo, so it builds up for buying ships or upgrades. Fuel and repairs can still use it, so no ship is stranded. A ship waiting for a full load says so ("... (keeping $250,000 in the bank)").
-- Totals for the last 10 minutes and all time: cargo sales, cargo bought, fuel, repairs, canal tolls, ships bought, ships sold, hub upgrades, and operating profit (sales − cargo bought − fuel − repairs − tolls). Smaller text and tighter columns so it all fits.
+- Totals for the last 10 minutes and all time: cargo sales, cargo bought, fuel, repairs, canal tolls, ships bought, ships sold, hub upgrades, mega upgrades, and operating profit (sales − cargo bought − fuel − repairs − tolls). Smaller text and tighter columns so it all fits.
 - Then a card per canal the fleet has used: "Panama Canal: 12 crossings · tolls −$48,000 · bonus XP 3,100" (bonus XP is the extra company XP from the canal bonus).
-- A table of every ship: model, sales, cargo bought, fuel, repairs, tolls, lifetime profit and profit over the last 10 minutes. Click a column to sort. Refreshes every second.
+- A table of every ship: model, sales, cargo bought, fuel, repairs, tolls, lifetime profit and profit over the last 10 minutes, grouped by ship line in shop order (container ships, ore, grain, livestock, tankers, vehicles, recovery boats). Each group sits on a faint band of its line's color and starts with a total row: the line's name in its color, its number of ships, and each column summed, in slightly bigger text. Click a column to sort the ships within each group; click a ship's name to open its ship popup. Refreshes every second.
 - The totals and the 10-minute window are saved with the game.
 
 ### 3. Shop screen
-- Three sections, "Container ships", "Gas tankers" and "Recovery boats", each a grid of compact cards up to 5 across (as many as fit beside the activity log: 5 at the default window, so 5 container ships, then 3 tankers, then 2 recovery boats, cheapest first), one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10"). Each section title fades letter by letter through its models' map colors, smallest ship first, and each card's name is in its model's map color (dark colors brightened a little so they read on the cards).
+- Three sections, "Container ships", "Gas tankers" and "Recovery boats", each a grid of compact cards up to 5 across (as many as fit beside the activity log: 5 at the default window, so 5 container ships, then 3 tankers, then 2 recovery boats, cheapest first), one card per ship model, showing its stats, price, and how many are owned ("Owned 2 / 10"). Each section title fades letter by letter through its models' map colors, smallest ship first, and each card's name is in its model's map color (dark colors brightened a little so they read on the cards). Each section sits on a faint tint of its ship line's color (the same colors as the Ships tab, Finances and the Prices menu).
 - Each card shows owned / slots at the current level (and the max, while it can still grow). A full model shows "Next slot at level N"; a locked model shows "Unlocks at level N". A red dot sits on each Buy button that can be used right now (unlocked, a free slot, and affordable).
 - A model with a first-purchase price shows it on the card ("$150,000 for your first, then $1,250,000"). Buy → naming popup with a suggested random name (editable, must be unique; a Random button suggests another) → confirm. Disabled if the player can't afford it: hovering it then shows a small note straight away, "You can't afford this ship ($1,300 short)." Shows "Limit reached" at the ownership limit.
 
@@ -238,14 +238,15 @@
 - List of the player's ships currently docked there, each with thin maintenance / fuel / cargo bars and clickable to open its ship popup.
 - Placeholder line: "Cargo market: coming soon".
 
-### Ship popup (openable from map, Ships screen, and port popups)
+### Ship popup (openable from map, Ships screen, Finances and port popups)
 - Name (top) with an Upgrades button (showing unspent points, with a red dot while there are any) and X; Model, current speed (with top speed), range, capacity, and level with XP into it (cargo ships).
+- Click the name to rename the ship: it becomes a text box (up to 24 characters); Enter saves, Esc or clicking away cancels. A name another ship already has (ignoring case) or a blank one shows in red with the reason in its tooltip. The new name shows everywhere at once (tiles, Finances, the map) and the ship's last-10-minutes finances carry over.
 - The Upgrades button swaps the bars and toggles for the three skill paths (10 pips each, the bonus so far, and a + button to spend a point). Paths are listed Speed, Efficiency, Durability.
 - Maintenance, Fuel and Cargo bars with live values (recovery boats: Tow instead of Cargo), then the Repair, Refuel, Rescue (auto-recovery) and Full (full loads) toggles. While docked: this stop's summary, e.g. "Sold $1,990 · Fuel −$800 · Repair −$200 / Profit $990".
 - Lost ships: a Send Recovery button (see Lost ships and recovery boats).
 - Status: e.g. "Docked at Rome" (with "(no route)", "(paused)", or why it's held when relevant), "Unloading at Tunis" / "Loading at Tunis", "En route to Tunis — 40%", "Stopping at Tunis" (paused while at sea). In a canal: "In Gatún Locks (chamber 2 of 3), rising — to Balboa", "In Pedro Miguel Locks, waiting for Miraflores Locks", "Waiting for Gatún Locks (2nd in line)", "Waiting for toll money at the Panama Canal". A stop's summary includes the toll paid on the leg that brought the ship there.
 - Current route listed if one exists.
-- Buttons: Assign Route (opens Route Assignment screen), Pause/Go toggle (greyed out with no route), Sell (first click shows the price, second click sells).
+- Buttons: Assign Route (opens Route Assignment screen), Pause/Go toggle (greyed out with no route), Sell (first click shows the price, second click sells), View on Map (switches to the World map with the ship just above the middle and its popup open below it; from any screen).
 - Pause behavior: a ship paused at sea continues to its next port and stays docked there. Go resumes the route from that port.
 
 ## Activity log
@@ -254,3 +255,5 @@
 
 ## Explicitly NOT in beta
 - Crew wages, port fees, fuel prices that differ by port, cargo types, upgrades, achievements, renaming ships, offline progress, audio, mobile, multiplayer and clans.
+
+<sub><sup>p.s. the company name in the top bar is worth a click, once per company: a hidden gem, $10,000,000.</sup></sub>

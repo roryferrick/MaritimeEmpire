@@ -48,6 +48,8 @@ signal hubs_changed
 signal hub_leveled(hub: Hub, level: int)
 ## A new hub was founded at a port.
 signal hub_built(hub: Hub)
+## A model got its mega upgrade.
+signal mega_upgraded(model_id: String)
 ## The fast-forward speed changed.
 signal time_speed_changed(speed: int)
 
@@ -66,11 +68,13 @@ const WINDOW_SECONDS := 600.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs", "mega"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
+## The hidden gem (click the company name): money it gives, once per company.
+const HIDDEN_GEM_MONEY := 10000000
 
 var money: int = 0:
 	set(value):
@@ -88,6 +92,10 @@ var company_name := ""
 var company_color := "purple"
 ## Models whose first-purchase price (first_price in ship_models.json) has been used.
 var first_prices_used: Array[String] = []
+## Models with their mega upgrade (see mega_error()).
+var mega_upgrades: Array[String] = []
+## Whether the hidden gem has been claimed this run.
+var hidden_gem_claimed := false
 ## New ships are delivered here.
 var home_port := ""
 var ships: Array[Ship] = []
@@ -241,6 +249,62 @@ func buy_error(model_id: String) -> String:
 	if money < ship_price(model_id):
 		return "You can't afford this ship."
 	return ""
+
+
+## True once a model's mega upgrade is bought.
+func has_mega(model_id: String) -> bool:
+	return mega_upgrades.has(model_id)
+
+
+## A model's mega upgrade: game_config mega.cost_factor x its price.
+func mega_cost(model_id: String) -> int:
+	return int(GameData.get_ship_model(model_id).get("price", 0)) * int(GameData.config.get("mega", {}).get("cost_factor", 80))
+
+
+## True when a model qualifies for its mega upgrade: all max_owned ships owned,
+## every one at the top level, and not bought yet (it may still cost too much).
+func mega_ready(model_id: String) -> bool:
+	var model := GameData.get_ship_model(model_id)
+	if model.get("recovery", false) or has_mega(model_id):
+		return false
+	var line := ships.filter(func(ship: Ship) -> bool: return ship.model_id == model_id)
+	return line.size() >= int(model.get("max_owned", 8)) and line.all(func(ship: Ship) -> bool: return ship.level() >= Progression.ship_max_level())
+
+
+## Why the mega upgrade can't be bought now, or "".
+func mega_error(model_id: String) -> String:
+	var model := GameData.get_ship_model(model_id)
+	if has_mega(model_id):
+		return "Already upgraded."
+	if not mega_ready(model_id):
+		return "Own %d %s ships, all at level %d." % [int(model.get("max_owned", 8)), model.get("name", model_id), Progression.ship_max_level()]
+	if money < mega_cost(model_id):
+		return "You can't afford this (%s short)." % Fmt.money(mega_cost(model_id) - money)
+	return ""
+
+
+func buy_mega(model_id: String) -> void:
+	if not mega_error(model_id).is_empty():
+		return
+	var cost := mega_cost(model_id)
+	money -= cost
+	_record(null, "mega", cost)
+	mega_upgrades.append(model_id)
+	mega_upgraded.emit(model_id)
+	for ship in ships:
+		if ship.model_id == model_id:
+			ship_changed.emit(ship)
+	save_game()
+
+
+## Adds HIDDEN_GEM_MONEY to the bank, the first time only.
+func claim_hidden_gem() -> void:
+	if hidden_gem_claimed:
+		return
+	hidden_gem_claimed = true
+	money += HIDDEN_GEM_MONEY
+	ActivityLog.add("You found a hidden gem: +%s" % Fmt.money(HIDDEN_GEM_MONEY), ActivityLog.Kind.GOOD)
+	save_game()
 
 
 func company_name_error(new_company_name: String) -> String:
@@ -444,14 +508,33 @@ func _gain_hub_xp(hub: Hub, amount: float) -> void:
 		hubs_changed.emit()
 
 
-## Why a ship name can't be used, or "" if it's fine.
-func ship_name_error(ship_name: String) -> String:
+## Why a ship name can't be used, or "" if it's fine (renaming_ship may keep its
+## own name, in a different case).
+func ship_name_error(ship_name: String, renaming_ship: Ship = null) -> String:
 	ship_name = ship_name.strip_edges()
 	if ship_name.is_empty():
 		return "Enter a name."
 	for ship in ships:
-		if ship.name.nocasecmp_to(ship_name) == 0:
+		if ship != renaming_ship and ship.name.nocasecmp_to(ship_name) == 0:
 			return "You already have a ship called %s." % ship.name
+	return ""
+
+
+
+## Renames a ship, carrying its recent finances over to the new name. Returns
+## why it couldn't, or "".
+func rename_ship(ship: Ship, new_name: String) -> String:
+	new_name = new_name.strip_edges().left(MAX_NAME_LENGTH)
+	var error := ship_name_error(new_name, ship)
+	if not error.is_empty() or new_name == ship.name:
+		return error
+	for bucket: Dictionary in _window:
+		if bucket.ships.has(ship.name):
+			bucket.ships[new_name] = bucket.ships[ship.name]
+			bucket.ships.erase(ship.name)
+	ship.name = new_name
+	ship_changed.emit(ship)
+	save_game()
 	return ""
 
 
@@ -549,21 +632,6 @@ func set_full_loads(ship: Ship, on: bool) -> void:
 
 func set_bank_reserve(amount: int) -> void:
 	bank_reserve = maxi(amount, 0)
-
-
-## Ships in port waiting for money for a full load (see _waiting_for_load()).
-func ships_waiting_for_loads() -> Array[Ship]:
-	return ships.filter(func(ship: Ship) -> bool: return ship.is_docked() and not ship.load_wait.is_empty() and not ship.sail_now)
-
-
-## Sends every ship waiting for a full load off now, with whatever cargo the
-## money buys (just this once). Returns how many.
-func send_waiting_ships() -> int:
-	var waiting := ships_waiting_for_loads()
-	for ship in waiting:
-		ship.sail_now = true
-		ship_changed.emit(ship)
-	return waiting.size()
 
 
 ## Why a ship can't be sold right now, or "".
@@ -692,7 +760,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.cargo_leg_nm = 0.0
 	if not ship.cargo_id.is_empty():
 		var sale := ship.cargo_qty * market.sell_price(port, ship.cargo_id)
-		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost))
+		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost, ship.model_id))
 		ship.cargo_leg_nm = GameData.distance_nm(ship.from_port, port) if paid and ship.from_port != port else 0.0
 	ship.unloaded = ship.is_recovery()
 	ship.docked_at = port
@@ -791,7 +859,8 @@ func _sell_cargo(ship: Ship) -> void:
 ## Market.best_cargo()): a full hold (less what a canal makes it leave behind),
 ## or as much as the money allows while keeping the fleet's fuel reserve (see
 ## fuel_reserve()) and the bank_reserve, unless full loads are on, when it buys
-## nothing short of a full hold. Nothing if no cargo makes a profit.
+## nothing short of a full hold. Nothing if no cargo makes a profit. A full load
+## taken out of a hub by a ship that arrived empty gives the hub XP.
 func _load_cargo(ship: Ship, to: String) -> void:
 	if ship.is_recovery() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return
@@ -802,7 +871,7 @@ func _load_cargo(ship: Ship, to: String) -> void:
 	var fuel_reserve := fuel_reserve()
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
 	var quantity := mini(room, floori((float(money) - ship.bill - fuel_reserve - bank_reserve) / price))
-	if quantity <= 0 or (ship.full_loads and not ship.sail_now and quantity < room):
+	if quantity <= 0 or (ship.full_loads and quantity < room):
 		return
 	var cost := roundi(quantity * price)
 	money -= cost
@@ -813,6 +882,11 @@ func _load_cargo(ship: Ship, to: String) -> void:
 	ship.cargo_qty = quantity
 	ship.cargo_cost = cost
 	cargo_loaded.emit(ship, ship.docked_at, best[0], quantity, cost, to)
+	# A ship that came in empty and leaves with a full hold (a one-way route out of
+	# a hub) earns the hub the XP the load will earn where it's delivered.
+	var hub := hub_at(ship.docked_at)
+	if hub and ship.stop_sale == 0 and quantity >= room:
+		_gain_hub_xp(hub, Progression.xp_for_cargo(quantity, best[0], GameData.distance_nm(ship.docked_at, to)))
 	ship_changed.emit(ship)
 
 
@@ -882,7 +956,7 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 func _waiting_for_load(ship: Ship, to: String) -> bool:
 	if not ship.is_recovery() and ship.full_loads and ship.cargo_id.is_empty():
 		_load_cargo(ship, to)
-	if ship.is_recovery() or not ship.full_loads or ship.sail_now or not ship.cargo_id.is_empty() \
+	if ship.is_recovery() or not ship.full_loads or not ship.cargo_id.is_empty() \
 			or market.best_cargo(ship.model(), ship.docked_at, to)[0] == "":
 		_set_load_wait(ship, "")
 		return false
@@ -936,18 +1010,18 @@ func _leave_port(ship: Ship) -> void:
 	ship.dock_time = -1.0
 	ship.hold_reason = ""
 	ship.load_wait = ""
-	ship.sail_now = false
 
 
 # --- Canals ----------------------------------------------------------------
 
 ## Extra money on a profitable trade from a leg's bonuses: the profit x (the
 ## leg's sale factor (rough seas, upper lakes) x the destination hub's Pay
-## upgrade - 1). Nothing on a loss.
-func trade_bonus(from_port: String, to_port: String, profit: float) -> float:
+## upgrade x the model's mega upgrade, if it has one - 1). Nothing on a loss.
+func trade_bonus(from_port: String, to_port: String, profit: float, model_id := "") -> float:
 	if profit <= 0.0:
 		return 0.0
-	return profit * (GameData.sale_factor(from_port, to_port) * (1.0 + hub_bonus(to_port, "pay")) - 1.0)
+	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("profit_bonus", 0.5)) if has_mega(model_id) else 0.0)
+	return profit * (GameData.sale_factor(from_port, to_port) * (1.0 + hub_bonus(to_port, "pay")) * mega - 1.0)
 
 
 ## Money cargo purchases leave alone so no ship is stranded for fuel: what
@@ -1256,6 +1330,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	money = int(GameData.config.get("starting_money", 10000))
 	containers_delivered = 0
 	first_prices_used = []
+	mega_upgrades = []
+	hidden_gem_claimed = false
 	_clear_ships()
 	play_time = 0.0
 	totals = {}
@@ -1285,6 +1361,8 @@ func continue_game() -> String:
 	money = int(data.get("money", 0))
 	containers_delivered = int(data.get("containers_delivered", 0))
 	first_prices_used.assign(data.get("first_prices_used", []))
+	mega_upgrades.assign(data.get("mega_upgrades", []))
+	hidden_gem_claimed = bool(data.get("hidden_gem_claimed", false))
 	_clear_ships()
 	play_time = float(data.get("play_time", 0.0))
 	totals = data.get("totals", {})
@@ -1332,6 +1410,8 @@ func save_game() -> void:
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,
 		"first_prices_used": first_prices_used,
+		"mega_upgrades": mega_upgrades,
+		"hidden_gem_claimed": hidden_gem_claimed,
 		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)

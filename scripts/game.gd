@@ -68,6 +68,7 @@ func _ready() -> void:
 	%HubsButton.add_child(_hubs_alert)
 	GameState.hub_leveled.connect(_on_hub_leveled)
 	GameState.hub_built.connect(_on_hub_built)
+	GameState.mega_upgraded.connect(_on_mega_upgraded)
 	_update_alerts()
 	show_screen(Screen.WORLD)
 
@@ -112,6 +113,14 @@ func _update_alerts() -> void:
 func show_port_on_map(port_id: String) -> void:
 	show_screen(Screen.WORLD)
 	(%WorldScreen.find_child("MapView") as MapView).focus_port(port_id)
+
+
+## Switches to the World map, centered on a ship, with its popup open.
+func show_ship_on_map(ship: Ship) -> void:
+	show_screen(Screen.WORLD)
+	var map: MapView = %WorldScreen.find_child("MapView")
+	map.focus_ship(ship, map.size.y * 0.3)
+	%WorldScreen.open_ship_popup(ship)
 
 
 func show_screen(screen: Screen) -> void:
@@ -222,3 +231,8 @@ func _on_hub_leveled(hub: Hub, level: int) -> void:
 
 func _on_hub_built(hub: Hub) -> void:
 	ActivityLog.add("Founded a hub at %s" % GameData.port_name(hub.port_id), ActivityLog.Kind.GOOD)
+
+
+func _on_mega_upgraded(model_id: String) -> void:
+	var model_name: String = GameData.get_ship_model(model_id).get("name", model_id)
+	ActivityLog.add("Mega upgrade: every %s is now 50%% faster and earns 50%% more profit" % model_name, ActivityLog.Kind.GOOD)

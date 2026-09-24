@@ -113,9 +113,6 @@ var full_loads := true
 ## Why it is waiting in port for a full load ("waiting for money for a full
 ## load"), or "". Not a problem, so not a hold.
 var load_wait := ""
-## Set by "Send waiting ships": leave on the next try with whatever cargo the
-## money buys, even with full loads on. Cleared when it leaves; not saved.
-var sail_now := false
 ## When it was lost, relative to other lost ships (lower = earlier), for the recovery queue.
 var lost_order := 0
 ## At sea without the fuel (or maintenance) to reach the end of its leg.
@@ -201,9 +198,10 @@ func profit() -> float:
 	return ledger.income - ledger.cargo - ledger.fuel - ledger.repair - ledger.tolls
 
 
-## Top speed, including the speed skill.
+## Top speed, including the speed skill and the model's mega upgrade.
 func top_speed() -> float:
-	return float(model().get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed"))
+	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("speed_bonus", 0.5)) if GameState.has_mega(model_id) else 0.0)
+	return float(model().get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega
 
 
 ## Current speed: top speed scaled by maintenance.

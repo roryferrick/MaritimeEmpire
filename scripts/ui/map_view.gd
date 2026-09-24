@@ -300,6 +300,14 @@ func focus_port(port_id: String) -> void:
 	_changed()
 
 
+## Brings a ship (its port while docked) into view, keeping the zoom: centered
+## across, and raised_px above the middle (to leave room for its popup below).
+func focus_ship(ship: Ship, raised_px := 0.0) -> void:
+	_center = GameData.port_position(ship.docked_at) if ship.is_docked() else ship.world_position()
+	_center.y -= raised_px / _zoom
+	_changed()
+
+
 ## Centers on a port (by default the company's home port), showing
 ## game_config.json's initial_view_width_deg degrees of longitude across.
 func reset_view(center_port := "") -> void:
