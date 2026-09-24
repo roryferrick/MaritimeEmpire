@@ -1,9 +1,10 @@
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
-## category: container ships, gas tankers, then recovery boats. Each card shows
-## how many of the model the company's level allows, and the level that unlocks
-## the model or its next slot. A red dot marks every Buy button that can be used
-## right now.
+## category: container ships, gas tankers, then recovery boats. Each section
+## title runs through its models' map colors, smallest ship first, and each
+## card's name is in its model's map color. Each card shows how many of the
+## model the company's level allows, and the level that unlocks the model or its
+## next slot. A red dot marks every Buy button that can be used right now.
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Gas tankers", "tanker"], ["Recovery boats", "recovery"]]
@@ -13,6 +14,9 @@ const MAX_COLUMNS := 5
 const CARD_GAP := 12
 const CARD_WIDTH := 176.0
 const CARD_LABEL_WIDTH := 44.0
+## Ship names and section titles use the models' map colors, brightened to at
+## least this luminance.
+const MIN_TEXT_LUMINANCE := 0.5
 
 const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
@@ -24,10 +28,7 @@ var _grids: Array[GridContainer] = []
 
 func _ready() -> void:
 	for section: Array in SECTIONS:
-		var title := Label.new()
-		title.theme_type_variation = &"HeaderLabel"
-		title.text = section[0]
-		%Items.add_child(title)
+		%Items.add_child(_section_title(section[0], section[1]))
 		var grid := GridContainer.new()
 		grid.columns = MAX_COLUMNS
 		grid.add_theme_constant_override(&"h_separation", CARD_GAP)
@@ -56,6 +57,49 @@ func _fit_columns() -> void:
 		grid.columns = columns
 
 
+## A section title shaded letter by letter through the map colors of the
+## category's models, from the smallest ship's (first letter) to the biggest's
+## (last letter).
+func _section_title(text: String, category: String) -> Control:
+	var models := GameData.ship_models.filter(func(model: Dictionary) -> bool: return model.get("category", "container") == category)
+	models.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("map_size", [0])[0]) < float(b.get("map_size", [0])[0]))
+	var gradient := Gradient.new()
+	gradient.remove_point(1)
+	gradient.set_color(0, _map_color(models[0]) if not models.is_empty() else Color.WHITE)
+	for i in range(1, models.size()):
+		gradient.add_point(float(i) / (models.size() - 1), _map_color(models[i]))
+	var letters := text.replace(" ", "").length()
+	var bbcode := ""
+	var n := 0
+	for character in text:
+		if character == " ":
+			bbcode += character
+			continue
+		var color := gradient.sample(float(n) / maxi(letters - 1, 1))
+		bbcode += "[color=#%s]%s[/color]" % [color.to_html(false), character]
+		n += 1
+	var title := RichTextLabel.new()
+	title.bbcode_enabled = true
+	title.fit_content = true
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.scroll_active = false
+	title.add_theme_font_size_override(&"normal_font_size", get_theme_font_size(&"font_size", &"HeaderLabel"))
+	title.text = bbcode
+	return title
+
+
+## A model's map color for text: dark ones (the Mammoth's brown, the
+## Supertanker's blue) are lifted toward white until they reach
+## MIN_TEXT_LUMINANCE, so they read on the dark cards.
+static func _map_color(model: Dictionary) -> Color:
+	var color := Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE)
+	var luminance := color.get_luminance()
+	if luminance < MIN_TEXT_LUMINANCE:
+		color = color.lerp(Color.WHITE, (MIN_TEXT_LUMINANCE - luminance) / (1.0 - luminance))
+	return color
+
+
 func _make_card(model: Dictionary) -> Control:
 	var card := PanelContainer.new()
 	card.theme_type_variation = &"ShopCard"
@@ -67,6 +111,7 @@ func _make_card(model: Dictionary) -> Control:
 	var title := Label.new()
 	title.theme_type_variation = &"ShopCardTitle"
 	title.text = model.get("name", model.id)
+	title.add_theme_color_override(&"font_color", _map_color(model))
 	box.add_child(title)
 
 	var tank := float(model.get("fuel_tank", 0))

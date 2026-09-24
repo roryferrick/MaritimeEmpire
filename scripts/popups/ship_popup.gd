@@ -68,14 +68,17 @@ func _update_live() -> void:
 	%SpeedValue.text = "%s nm/s (top %s)" % [Fmt.decimal(ship.speed(), 2), Fmt.decimal(ship.top_speed(), 2)]
 	var fuel := roundi(ship.stop_fuel_cost)
 	var repair := roundi(ship.stop_repair_cost)
-	var has_costs := ship.is_docked() and (ship.stop_sale > 0 or fuel + repair > 0)
+	var toll := ship.stop_toll
+	var has_costs := ship.is_docked() and (ship.stop_sale > 0 or fuel + repair + toll > 0)
 	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed)
 	var costs := "Fuel %s · Repair %s" % [Fmt.money(-fuel), Fmt.money(-repair)]
+	if toll > 0:
+		costs += " · Toll %s" % Fmt.money(-toll)
 	if ship.is_recovery():
 		%CostLabel.text = "This stop: %s" % costs
 	else:
 		%CostLabel.text = "This stop: Sold %s · %s\nProfit %s" % [
-			Fmt.money(ship.stop_sale), costs, Fmt.money(ship.stop_sale - fuel - repair)]
+			Fmt.money(ship.stop_sale), costs, Fmt.money(ship.stop_sale - fuel - repair - toll)]
 	_update_recovery()
 	_update_sell()
 	if not ship.is_recovery():

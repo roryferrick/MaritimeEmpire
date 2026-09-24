@@ -49,3 +49,11 @@ static func short(n: float) -> String:
 ## 45 -> "45 s", 100 -> "2 min", 4380 -> "1 h 13 min"
 static func rough_duration(seconds: float) -> String:
 	return duration(seconds if seconds < 60.0 else roundf(seconds / 60.0) * 60.0)
+
+
+## 1 -> "1st", 2 -> "2nd", 11 -> "11th", 23 -> "23rd"
+static func ordinal(n: int) -> String:
+	var suffix := "th"
+	if n % 100 < 11 or n % 100 > 13:
+		suffix = ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]
+	return "%d%s" % [n, suffix]

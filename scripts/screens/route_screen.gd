@@ -102,6 +102,7 @@ func _rebuild_list() -> void:
 
 	var n := _waypoints.size()
 	var total_nm := 0.0
+	var total_lock_s := 0.0
 	for i in n:
 		var stop := Label.new()
 		stop.text = "%d. %s" % [i + 1, GameData.port_name(_waypoints[i])]
@@ -112,11 +113,14 @@ func _rebuild_list() -> void:
 		if next == _waypoints[i]:
 			continue
 		var distance := GameData.distance_nm(_waypoints[i], next)
+		var lock_s := GameData.canal_lock_seconds(_waypoints[i], next)
 		total_nm += distance
+		total_lock_s += lock_s
 		var leg := Label.new()
 		leg.theme_type_variation = &"DimLabel" if _ship.can_sail(_waypoints[i], next) else &"ErrorLabel"
+		leg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var prefix := "back to" if i == n - 1 else "to"
-		leg.text = "      %s %s · %s" % [prefix, GameData.port_name(next), _leg_text(distance)]
+		leg.text = "      %s %s · %s%s" % [prefix, GameData.port_name(next), _leg_text(distance, lock_s), _canal_text(_waypoints[i], next)]
 		%WaypointList.add_child(leg)
 
 	if n == 0:
@@ -124,10 +128,21 @@ func _rebuild_list() -> void:
 	elif n == 1:
 		%TotalLabel.text = "Add at least one more port."
 	else:
-		%TotalLabel.text = "Full loop: %s" % _leg_text(total_nm)
+		%TotalLabel.text = "Full loop: %s" % _leg_text(total_nm, total_lock_s)
 
 
-func _leg_text(distance_nm: float) -> String:
+## Distance and sailing time at top speed, plus lock_s in canal locks (not
+## counting any wait for a free chamber).
+func _leg_text(distance_nm: float, lock_s := 0.0) -> String:
 	var speed := _ship.top_speed()
-	var time := Fmt.duration(distance_nm / speed) if speed > 0.0 else "?"
+	var time := Fmt.duration(distance_nm / speed + lock_s) if speed > 0.0 else "?"
 	return "%s nm · %s" % [Fmt.thousands(roundi(distance_nm)), time]
+
+
+## " · Panama Canal: toll $4,200, +50% XP" for a leg through a canal, else "".
+func _canal_text(from_port: String, to_port: String) -> String:
+	var crossing := GameData.canal_crossing(from_port, to_port)
+	if crossing.is_empty():
+		return ""
+	return " · %s: toll %s, +%d%% XP" % [crossing.canal.name, Fmt.money(GameData.canal_toll(from_port, to_port, _ship.model())),
+		roundi(float(crossing.canal.get("xp_bonus", 0.0)) * 100.0)]

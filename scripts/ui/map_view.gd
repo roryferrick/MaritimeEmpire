@@ -1,14 +1,15 @@
 class_name MapView
 extends Control
 ## Pannable, zoomable world map (Web Mercator, wraps east-west). Draws land,
-## borders and country names, with ports, ships and an optional route on top,
-## and reports clicks.
+## borders and country names, canals and their locks, with ports, ships and an
+## optional route on top, and reports clicks.
 ##
 ## Map coordinates are projected degrees (see Geo). Colors come from the
 ## "MapView" type in the project theme; gray_mode uses the "_gray" variants.
 
 signal port_clicked(port_id: String)
 signal ship_clicked(ship: Ship)
+signal lock_clicked(canal_id: String, lock_index: int)
 signal empty_clicked
 ## Emitted whenever the view pans or zooms.
 signal view_changed
@@ -49,6 +50,24 @@ const HUB_ALERT_OFFSET := Vector2(15, -15)
 ## The faint route lanes drawn with show_active_lanes.
 const ACTIVE_LANE_ALPHA := 0.3
 const ACTIVE_LANE_WIDTH := 1.5
+## Canals (data/canals.json): the channel's width in projected degrees (at
+## least CANAL_MIN_WIDTH px), and each lock chamber's length and the width of
+## each of its two lanes (one per direction), drawn from LOCK_MIN_ZOOM (pixels
+## per degree). Ships in a canal keep to the right-hand lane.
+const CANAL_WIDTH := 0.012
+const CANAL_MIN_WIDTH := 1.5
+const CHAMBER_LENGTH := 0.021
+const CHAMBER_LANE_WIDTH := 0.009
+const LOCK_MIN_ZOOM := 120.0
+const LOCK_HIT_RADIUS := 14.0
+## Canal names show from this web zoom level, until lock names take over at
+## LOCK_LABEL_ZOOM (pixels per degree).
+const CANAL_LABEL_WEB_ZOOM := 6.0
+const LOCK_LABEL_ZOOM := 350.0
+const CANAL_FONT_SIZE := 13
+## Lock chamber water runs from this much darker than the ocean (low) to this
+## much lighter (high) as it fills.
+const LOCK_WATER_SHADE := 0.3
 
 const FALLBACK_COLORS := {
 	&"ocean": Color(0.16, 0.36, 0.56),
@@ -76,6 +95,7 @@ const FALLBACK_COLORS := {
 	&"hub_alert_outline": Color(1, 1, 1),
 	&"river_gray": Color(0.34, 0.35, 0.38),
 	&"route": Color(1.0, 0.6, 0.15),
+	&"lock_gate": Color(0.12, 0.1, 0.08),
 }
 
 ## Draw with the muted palette used by the Route Assignment screen.
@@ -235,7 +255,7 @@ func port_screen_position(port_id: String) -> Vector2:
 ## so they don't cover it or each other.
 func ship_screen_position(ship: Ship) -> Vector2:
 	if not ship.is_docked():
-		return world_to_screen(ship.world_position())
+		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
 	var slot := 0
 	for other in GameState.ships:
 		if other == ship:
@@ -315,7 +335,8 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
-## Picks whichever port or ship is closest to the click, within its hit radius.
+## Picks whichever port or ship is closest to the click, within its hit radius,
+## or else a canal lock under it.
 func _click(screen_pos: Vector2) -> void:
 	var nearest_port := ""
 	var nearest_ship: Ship = null
@@ -335,6 +356,9 @@ func _click(screen_pos: Vector2) -> void:
 		ship_clicked.emit(nearest_ship)
 	elif not nearest_port.is_empty():
 		port_clicked.emit(nearest_port)
+	elif not _lock_at(screen_pos).is_empty():
+		var lock := _lock_at(screen_pos)
+		lock_clicked.emit(lock[0], lock[1])
 	else:
 		empty_clicked.emit()
 
@@ -395,6 +419,7 @@ func _draw_overlay() -> void:
 	var placed_labels: Array[Rect2] = []
 	var port_labels := _place_port_labels(placed_labels)
 	_draw_country_labels(placed_labels)
+	_draw_canals()
 	if show_ships and show_active_lanes:
 		_draw_active_lanes()
 	_draw_route()
@@ -404,7 +429,8 @@ func _draw_overlay() -> void:
 		_draw_hub_alerts()
 
 
-## Port labels in rank order, skipping any that would overlap one already placed.
+## Port labels, the HQ's and hubs' first and then in rank order, skipping any
+## that would overlap one already placed.
 ## Returns [port id, label rect] pairs.
 func _place_port_labels(placed: Array[Rect2]) -> Array:
 	var font := get_theme_default_font()
@@ -412,7 +438,12 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 		_ports_by_rank = GameData.ports.duplicate()
 		_ports_by_rank.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 			return a.get("rank", 999) < b.get("rank", 999))
-	var ranked := _ports_by_rank
+	# The HQ and hubs get their names placed first, then the rest by rank.
+	var hub_ports := {}
+	for hub in GameState.hubs:
+		hub_ports[hub.port_id] = true
+	var ranked := _ports_by_rank.filter(func(port: Dictionary) -> bool: return hub_ports.has(port.id))
+	ranked.append_array(_ports_by_rank.filter(func(port: Dictionary) -> bool: return not hub_ports.has(port.id)))
 	var labels := []
 	var bounds := Rect2(Vector2.ZERO, size)
 	for port: Dictionary in ranked:
@@ -544,6 +575,125 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 			_overlay.draw_dashed_line(points[i - 1], points[i], color, width, 8.0)
 	else:
 		_overlay.draw_polyline(points, color, width, true)
+
+
+## Each canal as a water channel across the land. Zoomed in, its lock chambers
+## too (two lanes each, the water rising or falling with a ship inside), and
+## its name, then its locks' names.
+func _draw_canals() -> void:
+	var view := Rect2(Vector2.ZERO, size).grow(40.0)
+	for canal in GameData.canals:
+		var points := _canal_screen_path(canal)
+		var bounds := Rect2(points[0], Vector2.ZERO)
+		for p in points:
+			bounds = bounds.expand(p)
+		if not view.intersects(bounds.grow(1.0)):
+			continue
+		_overlay.draw_polyline(points, _color(&"ocean"), maxf(CANAL_WIDTH * _zoom, CANAL_MIN_WIDTH), true)
+		if _zoom >= LOCK_MIN_ZOOM:
+			for chamber: Dictionary in canal.chambers:
+				_draw_chamber(canal, chamber, points)
+		if _zoom >= LOCK_LABEL_ZOOM:
+			for lock_index in canal.locks.size():
+				var center := lock_screen_position(canal.id, lock_index)
+				_draw_canal_label(canal.locks[lock_index].name, center + Vector2(CHAMBER_LANE_WIDTH * _zoom * 1.5 + 6.0, 4.0))
+		elif _web_zoom() >= CANAL_LABEL_WEB_ZOOM:
+			_draw_canal_label(canal.name, points[floori(points.size() / 2.0)] + Vector2(8.0, 4.0))
+
+
+## A canal's path on screen, shifted as a whole to the copy of the world nearest the view.
+func _canal_screen_path(canal: Dictionary) -> PackedVector2Array:
+	var path: PackedVector2Array = canal.projected_path
+	var shift := _wrap_near(path[0].x, _center.x) - path[0].x
+	var points := PackedVector2Array()
+	for p in path:
+		points.append(size / 2.0 + Vector2(p.x + shift - _center.x, _center.y - p.y) * _zoom)
+	return points
+
+
+## One lock chamber: a lane each way side by side (ships keep right), walled,
+## with gates at both ends.
+func _draw_chamber(canal: Dictionary, chamber: Dictionary, points: PackedVector2Array) -> void:
+	var i: int = chamber.path_index
+	var center := points[i]
+	var along := (points[mini(i + 1, points.size() - 1)] - points[maxi(i - 1, 0)]).normalized()
+	var across := Vector2(-along.y, along.x)  # Right of a ship sailing along the path.
+	var half := along * CHAMBER_LENGTH * _zoom / 2.0
+	var lane := across * CHAMBER_LANE_WIDTH * _zoom
+	for forward: bool in [true, false]:
+		var side := lane if forward else -lane
+		_overlay.draw_colored_polygon(PackedVector2Array([center - half, center + half, center + half + side, center - half + side]),
+			_chamber_water(canal, chamber, forward))
+	var wall := _color(&"coast")
+	_overlay.draw_polyline(PackedVector2Array([center - half - lane, center + half - lane, center + half + lane,
+		center - half + lane, center - half - lane]), wall, 1.0, true)
+	_overlay.draw_line(center - half, center + half, wall, 1.0, true)
+	var gate := _color(&"lock_gate")
+	for end: Vector2 in [center - half, center + half]:
+		_overlay.draw_line(end - lane, end + lane, gate, 2.0, true)
+
+
+## A chamber lane's water: darker when low, lighter when high. With a ship in
+## it, it rises or falls over the ship's time there.
+func _chamber_water(canal: Dictionary, chamber: Dictionary, forward: bool) -> Color:
+	var water := _color(&"ocean")
+	var level := 0.5
+	var ship := GameState.chamber_ship(canal.id, chamber.index, forward)
+	if ship and ship.lock_chamber().get("index", -1) == chamber.index:
+		var t := clampf(ship.lock_time / float(canal.get("step_seconds", 3)), 0.0, 1.0)
+		var rises: bool = canal.locks[chamber.lock].rises_forward == forward
+		level = t if rises else 1.0 - t
+	return water.darkened(LOCK_WATER_SHADE).lerp(water.lightened(LOCK_WATER_SHADE), level)
+
+
+func _draw_canal_label(text: String, at: Vector2) -> void:
+	var font := get_theme_default_font()
+	_overlay.draw_string(font, at + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label_shadow"))
+	_overlay.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label"))
+
+
+## The middle of a lock's chambers on screen.
+func lock_screen_position(canal_id: String, lock_index: int) -> Vector2:
+	var total := Vector2.ZERO
+	var count := 0
+	for chamber: Dictionary in GameData.get_canal(canal_id).get("chambers", []):
+		if chamber.lock == lock_index:
+			total += world_to_screen(chamber.position)
+			count += 1
+	return total / count if count > 0 else Vector2.ZERO
+
+
+## [canal id, lock index] of the lock under a screen point, or [] (only once
+## the chambers are drawn).
+func _lock_at(screen_pos: Vector2) -> Array:
+	if _zoom < LOCK_MIN_ZOOM:
+		return []
+	for canal in GameData.canals:
+		for lock_index in canal.locks.size():
+			var center := lock_screen_position(canal.id, lock_index)
+			var reach := LOCK_HIT_RADIUS
+			for chamber: Dictionary in canal.chambers:
+				if chamber.lock == lock_index:
+					reach = maxf(reach, world_to_screen(chamber.position).distance_to(center) + CHAMBER_LENGTH * _zoom / 2.0)
+			if center.distance_to(screen_pos) <= reach:
+				return [canal.id, lock_index]
+	return []
+
+
+## Ships in a canal keep to the right-hand lane of the channel and its locks
+## (a ship riding on a recovery boat follows the boat).
+func _canal_lane_offset(ship: Ship) -> Vector2:
+	var sailing := ship.rescuer if ship.is_carried() else ship
+	if sailing.is_docked() or sailing.from_port.is_empty():
+		return Vector2.ZERO
+	var crossing := GameData.canal_crossing(sailing.from_port, sailing.to_port)
+	if crossing.is_empty() or sailing.traveled_nm < crossing.start_nm or sailing.traveled_nm > crossing.end_nm:
+		return Vector2.ZERO
+	var direction := sailing.heading()
+	if direction == Vector2.ZERO:
+		return Vector2.ZERO
+	var on_screen := Vector2(direction.x, -direction.y).normalized()
+	return Vector2(-on_screen.y, on_screen.x) * CHAMBER_LANE_WIDTH * _zoom / 2.0
 
 
 ## A red dot (like the nav tabs') by each HQ or hub with an upgrade that can be

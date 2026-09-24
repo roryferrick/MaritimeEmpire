@@ -31,6 +31,12 @@ const JOB_TOW := "tow"
 ## A ship sells for this fraction of its price, times its maintenance.
 const SELL_FRACTION := 0.5
 
+## Canal states (canal_state): heading into a lock chamber it has reserved,
+## waiting in line for one, or waiting at the canal entrance for toll money.
+const CANAL_RESERVED := "reserved"
+const CANAL_QUEUED := "queued"
+const CANAL_TOLL := "toll"
+
 var name := ""
 var model_id := ""
 var route: Array[String] = []
@@ -64,6 +70,23 @@ var bill := 0.0
 ## Why a running ship is stuck in port, or "".
 var hold_reason := ""
 
+## Going through a canal (see data/canals.json) on the current leg or job
+## segment: how many of the lane's lock chambers the ship has entered (-1 until
+## worked out after loading an old save), seconds in the chamber it's in (-1
+## when not in one), CANAL_* or "", when it joined the line for a chamber,
+## whether it has entered the canal (paying its toll), and the tolls paid on
+## this leg.
+var canal_step := 0
+var lock_time := -1.0
+var canal_state := ""
+var canal_queue_since := 0.0
+var canal_entered := false
+var leg_toll := 0
+## Toll paid on the leg that ended at this stop (counted in the stop's
+## profit), and the canal whose XP bonus the cargo being unloaded earns, or "".
+var stop_toll := 0
+var delivery_canal := ""
+
 ## Why this ship is stranded at sea ("out of fuel", "engine failure"), or "".
 var lost_reason := ""
 ## Send the cheapest capable recovery boat automatically when lost.
@@ -74,9 +97,9 @@ var lost_order := 0
 var at_risk := false
 ## Seconds spent sailing since it was bought; older ships break down more.
 var sea_time := 0.0
-## Lifetime money in (income) and out (fuel and repair), in dollars. A
+## Lifetime money in (income) and out (fuel, repair and canal tolls), in dollars. A
 ## recovery boat's own running costs go on its own ledger.
-var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0}
+var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0, "tolls": 0.0}
 ## Total XP from deliveries (cargo ships only), and skill levels bought with
 ## the points its levels give: "speed", "durability", "efficiency".
 var xp := 0.0
@@ -140,7 +163,7 @@ func can_sell() -> bool:
 
 
 func profit() -> float:
-	return ledger.income - ledger.fuel - ledger.repair
+	return ledger.income - ledger.fuel - ledger.repair - ledger.tolls
 
 
 ## Top speed, including the speed skill.
@@ -324,6 +347,8 @@ func attention_reason() -> String:
 		return "lost at sea"
 	if is_held():
 		return "held in port"
+	if canal_state == CANAL_TOLL:
+		return "waiting for toll money"
 	if not is_recovery() and is_docked() and not has_route():
 		return "no route"
 	if is_docked() and paused:
@@ -411,8 +436,10 @@ func next_route_index() -> int:
 
 
 func status_text() -> String:
+	var canal := canal_status_text()
 	if is_recovery():
-		return _recovery_status_text()
+		var job := _recovery_status_text()
+		return job if canal.is_empty() else "%s — %s" % [job, canal]
 	if is_lost():
 		if rescuer == null:
 			if auto_recover:
@@ -434,10 +461,52 @@ func status_text() -> String:
 			text += " — %s" % hold_reason
 		return text
 	var destination := GameData.port_name(to_port)
+	if not canal.is_empty():
+		return "%s — to %s" % [canal, destination]
 	if paused:
 		return "Stopping at %s" % destination
 	var text := "En route to %s — %d%%" % [destination, int(leg_progress() * 100.0)]
 	return text + " — won't make it!" if at_risk else text
+
+
+## The lock chamber the ship is sitting in ({index, lock, mile} from
+## GameData.canal_crossing()), or {} if it isn't in one.
+func lock_chamber() -> Dictionary:
+	if lock_time < 0.0 or canal_step <= 0 or from_port.is_empty():
+		return {}
+	var crossing := GameData.canal_crossing(from_port, to_port)
+	return crossing.chambers[canal_step - 1] if canal_step <= crossing.get("chambers", []).size() else {}
+
+
+## Where the ship is in a canal's locks, e.g. "In Gatún Locks (chamber 2 of 3),
+## rising", "Waiting for Pedro Miguel Locks (2nd in line)" or "Waiting for toll
+## money at the Panama Canal"; "" when it isn't held up in one.
+func canal_status_text() -> String:
+	if is_docked() or is_lost() or from_port.is_empty():
+		return ""
+	var crossing := GameData.canal_crossing(from_port, to_port)
+	if crossing.is_empty():
+		return ""
+	var canal: Dictionary = crossing.canal
+	var chambers: Array = crossing.chambers
+	if canal_state == CANAL_TOLL:
+		return "Waiting for toll money at the %s" % canal.name
+	if lock_time >= 0.0 and canal_step > 0:
+		var chamber: Dictionary = chambers[canal_step - 1]
+		var lock: Dictionary = canal.locks[chamber.lock]
+		var in_lock := chambers.filter(func(c: Dictionary) -> bool: return c.lock == chamber.lock)
+		if canal_state == CANAL_QUEUED:
+			var next: Dictionary = chambers[canal_step]
+			if next.lock == chamber.lock:
+				return "In %s, waiting for the next chamber" % lock.name
+			return "In %s, waiting for %s" % [lock.name, canal.locks[next.lock].name]
+		var rising: bool = lock.rises_forward == crossing.forward
+		return "In %s (chamber %d of %d), %s" % [lock.name, in_lock.find(chamber) + 1, in_lock.size(),
+			"rising" if rising else "lowering"]
+	if canal_state == CANAL_QUEUED and canal_step < chambers.size():
+		var lock_name: String = canal.locks[chambers[canal_step].lock].name
+		return "Waiting for %s (%s in line)" % [lock_name, Fmt.ordinal(GameState.canal_line_position(self))]
+	return ""
 
 
 func _recovery_status_text() -> String:
@@ -483,6 +552,14 @@ func to_dict() -> Dictionary:
 		"stop_fuel_cost": stop_fuel_cost,
 		"stop_repair_cost": stop_repair_cost,
 		"bill": bill,
+		"canal_step": canal_step,
+		"lock_time": lock_time,
+		"canal_state": canal_state,
+		"canal_queue_since": canal_queue_since,
+		"canal_entered": canal_entered,
+		"leg_toll": leg_toll,
+		"stop_toll": stop_toll,
+		"delivery_canal": delivery_canal,
 		"lost_reason": lost_reason,
 		"rescuing": rescuing.name if rescuing else "",
 		"job_phase": job_phase,
@@ -524,6 +601,15 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.stop_fuel_cost = float(data.get("stop_fuel_cost", 0.0))
 	ship.stop_repair_cost = float(data.get("stop_repair_cost", 0.0))
 	ship.bill = float(data.get("bill", 0.0))
+	# Saves from before canals: worked out from where the ship is (GameState._rebuild_canal_lines()).
+	ship.canal_step = int(data.get("canal_step", -1))
+	ship.lock_time = float(data.get("lock_time", -1.0))
+	ship.canal_state = data.get("canal_state", "")
+	ship.canal_queue_since = float(data.get("canal_queue_since", 0.0))
+	ship.canal_entered = bool(data.get("canal_entered", false))
+	ship.leg_toll = int(data.get("leg_toll", 0))
+	ship.stop_toll = int(data.get("stop_toll", 0))
+	ship.delivery_canal = data.get("delivery_canal", "")
 	ship.lost_reason = data.get("lost_reason", "")
 	ship.job_phase = data.get("job_phase", JOB_NONE)
 	ship.segment_end = float(data.get("segment_end", 0.0))

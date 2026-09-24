@@ -1,0 +1,32 @@
+{
+	"_comment": "Canals with locks. path is the canal's centerline as [lon, lat] points from its first end to its second (Panama: Atlantic to Pacific); tools/build_map_data.gd carves it as water and lays it into every sea lane that crosses the canal, so ships follow it exactly. Every lock chamber must also be a point on path. Chambers are spaced about 1.5 nm apart, several times real size, so they show up at full zoom (like the ships, which are drawn much bigger than life). locks lists each set of chambers in path order; rises_forward says whether a ship sailing along path (Atlantic to Pacific) goes up in it (Gatun lifts ships to Gatun Lake, Pedro Miguel and Miraflores lower them to the Pacific). Each chamber has two lanes, one per direction, and holds one ship per lane for step_seconds while the water rises or falls. Ships wait in line queue_spacing_nm apart before a busy chamber, engines off (no fuel, no wear); a ship that finishes a chamber stays in it until the next one is free if that one is at most hold_chamber_nm further on. Nothing breaks down inside the canal. Entering the canal costs toll_share of the leg's base pay (before hub bonuses); a ship without the money waits at the entrance. Deliveries from a leg through the canal earn xp_bonus more XP for the company, the ship and the hub where they're unloaded (added to other bonuses). Recovery boats use the locks but pay no toll. directions names the two ways through (along path, then back), for the lock popup. divide is a line along the land between the two seas (crossing the canal once, at the Culebra Cut): the map tool treats any lane that crosses it as going through the canal, and cuts out lanes' detours across it and back.",
+	"canals": [
+		{
+			"id": "panama",
+			"name": "Panama Canal",
+			"directions": ["Southbound, to the Pacific", "Northbound, to the Atlantic"],
+			"toll_share": 0.2,
+			"xp_bonus": 0.5,
+			"step_seconds": 3,
+			"queue_spacing_nm": 1.6,
+			"hold_chamber_nm": 3.0,
+			"path": [
+				[-79.918, 9.420], [-79.916, 9.385], [-79.912, 9.355], [-79.915, 9.332], [-79.918, 9.318],
+				[-79.919, 9.305], [-79.920, 9.280], [-79.921, 9.255],
+				[-79.921, 9.240], [-79.905, 9.222], [-79.880, 9.200], [-79.855, 9.181], [-79.830, 9.166],
+				[-79.800, 9.150], [-79.770, 9.135], [-79.735, 9.121], [-79.700, 9.110],
+				[-79.682, 9.092], [-79.667, 9.072], [-79.652, 9.053], [-79.638, 9.038], [-79.627, 9.030],
+				[-79.617, 9.021],
+				[-79.607, 9.011],
+				[-79.598, 9.002], [-79.580, 8.984],
+				[-79.574, 8.972], [-79.568, 8.957], [-79.560, 8.938], [-79.546, 8.915], [-79.531, 8.890], [-79.515, 8.860]
+			],
+			"divide": [[-82.0, 8.65], [-81.2, 8.55], [-80.6, 8.62], [-80.1, 8.85], [-79.8, 9.0], [-79.65, 9.06], [-79.35, 9.2], [-78.8, 9.2], [-78.2, 8.9], [-77.7, 8.4], [-77.4, 8.0]],
+			"locks": [
+				{"name": "Gatún Locks", "rises_forward": true, "chambers": [[-79.919, 9.305], [-79.920, 9.280], [-79.921, 9.255]]},
+				{"name": "Pedro Miguel Locks", "rises_forward": false, "chambers": [[-79.617, 9.021]]},
+				{"name": "Miraflores Locks", "rises_forward": false, "chambers": [[-79.598, 9.002], [-79.580, 8.984]]}
+			]
+		}
+	]
+}

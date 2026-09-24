@@ -1,6 +1,6 @@
 extends Control
-## The main map: ports and ships, with their popups, and a switch in the top
-## right for showing the fleet's route lanes faintly.
+## The main map: ports, ships and canal locks, with their popups, and a switch
+## in the top right for showing the fleet's route lanes faintly.
 
 @onready var _map: MapView = $MapView
 
@@ -10,6 +10,7 @@ func _ready() -> void:
 	_map.show_active_lanes = GameState.show_active_routes
 	_map.port_clicked.connect(_open_port_popup)
 	_map.ship_clicked.connect(_open_ship_popup)
+	_map.lock_clicked.connect(_open_lock_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -24,6 +25,15 @@ func _open_port_popup(port_id: String) -> void:
 	var follow := func() -> Vector2:
 		return _map.get_global_transform() * _map.port_screen_position(port_id)
 	PopupHost.find(self).show_port(port_id, follow)
+
+
+func _open_lock_popup(canal_id: String, lock_index: int) -> void:
+	var popup := LockPopup.new()
+	popup.canal_id = canal_id
+	popup.lock_index = lock_index
+	popup.follow = func() -> Vector2:
+		return _map.get_global_transform() * _map.lock_screen_position(canal_id, lock_index)
+	PopupHost.find(self).open(popup)
 
 
 func _open_ship_popup(ship: Ship) -> void:

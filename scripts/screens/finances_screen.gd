@@ -1,25 +1,32 @@
 extends Control
-## Company totals (last 10 minutes and all time) and a sortable table of each
+## Company totals (last 10 minutes and all time), a card per canal the fleet
+## has used (crossings, tolls and bonus XP), and a sortable table of each
 ## ship's lifetime profit. Refreshes once a second while visible.
 
 const REFRESH_SECONDS := 1.0
 ## Table columns: [title, sort key]. Money columns sort biggest first.
 const COLUMNS := [
 	["Ship", "name"], ["Model", "model"], ["Income", "income"], ["Fuel", "fuel"],
-	["Repairs", "repair"], ["Profit", "profit"], ["Last 10 min", "recent"],
+	["Repairs", "repair"], ["Tolls", "tolls"], ["Profit", "profit"], ["Last 10 min", "recent"],
 ]
 ## Totals rows: [title, money kind, is a cost].
 const TOTAL_ROWS := [
-	["Cargo income", "income", false], ["Fuel", "fuel", true], ["Repairs", "repair", true],
+	["Cargo income", "income", false], ["Fuel", "fuel", true], ["Repairs", "repair", true], ["Canal tolls", "tolls", true],
 	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true],
 ]
 
 var _sort_key := "profit"
 var _sort_descending := true
 var _clock := 0.0
+var _canal_card := PanelContainer.new()
+var _canal_label := Label.new()
 
 
 func _ready() -> void:
+	_canal_card.theme_type_variation = &"CardPanel"
+	_canal_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_canal_card.add_child(_canal_label)
+	$Scroll/Margin/Content/TotalsCard.add_sibling(_canal_card)
 	visibility_changed.connect(_refresh)
 	GameState.ships_changed.connect(_refresh)
 	_refresh()
@@ -39,6 +46,7 @@ func _refresh() -> void:
 		return
 	var recent := GameState.recent_finances()
 	_fill_totals(recent.fleet)
+	_fill_canals()
 	_fill_ship_table(recent.ships)
 
 
@@ -57,9 +65,23 @@ func _fill_totals(recent: Dictionary) -> void:
 		_add_label(%Totals, Fmt.money(roundi(profit)), &"GainLabel" if profit >= 0.0 else &"ErrorLabel")
 
 
-## Income minus fuel and repairs (not buying or selling ships).
+## Income minus fuel, repairs and canal tolls (not buying or selling ships).
 static func _operating_profit(source: Dictionary) -> float:
-	return float(source.get("income", 0.0)) - float(source.get("fuel", 0.0)) - float(source.get("repair", 0.0))
+	return (float(source.get("income", 0.0)) - float(source.get("fuel", 0.0)) - float(source.get("repair", 0.0))
+		- float(source.get("tolls", 0.0)))
+
+
+## Crossings, tolls and bonus XP for each canal the fleet has been through.
+func _fill_canals() -> void:
+	var lines := PackedStringArray()
+	for canal in GameData.canals:
+		var stats: Dictionary = GameState.canal_stats.get(canal.id, {})
+		if stats.is_empty():
+			continue
+		lines.append("%s: %s crossings · tolls %s · bonus XP %s" % [canal.name, Fmt.thousands(int(stats.get("crossings", 0))),
+			Fmt.money(-roundi(float(stats.get("tolls", 0.0)))), Fmt.thousands(roundi(float(stats.get("xp", 0.0))))])
+	_canal_label.text = "\n".join(lines)
+	_canal_card.visible = not lines.is_empty()
 
 
 func _fill_ship_table(recent_profit: Dictionary) -> void:
@@ -81,6 +103,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 			income = ship.ledger.income,
 			fuel = ship.ledger.fuel,
 			repair = ship.ledger.repair,
+			tolls = ship.ledger.tolls,
 			profit = ship.profit(),
 			recent = float(recent_profit.get(ship.name, 0.0)),
 		})
@@ -89,7 +112,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 		_add_label(%ShipTable, row.name)
 		_add_label(%ShipTable, row.model, &"DimLabel")
 		_add_label(%ShipTable, Fmt.money(roundi(row.income)))
-		for key: String in ["fuel", "repair"]:
+		for key: String in ["fuel", "repair", "tolls"]:
 			_add_label(%ShipTable, Fmt.money(-roundi(row[key])))
 		for key: String in ["profit", "recent"]:
 			_add_label(%ShipTable, Fmt.money(roundi(row[key])), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel")

@@ -16,8 +16,11 @@ signal ship_changed(ship: Ship)
 signal ship_arrived(ship: Ship, port_id: String, payment: int)
 ## A running ship is stuck in port, e.g. without enough fuel for its next leg.
 signal ship_held(ship: Ship, reason: String)
-## A ship left a port, with what it earned and spent there.
-signal ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, repair_cost: int)
+## A ship left a port, with what it earned and spent there (toll: the canal
+## toll paid on the leg that brought it there).
+signal ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, repair_cost: int, toll: int)
+## A cargo ship entered a canal and paid its toll.
+signal canal_entered(ship: Ship, canal: Dictionary, toll: int)
 ## A random breakdown knocked a ship's maintenance down.
 signal ship_broke_down(ship: Ship)
 ## A ship ran out of fuel or maintenance at sea.
@@ -60,7 +63,7 @@ const WINDOW_SECONDS := 600.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "bought", "sold", "hubs"]
+const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "tolls", "bought", "sold", "hubs"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 ## Fast-forward speeds the top bar button cycles through.
@@ -101,6 +104,8 @@ var show_active_routes := true
 var hubs: Array[Hub] = []
 ## All-time totals for each of MONEY_KINDS.
 var totals := {}
+## Per canal id: {crossings, tolls, xp (the extra company XP its bonus gave)}.
+var canal_stats := {}
 ## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
 ## ships: {ship name: {kind: amount}}}.
 var _window: Array = []
@@ -108,6 +113,10 @@ var _window: Array = []
 var _autosave_timer := Timer.new()
 var _breakdown_clock := 0.0
 var _auto_recovery_clock := 0.0
+## Lock chambers (GameData.chamber_key()): the ship in or heading into each,
+## and the ships waiting for each, in order.
+var _chamber_ships := {}
+var _chamber_lines := {}
 
 
 func _ready() -> void:
@@ -517,8 +526,13 @@ func _advance(ship: Ship, delta: float) -> void:
 
 ## Wears, burns fuel and moves a ship along its current lane. Returns false if
 ## the ship ran out of fuel or maintenance and is now lost at sea. Mammoths
-## only set off when they can finish, so they're never lost.
+## only set off when they can finish, so they're never lost. In a canal, a
+## ship waiting in a lock chamber, in line or for toll money stays put with its
+## engines off (no fuel or wear).
 func _sail(ship: Ship, delta: float) -> bool:
+	var crossing := GameData.canal_crossing(ship.from_port, ship.to_port)
+	if not crossing.is_empty() and _held_in_canal(ship, crossing, delta):
+		return true
 	if ship.is_running() or ship.is_recovery():
 		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * delta, 0.0)
 	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * delta, 0.0)
@@ -534,7 +548,10 @@ func _sail(ship: Ship, delta: float) -> bool:
 	var speed := ship.speed()
 	if ship.is_recovery():
 		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
-	ship.traveled_nm += speed * delta
+	var target := ship.traveled_nm + speed * delta
+	if not crossing.is_empty():
+		target = _sail_canal(ship, crossing, target)
+	ship.traveled_nm = target
 	if not ship.is_recovery():
 		_check_at_risk(ship)
 	return true
@@ -553,6 +570,7 @@ func _check_at_risk(ship: Ship) -> void:
 
 
 func _lose(ship: Ship, reason: String) -> void:
+	_leave_canal(ship)
 	ship.lost_reason = reason
 	ship.lost_order = roundi(play_time * 1000.0)
 	ship.at_risk = false
@@ -561,8 +579,9 @@ func _lose(ship: Ship, reason: String) -> void:
 
 
 ## From the breakdowns min_company_level on, every interval_s each ship at sea
-## (not recovery boats) rolls its own Ship.breakdown_chance(); on a hit it
-## loses hit of its maintenance, and is lost at sea if that leaves it at 0%.
+## (not recovery boats, and not in a canal) rolls its own
+## Ship.breakdown_chance(); on a hit it loses hit of its maintenance, and is
+## lost at sea if that leaves it at 0%.
 func _roll_breakdowns(delta: float) -> void:
 	var settings: Dictionary = GameData.config.get("breakdowns", {})
 	var interval := float(settings.get("interval_s", 5))
@@ -572,7 +591,7 @@ func _roll_breakdowns(delta: float) -> void:
 		if company_level() < int(settings.get("min_company_level", 6)):
 			continue
 		for ship in ships:
-			if ship.is_recovery() or ship.is_docked() or ship.is_lost() or randf() >= ship.breakdown_chance():
+			if ship.is_recovery() or ship.is_docked() or ship.is_lost() or _in_canal(ship) or randf() >= ship.breakdown_chance():
 				continue
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
 			ship_broke_down.emit(ship)
@@ -582,6 +601,12 @@ func _roll_breakdowns(delta: float) -> void:
 
 func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.at_risk = false
+	_leave_canal(ship)
+	var crossing := GameData.canal_crossing(ship.from_port, port)
+	ship.delivery_canal = crossing.canal.id if paid and ship.canal_entered and not crossing.is_empty() and not ship.is_recovery() else ""
+	ship.stop_toll = ship.leg_toll
+	ship.leg_toll = 0
+	ship.canal_entered = false
 	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.model()) if paid else 0
 	ship.cargo_payment = roundi(ship.cargo_payment * (1.0 + hub_bonus(port, "pay")))
 	ship.unloaded = ship.cargo_payment <= 0
@@ -640,12 +665,20 @@ func _unload(ship: Ship) -> void:
 		containers_delivered += ship.capacity()
 	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
 	var hub := hub_at(ship.docked_at)
-	_gain_xp(ship, Progression.xp_for_payment(ship.cargo_payment), 1.0 + (hub.bonus("xp") if hub else 0.0),
-		1.0 + (hub.company_xp_bonus() if hub else 0.0))
+	var xp := Progression.xp_for_payment(ship.cargo_payment)
+	# Cargo that came through a canal earns its XP bonus on top of the hub's.
+	var canal := GameData.get_canal(ship.delivery_canal)
+	var canal_bonus := float(canal.get("xp_bonus", 0.0))
+	ship.delivery_canal = ""
+	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus,
+		1.0 + (hub.company_xp_bonus() if hub else 0.0) + canal_bonus)
+	if canal_bonus > 0.0:
+		var stats: Dictionary = canal_stats.get_or_add(canal.id, {crossings = 0, tolls = 0.0, xp = 0.0})
+		stats.xp = float(stats.xp) + xp * canal_bonus
 	if hub:
 		hub.deliveries += 1
 		hub.income += ship.cargo_payment
-		_gain_hub_xp(hub, Progression.xp_for_payment(ship.cargo_payment))
+		_gain_hub_xp(hub, xp * (1.0 + canal_bonus))
 
 
 ## Adds delivery XP to the company (times company_multiplier, from a hub's
@@ -723,20 +756,261 @@ func _depart(ship: Ship, to: String) -> void:
 	ship.to_port = to
 	ship.traveled_nm = 0.0
 	ship.docked_at = ""
+	_start_canal_leg(ship)
 	ship_changed.emit(ship)
 
 
-## Reports what the ship earned and spent at the port it's leaving.
+## Reports what the ship earned and spent at the port it's leaving (and the
+## toll for the leg that brought it there).
 func _leave_port(ship: Ship) -> void:
 	var fuel := roundi(ship.stop_fuel_cost)
 	var repair := roundi(ship.stop_repair_cost)
-	if ship.stop_sale > 0 or fuel > 0 or repair > 0:
-		ship_departed.emit(ship, ship.docked_at, ship.stop_sale, fuel, repair)
+	if ship.stop_sale > 0 or fuel > 0 or repair > 0 or ship.stop_toll > 0:
+		ship_departed.emit(ship, ship.docked_at, ship.stop_sale, fuel, repair, ship.stop_toll)
 	ship.stop_sale = 0
+	ship.stop_toll = 0
 	ship.stop_fuel_cost = 0.0
 	ship.stop_repair_cost = 0.0
 	ship.dock_time = -1.0
 	ship.hold_reason = ""
+
+
+# --- Canals ----------------------------------------------------------------
+#
+# A lane through a canal (GameData.canal_crossing()) passes its lock chambers
+# in order. Each chamber has a lane each way, holding one ship: a ship
+# reserves the chamber ahead as it comes up to it (or joins the line for it,
+# stopping queue_spacing_nm behind the ship ahead), sails in, and sits there
+# step_seconds while the water rises or falls. It then leaves, unless the next
+# chamber is close by (hold_chamber_nm), in which case it stays in this one until
+# it has that one. Cargo ships pay the toll on entering the canal.
+
+## Stops a ship that's in a lock chamber, in line, or waiting for toll money.
+## Returns true while it's held there this frame.
+func _held_in_canal(ship: Ship, crossing: Dictionary, delta: float) -> bool:
+	if ship.lock_time >= 0.0:
+		ship.lock_time += delta
+		if ship.lock_time < float(crossing.canal.get("step_seconds", 3)):
+			return true
+		if _next_chamber_close(ship, crossing) and not _take_chamber(ship, crossing, ship.canal_step):
+			return true
+		_free_chamber(ship, _chamber_key(crossing, ship.canal_step - 1))
+		ship.lock_time = -1.0
+		ship_changed.emit(ship)
+		return false
+	match ship.canal_state:
+		Ship.CANAL_TOLL:
+			return not _pay_toll(ship, crossing)
+		Ship.CANAL_QUEUED:
+			if _take_chamber(ship, crossing, ship.canal_step):
+				return false
+			return ship.traveled_nm >= _line_stop(ship, crossing) - 0.001
+	return false
+
+
+## How far a ship sailing toward `target` (nm along its lane) gets: it stops at
+## the canal entrance without toll money, at its place in line for a busy
+## chamber, or in the chamber it has reserved.
+func _sail_canal(ship: Ship, crossing: Dictionary, target: float) -> float:
+	var from := ship.traveled_nm
+	if not ship.canal_entered and from <= crossing.start_nm and target >= crossing.start_nm and not _pay_toll(ship, crossing):
+		ship.canal_state = Ship.CANAL_TOLL
+		ship_changed.emit(ship)
+		return crossing.start_nm
+	var step := ship.canal_step
+	if not _chamber_ahead(ship, crossing, step):
+		return target
+	var chamber: Dictionary = crossing.chambers[step]
+	if ship.canal_state.is_empty():
+		var in_line := _sailing_in_line(_chamber_lines.get(_chamber_key(crossing, step), []), null)
+		if target < chamber.mile - _line_spacing(crossing) * (in_line + 1):
+			return target
+		_take_chamber(ship, crossing, step)
+	if ship.canal_state == Ship.CANAL_QUEUED:
+		return maxf(from, minf(target, _line_stop(ship, crossing)))
+	if target < chamber.mile:
+		return target
+	ship.canal_step += 1
+	ship.lock_time = 0.0
+	ship.canal_state = ""
+	ship_changed.emit(ship)
+	return chamber.mile
+
+
+## Reserves a chamber if it's free and the ship is first in line for it;
+## otherwise puts the ship in line (if it isn't already). Returns true if reserved.
+func _take_chamber(ship: Ship, crossing: Dictionary, step: int) -> bool:
+	var key := _chamber_key(crossing, step)
+	var line: Array = _chamber_lines.get_or_add(key, [])
+	if _chamber_ships.has(key) or (not line.is_empty() and line[0] != ship):
+		if not line.has(ship):
+			line.append(ship)
+			ship.canal_state = Ship.CANAL_QUEUED
+			ship.canal_queue_since = play_time
+			ship_changed.emit(ship)
+		return false
+	line.erase(ship)
+	_chamber_ships[key] = ship
+	ship.canal_state = Ship.CANAL_RESERVED
+	ship_changed.emit(ship)
+	return true
+
+
+func _free_chamber(ship: Ship, key: String) -> void:
+	if _chamber_ships.get(key) == ship:
+		_chamber_ships.erase(key)
+
+
+## True if the lane has a chamber at this step before the ship's stretch ends
+## (a recovery boat's job segment can end partway along a lane).
+func _chamber_ahead(ship: Ship, crossing: Dictionary, step: int) -> bool:
+	var end := ship.segment_end if ship.is_on_job() else ship.leg_length()
+	return step < crossing.chambers.size() and crossing.chambers[step].mile < end
+
+
+## True if the ship's next chamber is close enough that it waits in the one it's in.
+func _next_chamber_close(ship: Ship, crossing: Dictionary) -> bool:
+	var step := ship.canal_step
+	if not _chamber_ahead(ship, crossing, step):
+		return false
+	var gap: float = crossing.chambers[step].mile - crossing.chambers[step - 1].mile
+	return gap <= float(crossing.canal.get("hold_chamber_nm", 3.0))
+
+
+## Where a ship in line stops: queue_spacing_nm behind each ship ahead of it
+## that's still sailing (ships waiting in the chamber before don't count).
+func _line_stop(ship: Ship, crossing: Dictionary) -> float:
+	var line: Array = _chamber_lines.get(_chamber_key(crossing, ship.canal_step), [])
+	var ahead := _sailing_in_line(line, ship)
+	return crossing.chambers[ship.canal_step].mile - _line_spacing(crossing) * (ahead + 1)
+
+
+## Ships in a line that are sailing rather than waiting in a chamber, up to `before` (all if null).
+static func _sailing_in_line(line: Array, before: Ship) -> int:
+	var count := 0
+	for other: Ship in line:
+		if other == before:
+			break
+		if other.lock_time < 0.0:
+			count += 1
+	return count
+
+
+static func _line_spacing(crossing: Dictionary) -> float:
+	return float(crossing.canal.get("queue_spacing_nm", 1.6))
+
+
+static func _chamber_key(crossing: Dictionary, step: int) -> String:
+	return GameData.chamber_key(crossing.canal.id, crossing.chambers[step].index, crossing.forward)
+
+
+## Charges a cargo ship its toll for entering the canal. Returns false if it
+## can't afford it yet. Recovery boats go through free.
+func _pay_toll(ship: Ship, crossing: Dictionary) -> bool:
+	var canal: Dictionary = crossing.canal
+	if not ship.is_recovery():
+		var toll := GameData.canal_toll(ship.from_port, ship.to_port, ship.model())
+		if money < toll:
+			return false
+		money -= toll
+		_record(ship, "tolls", toll)
+		ship.leg_toll += toll
+		var stats: Dictionary = canal_stats.get_or_add(canal.id, {crossings = 0, tolls = 0.0, xp = 0.0})
+		stats.crossings = int(stats.crossings) + 1
+		stats.tolls = float(stats.tolls) + toll
+		canal_entered.emit(ship, canal, toll)
+	ship.canal_entered = true
+	ship.canal_state = ""
+	ship_changed.emit(ship)
+	return true
+
+
+## Sets up a ship's canal state for the leg or job segment it's starting (which
+## may start partway along its lane, past some chambers).
+func _start_canal_leg(ship: Ship) -> void:
+	_leave_canal(ship)
+	ship.canal_step = 0
+	ship.canal_entered = false
+	var crossing := GameData.canal_crossing(ship.from_port, ship.to_port)
+	if crossing.is_empty():
+		return
+	for chamber: Dictionary in crossing.chambers:
+		if chamber.mile < ship.traveled_nm - 0.001:
+			ship.canal_step += 1
+	ship.canal_entered = ship.traveled_nm > crossing.start_nm + 0.001
+
+
+## Frees any chamber a ship holds and takes it out of every line.
+func _leave_canal(ship: Ship) -> void:
+	for key: String in _chamber_ships.keys():
+		if _chamber_ships[key] == ship:
+			_chamber_ships.erase(key)
+	for line: Array in _chamber_lines.values():
+		line.erase(ship)
+	ship.lock_time = -1.0
+	ship.canal_state = ""
+
+
+## True while a ship is between a canal's entrance and exit, or held up at one
+## (in line, even back past the entrance, or waiting for toll money): no
+## breakdowns there.
+func _in_canal(ship: Ship) -> bool:
+	if ship.is_docked() or ship.from_port.is_empty():
+		return false
+	if not ship.canal_state.is_empty() or ship.lock_time >= 0.0:
+		return true
+	var crossing := GameData.canal_crossing(ship.from_port, ship.to_port)
+	return not crossing.is_empty() and ship.traveled_nm >= crossing.start_nm and ship.traveled_nm <= crossing.end_nm
+
+
+## Rebuilds who holds and waits for each chamber from the ships' own state,
+## after loading. Saves from before canals work out each ship's progress from
+## where it is.
+func _rebuild_canal_lines() -> void:
+	_chamber_ships.clear()
+	_chamber_lines.clear()
+	var waiting: Array[Ship] = []
+	for ship in ships:
+		var crossing := {}
+		if not ship.is_docked() and not ship.is_lost() and not ship.from_port.is_empty():
+			crossing = GameData.canal_crossing(ship.from_port, ship.to_port)
+		if crossing.is_empty():
+			ship.canal_step = 0
+			ship.lock_time = -1.0
+			ship.canal_state = ""
+			continue
+		if ship.canal_step < 0 or ship.canal_step > crossing.chambers.size():
+			_start_canal_leg(ship)
+		if ship.lock_time >= 0.0 and ship.canal_step > 0:
+			_chamber_ships[_chamber_key(crossing, ship.canal_step - 1)] = ship
+		if ship.canal_state == Ship.CANAL_RESERVED and ship.canal_step < crossing.chambers.size():
+			_chamber_ships[_chamber_key(crossing, ship.canal_step)] = ship
+		elif ship.canal_state == Ship.CANAL_QUEUED and ship.canal_step < crossing.chambers.size():
+			waiting.append(ship)
+	waiting.sort_custom(func(a: Ship, b: Ship) -> bool: return a.canal_queue_since < b.canal_queue_since)
+	for ship in waiting:
+		var crossing := GameData.canal_crossing(ship.from_port, ship.to_port)
+		_chamber_lines.get_or_add(_chamber_key(crossing, ship.canal_step), []).append(ship)
+
+
+## The ship in (or heading into) one lane of a lock chamber, or null.
+func chamber_ship(canal_id: String, chamber_index: int, forward: bool) -> Ship:
+	return _chamber_ships.get(GameData.chamber_key(canal_id, chamber_index, forward))
+
+
+## Ships waiting for one lane of a lock chamber, first in line first.
+func chamber_line(canal_id: String, chamber_index: int, forward: bool) -> Array:
+	return _chamber_lines.get(GameData.chamber_key(canal_id, chamber_index, forward), [])
+
+
+## A ship's place (1 = first) in line for its next chamber, or 0 if it isn't in one.
+func canal_line_position(ship: Ship) -> int:
+	if ship.canal_state != Ship.CANAL_QUEUED:
+		return 0
+	var crossing := GameData.canal_crossing(ship.from_port, ship.to_port)
+	if crossing.is_empty() or ship.canal_step >= crossing.chambers.size():
+		return 0
+	return chamber_line(crossing.canal.id, crossing.chambers[ship.canal_step].index, crossing.forward).find(ship) + 1
 
 
 # --- Recovery --------------------------------------------------------------
@@ -851,6 +1125,7 @@ func _start_segment(ship: Ship, segment: Array) -> void:
 	ship.to_port = segment[1]
 	ship.traveled_nm = segment[2]
 	ship.segment_end = segment[3]
+	_start_canal_leg(ship)
 
 
 ## A Mammoth on a job: sail to the lost ship, line up with it, carry it to port.
@@ -986,7 +1261,7 @@ func recent_finances() -> Dictionary:
 			fleet[kind] = float(fleet.get(kind, 0.0)) + bucket.fleet[kind]
 		for ship_name: String in bucket.ships:
 			var tally: Dictionary = bucket.ships[ship_name]
-			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0))
+			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0)) + float(tally.get("tolls", 0.0))
 			ship_profit[ship_name] = float(ship_profit.get(ship_name, 0.0)) + float(tally.get("income", 0.0)) - costs
 	return {fleet = fleet, ships = ship_profit}
 
@@ -1006,6 +1281,9 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	_clear_ships()
 	play_time = 0.0
 	totals = {}
+	canal_stats = {}
+	_chamber_ships.clear()
+	_chamber_lines.clear()
 	company_xp = 0.0
 	show_active_routes = true
 	hubs.assign([Hub.new(home_port, true)])
@@ -1030,6 +1308,7 @@ func continue_game() -> String:
 	_clear_ships()
 	play_time = float(data.get("play_time", 0.0))
 	totals = data.get("totals", {})
+	canal_stats = data.get("canal_stats", {})
 	# Saves from before XP: count the XP past deliveries would have earned.
 	company_xp = float(data.get("company_xp", Progression.xp_for_payment(float(totals.get("income", 0.0)))))
 	_window = data.get("finance_window", [])
@@ -1042,6 +1321,7 @@ func continue_game() -> String:
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
 	Ship.link_rescues(ships)
+	_rebuild_canal_lines()
 	for ship in ships:
 		if ship.is_recovery() and ship.base_port.is_empty():  # Saves from before bases.
 			ship.base_port = home_port
@@ -1064,6 +1344,7 @@ func save_game() -> void:
 		"show_active_routes": show_active_routes,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
 		"totals": totals,
+		"canal_stats": canal_stats,
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,
 		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),

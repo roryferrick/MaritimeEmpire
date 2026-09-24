@@ -5,7 +5,9 @@ extends SceneTree
 ##
 ## Rerun after changing data/ports.json (takes several minutes; add
 ## "-- --lanes-only" to skip rebuilding the map art, or "-- --map-only" to
-## rebuild only the map art: land, lakes, rivers, borders and labels):
+## rebuild only the map art: land, lakes, rivers, borders and labels). After
+## changing only data/canals.json, "-- --canals-only" lays the canals into the
+## existing lanes again in seconds:
 ##   Godot --headless --path . -s tools/build_map_data.gd
 ##
 ## Source files (public domain, https://www.naturalearthdata.com), in tools/source_data/:
@@ -18,6 +20,7 @@ const COUNTRIES_PATH := "res://tools/source_data/ne_50m_admin_0_countries.geojso
 const LAKES_PATH := "res://tools/source_data/ne_10m_lakes.geojson"
 const RIVERS_PATH := "res://tools/source_data/ne_10m_rivers_lake_centerlines.geojson"
 const PORTS_PATH := "res://data/ports.json"
+const CANALS_PATH := "res://data/canals.json"
 const MAP_OUT := "res://data/world_map.res"
 const LANES_OUT := "res://data/sea_lanes.res"
 
@@ -48,15 +51,18 @@ const COAST_PENALTY := 1.3
 const SNAP_RADIUS := 30
 ## Great-circle legs are split into pieces about this long (nm) where open water allows.
 const GREAT_CIRCLE_STEP_NM := 100.0
-## Canals, rivers and straits too narrow for the grid to see. Carved as water.
-## Each is a list of [lon, lat] points.
+## Canals (data/canals.json) are laid into the lanes that cross them, so ships
+## follow the centerline and its locks exactly (see _splice_canal()). Lane
+## points within this many degrees of a centerline count as on it.
+const CANAL_SNAP_DEG := 0.2
+## Rivers and straits too narrow for the grid to see. Carved as water, like
+## the canals in data/canals.json. Each is a list of [lon, lat] points.
 const CHANNELS := {
 	"Strait of Gibraltar": [[-6.2, 35.95], [-5.6, 35.97], [-5.2, 36.0]],
 	"Dardanelles": [[26.15, 40.00], [26.27, 40.07], [26.40, 40.15], [26.45, 40.22], [26.55, 40.30], [26.68, 40.41], [26.80, 40.48]],
 	"Strait of Messina": [[15.68, 38.31], [15.66, 38.25], [15.62, 38.18], [15.60, 38.10], [15.57, 38.00]],
 	"Strait of Bonifacio": [[9.0, 41.33], [9.25, 41.32], [9.5, 41.30]],
 	"Suez Canal": [[32.31, 31.30], [32.32, 31.00], [32.33, 30.70], [32.35, 30.45], [32.42, 30.20], [32.57, 29.95], [32.57, 29.80]],
-	"Panama Canal": [[-79.92, 9.40], [-79.90, 9.30], [-79.85, 9.20], [-79.75, 9.12], [-79.68, 9.05], [-79.62, 9.00], [-79.55, 8.90], [-79.52, 8.80]],
 	"Singapore Strait": [[103.5, 1.20], [103.8, 1.20], [104.1, 1.25], [104.4, 1.30]],
 	"Great Belt": [[11.0, 56.10], [10.95, 55.70], [11.0, 55.35], [11.05, 55.05], [11.2, 54.70], [11.5, 54.55]],
 	"Elbe (Hamburg)": [[8.3, 53.95], [8.7, 53.88], [9.0, 53.85], [9.35, 53.72], [9.55, 53.60], [9.8, 53.54], [9.95, 53.54]],
@@ -92,13 +98,21 @@ var _ocean := PackedByteArray()
 var _coarse_cols := 0
 ## For each coarse cell, the index of the fine ocean cell a route passes through (-1 if none).
 var _coarse_rep := PackedInt32Array()
+## Each canal from data/canals.json: {path (its centerline), divide}, as [lon, lat] points.
+var _canals: Array[Dictionary] = []
 
 
 func _init() -> void:
 	var started := Time.get_ticks_msec()
+	var args := OS.get_cmdline_user_args()
+	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
+		_canals.append({path = _to_points(canal.path), divide = _to_points(canal.divide)})
+	if "--canals-only" in args:
+		_resplice_lanes()
+		quit()
+		return
 	var land_rings := _read_land_rings()
 	print("Land: %d rings" % land_rings.size())
-	var args := OS.get_cmdline_user_args()
 	if not "--lanes-only" in args:
 		_build_map(land_rings)
 	if not "--map-only" in args:
@@ -376,11 +390,13 @@ func _build_grid(land_polygons: Array) -> void:
 		_fill_rings(rings, 0.0)
 		_fill_rings(rings, Geo.WORLD_WIDTH)
 
-	for channel_name: String in CHANNELS:
-		var channel: Array = CHANNELS[channel_name]
+	var channels: Array = CHANNELS.values().map(_to_points)
+	for canal in _canals:
+		channels.append(canal.path)
+	for channel: PackedVector2Array in channels:
 		for i in range(1, channel.size()):
-			var a := Geo.project(Vector2(channel[i - 1][0], channel[i - 1][1]))
-			var b := Geo.project(Vector2(channel[i][0], channel[i][1]))
+			var a := Geo.project(channel[i - 1])
+			var b := Geo.project(channel[i])
 			_carve(a, b)
 			_carve(a + Vector2(Geo.WORLD_WIDTH, 0), b + Vector2(Geo.WORLD_WIDTH, 0))
 
@@ -584,6 +600,7 @@ func _build_lanes() -> void:
 					if cells.is_empty():
 						continue
 					var points := _lane_points(Vector2(lon_a, a.lat), cells, Vector2(lon_b, b.lat))
+					points = _splice_canals(points)
 					shape_usec += Time.get_ticks_usec() - t1
 					var distance := _length_nm(points)
 					if distance < best_distance:
@@ -779,6 +796,125 @@ func _lane_points(start: Vector2, cells: Array[Vector2i], end: Vector2) -> Packe
 		if arc_ok:
 			out.append_array(arc)
 		out.append(b)
+	return out
+
+
+## Lays each canal's centerline into a lane that crosses it (at either
+## east-west copy of the world), in place of the lane's own grid-fitted points.
+func _splice_canals(points: PackedVector2Array) -> PackedVector2Array:
+	for canal: Dictionary in _canals:
+		for offset in [0.0, Geo.WORLD_WIDTH]:
+			var shift := Vector2(offset, 0.0)
+			var path := PackedVector2Array()
+			for p: Vector2 in canal.path:
+				path.append(p + shift)
+			var divide := PackedVector2Array()
+			for p: Vector2 in canal.divide:
+				divide.append(p + shift)
+			points = _splice_canal(points, path, divide)
+	return points
+
+
+## Lays the canals into every lane already in data/sea_lanes.res and saves it
+## again, for "--canals-only". Lanes already laid in come out unchanged.
+func _resplice_lanes() -> void:
+	var data: SeaLaneData = load(LANES_OUT)
+	var out := SeaLaneData.new()
+	var changed := 0
+	for i in data.keys.size():
+		var points := data.points.slice(data.starts[i], data.starts[i + 1])
+		var spliced := _splice_canals(points)
+		if spliced != points:
+			changed += 1
+		out.keys.append(data.keys[i])
+		out.starts.append(out.points.size())
+		for p in spliced:
+			out.points.append(Vector2(snappedf(p.x, 0.0001), snappedf(p.y, 0.0001)))
+		out.distances.append(_length_nm(spliced))
+	out.starts.append(out.points.size())
+	var err := ResourceSaver.save(out, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % LANES_OUT)
+	print("Canals laid into %d of %d lanes" % [changed, out.keys.size()])
+	_print_stats(out)
+
+
+## The grid is too coarse to follow a canal (lanes can slip through lakes
+## beside it, or cut straight across), so lanes are judged by the canal's
+## divide, a line along the land between the two seas. A lane that crosses it
+## an odd number of times goes through the canal: the stretch from the last
+## point before its first crossing to the first point after its last crossing
+## (stepping further out past points on the centerline) is replaced by the
+## whole centerline. A lane starting or ending at a port on the canal (its
+## first or last point is on the centerline) joins it where that port is
+## nearest instead of at the canal's end. A lane that crosses an even number
+## of times only strays over the divide and back, so that detour is cut out.
+func _splice_canal(points: PackedVector2Array, path: PackedVector2Array, divide: PackedVector2Array) -> PackedVector2Array:
+	var crossings: Array[int] = []  # Lane segments (by end point) that cross the divide.
+	for k in range(1, points.size()):
+		for d in range(1, divide.size()):
+			if Geometry2D.segment_intersects_segment(points[k - 1], points[k], divide[d - 1], divide[d]) != null:
+				crossings.append(k)
+				break
+	if crossings.is_empty():
+		return points
+	var along_path := PackedFloat64Array([0.0])
+	for k in range(1, path.size()):
+		along_path.append(along_path[-1] + path[k - 1].distance_to(path[k]))
+	var nearest := []  # Per lane point: [distance, how far along the path, closest path point]
+	for p in points:
+		var best := [INF, 0.0, Vector2.ZERO]
+		for k in range(1, path.size()):
+			var q := Geometry2D.get_closest_point_to_segment(p, path[k - 1], path[k])
+			var distance := p.distance_to(q)
+			if distance < best[0]:
+				best = [distance, along_path[k - 1] + path[k - 1].distance_to(q), q]
+		nearest.append(best)
+	var before := crossings[0] - 1
+	var after := crossings[-1]
+	if crossings.size() % 2 == 0:
+		var out := points.slice(0, before + 1)
+		out.append_array(points.slice(after))
+		return out
+	# Which side it starts on: the side of the path's first end, if the point
+	# before the crossing is on the same side of the divide as that end.
+	var forward := _same_side(points[before], path[0], divide)
+	return _lay_canal(points, path, along_path, nearest, before, after, forward)
+
+
+## True if two points are on the same side of a divide: the segment between
+## them crosses it an even number of times.
+static func _same_side(a: Vector2, b: Vector2, divide: PackedVector2Array) -> bool:
+	var count := 0
+	for d in range(1, divide.size()):
+		if Geometry2D.segment_intersects_segment(a, b, divide[d - 1], divide[d]) != null:
+			count += 1
+	return count % 2 == 0
+
+
+## Replaces a lane's crossing (between points `before` and `after`, on either
+## side) with the centerline, run forward (from its first end) or back; see
+## _splice_canal().
+func _lay_canal(points: PackedVector2Array, path: PackedVector2Array, along_path: PackedFloat64Array,
+		nearest: Array, before: int, after: int, forward: bool) -> PackedVector2Array:
+	var first := before
+	while first > 0 and nearest[first][0] <= CANAL_SNAP_DEG:
+		first -= 1
+	var last := after
+	while last < points.size() - 1 and nearest[last][0] <= CANAL_SNAP_DEG:
+		last += 1
+	var total := along_path[-1]
+	var at_start: bool = first == 0 and nearest[0][0] <= CANAL_SNAP_DEG
+	var at_end: bool = last == points.size() - 1 and nearest[last][0] <= CANAL_SNAP_DEG
+	var start_along: float = nearest[first][1] if at_start else (0.0 if forward else total)
+	var end_along: float = nearest[last][1] if at_end else (total if forward else 0.0)
+	var out := points.slice(0, first + 1)
+	out.append(nearest[first][2] if at_start else (path[0] if forward else path[-1]))
+	var order := range(path.size()) if forward else range(path.size() - 1, -1, -1)
+	for v: int in order:
+		if along_path[v] > minf(start_along, end_along) and along_path[v] < maxf(start_along, end_along):
+			out.append(path[v])
+	out.append(nearest[last][2] if at_end else (path[-1] if forward else path[0]))
+	out.append_array(points.slice(last))
 	return out
 
 

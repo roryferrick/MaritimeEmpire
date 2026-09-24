@@ -50,6 +50,7 @@ func _ready() -> void:
 		button.pressed.connect(show_screen.bind(screen))
 	%RouteScreen.finished.connect(_close_route_screen)
 	GameState.ship_departed.connect(_on_ship_departed)
+	GameState.canal_entered.connect(_on_canal_entered)
 	GameState.ship_held.connect(_on_ship_held)
 	GameState.ship_broke_down.connect(_on_ship_broke_down)
 	GameState.ship_lost.connect(_on_ship_lost)
@@ -138,13 +139,19 @@ func _close_route_screen() -> void:
 	show_screen(_current_screen)
 
 
-func _on_ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, repair_cost: int) -> void:
+## The profit counts the canal toll paid on the leg that brought the ship here.
+func _on_ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, repair_cost: int, toll: int) -> void:
 	var port := GameData.port_name(port_id)
-	var costs := fuel_cost + repair_cost
+	var costs := fuel_cost + repair_cost + toll
 	if sale > 0:
 		ActivityLog.add("%s left %s: profit %s" % [ship.name, port, Fmt.money(sale - costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 	else:
 		ActivityLog.add("%s left %s: fuel and repairs %s" % [ship.name, port, Fmt.money(-costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+
+
+func _on_canal_entered(ship: Ship, canal: Dictionary, toll: int) -> void:
+	ActivityLog.add("%s entered the %s: toll %s (+%d%% XP on this delivery)" % [ship.name, canal.name, Fmt.money(toll),
+		roundi(float(canal.get("xp_bonus", 0.0)) * 100.0)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 func _on_ship_held(ship: Ship, reason: String) -> void:
