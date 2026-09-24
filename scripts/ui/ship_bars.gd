@@ -31,7 +31,7 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
-	var cargo_text := "Loaded"
+	var cargo_text: String = GameData.commodity(ship.cargo_id).get("name", "Loaded") if not ship.cargo_id.is_empty() else "Empty"
 	if ship.is_docking():
 		cargo_text = "Unloading" if ship.dock_time < ship.dock_seconds() / 2.0 else "Loading"
 	var load_bar := ["Cargo", ship.cargo_level(), &"cargo", cargo_text]

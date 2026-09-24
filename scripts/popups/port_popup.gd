@@ -2,12 +2,18 @@ class_name PortPopup
 extends AnchoredPopup
 ## Shows a port's name, its HQ or hub (level, XP and upgrade tree) or a button
 ## to found a hub there when one is available, and the player's ships docked
-## there with their bars.
+## there with their bars, and its market: each commodity's buy and sell price,
+## green where it's cheap compared with the world average and red where dear.
 
 const SHIP_BARS_WIDTH := 80.0
 ## Founding a hub takes a second click within this many seconds (it's permanent).
 const BUILD_CONFIRM_SECONDS := 3.0
 const REFRESH_SECONDS := 1.0
+## The market table: its text size, and how far below or above a commodity's
+## world average price counts as cheap (green) or dear (red).
+const MARKET_FONT_SIZE := 13
+const MARKET_CHEAP := 0.8
+const MARKET_DEAR := 1.25
 
 ## Set before adding to the tree.
 var port_id := ""
@@ -28,6 +34,7 @@ func _ready() -> void:
 	GameState.company_leveled.connect(_refresh_hub.unbind(2))
 	_refresh_hub()
 	_refresh_ships()
+	_refresh_market()
 
 
 func _process(delta: float) -> void:
@@ -36,6 +43,7 @@ func _process(delta: float) -> void:
 	if _clock >= REFRESH_SECONDS:
 		_clock = 0.0
 		_update_hub_xp()
+		_refresh_market()
 
 
 func _refresh_hub() -> void:
@@ -126,3 +134,28 @@ func _refresh_ships() -> void:
 
 func _open_ship(ship: Ship) -> void:
 	PopupHost.find(self).show_ship(ship, follow)
+
+
+## Each commodity's buy and sell price here, colored against its world average,
+## in two columns of commodities.
+func _refresh_market() -> void:
+	for child in %MarketGrid.get_children():
+		%MarketGrid.remove_child(child)
+		child.queue_free()
+	for title: String in ["", "Buy", "Sell", "", "Buy", "Sell"]:
+		_add_market_cell(title, &"DimLabel")
+	for commodity: Dictionary in GameData.commodities:
+		var sell := GameState.market.sell_price(port_id, commodity.id)
+		var ratio := sell / GameData.world_price(commodity.id)
+		var variation := &"GainLabel" if ratio < MARKET_CHEAP else (&"ErrorLabel" if ratio > MARKET_DEAR else &"")
+		_add_market_cell(commodity.name, &"")
+		_add_market_cell(Fmt.money(roundi(GameState.market.buy_price(port_id, commodity.id))), variation)
+		_add_market_cell(Fmt.money(roundi(sell)), variation)
+
+
+func _add_market_cell(text: String, variation: StringName) -> void:
+	var label := Label.new()
+	label.text = text
+	label.theme_type_variation = variation
+	label.add_theme_font_size_override(&"font_size", MARKET_FONT_SIZE)
+	%MarketGrid.add_child(label)

@@ -12,8 +12,11 @@ signal ships_changed
 ## A ship docked, finished docking, departed, was held in port, was
 ## paused/resumed, got a new route, or had a refuel/repair toggle changed.
 signal ship_changed(ship: Ship)
-## A ship finished unloading at a port and was paid.
-signal ship_arrived(ship: Ship, port_id: String, payment: int)
+## A ship sold its cargo at a port: what it was, how many units, what they cost
+## to buy, what they sold for, and the canal tolls paid on the way.
+signal cargo_sold(ship: Ship, port_id: String, commodity_id: String, quantity: int, cost: int, sale: int, tolls: int)
+## A ship bought cargo at a port to sell at its next one (to_port).
+signal cargo_loaded(ship: Ship, port_id: String, commodity_id: String, quantity: int, cost: int, to_port: String)
 ## A running ship is stuck in port, e.g. without enough fuel for its next leg.
 signal ship_held(ship: Ship, reason: String)
 ## A ship left a port, with what it earned and spent there (toll: the canal
@@ -49,7 +52,7 @@ signal hub_built(hub: Hub)
 signal time_speed_changed(speed: int)
 
 const SAVE_PATH := "user://savegame.json"
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const MAX_NAME_LENGTH := 24
 const MAX_COMPANY_NAME_LENGTH := 32
 ## Seconds of spare fuel a ship must have beyond what its next leg needs.
@@ -63,7 +66,7 @@ const WINDOW_SECONDS := 600.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "fuel", "repair", "tolls", "bought", "sold", "hubs"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 ## Fast-forward speeds the top bar button cycles through.
@@ -115,6 +118,8 @@ var _breakdown_clock := 0.0
 var _auto_recovery_clock := 0.0
 ## Moves ships through canals: tolls, locks and convoys.
 var canal_traffic := CanalTraffic.new(self)
+## Commodity prices: drift and the impact of the player's own trades.
+var market := Market.new(self)
 
 
 func _ready() -> void:
@@ -618,9 +623,16 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.stop_toll = ship.leg_toll
 	ship.leg_toll = 0
 	ship.canals_entered.clear()
-	ship.cargo_payment = GameData.leg_payment(ship.from_port, port, ship.model()) if paid else 0
-	ship.cargo_payment = roundi(ship.cargo_payment * (1.0 + hub_bonus(port, "pay")))
-	ship.unloaded = ship.cargo_payment <= 0
+	# The cargo sells here, at this port's price, when unloading finishes; the
+	# leg's bonuses and the hub's Pay upgrade add to a profitable trade's profit.
+	# XP counts the leg it came, none if a recovery boat carried it back.
+	ship.cargo_payment = 0
+	ship.cargo_leg_nm = 0.0
+	if not ship.cargo_id.is_empty():
+		var sale := ship.cargo_qty * market.sell_price(port, ship.cargo_id)
+		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost))
+		ship.cargo_leg_nm = GameData.distance_nm(ship.from_port, port) if paid and ship.from_port != port else 0.0
+	ship.unloaded = ship.is_recovery()
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""
@@ -634,6 +646,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.repair_rate = (1.0 - ship.maintenance) / phase
 	ship.refuel_rate = (ship.fuel_tank() - ship.fuel) / phase
 	ship.stop_sale = 0
+	ship.stop_cost = 0
 	ship.stop_fuel_cost = 0.0
 	ship.stop_repair_cost = 0.0
 	ship_changed.emit(ship)
@@ -667,16 +680,29 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		_set_hold(ship, "")
 
 
+## Halfway through a stop: sells the cargo it brought (if any), then loads its
+## next one for where it's going (if it's running a route).
 func _unload(ship: Ship) -> void:
 	ship.unloaded = true
+	if not ship.cargo_id.is_empty():
+		_sell_cargo(ship)
+	if ship.is_running():
+		_load_cargo(ship, ship.route[ship.next_route_index()])
+	ship_changed.emit(ship)
+
+
+func _sell_cargo(ship: Ship) -> void:
+	var commodity := GameData.commodity(ship.cargo_id)
 	ship.stop_sale = ship.cargo_payment
+	ship.stop_cost = ship.cargo_cost
 	money += ship.cargo_payment
 	_record(ship, "income", ship.cargo_payment)
-	if ship.model().get("category", "") == "container":
-		containers_delivered += ship.capacity()
-	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
+	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
+	if commodity.get("unit", "") == "container":
+		containers_delivered += ship.cargo_qty
+	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll)
 	var hub := hub_at(ship.docked_at)
-	var xp := Progression.xp_for_payment(ship.cargo_payment)
+	var xp := Progression.xp_for_cargo(ship.cargo_qty, ship.cargo_id, ship.cargo_leg_nm)
 	# Cargo that came through canals earns their XP bonuses on top of the hub's.
 	var canal_bonus := 0.0
 	for canal_id in ship.delivery_canals:
@@ -693,6 +719,38 @@ func _unload(ship: Ship) -> void:
 		hub.deliveries += 1
 		hub.income += ship.cargo_payment
 		_gain_hub_xp(hub, xp * (1.0 + canal_bonus))
+	ship.cargo_id = ""
+	ship.cargo_qty = 0
+	ship.cargo_cost = 0
+	ship.cargo_payment = 0
+
+
+## Buys the most profitable cargo the ship can carry to its next port (see
+## Market.best_cargo()): a full hold (less what a canal makes it leave behind),
+## or as much as the money allows while keeping the fleet's fuel reserve (see
+## fuel_reserve()). Nothing if no cargo makes a profit.
+func _load_cargo(ship: Ship, to: String) -> void:
+	if ship.is_recovery() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
+		return
+	var best := market.best_cargo(ship.model(), ship.docked_at, to)
+	if best[0] == "":
+		return
+	var price := market.buy_price(ship.docked_at, best[0])
+	var fuel_reserve := fuel_reserve()
+	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
+	var quantity := mini(room, floori((float(money) - ship.bill - fuel_reserve) / price))
+	if quantity <= 0:
+		return
+	var cost := roundi(quantity * price)
+	money -= cost
+	_record(ship, "cargo", cost)
+	market.trade(ship.docked_at, best[0], cost, true)
+	ship.cargo_id = best[0]
+	ship.cargo_from = ship.docked_at
+	ship.cargo_qty = quantity
+	ship.cargo_cost = cost
+	cargo_loaded.emit(ship, ship.docked_at, best[0], quantity, cost, to)
+	ship_changed.emit(ship)
 
 
 ## Adds delivery XP to the company (times company_multiplier, from a hub's
@@ -765,6 +823,7 @@ func _set_hold(ship: Ship, reason: String) -> void:
 func _depart(ship: Ship, to: String) -> void:
 	if not ship.is_recovery():
 		ship.route_index = ship.next_route_index()
+		_load_cargo(ship, to)  # If it didn't load when unloading (a new ship, or a new route).
 	_leave_port(ship)
 	ship.from_port = ship.docked_at
 	ship.to_port = to
@@ -790,6 +849,35 @@ func _leave_port(ship: Ship) -> void:
 
 
 # --- Canals ----------------------------------------------------------------
+
+## Extra money on a profitable trade from a leg's bonuses: the profit x (the
+## leg's sale factor (rough seas, upper lakes) x the destination hub's Pay
+## upgrade - 1). Nothing on a loss.
+func trade_bonus(from_port: String, to_port: String, profit: float) -> float:
+	if profit <= 0.0:
+		return 0.0
+	return profit * (GameData.sale_factor(from_port, to_port) * (1.0 + hub_bonus(to_port, "pay")) - 1.0)
+
+
+## Money cargo purchases leave alone so no ship is stranded for fuel: what
+## filling every ship's tank would cost at the port it's at or heading to.
+func fuel_reserve() -> float:
+	var total := 0.0
+	for ship in ships:
+		var port := ship.docked_at if ship.is_docked() else ship.to_port
+		if not port.is_empty():
+			total += ship.fuel_tank() * market.fuel_price(port)
+	return total
+
+
+## A canal's toll for a ship: its toll_share of what the ship's cargo will sell
+## for at the end of the leg (nothing for an empty ship).
+func cargo_toll(ship: Ship, canal: Dictionary) -> int:
+	if ship.cargo_id.is_empty():
+		return 0
+	var value := ship.cargo_qty * market.sell_price(ship.to_port, ship.cargo_id)
+	return roundi(value * float(canal.get("toll_share", 0.0)))
+
 
 ## Charges a canal toll to a ship's ledger and the finances.
 func record_toll(ship: Ship, canal: Dictionary, toll: int) -> void:
@@ -902,7 +990,7 @@ func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
 		approach_nm = approach_nm,
 		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if tow_port == a else 1.0),
 		fuel = mammoth.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S),
-		cost = mammoth.fuel_per_s() * running * float(GameData.config.get("fuel_price", 0))
+		cost = mammoth.fuel_per_s() * running * market.fuel_price(mammoth.docked_at)
 			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost(),
 	}
 
@@ -972,7 +1060,7 @@ func _refuel(ship: Ship, amount: float) -> void:
 	amount = minf(amount, ship.fuel_tank() - ship.fuel)
 	if amount <= 0.0:
 		return
-	var cost := amount * float(GameData.config.get("fuel_price", 0)) * (1.0 - hub_bonus(ship.docked_at, "costs"))
+	var cost := amount * market.fuel_price(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs"))
 	var paid := _spend(ship, cost, "fuel")
 	ship.stop_fuel_cost += paid
 	ship.fuel = minf(ship.fuel + amount * paid / cost, ship.fuel_tank())
@@ -1048,7 +1136,7 @@ func recent_finances() -> Dictionary:
 			fleet[kind] = float(fleet.get(kind, 0.0)) + bucket.fleet[kind]
 		for ship_name: String in bucket.ships:
 			var tally: Dictionary = bucket.ships[ship_name]
-			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0)) + float(tally.get("tolls", 0.0))
+			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0)) + float(tally.get("tolls", 0.0)) + float(tally.get("cargo", 0.0))
 			ship_profit[ship_name] = float(ship_profit.get(ship_name, 0.0)) + float(tally.get("income", 0.0)) - costs
 	return {fleet = fleet, ships = ship_profit}
 
@@ -1070,6 +1158,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	totals = {}
 	canal_stats = {}
 	canal_traffic.clear()
+	market.clear()
 	company_xp = 0.0
 	show_active_routes = true
 	hubs.assign([Hub.new(home_port, true)])
@@ -1085,7 +1174,7 @@ func continue_game() -> String:
 		push_error("GameState: save file %s is missing or corrupt" % SAVE_PATH)
 		return "The saved game could not be read."
 	if int(data.get("version", 0)) != SAVE_VERSION:
-		return "This save is from an older version of the game and can't be loaded. Start a new game."
+		return "This save is from before commodity trading and can't be loaded. Start a new game."
 	company_name = data.get("company_name", "")
 	company_color = data.get("company_color", "purple")  # Saves from before colors: purple.
 	home_port = data.get("home_port", "")
@@ -1095,8 +1184,9 @@ func continue_game() -> String:
 	play_time = float(data.get("play_time", 0.0))
 	totals = data.get("totals", {})
 	canal_stats = data.get("canal_stats", {})
+	market.from_dict(data.get("market", {}))
 	# Saves from before XP: count the XP past deliveries would have earned.
-	company_xp = float(data.get("company_xp", Progression.xp_for_payment(float(totals.get("income", 0.0)))))
+	company_xp = float(data.get("company_xp", 0.0))
 	_window = data.get("finance_window", [])
 	show_active_routes = bool(data.get("show_active_routes", true))
 	hubs.clear()
@@ -1131,6 +1221,7 @@ func save_game() -> void:
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
 		"totals": totals,
 		"canal_stats": canal_stats,
+		"market": market.to_dict(),
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,
 		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),

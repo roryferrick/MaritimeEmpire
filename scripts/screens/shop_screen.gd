@@ -1,13 +1,15 @@
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
-## category: container ships, gas tankers, then recovery boats. Each section
+## category: container ships, tankers, ore, grain, livestock and vehicle
+## carriers, then recovery boats. Each section
 ## title runs through its models' map colors, smallest ship first, and each
 ## card's name is in its model's map color. Each card shows how many of the
 ## model the company's level allows, and the level that unlocks the model or its
 ## next slot. A red dot marks every Buy button that can be used right now.
 
 ## [title, ship_models.json category]
-const SECTIONS := [["Container ships", "container"], ["Gas tankers", "tanker"], ["Recovery boats", "recovery"]]
+const SECTIONS := [["Container ships", "container"], ["Tankers", "tanker"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
+	["Livestock carriers", "livestock"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"]]
 ## Cards per row, fewer if they don't fit. Five fit beside the activity log
 ## at the default window size.
 const MAX_COLUMNS := 5
@@ -117,7 +119,8 @@ func _make_card(model: Dictionary) -> Control:
 	var tank := float(model.get("fuel_tank", 0))
 	var rows := [
 		["Speed", "%s nm/s" % Fmt.decimal(float(model.get("speed_nm_per_s", 0)), 2)],
-		["Cargo", GameData.cargo_text(model)],
+		["Hold", GameData.cargo_text(model)],
+		["Carries", GameData.cargo_names(model)],
 		["Range", "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))],
 		["Tank", "%s · %s" % [Fmt.short(tank), Fmt.rough_duration(tank / float(model.get("fuel_per_s", 1)))]],
 		["Stop", Fmt.duration(float(model.get("dock_s", 0)))],
@@ -127,6 +130,7 @@ func _make_card(model: Dictionary) -> Control:
 	if model.get("recovery", false):
 		rows[1] = ["Carries", GameData.carries_text(model)]
 		rows[2] = ["Job", "Recovers lost ships"]
+		rows.remove_at(3)
 	for row: Array in rows:
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override(&"separation", 6)

@@ -125,6 +125,11 @@ func _rebuild_list() -> void:
 		var prefix := "back to" if i == n - 1 else "to"
 		leg.text = "      %s %s · %s%s" % [prefix, GameData.port_name(next), _leg_text(distance, sailing_s, lock_s), _canal_text(_waypoints[i], next)]
 		%WaypointList.add_child(leg)
+		var trade := Label.new()
+		trade.theme_type_variation = &"GainLabel"
+		trade.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		trade.text = "      %s" % _trade_text(_waypoints[i], next)
+		%WaypointList.add_child(trade)
 
 	if n == 0:
 		%TotalLabel.text = "Click ports on the map in the order the ship should visit them."
@@ -154,24 +159,35 @@ func _sailing_seconds(from_port: String, to_port: String) -> float:
 	return seconds
 
 
-## Each canal on a leg, e.g. " · Panama Canal: toll $4,200, +50% XP", plus the
-## longest convoy wait and any cargo unloaded to pass; "" for none.
+## Each canal on a leg, e.g. " · Panama Canal: toll 20% of cargo value, +50%
+## XP", plus the longest convoy wait and any cargo unloaded to pass; "" for none.
 func _canal_text(from_port: String, to_port: String) -> String:
 	var text := ""
 	for crossing: Dictionary in GameData.canal_crossings(from_port, to_port):
 		var canal: Dictionary = crossing.canal
 		var parts := PackedStringArray()
-		var toll := GameData.canal_toll(from_port, to_port, _ship.model(), canal)
-		if toll > 0:
-			parts.append("toll %s" % Fmt.money(toll))
+		var share := float(canal.get("toll_share", 0.0))
+		if share > 0.0:
+			parts.append("toll %d%% of cargo value" % roundi(share * 100.0))
 		if float(canal.get("xp_bonus", 0.0)) > 0.0:
 			parts.append("+%d%% XP" % roundi(float(canal.xp_bonus) * 100.0))
 		if canal.get("type", "") == "convoy":
 			parts.append("up to %s waiting for a convoy" % Fmt.duration(float(canal.get("convoy_interval_s", 90))))
 		var lighten := float(canal.get("lighten", {}).get(_ship.model_id, 0.0))
 		if lighten > 0.0:
-			parts.append("unloads %d%% to pass (pay -%d%%)" % [roundi(lighten * 100.0), roundi(lighten * 100.0)])
+			parts.append("unloads %d%% of its cargo to pass" % roundi(lighten * 100.0))
 		text += " · %s: %s" % [canal.name, ", ".join(parts)] if not parts.is_empty() else " · %s" % canal.name
 	if GameData.is_rough_port(from_port) or GameData.is_rough_port(to_port):
-		text += " · rough seas: +%d%% pay and XP, 2x wear" % roundi(float(GameData.config.get("rough_seas", {}).get("pay_bonus", 0.0)) * 100.0)
+		text += " · rough seas: +%d%% trade profit, 2x wear" % roundi(float(GameData.config.get("rough_seas", {}).get("pay_bonus", 0.0)) * 100.0)
 	return text
+
+
+## What the ship would load for a leg and about how much it would make, at
+## today's prices: "loads Toys: about +$2,300", or that it would sail empty.
+func _trade_text(from_port: String, to_port: String) -> String:
+	var model := _ship.model()
+	var best := GameState.market.best_cargo(model, from_port, to_port)
+	if best[0] == "":
+		return "nothing to trade: sails empty"
+	var quantity := floori(_ship.capacity() * (1.0 - GameData.leg_lightening(from_port, to_port, model)))
+	return "loads %s: about +%s" % [GameData.commodity(best[0]).get("name", best[0]), Fmt.money(roundi(best[1] * quantity))]

@@ -9,12 +9,13 @@ const REFRESH_SECONDS := 1.0
 const TABLE_FONT_SIZE := 14
 ## Table columns: [title, sort key]. Money columns sort biggest first.
 const COLUMNS := [
-	["Ship", "name"], ["Model", "model"], ["Income", "income"], ["Fuel", "fuel"],
+	["Ship", "name"], ["Model", "model"], ["Sales", "income"], ["Cargo", "cargo"], ["Fuel", "fuel"],
 	["Repairs", "repair"], ["Tolls", "tolls"], ["Profit", "profit"], ["Last 10 min", "recent"],
 ]
 ## Totals rows: [title, money kind, is a cost].
 const TOTAL_ROWS := [
-	["Cargo income", "income", false], ["Fuel", "fuel", true], ["Repairs", "repair", true], ["Canal tolls", "tolls", true],
+	["Cargo sales", "income", false], ["Cargo bought", "cargo", true], ["Fuel", "fuel", true], ["Repairs", "repair", true],
+	["Canal tolls", "tolls", true],
 	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true],
 ]
 
@@ -69,10 +70,11 @@ func _fill_totals(recent: Dictionary) -> void:
 		_add_label(%Totals, Fmt.money(roundi(profit)), &"GainLabel" if profit >= 0.0 else &"ErrorLabel")
 
 
-## Income minus fuel, repairs and canal tolls (not buying or selling ships).
+## Cargo sales minus cargo bought, fuel, repairs and canal tolls (not buying or
+## selling ships).
 static func _operating_profit(source: Dictionary) -> float:
-	return (float(source.get("income", 0.0)) - float(source.get("fuel", 0.0)) - float(source.get("repair", 0.0))
-		- float(source.get("tolls", 0.0)))
+	return (float(source.get("income", 0.0)) - float(source.get("cargo", 0.0)) - float(source.get("fuel", 0.0))
+		- float(source.get("repair", 0.0)) - float(source.get("tolls", 0.0)))
 
 
 ## Crossings, tolls and bonus XP for each canal the fleet has been through.
@@ -106,6 +108,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 			name = ship.name,
 			model = String(ship.model().get("name", ship.model_id)),
 			income = ship.ledger.income,
+			cargo = ship.ledger.cargo,
 			fuel = ship.ledger.fuel,
 			repair = ship.ledger.repair,
 			tolls = ship.ledger.tolls,
@@ -117,7 +120,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 		_add_label(%ShipTable, row.name)
 		_add_label(%ShipTable, row.model, &"DimLabel")
 		_add_label(%ShipTable, Fmt.money(roundi(row.income)))
-		for key: String in ["fuel", "repair", "tolls"]:
+		for key: String in ["cargo", "fuel", "repair", "tolls"]:
 			_add_label(%ShipTable, Fmt.money(-roundi(row[key])))
 		for key: String in ["profit", "recent"]:
 			_add_label(%ShipTable, Fmt.money(roundi(row[key])), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel")

@@ -12,6 +12,7 @@ const SHIP_MODELS_PATH := "res://data/ship_models.json"
 const SHIP_NAMES_PATH := "res://data/ship_names.json"
 const WORLD_MAP_PATH := "res://data/world_map.res"
 const CANALS_PATH := "res://data/canals.json"
+const MARKETS_PATH := "res://data/markets.json"
 ## How close (in projected degrees) a lane must pass a lock chamber to go through it.
 const CHAMBER_ON_LANE := 0.002
 const _NO_LANE := 1 << 30
@@ -27,6 +28,9 @@ var world_map: WorldMapData
 ## canals' single-lane stretches (single_nm: [[start, end] nm]), and lock
 ## chambers in path order (chambers: {index, lock, position, path_index}).
 var canals: Array[Dictionary] = []
+## Commodities, regions and prices from data/markets.json.
+var markets: Dictionary = {}
+var commodities: Array[Dictionary] = []
 
 var _ports_by_id: Dictionary = {}
 var _port_positions: Dictionary = {}  # id -> projected Vector2
@@ -39,6 +43,10 @@ var _lane_cache: Dictionary = {}  # "FROM-TO" -> SeaLane, built on first use
 var _crossing_cache: Dictionary = {}  # "FROM-TO" -> canal_crossings()
 var _chambers_cache: Dictionary = {}  # "FROM-TO" -> lane_chambers()
 var _zones_cache: Dictionary = {}  # "FROM-TO" -> lane_zones()
+var _commodities_by_id: Dictionary = {}
+var _port_regions: Dictionary = {}  # port id -> region
+var _base_prices: Dictionary = {}  # "PORT/commodity" -> base_price()
+var _world_prices: Dictionary = {}  # commodity -> world_price()
 
 
 ## A sailing path between two ports.
@@ -94,6 +102,7 @@ func _ready() -> void:
 	world_map = load(WORLD_MAP_PATH)
 	_load_lanes()
 	_load_canals()
+	_load_markets()
 
 
 func get_port(id: String) -> Dictionary:
@@ -328,16 +337,11 @@ static func chamber_slots(canal: Dictionary, chamber: Dictionary) -> Array[Strin
 	return slots
 
 
-## The toll for one canal on a leg: its toll_share of the leg's base pay.
-func canal_toll(from_port: String, to_port: String, model: Dictionary, canal: Dictionary) -> int:
-	return roundi(leg_payment(from_port, to_port, model) * float(canal.get("toll_share", 0.0)))
-
-
-## All the canal tolls on a leg.
-func leg_tolls(from_port: String, to_port: String, model: Dictionary) -> int:
-	var total := 0
+## The share of a cargo's sale value all the canals on a leg charge as tolls.
+func leg_toll_share(from_port: String, to_port: String) -> float:
+	var total := 0.0
 	for crossing: Dictionary in canal_crossings(from_port, to_port):
-		total += canal_toll(from_port, to_port, model, crossing.canal)
+		total += float(crossing.canal.get("toll_share", 0.0))
 	return total
 
 
@@ -443,20 +447,16 @@ func route_text(route: Array[String]) -> String:
 	return " → ".join(PackedStringArray(route.map(port_name)))
 
 
-## Paid to a ship of this model for carrying a load between two ports (before
-## any hub bonus): capacity x distance x pay rate, plus rough_seas.pay_bonus
-## to or from a port in the rough seas, plus upper_lakes_bonus between two
-## upper Great Lakes ports, less what a canal makes it unload to pass
-## (a canal's "lighten" for the model, e.g. a Supertanker at Suez).
-func leg_payment(from_port: String, to_port: String, model: Dictionary) -> int:
-	var pay := int(model.get("capacity", 0)) * distance_nm(from_port, to_port) * pay_rate(model)
+## How much more a cargo sells for on a leg: rough_seas.pay_bonus to or from a
+## port in the rough seas, and upper_lakes_bonus between two upper Great Lakes
+## ports (x1 otherwise).
+func sale_factor(from_port: String, to_port: String) -> float:
+	var factor := 1.0
 	if is_rough_port(from_port) or is_rough_port(to_port):
-		pay *= 1.0 + float(config.get("rough_seas", {}).get("pay_bonus", 0.0))
+		factor *= 1.0 + float(config.get("rough_seas", {}).get("pay_bonus", 0.0))
 	if is_upper_lakes_port(from_port) and is_upper_lakes_port(to_port):
-		pay *= 1.0 + float(config.get("upper_lakes_bonus", 0.0))
-	for crossing: Dictionary in canal_crossings(from_port, to_port):
-		pay *= 1.0 - float(crossing.canal.get("lighten", {}).get(model.get("id", ""), 0.0))
-	return roundi(pay)
+		factor *= 1.0 + float(config.get("upper_lakes_bonus", 0.0))
+	return factor
 
 
 ## True for Great Lakes ports on Lakes Superior, Michigan or Huron.
@@ -472,16 +472,96 @@ func leg_lightening(from_port: String, to_port: String, model: Dictionary) -> fl
 	return 1.0 - kept
 
 
-## Dollars per unit of cargo per nm: the model's own pay_per_unit_nm (gas
-## tankers), or game_config pay_per_container_nm.
-func pay_rate(model: Dictionary) -> float:
-	return float(model.get("pay_per_unit_nm", config.get("pay_per_container_nm", 0.0)))
-
-
-## "10,000 containers" or "5,000 tons of fuel".
+## "800 tons" or "10 containers": a model's hold in its cargo's unit.
 func cargo_text(model: Dictionary) -> String:
-	var unit := "tons of fuel" if model.get("category", "") == "tanker" else "containers"
-	return "%s %s" % [Fmt.thousands(int(model.get("capacity", 0))), unit]
+	var cargo: Array = model.get("cargo", [])
+	var units: String = commodity(cargo[0]).get("units", "units") if not cargo.is_empty() else "units"
+	return "%s %s" % [Fmt.thousands(int(model.get("capacity", 0))), units]
+
+
+## "Toys, Clothing, Furniture, Coffee": what a model can carry.
+func cargo_names(model: Dictionary) -> String:
+	return ", ".join(PackedStringArray(model.get("cargo", []).map(func(id: String) -> String: return commodity(id).get("name", id))))
+
+
+# --- Markets -----------------------------------------------------------------
+
+func commodity(id: String) -> Dictionary:
+	return _commodities_by_id.get(id, {})
+
+
+## The region a port is in: {id, name, ports}.
+func port_region(port_id: String) -> Dictionary:
+	return _port_regions.get(port_id, {})
+
+
+## A commodity's steady price at a port, before drift and market impact (see
+## data/markets.json and _build_prices()).
+func base_price(port_id: String, commodity_id: String) -> float:
+	if _base_prices.is_empty():
+		_build_prices()
+	return float(_base_prices.get("%s/%s" % [port_id, commodity_id], 0.0))
+
+
+## Steady prices for every port and commodity. Each port starts from base x its
+## region's multiplier (or its own, if it's a source); then, as competing
+## traders would, prices are evened out with nearby ports (a weighted average,
+## the weight falling off with sea distance over smoothing_nm), so neighbours
+## price alike and differences build up with distance. Last, a gentle local
+## variation (spread over local_variation, varying smoothly across the map
+## rather than port by port) is applied.
+func _build_prices() -> void:
+	var sigma := float(markets.get("smoothing_nm", 700.0))
+	var weights := []  # Per port: [[other index, weight], ...]
+	for i in ports.size():
+		var row := []
+		for j in ports.size():
+			var d := 0.0 if i == j else distance_nm(ports[i].id, ports[j].id)
+			if d < 3.0 * sigma:
+				row.append([j, exp(-(d * d) / (sigma * sigma))])
+		weights.append(row)
+	var variation := float(markets.get("local_variation", 0.0))
+	for item: Dictionary in commodities:
+		var raw := PackedFloat64Array()
+		for port in ports:
+			var region_id: String = port_region(port.id).get("id", "")
+			var multiplier := float(markets.region_prices.get(region_id, {}).get(item.id, 1.0))
+			raw.append(float(item.base) * float(markets.sources.get(item.id, {}).get(port.id, multiplier)))
+		for i in ports.size():
+			var total := 0.0
+			var weight := 0.0
+			for pair: Array in weights[i]:
+				total += raw[pair[0]] * pair[1]
+				weight += pair[1]
+			var local := 1.0 + variation * 0.5 * _smooth_noise(ports[i], item.id)
+			_base_prices["%s/%s" % [ports[i].id, item.id]] = total / weight * local
+	_world_prices.clear()
+
+
+## A value in [-1, 1] that varies slowly across the map (over thousands of nm),
+## differently for each commodity.
+func _smooth_noise(port: Dictionary, commodity_id: String) -> float:
+	var a := _hash01(commodity_id + "/x") * TAU
+	var b := _hash01(commodity_id + "/y") * TAU
+	var lon := deg_to_rad(float(port.lon))
+	var lat := deg_to_rad(float(port.lat))
+	return 0.5 * sin(lon * 3.0 + a) * cos(lat * 2.0 + b) + 0.5 * sin(lon * 5.0 + lat * 4.0 + a + b)
+
+
+## A commodity's average steady price across all ports.
+func world_price(commodity_id: String) -> float:
+	if _world_prices.has(commodity_id):
+		return _world_prices[commodity_id]
+	var total := 0.0
+	for port in ports:
+		total += base_price(port.id, commodity_id)
+	_world_prices[commodity_id] = total / maxi(ports.size(), 1)
+	return _world_prices[commodity_id]
+
+
+## A repeatable number in [0, 1) for a string, for fixed per-port variation.
+static func _hash01(text: String) -> float:
+	return float(text.hash() & 0xFFFFFF) / float(0x1000000)
 
 
 func get_ship_model(id: String) -> Dictionary:
@@ -536,6 +616,16 @@ func _load_canals() -> void:
 				chambers.append({index = chambers.size(), lock = lock_index, position = position, path_index = path_index})
 		canal.chambers = chambers
 		canals.append(canal)
+
+
+func _load_markets() -> void:
+	markets = _load_json(MARKETS_PATH)
+	for item: Dictionary in markets.get("commodities", []):
+		commodities.append(item)
+		_commodities_by_id[item.id] = item
+	for region: Dictionary in markets.get("regions", []):
+		for port_id: String in region.ports:
+			_port_regions[port_id] = region
 
 
 func _load_json(path: String) -> Dictionary:

@@ -10,6 +10,7 @@
 [ext_resource type="PackedScene" path="res://scenes/screens/finances_screen.tscn" id="8_finances"]
 [ext_resource type="Script" path="res://scripts/ui/activity_log_panel.gd" id="9_log"]
 [ext_resource type="PackedScene" path="res://scenes/screens/hubs_screen.tscn" id="10_hubs"]
+[ext_resource type="Script" path="res://scripts/screens/markets_screen.gd" id="11_markets"]
 
 [node name="Game" type="Control"]
 layout_mode = 3
@@ -160,6 +161,17 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
+[node name="MarketsScreen" type="Control" parent="Layout/Main/Screens"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("11_markets")
+
 [node name="RouteScreen" parent="Layout/Main/Screens" instance=ExtResource("7_route")]
 unique_name_in_owner = true
 visible = false
@@ -198,6 +210,13 @@ custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Ships"
+
+[node name="MarketsButton" type="Button" parent="Layout/BottomNav/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Markets"
 
 [node name="FinancesButton" type="Button" parent="Layout/BottomNav/Buttons"]
 unique_name_in_owner = true

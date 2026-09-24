@@ -511,7 +511,7 @@ func convoy_ships(canal: Dictionary, forward: bool) -> Array[Ship]:
 ## yet. Recovery boats go free.
 func _pay_toll(ship: Ship, canal: Dictionary) -> bool:
 	if not ship.is_recovery():
-		var toll := GameData.canal_toll(ship.from_port, ship.to_port, ship.model(), canal)
+		var toll: int = _state.cargo_toll(ship, canal)
 		if _state.money < toll:
 			return false
 		_state.money -= toll

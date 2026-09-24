@@ -60,6 +60,13 @@ text = "None"
 layout_mode = 2
 
 [node name="MarketLabel" type="Label" parent="Content"]
-modulate = Color(1, 1, 1, 0.6)
 layout_mode = 2
-text = "Cargo market: coming soon"
+theme_type_variation = &"DimLabel"
+text = "Market, per unit (green: cheap here, red: dear)"
+
+[node name="MarketGrid" type="GridContainer" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 0
+columns = 6

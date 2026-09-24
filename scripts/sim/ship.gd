@@ -58,14 +58,24 @@ var auto_refuel := true
 var auto_repair := true
 ## Seconds since the ship docked at the end of a leg; -1 when not unloading/loading.
 var dock_time := -1.0
-## Earned on the leg just sailed; paid when unloading finishes.
+## Cargo aboard (see Market): the commodity id ("" when empty), how many units,
+## and what they cost to buy. On arrival, cargo_payment is what they sell for
+## (paid when unloading finishes) and cargo_leg_nm the leg they came (for XP).
+var cargo_id := ""
+## Where the cargo aboard was bought.
+var cargo_from := ""
+var cargo_qty := 0
+var cargo_cost := 0
 var cargo_payment := 0
+var cargo_leg_nm := 0.0
 var unloaded := true
 ## Rates (per second) that refill what was missing on arrival within one refill phase.
 var repair_rate := 0.0
 var refuel_rate := 0.0
-## Earned and spent at the current stop, for display.
+## Earned and spent at the current stop, for display (stop_cost: what the cargo
+## sold here had cost to buy).
 var stop_sale := 0
+var stop_cost := 0
 var stop_fuel_cost := 0.0
 var stop_repair_cost := 0.0
 ## Fractions of a dollar spent but not yet taken from the player's money.
@@ -101,9 +111,10 @@ var lost_order := 0
 var at_risk := false
 ## Seconds spent sailing since it was bought; older ships break down more.
 var sea_time := 0.0
-## Lifetime money in (income) and out (fuel, repair and canal tolls), in dollars. A
+## Lifetime money in (income: cargo sold) and out (cargo bought, fuel, repair
+## and canal tolls), in dollars. A
 ## recovery boat's own running costs go on its own ledger.
-var ledger := {"income": 0.0, "fuel": 0.0, "repair": 0.0, "tolls": 0.0}
+var ledger := {"income": 0.0, "cargo": 0.0, "fuel": 0.0, "repair": 0.0, "tolls": 0.0}
 ## Total XP from deliveries (cargo ships only), and skill levels bought with
 ## the points its levels give: "speed", "durability", "efficiency".
 var xp := 0.0
@@ -175,7 +186,7 @@ func can_sell() -> bool:
 
 
 func profit() -> float:
-	return ledger.income - ledger.fuel - ledger.repair - ledger.tolls
+	return ledger.income - ledger.cargo - ledger.fuel - ledger.repair - ledger.tolls
 
 
 ## Top speed, including the speed skill.
@@ -421,11 +432,13 @@ func fuel_level() -> float:
 	return clampf(fuel / tank, 0.0, 1.0) if tank > 0.0 else 0.0
 
 
-## 1 when loaded; empties while unloading and fills again while loading.
+## How full the hold is (0..1): the cargo aboard, emptying over the first half
+## of a stop as it's unloaded and filling over the second half with what it loaded.
 func cargo_level() -> float:
+	var full := clampf(float(cargo_qty) / capacity(), 0.0, 1.0) if capacity() > 0 else 0.0
 	if not is_docking() or dock_seconds() <= 0.0:
-		return 1.0
-	return clampf(absf(1.0 - 2.0 * dock_time / dock_seconds()), 0.0, 1.0)
+		return full
+	return full * clampf(absf(1.0 - 2.0 * dock_time / dock_seconds()), 0.0, 1.0)
 
 
 func leg_length() -> float:
@@ -627,11 +640,17 @@ func to_dict() -> Dictionary:
 		"auto_refuel": auto_refuel,
 		"auto_repair": auto_repair,
 		"dock_time": dock_time,
+		"cargo_id": cargo_id,
+		"cargo_from": cargo_from,
+		"cargo_qty": cargo_qty,
+		"cargo_cost": cargo_cost,
 		"cargo_payment": cargo_payment,
+		"cargo_leg_nm": cargo_leg_nm,
 		"unloaded": unloaded,
 		"repair_rate": repair_rate,
 		"refuel_rate": refuel_rate,
 		"stop_sale": stop_sale,
+		"stop_cost": stop_cost,
 		"stop_fuel_cost": stop_fuel_cost,
 		"stop_repair_cost": stop_repair_cost,
 		"bill": bill,
@@ -677,11 +696,17 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.auto_refuel = bool(data.get("auto_refuel", true))
 	ship.auto_repair = bool(data.get("auto_repair", true))
 	ship.dock_time = float(data.get("dock_time", -1.0))
+	ship.cargo_id = str(data.get("cargo_id", ""))
+	ship.cargo_from = str(data.get("cargo_from", ""))
+	ship.cargo_qty = int(data.get("cargo_qty", 0))
+	ship.cargo_cost = int(data.get("cargo_cost", 0))
 	ship.cargo_payment = int(data.get("cargo_payment", 0))
+	ship.cargo_leg_nm = float(data.get("cargo_leg_nm", 0.0))
 	ship.unloaded = bool(data.get("unloaded", true))
 	ship.repair_rate = float(data.get("repair_rate", 0.0))
 	ship.refuel_rate = float(data.get("refuel_rate", 0.0))
 	ship.stop_sale = int(data.get("stop_sale", 0))
+	ship.stop_cost = int(data.get("stop_cost", 0))
 	ship.stop_fuel_cost = float(data.get("stop_fuel_cost", 0.0))
 	ship.stop_repair_cost = float(data.get("stop_repair_cost", 0.0))
 	ship.bill = float(data.get("bill", 0.0))
@@ -710,8 +735,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	var saved_ledger: Dictionary = data.get("ledger", {})
 	for key: String in ship.ledger:
 		ship.ledger[key] = float(saved_ledger.get(key, 0.0))
-	# Saves from before XP: count the XP its past deliveries would have earned.
-	ship.xp = float(data.get("xp", Progression.xp_for_payment(ship.ledger.income)))
+	ship.xp = float(data.get("xp", 0.0))
 	var saved_skills: Dictionary = data.get("skills", {})
 	for key: String in ship.skills:
 		ship.skills[key] = int(saved_skills.get(key, 0))

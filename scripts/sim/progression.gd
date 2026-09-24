@@ -15,10 +15,16 @@ static func xp_for_delivery(capacity: int, distance_nm: float) -> float:
 	return capacity * distance_nm * float(GameData.config.get("xp_per_container_nm", 0.01))
 
 
-## XP for a delivery that paid this much: the containers x nm that pay would
-## buy at the container rate, x xp_per_container_nm.
-static func xp_for_payment(payment: float) -> float:
-	return xp_for_delivery(1, payment / float(GameData.config.get("pay_per_container_nm", 1.0)))
+## XP for delivering cargo: units x distance x xp_per_container_nm, weighted by
+## the commodity's base price against data/markets.json xp_ref_price (so a ton
+## of oil counts for less than a container of toys). Steady whatever the
+## market pays, so a trade at a loss still earns XP.
+static func xp_for_cargo(quantity: int, commodity_id: String, distance_nm: float) -> float:
+	return xp_for_delivery(quantity, distance_nm) * _value_weight(commodity_id)
+
+
+static func _value_weight(commodity_id: String) -> float:
+	return float(GameData.commodity(commodity_id).get("base", 0.0)) / float(GameData.markets.get("xp_ref_price", 4000))
 
 
 static func max_company_level() -> int:
@@ -143,10 +149,16 @@ static func _full_fleet_xp_per_minute(level: int) -> float:
 	return rate * float(GameData.config.get("at_sea_share", 0.75))
 
 
-## Delivery XP follows pay, so a tanker earns the XP of the containers its pay would buy.
+## A model's XP per minute at sea with a full hold of its average cargo.
 static func _xp_per_minute(model: Dictionary) -> float:
-	var pay_per_minute := int(model.get("capacity", 0)) * float(model.get("speed_nm_per_s", 0)) * 60.0 * GameData.pay_rate(model)
-	return xp_for_payment(pay_per_minute)
+	var cargo: Array = model.get("cargo", [])
+	if cargo.is_empty():
+		return 0.0
+	var weight := 0.0
+	for commodity_id: String in cargo:
+		weight += _value_weight(commodity_id)
+	weight /= cargo.size()
+	return xp_for_delivery(int(model.get("capacity", 0)), float(model.get("speed_nm_per_s", 0)) * 60.0) * weight
 
 
 static func _round_to_2_figures(value: float) -> int:

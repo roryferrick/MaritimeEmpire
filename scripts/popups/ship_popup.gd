@@ -20,6 +20,9 @@ var ship: Ship
 
 var _sell_confirm_until := 0.0
 var _upgrades_alert := AlertDot.new(4.0, Vector2(6, 6))
+## "Carrying 10 containers of Toys, bought for $1,200 at Shanghai, worth about
+## $3,500 at Rotterdam".
+var _cargo_label := Label.new()
 
 
 func _ready() -> void:
@@ -33,6 +36,11 @@ func _ready() -> void:
 	else:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 		%CapacityValue.text = GameData.cargo_text(model)
+		%CapacityValue.tooltip_text = "Carries %s" % GameData.cargo_names(model)
+		%CapacityValue.mouse_filter = Control.MOUSE_FILTER_PASS
+	_cargo_label.theme_type_variation = &"DimLabel"
+	_cargo_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	%CostLabel.add_sibling(_cargo_label)
 	%BarsSlot.add_child(ShipBars.new(ship))
 	for node: Control in [%SkillsButton, %LevelName, %LevelValue]:
 		node.visible = not ship.is_recovery()
@@ -70,6 +78,7 @@ func _update_live() -> void:
 	var repair := roundi(ship.stop_repair_cost)
 	var toll := ship.stop_toll
 	var has_costs := ship.is_docked() and (ship.stop_sale > 0 or fuel + repair + toll > 0)
+	_update_cargo()
 	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed)
 	var costs := "Fuel %s · Repair %s" % [Fmt.money(-fuel), Fmt.money(-repair)]
 	if toll > 0:
@@ -77,12 +86,33 @@ func _update_live() -> void:
 	if ship.is_recovery():
 		%CostLabel.text = "This stop: %s" % costs
 	else:
-		%CostLabel.text = "This stop: Sold %s · %s\nProfit %s" % [
-			Fmt.money(ship.stop_sale), costs, Fmt.money(ship.stop_sale - fuel - repair - toll)]
+		%CostLabel.text = "This stop: Sold %s (cargo cost %s) · %s\nProfit %s" % [Fmt.money(ship.stop_sale),
+			Fmt.money(ship.stop_cost), costs, Fmt.money(ship.stop_sale - ship.stop_cost - fuel - repair - toll)]
 	_update_recovery()
 	_update_sell()
 	if not ship.is_recovery():
 		_update_level_text()
+
+
+## What's aboard: its cost and what it should sell for where it's going, at
+## today's prices; "Empty hold" otherwise.
+func _update_cargo() -> void:
+	_set_shown(_cargo_label, not ship.is_recovery() and not %SkillsButton.button_pressed)
+	if ship.cargo_id.is_empty():
+		_cargo_label.text = "Empty hold"
+		return
+	var commodity := GameData.commodity(ship.cargo_id)
+	var from := ship.cargo_from
+	var to := ship.to_port
+	if ship.is_docked():
+		to = ship.docked_at if not ship.unloaded else (ship.route[ship.next_route_index()] if ship.has_route() else "")
+	var text := "Carrying %s %s of %s, bought for %s at %s" % [Fmt.thousands(ship.cargo_qty), commodity.get("units", "units"),
+		commodity.get("name", ship.cargo_id), Fmt.money(ship.cargo_cost), GameData.port_name(from)]
+	if not to.is_empty():
+		var sale := ship.cargo_qty * GameState.market.sell_price(to, ship.cargo_id)
+		var worth: float = sale + GameState.trade_bonus(from, to, sale - ship.cargo_cost)
+		text += ", worth about %s at %s" % [Fmt.money(roundi(worth)), GameData.port_name(to)]
+	_cargo_label.text = text
 
 
 func _update_sell() -> void:

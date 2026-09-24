@@ -1,9 +1,9 @@
 class_name GameRoot
 extends Control
-## Root of an active game: top bar, activity log, the five main screens, the
+## Root of an active game: top bar, activity log, the six main screens, the
 ## bottom nav, and the full-screen Route Assignment screen.
 
-enum Screen { WORLD, SHIPS, FINANCES, HUBS, SHOP }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -14,6 +14,7 @@ var _current_screen := Screen.WORLD
 @onready var _screens := {
 	Screen.WORLD: %WorldScreen,
 	Screen.SHIPS: %ShipsScreen,
+	Screen.MARKETS: %MarketsScreen,
 	Screen.FINANCES: %FinancesScreen,
 	Screen.HUBS: %HubsScreen,
 	Screen.SHOP: %ShopScreen,
@@ -21,6 +22,7 @@ var _current_screen := Screen.WORLD
 @onready var _nav_buttons := {
 	Screen.WORLD: %WorldButton,
 	Screen.SHIPS: %ShipsButton,
+	Screen.MARKETS: %MarketsButton,
 	Screen.FINANCES: %FinancesButton,
 	Screen.HUBS: %HubsButton,
 	Screen.SHOP: %ShopButton,
@@ -49,7 +51,8 @@ func _ready() -> void:
 		button.button_group = group
 		button.pressed.connect(show_screen.bind(screen))
 	%RouteScreen.finished.connect(_close_route_screen)
-	GameState.ship_departed.connect(_on_ship_departed)
+	GameState.cargo_sold.connect(_on_cargo_sold)
+	GameState.cargo_loaded.connect(_on_cargo_loaded)
 	GameState.canal_entered.connect(_on_canal_entered)
 	GameState.ship_held.connect(_on_ship_held)
 	GameState.ship_broke_down.connect(_on_ship_broke_down)
@@ -139,14 +142,21 @@ func _close_route_screen() -> void:
 	show_screen(_current_screen)
 
 
-## The profit counts the canal toll paid on the leg that brought the ship here.
-func _on_ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, repair_cost: int, toll: int) -> void:
-	var port := GameData.port_name(port_id)
-	var costs := fuel_cost + repair_cost + toll
-	if sale > 0:
-		ActivityLog.add("%s left %s: profit %s" % [ship.name, port, Fmt.money(sale - costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
-	else:
-		ActivityLog.add("%s left %s: fuel and repairs %s" % [ship.name, port, Fmt.money(-costs)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+## "Sea Otter sold Toys at Rotterdam: +$2,300 profit (bought $1,200, sold $3,500)":
+## the trade's profit after the canal tolls on the way; a loss is shown in red.
+func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity: int, cost: int, sale: int, tolls: int) -> void:
+	var profit := sale - cost - tolls
+	var text := "%s sold %s at %s: %s%s profit (bought %s, sold %s%s)" % [ship.name, GameData.commodity(commodity_id).get("name", commodity_id),
+		GameData.port_name(port_id), "+" if profit >= 0 else "", Fmt.money(profit), Fmt.money(cost), Fmt.money(sale),
+		", tolls %s" % Fmt.money(tolls) if tolls > 0 else ""]
+	ActivityLog.add(text, ActivityLog.Kind.INFO if profit >= 0 else ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
+
+
+## "Sea Otter loaded 10 containers of Toys for Rotterdam ($1,200)".
+func _on_cargo_loaded(ship: Ship, _port_id: String, commodity_id: String, quantity: int, cost: int, to_port: String) -> void:
+	var commodity := GameData.commodity(commodity_id)
+	ActivityLog.add("%s loaded %s %s of %s for %s (%s)" % [ship.name, Fmt.thousands(quantity), commodity.get("units", "units"),
+		commodity.get("name", commodity_id), GameData.port_name(to_port), Fmt.money(cost)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 ## "Ever Bright entered the Panama Canal: toll $4,200 (+50% XP on this delivery)";

@@ -12,7 +12,7 @@ const PATHS := [
 	["xp", "Ship XP", "+%d%% XP"],
 	["costs", "Fuel & repairs", "-%d%% price"],
 	["speed", "Port stops", "-%d%% time"],
-	["pay", "Pay", "+%d%% pay"],
+	["pay", "Sale prices", "+%d%% sale price"],
 ]
 
 var port_id := ""

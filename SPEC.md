@@ -7,7 +7,7 @@
 - Silent (no audio) for beta.
 
 ## Data & tools
-- Game data lives in data/: ports.json (ports), ship_models.json (models, prices, speeds, ranges, limits, map look), ship_names.json (suggested ship names), game_config.json (starting money, pay rate, autosave interval, initial map zoom).
+- Game data lives in data/: ports.json (ports), ship_models.json (models, prices, speeds, ranges, limits, map look), ship_names.json (suggested ship names), game_config.json (starting money, XP and levels, autosave interval, initial map zoom), markets.json (commodities, regions and prices), canals.json (canals and locks).
 - Generated data: data/world_map.res (land, coastline, lakes, rivers, borders, country names) and data/sea_lanes.res (a lane and distance for every pair of ports). Both are built by tools/build_map_data.gd from Natural Earth public-domain downloads kept in tools/source_data/ (not in git).
 - After changing ports.json, rerun the tool (about 25-30 minutes; add `-- --lanes-only` to skip rebuilding the map art, or `-- --map-only` to rebuild only the map art after changing its source data). Source data in tools/source_data/: ne_10m_land, ne_50m_admin_0_countries, ne_10m_lakes and ne_10m_rivers_lake_centerlines (GeoJSON):
   `Godot --headless --path . -s tools/build_map_data.gd`
@@ -15,14 +15,21 @@
 - Saves record port and model ids, so renaming models or adding ports keeps existing saves working; removing or renaming a port id does not.
 
 ## Economy & time
-- Starting money: $10,000.
+- Starting money: $150,000 (enough for a first ship and its first cargoes). Saves from before trading can't be loaded.
 - NOT an idle game (for beta): time only passes while the game is open, at a constant speed, or 2x or 4x with fast forward (see Top bar).
 - On quit, the game saves and the world freezes. On Continue, everything resumes exactly where it left off. Ships do not move and no money is earned while the game is closed.
-- Payment for every leg, credited when the ship finishes unloading at the far port: containers (the ship's capacity) × leg distance in nm × $0.6125. The rate is tuned so a Scooter 10 earns about $2,000 per minute of sailing; Rome→Tunis pays a Scooter 10 about $2,000.
-- Every delivery adds the ship's capacity to the "Containers delivered" total.
-- Fuel costs $2.40 per unit at every port (game_config.json). Fuel costs about 40% of a leg's pay, and repairs about 10%.
-- When a ship leaves a port, the activity log shows its profit there (sale − (fuel + repair + the canal toll paid on the leg that brought it there)).
+- Ships trade (see Trading): they buy a commodity at one port and sell it at the next. Profit is the price difference, less fuel, repairs and canal tolls.
+- Every container delivered adds to the "Containers delivered" total.
+- Ships buy their own fuel at each port's local price, which follows the oil price there (cheapest in the Gulf, dearest on remote islands); on average it's half the old $2.40. Repair costs are half what they were.
 - Endless sandbox — no win condition.
+
+## Trading
+- 12 commodities (data/markets.json): Toys, Clothing, Furniture and Coffee (container ships); Oil and Gas (tankers); Iron ore, Coal and Gold ore (ore carriers); Grain (grain carriers); Livestock (livestock carriers); Vehicles (vehicle carriers). Container ships, tankers and ore carriers pick whichever of their goods pays best at each stop; the others carry their one good.
+- Every port buys and sells everything. Prices come from 16 regions (0.5x where a good is produced to 2x where it's scarce: toys cheap in China, oil and gas in the Gulf, gold at Tema, Durban, Callao, Magadan, Port Moresby and Juneau, iron ore on the Great Lakes, in Brazil and Australia, vehicles in Japan, Korea, Germany and Detroit...), evened out between nearby ports (as competing traders would, over about 1,200 nm) so prices build up with distance, with a gentle local variation (up to 16%) and a slow drift (up to 5% over about 20 minutes, neighbours drifting together). Buying costs 5% more than selling at the same port. Your own trades nudge prices by up to 1% (for a very large load), recovering within a couple of minutes.
+- Halfway through each stop a ship sells its cargo, then buys the most profitable cargo it can carry to its next stop (after the canal tolls on the way): a full hold (less what a canal makes it leave behind), or as much as the money allows, always keeping enough for the whole fleet to fill its fuel tanks. Nothing if no cargo makes a profit (it sails empty).
+- Canal tolls are a share of the cargo's value at the destination (none for an empty ship). The rough-seas bonus (+50%), the upper-lakes bonus (+20%) and a hub's Sale prices upgrade add to a profitable trade's profit.
+- Balance: a good route earns about what the same ship earned under the old flat pay, the best about twice that; short hops earn a little, long hauls between the right regions a lot.
+- Markets tab: pick a commodity to see the cheapest ports to buy it, the dearest to sell, and the best trades anywhere and within 800 nm (port names go to the map). The port popup shows every commodity's buy and sell price there (green cheap, red dear). The World map's Prices picker colors every port by a commodity's price. The route screen shows what each leg would load and its expected profit.
 
 ## Fuel, maintenance and port stops
 - Every ship has a fuel tank and a maintenance level (0–100%). Both start full when the ship is bought.
@@ -56,7 +63,7 @@
 - Recovery boats have no route and no Assign Route or Pause buttons, and never break down at random. They pay their own fuel and repairs: those show on the recovery boat's own line in the Finances tab.
 
 ## Company and ship levels (XP)
-- Every delivery (when unloading finishes) gives XP to the company and to the ship in proportion to its pay: pay ÷ $0.6125 ÷ 100, which for container ships is containers × leg distance (nm) ÷ 100. Rome→Tunis in a Scooter 10 gives about 32 XP. Ships carried back to their origin earn nothing; recovery boats earn no XP.
+- Every delivery (when unloading finishes) gives XP to the company and to the ship for the work done: units delivered × leg distance × 0.01, weighted by the commodity's base price against a container of toys (a ton of oil counts for less). It doesn't depend on the profit, so a trade at a loss still earns XP. Levelling is about twice as fast as before the trading update (company level costs, hub level costs and each model's first ship level all halved), so level 100 takes about 20 hours.
 - The company levels from 1 to 100 (Level and an XP bar in the top bar; toast on level-up with what it unlocked). Each level's cost is set so it takes roughly 3 minutes at level 1, rising to about 47 minutes at level 99, of what a full fleet at that level earns. So bigger ships don't make levels fly by, and level 100 takes about 40 hours (about 1 hour to level 10, 11 hours to 50, 24 hours to 75).
 - Ship slots are per model: each container ship and gas tanker can be owned 3 at a time when it unlocks, plus 1 more every 3 company levels, up to its max of 10 (so 21 levels after unlocking). The Scooter 10 and GE 100 gain a slot every 2 levels instead (full 14 levels after unlocking). Recovery boats start at 1 and gain 1 every 5 levels, up to 5. Level-up messages say which models got a slot ("+1 slot: Scooter 10, GE 100").
 - Models unlock by company level: Scooter 10 at 1, GE 100 at 5, Buffalo at 8, Greenline 200 at 12, Coastal at 15, Trans Atlantic and Mammoth at 25, Aframax at 35, Dominator at 50, Supertanker at 60. Ships already owned are kept even if they're above the current slots or unlocks.
@@ -127,6 +134,7 @@
 - The route screen marks those legs "rough seas: +50% pay and XP, 2x wear".
 
 ## Ship models (data file)
+- Six lines: container ships (Scooter 10, GE 100, Greenline 200, Trans Atlantic, Dominator), tankers (Coastal, Aframax, Supertanker), and new ore carriers (Laker L2, Panamax Bulker L20, Capesize L45), grain carriers (Grain Laker L8, Kamsarmax L28, Post-Panamax Bulker L52), livestock carriers (Cattle Coaster L12, Livestock Carrier L30, Ocean Shearer L55) and vehicle carriers (Car Hopper L18, Car Carrier L38, Giant Car Carrier L58), plus the recovery boats. The Scooter 10 now carries 15 containers. Seaway-sized models (by length): Scooter, GE, Greenline, Coastal, Laker, Grain Laker, Cattle Coaster, Livestock Carrier, Car Hopper and the Buffalo (which can now also carry the small new models).
 | Model | Price | Speed (nm/s) | Capacity | Range per leg | Max owned |
 |---|---|---|---|---|---|
 | Scooter 10 | $2,500 | 5.44 | 10 | 490 nm (≈1 min 30 s) | 10 |
@@ -152,7 +160,6 @@
 | Aframax | 1,830,000 | 2,250 | 1 | $81,000 | 30 s |
 | Supertanker | 41,300,000 | 19,125 | 0.5 | $1,375,000 | 1 min |
 | Mammoth | 20,400,000 | 4,500 | 0.5 | $300,000 | 10 s |
-- Gas tankers carry fuel as paid cargo: $0.05 per ton per nm (container ships: $0.6125 per container per nm), paid when unloading finishes like any cargo. Each size carries 10x the last and is 15% slower. They earn a little more per dollar of price than the container ships nearest them in price (Coastal about $95k a minute gross, Aframax $810k, Supertanker $6.9M), with fuel still about 40% and repairs 10% of pay. They're the size of the Greenline 200, Trans Atlantic and Dominator, and their deliveries don't count toward "Containers delivered".
 - Speeds keep a 30 : 20 : 18 : 35 : 22 ratio, scaled so a Scooter 10 sails Rome→Tunis (324.9 nm) in about 60 s. A Dominator's longest leg (9,000 nm) takes about 42 minutes with wear.
 - Range is the longest single leg a ship can sail at 100% maintenance. It's enforced when assigning routes; fuel is checked again at every departure.
 - On the map each model is a differently sized and colored rectangle with a pointed bow. Smaller ships are drawn on top of bigger ones where they overlap (and a click there picks the smaller one). Colors by family, smallest to biggest: container ships yellow to red (Scooter 10, GE 100, Greenline 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Buffalo, Mammoth). Docked ships (all models) are drawn as small dots in their model color, in rings around the port (outer rings hold more), to save room.
@@ -197,9 +204,9 @@
 - Then a "New hub available" card (how to found one, with a button to the map) while a hub can be founded, and a "Next hub" card with the company level that unlocks the next one.
 
 ### Finances screen
-- Totals for the last 10 minutes and all time: cargo income, fuel, repairs, canal tolls, ships bought, ships sold, hub upgrades, and operating profit (income − fuel − repairs − tolls).
+- Totals for the last 10 minutes and all time: cargo sales, cargo bought, fuel, repairs, canal tolls, ships bought, ships sold, hub upgrades, and operating profit (sales − cargo bought − fuel − repairs − tolls). Smaller text and tighter columns so it all fits.
 - Then a card per canal the fleet has used: "Panama Canal: 12 crossings · tolls −$48,000 · bonus XP 3,100" (bonus XP is the extra company XP from the canal bonus).
-- A table of every ship: model, income, fuel, repairs, tolls, lifetime profit and profit over the last 10 minutes. Click a column to sort. Refreshes every second.
+- A table of every ship: model, sales, cargo bought, fuel, repairs, tolls, lifetime profit and profit over the last 10 minutes. Click a column to sort. Refreshes every second.
 - The totals and the 10-minute window are saved with the game.
 
 ### 3. Shop screen
@@ -237,7 +244,7 @@
 
 ## Activity log
 - Messages go into an activity log down the left of the game screen (272 px wide, beside the World, Ships, Finances and Shop screens; hidden on the Route Assignment screen). Newest first, in small text (size 8; about three-quarters of messages fit on one line, and longer ones like "held at" warnings wrap to two), each with the play time it happened (e.g. "02:10"). Text is in the color of the ship it's about (lightened if too dark to read; company-wide messages stay white). Bad news (breakdowns, lost ships, ships held in port or that won't make it) has a red highlight behind it; good news (level-ups, recoveries) a green one. It keeps the last 100 messages and starts empty each session.
-- Messages, e.g. "Sea Otter left Tunis: profit $990" (the sale and costs are in the ship popup and Finances), "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000", "Sea Otter entered the Panama Canal: toll $4,200 (+50% XP on this delivery)".
+- Messages, e.g. "Sea Otter sold Toys at Rotterdam: +$2,300 profit (bought $1,200, sold $3,500)" (in red for a loss), "Sea Otter loaded 15 containers of Toys for Rotterdam ($45,000)", "Sea Otter is held at Tunis: not enough fuel for Rome; turn on refuel", "Sea Otter broke down at sea! Maintenance now 30%", "Sea Otter is lost at sea (out of fuel)", "Big Mo carried Sea Otter to Tunis", "Auto-recovery: Little Mo sent for Sea Otter (about $160,000)", "Sea Otter won't make it to Tunis at this rate!", "Sold Big Blue for $10,000", "Sea Otter entered the Panama Canal: toll $4,200 (+50% XP on this delivery)".
 
 ## Explicitly NOT in beta
 - Crew wages, port fees, fuel prices that differ by port, cargo types, upgrades, achievements, renaming ships, offline progress, audio, mobile, multiplayer and clans.
