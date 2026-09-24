@@ -37,6 +37,8 @@ var _grids: Array[GridContainer] = []
 var _hint := PanelContainer.new()
 var _hint_label := Label.new()
 var _hovered := ""
+## Money, the fleet or the level changed since the cards were last updated.
+var _dirty := false
 
 
 func _ready() -> void:
@@ -52,9 +54,12 @@ func _ready() -> void:
 		for model: Dictionary in GameData.ship_models:
 			if model.get("category", "container") == section[1]:
 				grid.add_child(_make_card(model))
-	GameState.money_changed.connect(_update_cards.unbind(1))
-	GameState.ships_changed.connect(_update_cards)
-	GameState.company_leveled.connect(_update_cards.unbind(2))
+	# Money changes many times a second while ships refuel; the cards catch up
+	# once a frame, and only while the Shop is open.
+	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
+	GameState.ships_changed.connect(func() -> void: _dirty = true)
+	GameState.company_leveled.connect(func(_level: int, _unlocks: Array[String]) -> void: _dirty = true)
+	visibility_changed.connect(func() -> void: _dirty = true)
 	resized.connect(_fit_columns)
 	_hint.theme_type_variation = &"MapPopup"
 	_hint.top_level = true
@@ -266,5 +271,8 @@ func _update_hint() -> void:
 
 
 func _process(_delta: float) -> void:
-	if _hint.visible:
+	if _dirty and is_visible_in_tree():
+		_dirty = false
+		_update_cards()
+	elif _hint.visible:
 		_update_hint()  # Follows the button if the list scrolls.

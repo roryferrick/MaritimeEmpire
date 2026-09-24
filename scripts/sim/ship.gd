@@ -113,10 +113,31 @@ var full_loads := true
 ## Why it is waiting in port for a full load ("waiting for money for a full
 ## load"), or "". Not a problem, so not a hold.
 var load_wait := ""
+## When a ship waiting for a full load next looks for one (play_time); not saved.
+var load_check_time := 0.0
+## The money a full hold needed at its last look (see GameState._load_cargo()).
+var load_need := 0
+## level_info(), and the XP it was worked out for.
+var _level_info := {}
+var _level_xp := -1.0
+## Cached top_speed(), fuel_per_s() and wear_per_s() (see _refresh_stats()).
+var _top_speed := 0.0
+var _fuel_per_s := 0.0
+var _wear_per_s := 0.0
+var _stats_dirty := true
+## The leg the cached length and zones are for (see _update_leg()).
+var _leg_from := "?"
+var _leg_to := "?"
+var _leg_length := 0.0
+var _leg_zones: Array = []
+var _leg_has_canal := false
 ## When it was lost, relative to other lost ships (lower = earlier), for the recovery queue.
 var lost_order := 0
 ## At sea without the fuel (or maintenance) to reach the end of its leg.
 var at_risk := false
+## When it next checks whether it can make port (play_time; see
+## GameState._check_at_risk()). Not saved.
+var risk_check_time := 0.0
 ## Seconds spent sailing since it was bought; older ships break down more.
 var sea_time := 0.0
 ## Lifetime money in (income: cargo sold) and out (cargo bought, fuel, repair
@@ -200,8 +221,9 @@ func profit() -> float:
 
 ## Top speed, including the speed skill and the model's mega upgrade.
 func top_speed() -> float:
-	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("speed_bonus", 0.5)) if GameState.has_mega(model_id) else 0.0)
-	return float(model().get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega
+	if _stats_dirty:
+		_refresh_stats()
+	return _top_speed
 
 
 ## Current speed: top speed scaled by maintenance.
@@ -224,12 +246,32 @@ func fuel_tank() -> float:
 
 ## Fuel burned per second at sea, less the efficiency skill.
 func fuel_per_s() -> float:
-	return float(model().get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency"))
+	if _stats_dirty:
+		_refresh_stats()
+	return _fuel_per_s
 
 
 ## Maintenance lost per second of running at sea, less the durability skill.
 func wear_per_s() -> float:
-	return float(model().get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability"))
+	if _stats_dirty:
+		_refresh_stats()
+	return _wear_per_s
+
+
+## Top speed, fuel burn and wear depend on the model, skills and mega upgrade,
+## which change rarely, so they're worked out once and kept until
+## invalidate_stats() (called when a skill is spent or a mega upgrade bought).
+func _refresh_stats() -> void:
+	var data := model()
+	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("speed_bonus", 0.5)) if GameState.has_mega(model_id) else 0.0)
+	_top_speed = float(data.get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency"))
+	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability"))
+	_stats_dirty = false
+
+
+func invalidate_stats() -> void:
+	_stats_dirty = true
 
 
 ## How much the durability skill cuts the chance of a random breakdown (0..1).
@@ -251,7 +293,10 @@ func breakdown_chance() -> float:
 
 ## {level, xp (into the level), cost (of the level)}; recovery boats stay at 0.
 func level_info() -> Dictionary:
-	return Progression.ship_level(model(), xp)
+	if xp != _level_xp:  # Worked out again only when the XP changes.
+		_level_info = Progression.ship_level(model(), xp)
+		_level_xp = xp
+	return _level_info
 
 
 func level() -> int:
@@ -321,7 +366,8 @@ func leg_seconds(from: String, to: String, start_mile: float, end_mile: float, s
 	var seconds := 0.0
 	var m := start_maintenance
 	var mile := start_mile
-	for zone: Array in GameData.lane_zones(from, to):
+	var zones := GameData.lane_zones(from, to) if from != from_port or to != to_port else _current_zones()
+	for zone: Array in zones:
 		if mile >= end_mile - 0.0001:
 			break
 		if zone[0] <= mile:
@@ -452,7 +498,41 @@ func cargo_level() -> float:
 
 
 func leg_length() -> float:
-	return GameData.distance_nm(from_port, to_port)
+	_update_leg()
+	return _leg_length
+
+
+## True if the current leg goes through a canal.
+func leg_has_canal() -> bool:
+	_update_leg()
+	return _leg_has_canal
+
+
+func _current_zones() -> Array:
+	_update_leg()
+	return _leg_zones
+
+
+## Speed and wear factors ([speed, wear]) at a mile of the current leg (see
+## GameData.zone_factors()).
+func zone_factors(mile: float) -> Array:
+	_update_leg()
+	for zone: Array in _leg_zones:
+		if mile < zone[0]:
+			return [zone[1], zone[2]]
+	return [1.0, 1.0]
+
+
+## The current leg's length and zones, looked up once per leg rather than on
+## every call (the lookups build text keys, which adds up at sea every step).
+func _update_leg() -> void:
+	if from_port == _leg_from and to_port == _leg_to:
+		return
+	_leg_from = from_port
+	_leg_to = to_port
+	_leg_length = GameData.distance_nm(from_port, to_port)
+	_leg_zones = GameData.lane_zones(from_port, to_port)
+	_leg_has_canal = not GameData.canal_crossings(from_port, to_port).is_empty()
 
 
 func leg_progress() -> float:

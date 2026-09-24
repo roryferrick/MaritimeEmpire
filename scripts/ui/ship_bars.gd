@@ -13,6 +13,8 @@ const ROW_GAP := 4.0
 
 var ship: Ship
 var compact := false
+## What the bars showed when last drawn (see _process()).
+var _drawn := []
 
 
 func _init(for_ship: Ship, is_compact := false) -> void:
@@ -25,8 +27,17 @@ func _ready() -> void:
 	custom_minimum_size.y = 3.0 * _row_height() - _gap()
 
 
+## Redraws only when a bar has moved by a pixel or so (or the cargo changed):
+## a Ships tab full of tiles would otherwise redraw them all every frame.
 func _process(_delta: float) -> void:
-	if is_visible_in_tree():
+	if not is_visible_in_tree():
+		return
+	var steps := maxf(size.x, 1.0)
+	var key := [roundi(ship.maintenance * steps), roundi(ship.fuel_level() * steps), roundi(ship.cargo_level() * steps),
+		ship.cargo_id, ship.is_docking() and ship.dock_time < ship.dock_seconds() / 2.0, ship.is_docking(),
+		ship.is_carrying() if ship.is_recovery() else false]
+	if key != _drawn:
+		_drawn = key
 		queue_redraw()
 
 

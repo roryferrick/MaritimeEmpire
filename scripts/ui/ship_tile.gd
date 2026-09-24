@@ -57,18 +57,18 @@ func _init(for_ship: Ship) -> void:
 
 
 func _ready() -> void:
-	GameState.ship_changed.connect(_on_ship_changed)
 	# A Button doesn't size itself to its children: fit the tile to its content.
 	var row: Control = get_child(0)
 	custom_minimum_size.y = row.get_combined_minimum_size().y + 2.0 * PADDING
 
 
-func _on_ship_changed(changed: Ship) -> void:
-	if changed == ship:
-		_dot.queue_redraw()
-		_name.text = ship.name
-		tooltip_text = ship.name
-		_update_info()
+## Brings the tile up to date with its ship (the Ships screen calls this when
+## the ship changes).
+func refresh() -> void:
+	_dot.queue_redraw()
+	_name.text = ship.name
+	tooltip_text = ship.name
+	_update_info()
 
 
 ## "Coffee · Lv 3" (green, with "+2", while it has skill points to spend);

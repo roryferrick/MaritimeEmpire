@@ -26,6 +26,11 @@ const DOCK_DOT_RADIUS := 2.75
 const DOCK_FIRST_RING := PORT_RADIUS + 7.5
 const DOCK_RING_GAP := 6.0
 const DOCK_DOT_SPACING := 6.5
+## Half the size of the docked-dot images: the dot plus room for its outline.
+const DOCK_DOT_IMAGE_RADIUS := DOCK_DOT_RADIUS + 1.5
+## How often (seconds) the static map layer (ports, labels, route lanes) is
+## redrawn while ships are shown, besides whenever the view or settings change.
+const STATIC_REFRESH_S := 0.25
 const DRAG_THRESHOLD := 5.0
 const ZOOM_STEP := 1.15
 ## Closest zoom, in pixels per projected degree.
@@ -118,6 +123,7 @@ const FALLBACK_COLORS := {
 		for tier in _river_tiers:
 			tier.queue_redraw()
 		queue_redraw()
+		_redraw_layers()
 
 ## Draw the player's ships and let them be clicked.
 @export var show_ships := false
@@ -126,28 +132,43 @@ const FALLBACK_COLORS := {
 var show_active_lanes := false:
 	set(value):
 		show_active_lanes = value
-		_overlay.queue_redraw()
+		_static_layer.queue_redraw()
 
 ## Port ids drawn as a looping route along its sea lanes, each stop numbered.
 var route: Array[String] = []:
 	set(value):
 		route = value
-		_overlay.queue_redraw()
+		_static_layer.queue_redraw()
 
 ## A commodity id to color ports by (green where it's cheap, red where it's
 ## dear, against its world average), or "" for plain white ports.
 var price_commodity := "":
 	set(value):
 		price_commodity = value
-		_overlay.queue_redraw()
+		_static_layer.queue_redraw()
 
 ## Port ids drawn grayed out, e.g. ports out of range in the route editor.
 var dimmed_ports: Dictionary = {}:
 	set(value):
 		dimmed_ports = value
-		_overlay.queue_redraw()
+		_static_layer.queue_redraw()
 
 var _center := Vector2.ZERO  # Map point shown at the middle of the view.
+## Ship drawing caches: each docked ship's ring slot (and the frame it was for),
+## the draw order (redone when the fleet changes) and each model's look.
+var _dock_slots := {}
+var _dock_slots_frame := -1
+var _draw_order: Array[Ship] = []
+var _draw_order_dirty := true
+var _model_looks := {}
+## Docked-ship dot images (see _dot_image()).
+var _dock_dot_fill := _dot_image(0.0)
+var _dock_dot_ring := _dot_image(1.0)
+## Label placement for the current view ([port id, rect] and [text, rect] pairs),
+## redone when _labels_key (the view and the hubs) changes.
+var _port_labels := []
+var _country_labels := []
+var _labels_key := []
 var _zoom := 1.0  # Screen pixels per projected degree.
 var _has_fit := false
 var _pressed_button: MouseButton = MOUSE_BUTTON_NONE
@@ -160,8 +181,15 @@ var _art_root := Node2D.new()
 var _art_copies: Array[WorldArt] = []
 ## Every copy's river tiers, shown or hidden by zoom.
 var _river_tiers: Array[RiverTier] = []
-## Ports, ships, routes and labels, drawn in screen space every frame.
+## Drawn in screen space in three layers, bottom to top: canals (every frame,
+## for locks and convoys), the rest that only changes with the view, routes,
+## hubs or prices (ports, labels, route lanes; see STATIC_REFRESH_S), and ships
+## (every frame). _canvas is the layer being drawn, which the draw helpers use.
+var _canal_layer := Control.new()
+var _static_layer := Control.new()
 var _overlay := Control.new()
+var _canvas: Control = _overlay
+var _static_clock := 0.0
 var _ports_by_rank: Array = []  # Label priority order, sorted on first draw.
 
 
@@ -202,6 +230,7 @@ func _ready() -> void:
 	clip_contents = true
 	mouse_filter = MOUSE_FILTER_STOP
 	resized.connect(_on_resized)
+	GameState.ships_changed.connect(func() -> void: _draw_order_dirty = true)
 
 	var data := GameData.world_map
 	var land_mesh := _triangle_mesh(data.land_triangles)
@@ -229,15 +258,26 @@ func _ready() -> void:
 			art.add_child(tier)
 			_river_tiers.append(tier)
 
-	_overlay.mouse_filter = MOUSE_FILTER_IGNORE
-	_overlay.set_anchors_preset(PRESET_FULL_RECT)
+	for layer: Control in [_canal_layer, _static_layer, _overlay]:
+		layer.mouse_filter = MOUSE_FILTER_IGNORE
+		layer.set_anchors_preset(PRESET_FULL_RECT)
+		add_child(layer)
+	_canal_layer.draw.connect(_draw_canal_layer)
+	_static_layer.draw.connect(_draw_static_layer)
 	_overlay.draw.connect(_draw_overlay)
-	add_child(_overlay)
 
 
-func _process(_delta: float) -> void:
-	if show_ships and is_visible_in_tree():
-		_overlay.queue_redraw()
+func _process(delta: float) -> void:
+	if not show_ships or not is_visible_in_tree():
+		return
+	_canal_layer.queue_redraw()
+	_overlay.queue_redraw()
+	# Route lanes follow the ships' legs, hub rings the hubs and port colors the
+	# drifting prices: a few times a second is plenty.
+	_static_clock += delta
+	if _static_clock >= STATIC_REFRESH_S:
+		_static_clock = 0.0
+		_static_layer.queue_redraw()
 
 
 func _triangle_mesh(triangles: PackedVector2Array) -> ArrayMesh:
@@ -278,12 +318,7 @@ func ship_screen_position(ship: Ship) -> Vector2:
 			if not crossing.is_empty() and crossing.canal.get("type", "") == "convoy":
 				return _anchorage_slot_position(ship, crossing)
 		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
-	var slot := 0
-	for other in GameState.ships:
-		if other == ship:
-			break
-		if other.docked_at == ship.docked_at:
-			slot += 1
+	var slot := _dock_slot(ship)
 	var radius := DOCK_FIRST_RING
 	var per_ring := floori(TAU * radius / DOCK_DOT_SPACING)
 	while slot >= per_ring:
@@ -293,6 +328,21 @@ func ship_screen_position(ship: Ship) -> Vector2:
 	var angle := -PI / 2.0 + TAU * slot / per_ring
 	return port_screen_position(ship.docked_at) + Vector2.from_angle(angle) * radius
 
+
+## A docked ship's place in its port's rings: how many of the fleet before it are
+## docked there. Worked out for the whole fleet once a frame.
+func _dock_slot(ship: Ship) -> int:
+	var frame := Engine.get_process_frames()
+	if frame != _dock_slots_frame:
+		_dock_slots_frame = frame
+		_dock_slots.clear()
+		var counts := {}
+		for other in GameState.ships:
+			if other.is_docked():
+				var count: int = counts.get(other.docked_at, 0)
+				_dock_slots[other] = count
+				counts[other.docked_at] = count + 1
+	return _dock_slots.get(ship, 0)
 
 ## Centers the view on a port, keeping the zoom.
 func focus_port(port_id: String) -> void:
@@ -424,7 +474,7 @@ func _changed() -> void:
 	_art_root.scale = Vector2(_zoom, -_zoom)
 	_update_rivers()
 	queue_redraw()
-	_overlay.queue_redraw()
+	_redraw_layers()
 	view_changed.emit()
 
 
@@ -447,15 +497,35 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), _color(&"ocean"))
 
 
-func _draw_overlay() -> void:
-	var placed_labels: Array[Rect2] = []
-	var port_labels := _place_port_labels(placed_labels)
-	_draw_country_labels(placed_labels)
+func _redraw_layers() -> void:
+	_canal_layer.queue_redraw()
+	_static_layer.queue_redraw()
+	_overlay.queue_redraw()
+
+
+func _draw_canal_layer() -> void:
+	_canvas = _canal_layer
 	_draw_canals()
+
+
+func _draw_static_layer() -> void:
+	_canvas = _static_layer
+	# Where labels go only changes with the view (or the hubs), not every frame.
+	var key := [_center, _zoom, size, GameState.hubs.map(func(hub: Hub) -> String: return hub.port_id)]
+	if key != _labels_key:
+		_labels_key = key
+		var placed_labels: Array[Rect2] = []
+		_port_labels = _place_port_labels(placed_labels)
+		_country_labels = _place_country_labels(placed_labels)
+	_draw_country_labels()
 	if show_ships and show_active_lanes:
 		_draw_active_lanes()
 	_draw_route()
-	_draw_ports(port_labels)
+	_draw_ports(_port_labels)
+
+
+func _draw_overlay() -> void:
+	_canvas = _overlay
 	if show_ships:
 		_draw_ships()
 		_draw_hub_alerts()
@@ -489,11 +559,12 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 	return labels
 
 
-func _draw_country_labels(placed: Array[Rect2]) -> void:
+## Country names that fit around the port labels already placed: [text, rect] pairs.
+func _place_country_labels(placed: Array[Rect2]) -> Array:
 	var data := GameData.world_map
 	var font := get_theme_default_font()
-	var color := _color(&"country_label")
 	var web_zoom := _web_zoom()
+	var labels := []
 	var bounds := Rect2(Vector2.ZERO, size)
 	for i in data.label_names.size():
 		if data.label_min_zoom[i] > web_zoom:
@@ -504,8 +575,17 @@ func _draw_country_labels(placed: Array[Rect2]) -> void:
 		if not bounds.encloses(rect) or _overlaps(rect, placed):
 			continue
 		placed.append(rect.grow(LABEL_PADDING))
-		_overlay.draw_string(font, rect.position + Vector2(0, font.get_ascent(COUNTRY_FONT_SIZE)), text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, COUNTRY_FONT_SIZE, color)
+		labels.append([text, rect])
+	return labels
+
+
+func _draw_country_labels() -> void:
+	var font := get_theme_default_font()
+	var color := _color(&"country_label")
+	var ascent := font.get_ascent(COUNTRY_FONT_SIZE)
+	for label: Array in _country_labels:
+		var rect: Rect2 = label[1]
+		_canvas.draw_string(font, rect.position + Vector2(0, ascent), label[0], HORIZONTAL_ALIGNMENT_LEFT, -1, COUNTRY_FONT_SIZE, color)
 
 
 func _overlaps(rect: Rect2, placed: Array[Rect2]) -> bool:
@@ -530,24 +610,27 @@ func _draw_ports(labels: Array) -> void:
 	var outline := _color(&"port_outline")
 	var label_color := _color(&"label")
 	var shadow := _color(&"label_shadow")
+	var visible_area := Rect2(Vector2.ZERO, size).grow(PORT_RADIUS + 4.0)
 	for port: Dictionary in GameData.ports:
 		var pos := port_screen_position(port.id)
+		if not visible_area.has_point(pos):
+			continue
 		var is_dimmed := dimmed_ports.has(port.id)
 		var port_fill := fill if price_commodity.is_empty() else _price_color(port.id)
-		_overlay.draw_circle(pos, PORT_RADIUS, dimmed if is_dimmed else port_fill)
-		_overlay.draw_arc(pos, PORT_RADIUS, 0.0, TAU, 24, outline, 1.5, true)
+		_canvas.draw_circle(pos, PORT_RADIUS, dimmed if is_dimmed else port_fill)
+		_canvas.draw_arc(pos, PORT_RADIUS, 0.0, TAU, 24, outline, 1.5, true)
 	# The HQ and hubs get a ring in the company's color (heavier for the HQ).
 	var ring_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value()
 	for hub in GameState.hubs:
 		var width := HQ_RING_WIDTH if hub.is_hq else HUB_RING_WIDTH
-		_overlay.draw_arc(port_screen_position(hub.port_id), PORT_RADIUS + 1.0 + width / 2.0, 0.0, TAU, 32, ring_color, width, true)
+		_canvas.draw_arc(port_screen_position(hub.port_id), PORT_RADIUS + 1.0 + width / 2.0, 0.0, TAU, 32, ring_color, width, true)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
 		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
 		var text: String = GameData.port_name(label[0])
 		var color := dimmed if dimmed_ports.has(label[0]) else label_color
-		_overlay.draw_string(font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
-		_overlay.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
+		_canvas.draw_string(font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
+		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 
 
 ## Legs follow their sea lanes; the leg closing the loop is dashed. Stop
@@ -572,8 +655,8 @@ func _draw_route() -> void:
 		var text := ", ".join(PackedStringArray(stops[port_id]))
 		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE).x
 		var pos := port_screen_position(port_id) + Vector2(-width / 2.0, -PORT_RADIUS - 5.0)
-		_overlay.draw_string(font, pos + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
-		_overlay.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
+		_canvas.draw_string(font, pos + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
+		_canvas.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 
 
 ## Every lane the fleet sails: each cargo ship's route loop, any route waiting
@@ -613,9 +696,9 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 		points.append(size / 2.0 + Vector2(p.x + shift - _center.x, _center.y - p.y) * _zoom)
 	if dashed:
 		for i in range(1, points.size()):
-			_overlay.draw_dashed_line(points[i - 1], points[i], color, width, 8.0)
+			_canvas.draw_dashed_line(points[i - 1], points[i], color, width, 8.0)
 	else:
-		_overlay.draw_polyline(points, color, width, true)
+		_canvas.draw_polyline(points, color, width, true)
 
 
 ## Each canal as a water channel across the land (a convoy canal doubled where
@@ -635,7 +718,7 @@ func _draw_canals() -> void:
 		if canal.get("type", "") == "convoy":
 			_draw_convoy_channel(canal, points, width)
 		else:
-			_overlay.draw_polyline(points, _color(&"ocean"), width, true)
+			_canvas.draw_polyline(points, _color(&"ocean"), width, true)
 		if _zoom >= LOCK_MIN_ZOOM:
 			for chamber: Dictionary in canal.chambers:
 				_draw_chamber(canal, chamber, points)
@@ -661,15 +744,15 @@ func _draw_convoy_channel(canal: Dictionary, points: PackedVector2Array, width: 
 		var i := int(pair[0])
 		var j := int(pair[1])
 		if i > previous:
-			_overlay.draw_polyline(points.slice(previous, i + 1), water, width, true)
+			_canvas.draw_polyline(points.slice(previous, i + 1), water, width, true)
 		for side: float in [-1.0, 1.0]:
 			var offset := PackedVector2Array()
 			for k in range(i, j + 1):
 				offset.append(points[k] + _path_normal(points, k) * gap * side)
-			_overlay.draw_polyline(offset, water, width, true)
+			_canvas.draw_polyline(offset, water, width, true)
 		previous = j
 	if previous < points.size() - 1:
-		_overlay.draw_polyline(points.slice(previous), water, width, true)
+		_canvas.draw_polyline(points.slice(previous), water, width, true)
 
 
 ## Unit vector to the right of a path at point k (on screen).
@@ -721,24 +804,24 @@ func _draw_chamber(canal: Dictionary, chamber: Dictionary, points: PackedVector2
 		var level := GameState.canal_traffic.slot_level(canal, chamber, slots[k])
 		var color := water.darkened(LOCK_WATER_SHADE).lerp(water.lightened(LOCK_WATER_SHADE), level)
 		var c := center + offset
-		_overlay.draw_colored_polygon(PackedVector2Array([c - half - lane / 2.0, c + half - lane / 2.0,
+		_canvas.draw_colored_polygon(PackedVector2Array([c - half - lane / 2.0, c + half - lane / 2.0,
 			c + half + lane / 2.0, c - half + lane / 2.0]), color)
 	var outer := lane * lanes / 2.0
 	var wall := _color(&"coast")
-	_overlay.draw_polyline(PackedVector2Array([center - half - outer, center + half - outer, center + half + outer,
+	_canvas.draw_polyline(PackedVector2Array([center - half - outer, center + half - outer, center + half + outer,
 		center - half + outer, center - half - outer]), wall, 1.0, true)
 	for k in range(1, slots.size()):
 		var divider := lane * (float(k) - lanes / 2.0)
-		_overlay.draw_line(center - half + divider, center + half + divider, wall, 1.0, true)
+		_canvas.draw_line(center - half + divider, center + half + divider, wall, 1.0, true)
 	var gate := _color(&"lock_gate")
 	for end: Vector2 in [center - half, center + half]:
-		_overlay.draw_line(end - outer, end + outer, gate, 2.0, true)
+		_canvas.draw_line(end - outer, end + outer, gate, 2.0, true)
 
 
 func _draw_canal_label(text: String, at: Vector2) -> void:
 	var font := get_theme_default_font()
-	_overlay.draw_string(font, at + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label_shadow"))
-	_overlay.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label"))
+	_canvas.draw_string(font, at + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label_shadow"))
+	_canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label"))
 
 
 ## The middle of a lock's chambers on screen.
@@ -841,8 +924,8 @@ func _draw_hub_alerts() -> void:
 	for hub in GameState.hubs:
 		if GameState.hub_can_upgrade(hub):
 			var dot := port_screen_position(hub.port_id) + HUB_ALERT_OFFSET
-			_overlay.draw_circle(dot, HUB_ALERT_RADIUS + 1.0, _color(&"hub_alert_outline"), true, -1.0, true)
-			_overlay.draw_circle(dot, HUB_ALERT_RADIUS, _color(&"hub_alert"), true, -1.0, true)
+			_canvas.draw_circle(dot, HUB_ALERT_RADIUS + 1.0, _color(&"hub_alert_outline"), true, -1.0, true)
+			_canvas.draw_circle(dot, HUB_ALERT_RADIUS, _color(&"hub_alert"), true, -1.0, true)
 
 
 ## Ships at sea are rectangles with a pointed bow; docked ships are small dots.
@@ -858,7 +941,7 @@ func _draw_ships() -> void:
 	for ship in GameState.ships:
 		if ship.is_carried():
 			_draw_ship(ship, outline)
-	_overlay.draw_set_transform_matrix(Transform2D.IDENTITY)
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 	for ship in GameState.ships:
 		if ship.is_lost() and not ship.is_carried():
 			_draw_marker(ship_screen_position(ship), _color(&"lost_marker"))
@@ -868,14 +951,18 @@ func _draw_ships() -> void:
 
 ## Ships top-drawn first, so a click on overlapping ships picks the one on top.
 func _ships_topmost_first() -> Array[Ship]:
-	var order := _ships_biggest_first()
+	var order := _ships_biggest_first().duplicate()
 	order.reverse()
 	return order
 
 
 ## Ships in drawing order: biggest (by map length) first, so smaller ships are
-## drawn on top of bigger ones; same-sized ships keep their fleet order.
+## drawn on top of bigger ones; same-sized ships keep their fleet order. Kept
+## until the fleet changes.
 func _ships_biggest_first() -> Array[Ship]:
+	if _draw_order.size() == GameState.ships.size() and not _draw_order_dirty:
+		return _draw_order
+	_draw_order_dirty = false
 	var order: Array[Ship] = GameState.ships.duplicate()
 	var index := {}
 	for i in order.size():
@@ -884,39 +971,76 @@ func _ships_biggest_first() -> Array[Ship]:
 		var length_a := float(a.model().get("map_size", [0])[0])
 		var length_b := float(b.model().get("map_size", [0])[0])
 		return length_a > length_b if length_a != length_b else index[a] < index[b])
+	_draw_order = order
 	return order
 
 
 func _draw_ship(ship: Ship, outline: Color) -> void:
-	var model := ship.model()
-	var color := Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE)
+	var look := _model_look(ship.model_id)
+	var color: Color = look[0]
 	if ship.is_docked():
-		_overlay.draw_set_transform_matrix(Transform2D.IDENTITY)
+		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		var at := ship_screen_position(ship)
-		_overlay.draw_circle(at, DOCK_DOT_RADIUS, color, true, -1.0, true)
-		_overlay.draw_circle(at, DOCK_DOT_RADIUS, outline, false, 1.0, true)
+		# Stamped from two small images made once (antialiased circles are costly
+		# to build each frame): the dot in the model's color, then its outline.
+		var rect := Rect2(at - Vector2.ONE * DOCK_DOT_IMAGE_RADIUS, Vector2.ONE * DOCK_DOT_IMAGE_RADIUS * 2.0)
+		_canvas.draw_texture_rect(_dock_dot_fill, rect, false, color)
+		_canvas.draw_texture_rect(_dock_dot_ring, rect, false, outline)
 		return
-	var dims: Array = model.get("map_size", [14, 6])
-	var length := float(dims[0])
-	var width := float(dims[1])
-	var bow := width * BOW_LENGTH_FACTOR
-	# Hull plus bow, centered on the ship's position.
-	var back := -(length + bow) / 2.0
-	var front := back + length
-	var hull := PackedVector2Array([
-		Vector2(back, -width / 2.0), Vector2(front, -width / 2.0), Vector2(front + bow, 0.0),
-		Vector2(front, width / 2.0), Vector2(back, width / 2.0)])
 	var direction := ship.heading()
 	var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
-	_overlay.draw_set_transform(ship_screen_position(ship), angle)
-	_overlay.draw_colored_polygon(hull, color)
-	hull.append(hull[0])
-	_overlay.draw_polyline(hull, outline, 1.0)
+	_canvas.draw_set_transform(ship_screen_position(ship), angle)
+	# The hull as a quad and the bow as a triangle: simple shapes Godot needn't
+	# triangulate each frame, unlike a general polygon.
+	var colors := PackedColorArray([color])
+	_canvas.draw_primitive(look[3], colors, PackedVector2Array())
+	_canvas.draw_primitive(look[4], colors, PackedVector2Array())
+	_canvas.draw_polyline(look[5], outline, 1.0)
+
+
+## A white circle image for docked-ship dots: filled (ring_width 0) or just its
+## outline, antialiased, 2 x DOCK_DOT_IMAGE_RADIUS across, and drawn
+## at 4x resolution for smooth edges when scaled down.
+static func _dot_image(ring_width: float) -> ImageTexture:
+	var oversample := 4.0
+	var pixels := int(ceilf(DOCK_DOT_IMAGE_RADIUS * 2.0 * oversample))
+	var image := Image.create(pixels, pixels, false, Image.FORMAT_RGBA8)
+	var center := Vector2.ONE * pixels / 2.0
+	for y in pixels:
+		for x in pixels:
+			var d := (Vector2(x + 0.5, y + 0.5) - center).length() / oversample
+			var alpha := clampf(DOCK_DOT_RADIUS + 0.5 - d, 0.0, 1.0) if ring_width <= 0.0 \
+				else clampf(ring_width / 2.0 + 0.5 - absf(d - DOCK_DOT_RADIUS), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha))
+	return ImageTexture.create_from_image(image)
+
+
+## A model's look, worked out once: [map color, length, width, hull quad, bow
+## triangle, closed outline], the shapes centered on the ship's position.
+func _model_look(model_id: String) -> Array:
+	if not _model_looks.has(model_id):
+		var model := GameData.get_ship_model(model_id)
+		var dims: Array = model.get("map_size", [14, 6])
+		var length := float(dims[0])
+		var width := float(dims[1])
+		var bow := width * BOW_LENGTH_FACTOR
+		var back := -(length + bow) / 2.0
+		var front := back + length
+		var back_left := Vector2(back, -width / 2.0)
+		var front_left := Vector2(front, -width / 2.0)
+		var tip := Vector2(front + bow, 0.0)
+		var front_right := Vector2(front, width / 2.0)
+		var back_right := Vector2(back, width / 2.0)
+		_model_looks[model_id] = [Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE), length, width,
+			PackedVector2Array([back_left, front_left, front_right, back_right]),
+			PackedVector2Array([front_left, tip, front_right]),
+			PackedVector2Array([back_left, front_left, tip, front_right, back_right, back_left])]
+	return _model_looks[model_id]
 
 
 func _draw_marker(at: Vector2, color: Color) -> void:
 	var font := get_theme_default_font()
 	var baseline := at + Vector2(-LOST_MARKER_SIZE * 0.15, -LOST_MARKER_OFFSET)
-	_overlay.draw_string_outline(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, 4,
+	_canvas.draw_string_outline(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, 4,
 		_color(&"lost_marker_outline"))
-	_overlay.draw_string(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, color)
+	_canvas.draw_string(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, color)

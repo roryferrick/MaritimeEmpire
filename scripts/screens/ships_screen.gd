@@ -36,6 +36,13 @@ var _upgrade_all := Button.new()
 var _upgrade_all_alert := AlertDot.new(4.0, Vector2(5, 5))
 ## Model id -> [its "Mega upgrade" button, that button's red dot, its "★ Mega" badge].
 var _megas := {}
+## Ship -> its tile.
+var _tiles := {}
+## Ships changed since the tab last caught up (as keys), and whether anything did.
+var _changed_ships := {}
+var _dirty := false
+## The fleet changed (a ship bought or sold): rebuild the tiles when next shown.
+var _needs_rebuild := false
 
 
 func _ready() -> void:
@@ -45,8 +52,11 @@ func _ready() -> void:
 		%FilterOption.add_item(FILTER_NAMES[filter], filter)
 	%SortOption.item_selected.connect(_rebuild.unbind(1))
 	%FilterOption.item_selected.connect(_apply_filter.unbind(1))
-	GameState.ships_changed.connect(_rebuild)
-	GameState.ship_changed.connect(_apply_filter.unbind(1))
+	GameState.ships_changed.connect(func() -> void: _needs_rebuild = true)
+	GameState.ship_changed.connect(_on_ship_changed)
+	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
+	GameState.mega_upgraded.connect(func(_model_id: String) -> void: _dirty = true)
+	visibility_changed.connect(func() -> void: _dirty = true)
 	_upgrade_all.tooltip_text = "Spend every ship's upgrade points in turn: speed, efficiency, durability, speed..."
 	_upgrade_all.pressed.connect(GameState.upgrade_all)
 	_upgrade_all.custom_minimum_size.x = UPGRADE_ALL_WIDTH
@@ -57,14 +67,31 @@ func _ready() -> void:
 	%Header.add_child(_upgrade_all)
 	_upgrade_all.add_child(_upgrade_all_alert)
 	%Header.move_child(_upgrade_all, %CountLabel.get_index())
-	GameState.ship_changed.connect(_update_upgrade_all.unbind(1))
-	GameState.ships_changed.connect(_update_upgrade_all)
-	_update_upgrade_all()
-	GameState.money_changed.connect(_update_megas.unbind(1))
-	GameState.ship_changed.connect(_update_megas.unbind(1))
-	GameState.mega_upgraded.connect(_update_megas.unbind(1))
 	%Groups.resized.connect(_size_tiles)
 	_rebuild()
+
+
+## Ship changes (and money, for the mega buttons) are only noted as they come;
+## the tab catches up once a frame, and only while it's open.
+func _process(_delta: float) -> void:
+	if not is_visible_in_tree():
+		return
+	if _needs_rebuild:
+		_rebuild()
+	elif _dirty:
+		for ship: Ship in _changed_ships:
+			if _tiles.has(ship):
+				_tiles[ship].refresh()
+		_apply_filter()
+		_update_upgrade_all()
+		_update_megas()
+	_changed_ships.clear()
+	_dirty = false
+
+
+func _on_ship_changed(ship: Ship) -> void:
+	_changed_ships[ship] = true
+	_dirty = true
 
 
 func _rebuild() -> void:
@@ -73,6 +100,8 @@ func _rebuild() -> void:
 		child.queue_free()
 	_groups.clear()
 	_megas.clear()
+	_tiles.clear()
+	_needs_rebuild = false
 	var sorted := GameState.ships.duplicate()
 	sorted.sort_custom(_ship_before)
 	for model: Dictionary in GameData.ship_models:
@@ -82,6 +111,7 @@ func _rebuild() -> void:
 		var grid := _add_group(model)
 		for ship: Ship in model_ships:
 			var tile := ShipTile.new(ship)
+			_tiles[ship] = tile
 			tile.pressed.connect(_open_ship.bind(tile))
 			grid.add_child(tile)
 	%EmptyLabel.visible = GameState.ships.is_empty()
@@ -89,6 +119,7 @@ func _rebuild() -> void:
 	_apply_filter()
 	_size_tiles()
 	_update_megas()
+	_update_upgrade_all()
 
 
 func _update_upgrade_all() -> void:

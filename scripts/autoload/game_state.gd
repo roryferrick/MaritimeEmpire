@@ -75,6 +75,14 @@ const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The hidden gem (click the company name): money it gives, once per company.
 const HIDDEN_GEM_MONEY := 10000000
+## How often (game seconds) a ship waiting in port for a full load looks again
+## (it also looks as soon as the money reaches what it needed).
+const LOAD_RECHECK_S := 2.0
+## How often (game seconds) a ship at sea checks it can still make port (see
+## _check_at_risk()); a breakdown or a new leg checks at once.
+const AT_RISK_CHECK_S := 0.25
+## How long (game seconds) a worked-out fuel_reserve() is used before it's redone.
+const FUEL_RESERVE_REFRESH_S := 0.25
 
 var money: int = 0:
 	set(value):
@@ -293,6 +301,7 @@ func buy_mega(model_id: String) -> void:
 	mega_upgraded.emit(model_id)
 	for ship in ships:
 		if ship.model_id == model_id:
+			ship.invalidate_stats()
 			ship_changed.emit(ship)
 	save_game()
 
@@ -328,6 +337,7 @@ func level_skill(ship: Ship, skill: String) -> void:
 	if not ship.can_level_skill(skill):
 		return
 	ship.skills[skill] = int(ship.skills[skill]) + 1
+	ship.invalidate_stats()
 	ship_changed.emit(ship)
 
 
@@ -346,6 +356,7 @@ func upgrade_all() -> int:
 			if best.is_empty():
 				break
 			ship.skills[best] = int(ship.skills[best]) + 1
+			ship.invalidate_stats()
 			spent += 1
 		if spent > before:
 			ship_changed.emit(ship)
@@ -627,6 +638,7 @@ func set_auto_recover(ship: Ship, on: bool) -> void:
 
 func set_full_loads(ship: Ship, on: bool) -> void:
 	ship.full_loads = on
+	ship.load_check_time = 0.0  # Act on it at once rather than at the next look.
 	ship_changed.emit(ship)
 
 
@@ -661,6 +673,9 @@ func sell_ship(ship: Ship) -> String:
 
 
 func _advance(ship: Ship, delta: float) -> void:
+	# A ship waiting in port for a full load, not due another look: nothing to do.
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need and ship.is_docked():
+		return
 	if ship.is_on_job():
 		_advance_job(ship, delta)
 	elif ship.is_docked():
@@ -679,7 +694,7 @@ func _advance(ship: Ship, delta: float) -> void:
 func _sail(ship: Ship, delta: float) -> bool:
 	if canal_traffic.hold(ship, delta):
 		return true
-	var zone := GameData.zone_factors(ship.from_port, ship.to_port, ship.traveled_nm)
+	var zone := ship.zone_factors(ship.traveled_nm)
 	var speed := ship.speed()
 	if ship.is_recovery():
 		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
@@ -698,7 +713,9 @@ func _sail(ship: Ship, delta: float) -> bool:
 		if ship.maintenance <= 0.0:
 			_lose(ship, "broken down")
 			return false
-		_check_at_risk(ship)
+		if play_time >= ship.risk_check_time:
+			ship.risk_check_time = play_time + AT_RISK_CHECK_S
+			_check_at_risk(ship)
 	return true
 
 
@@ -739,6 +756,7 @@ func _roll_breakdowns(delta: float) -> void:
 			if ship.is_recovery() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or randf() >= ship.breakdown_chance():
 				continue
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
+			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
 			ship_broke_down.emit(ship)
 			if ship.maintenance <= 0.0:
 				_lose(ship, "broken down")
@@ -861,18 +879,21 @@ func _sell_cargo(ship: Ship) -> void:
 ## fuel_reserve()) and the bank_reserve, unless full loads are on, when it buys
 ## nothing short of a full hold. Nothing if no cargo makes a profit. A full load
 ## taken out of a hub by a ship that arrived empty gives the hub XP.
-func _load_cargo(ship: Ship, to: String) -> void:
+## Returns the cargo it chose (bought or not, for lack of money), or "" if none pays.
+func _load_cargo(ship: Ship, to: String) -> String:
 	if ship.is_recovery() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
-		return
+		return ""
 	var best := market.best_cargo(ship.model(), ship.docked_at, to)
 	if best[0] == "":
-		return
+		return ""
 	var price := market.buy_price(ship.docked_at, best[0])
 	var fuel_reserve := fuel_reserve()
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
 	var quantity := mini(room, floori((float(money) - ship.bill - fuel_reserve - bank_reserve) / price))
 	if quantity <= 0 or (ship.full_loads and quantity < room):
-		return
+		# What a full hold would need in the bank, for ships waiting for one.
+		ship.load_need = roundi(room * price + ship.bill + fuel_reserve + bank_reserve)
+		return best[0]
 	var cost := roundi(quantity * price)
 	money -= cost
 	_record(ship, "cargo", cost)
@@ -888,6 +909,7 @@ func _load_cargo(ship: Ship, to: String) -> void:
 	if hub and ship.stop_sale == 0 and quantity >= room:
 		_gain_hub_xp(hub, Progression.xp_for_cargo(quantity, best[0], GameData.distance_nm(ship.docked_at, to)))
 	ship_changed.emit(ship)
+	return best[0]
 
 
 ## Adds delivery XP to the company (times company_multiplier, from a hub's
@@ -918,6 +940,9 @@ func _fuel_to_leave(ship: Ship, to: String) -> float:
 ## while refilling tops up (as the toggles and money allow) until its tank is
 ## full or the money runs out, and is held in port while it lacks fuel for the leg.
 func _try_depart(ship: Ship, delta: float, to: String) -> void:
+	# Waiting for a full load, and not due another look (see _waiting_for_load()).
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need:
+		return
 	var phase := ship.refill_phase_seconds()
 	var topping_up := ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
 	if topping_up or ship.fuel < _fuel_to_leave(ship, to):
@@ -954,10 +979,15 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 ## can buy a full one (see _load_cargo()), saying why in its load_wait. A leg
 ## where no cargo makes a profit is sailed empty straight away.
 func _waiting_for_load(ship: Ship, to: String) -> bool:
-	if not ship.is_recovery() and ship.full_loads and ship.cargo_id.is_empty():
-		_load_cargo(ship, to)
-	if ship.is_recovery() or not ship.full_loads or not ship.cargo_id.is_empty() \
-			or market.best_cargo(ship.model(), ship.docked_at, to)[0] == "":
+	if ship.is_recovery() or not ship.full_loads or not ship.cargo_id.is_empty():
+		_set_load_wait(ship, "")
+		return false
+	# Already waiting: look again as soon as the money reaches what a full hold
+	# needed, and otherwise only every LOAD_RECHECK_S (prices drift slowly).
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need:
+		return true
+	ship.load_check_time = play_time + LOAD_RECHECK_S
+	if _load_cargo(ship, to).is_empty() or not ship.cargo_id.is_empty():
 		_set_load_wait(ship, "")
 		return false
 	_set_hold(ship, "")
@@ -990,6 +1020,7 @@ func _depart(ship: Ship, to: String) -> void:
 	_leave_port(ship)
 	ship.from_port = ship.docked_at
 	ship.to_port = to
+	ship.risk_check_time = 0.0
 	ship.traveled_nm = 0.0
 	ship.docked_at = ""
 	canal_traffic.start_leg(ship)
@@ -1026,10 +1057,11 @@ func trade_bonus(from_port: String, to_port: String, profit: float, model_id := 
 
 ## Money cargo purchases leave alone so no ship is stranded for fuel: what
 ## topping up every ship's tank would cost at the port it's at or heading to (a
-## cargo ship at sea counting the fuel it will burn to get there). Worked out
-## once per step, as ships waiting for a full load ask every frame.
+## cargo ship at sea counting the fuel it will burn to get there). A buffer, so
+## it's worked out at most every FUEL_RESERVE_REFRESH_S of game time: with a big
+## fleet it's costly, and ships buying cargo ask for it many times a second.
 func fuel_reserve() -> float:
-	if _fuel_reserve_time == play_time:
+	if _fuel_reserve_time >= 0.0 and play_time >= _fuel_reserve_time and play_time - _fuel_reserve_time < FUEL_RESERVE_REFRESH_S:
 		return _fuel_reserve
 	var total := 0.0
 	for ship in ships:
@@ -1381,6 +1413,8 @@ func continue_game() -> String:
 	for ship_data: Dictionary in data.get("ships", []):
 		ships.append(Ship.from_dict(ship_data))
 	Ship.link_rescues(ships)
+	for ship in ships:
+		ship.invalidate_stats()  # Skills and mega upgrades are all loaded now.
 	canal_traffic.rebuild(ships)
 	for ship in ships:
 		if ship.is_recovery() and ship.base_port.is_empty():  # Saves from before bases.

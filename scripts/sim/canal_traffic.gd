@@ -110,6 +110,8 @@ func hold(ship: Ship, delta: float) -> bool:
 
 ## How far a ship sailing toward `target` (nm along its lane) may go.
 func limit(ship: Ship, target: float) -> float:
+	if not ship.leg_has_canal():  # Most legs: nothing to check.
+		return target
 	var from := ship.traveled_nm
 	var crossing := GameData.crossing_ahead(ship.from_port, ship.to_port, from)
 	if crossing.is_empty():
