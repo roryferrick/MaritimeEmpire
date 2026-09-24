@@ -73,6 +73,9 @@ var containers_delivered: int = 0:
 		containers_changed.emit(containers_delivered)
 
 var company_name := ""
+## The company's color id (see game_config company_colors): its name in the
+## top bar and the rings around its HQ and hubs.
+var company_color := "purple"
 ## New ships are delivered here.
 var home_port := ""
 var ships: Array[Ship] = []
@@ -163,6 +166,14 @@ func buy_error(model_id: String) -> String:
 
 func company_name_error(new_company_name: String) -> String:
 	return "Enter a company name." if new_company_name.strip_edges().is_empty() else ""
+
+
+## The company's color as a Color (purple if its id isn't in the config).
+func company_color_value() -> Color:
+	for entry: Array in GameData.config.get("company_colors", []):
+		if entry[0] == company_color:
+			return Color.from_string(entry[2], Color.MEDIUM_PURPLE)
+	return Color.from_string("#b67cf2", Color.MEDIUM_PURPLE)
 
 
 func company_level() -> int:
@@ -603,22 +614,24 @@ func _unload(ship: Ship) -> void:
 		containers_delivered += ship.capacity()
 	ship_arrived.emit(ship, ship.docked_at, ship.cargo_payment)
 	var hub := hub_at(ship.docked_at)
-	_gain_xp(ship, Progression.xp_for_payment(ship.cargo_payment), 1.0 + (hub.bonus("xp") if hub else 0.0))
+	_gain_xp(ship, Progression.xp_for_payment(ship.cargo_payment), 1.0 + (hub.bonus("xp") if hub else 0.0),
+		1.0 + (hub.company_xp_bonus() if hub else 0.0))
 	if hub:
 		hub.deliveries += 1
 		hub.income += ship.cargo_payment
 		_gain_hub_xp(hub, Progression.xp_for_payment(ship.cargo_payment))
 
 
-## Adds delivery XP to the company and (times ship_multiplier, from a hub's
-## XP bonus) to the ship, announcing any level-ups.
-func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0) -> void:
+## Adds delivery XP to the company (times company_multiplier, from a hub's
+## company XP bonus) and to the ship (times ship_multiplier, from its ship XP
+## upgrade), announcing any level-ups.
+func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0, company_multiplier := 1.0) -> void:
 	var company_before := company_level()
 	var ship_before := ship.level()
-	company_xp += amount
+	company_xp += amount * company_multiplier
 	ship.xp += amount * ship_multiplier
 	var bucket := _current_bucket()
-	bucket.fleet["xp"] = float(bucket.fleet.get("xp", 0.0)) + amount
+	bucket.fleet["xp"] = float(bucket.fleet.get("xp", 0.0)) + amount * company_multiplier
 	company_xp_changed.emit(company_xp)
 	for level in range(company_before + 1, company_level() + 1):
 		company_leveled.emit(level, Progression.unlocks_at(level))
@@ -958,8 +971,9 @@ func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
 
-func new_game(new_company_name: String, new_home_port: String) -> void:
+func new_game(new_company_name: String, new_home_port: String, new_color := "purple") -> void:
 	company_name = new_company_name.strip_edges()
+	company_color = new_color
 	home_port = new_home_port
 	money = int(GameData.config.get("starting_money", 10000))
 	containers_delivered = 0
@@ -983,6 +997,7 @@ func continue_game() -> String:
 	if int(data.get("version", 0)) != SAVE_VERSION:
 		return "This save is from an older version of the game and can't be loaded. Start a new game."
 	company_name = data.get("company_name", "")
+	company_color = data.get("company_color", "purple")  # Saves from before colors: purple.
 	home_port = data.get("home_port", "")
 	money = int(data.get("money", 0))
 	containers_delivered = int(data.get("containers_delivered", 0))
@@ -1015,6 +1030,7 @@ func save_game() -> void:
 	var data := {
 		"version": SAVE_VERSION,
 		"company_name": company_name,
+		"company_color": company_color,
 		"home_port": home_port,
 		"money": money,
 		"play_time": play_time,

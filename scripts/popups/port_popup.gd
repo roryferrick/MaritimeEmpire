@@ -65,6 +65,10 @@ func _show_hub(hub: Hub) -> void:
 	_xp_label.theme_type_variation = &"DimLabel"
 	%HubBox.add_child(_xp_label)
 	_update_hub_xp()
+	var company := Label.new()
+	company.theme_type_variation = &"GainLabel"
+	company.text = hub.company_xp_text()
+	%HubBox.add_child(company)
 	%HubBox.add_child(HubTree.new(hub))
 	var points := hub.upgrade_points()
 	if points > 0:

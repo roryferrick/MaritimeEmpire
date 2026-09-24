@@ -77,6 +77,10 @@ func _hub_card(hub: Hub) -> Control:
 	var xp := Label.new()
 	xp.theme_type_variation = &"DimLabel"
 	box.add_child(xp)
+	var company := Label.new()
+	company.theme_type_variation = &"GainLabel"
+	company.text = hub.company_xp_text()
+	box.add_child(company)
 
 	box.add_child(HSeparator.new())
 	var points := hub.upgrade_points()

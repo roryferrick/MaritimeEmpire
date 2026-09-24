@@ -46,6 +46,15 @@ func can_upgrade(path: String) -> bool:
 	return upgrade_points() > 0 and int(upgrades.get(path, 0)) < Hub.max_path_level()
 
 
+## Extra company XP for deliveries unloaded here (e.g. 0.3 for +30%): hubs.
+## company_xp_base, plus company_xp_per_10_levels for every 10 levels, times
+## the HQ multiplier. Free: it comes with the hub's level, not an upgrade.
+func company_xp_bonus() -> float:
+	var settings := Hub.settings()
+	var bonus := float(settings.get("company_xp_base", 0.1)) + float(settings.get("company_xp_per_10_levels", 0.1)) * floori(level / 10.0)
+	return bonus * (float(settings.get("hq_multiplier", 1.5)) if is_hq else 1.0)
+
+
 ## Money for the next point in a path: upgrade_cost, plus upgrade_cost_step for
 ## each point it already has.
 func upgrade_cost(path: String) -> int:
@@ -88,3 +97,13 @@ static func max_level() -> int:
 
 static func max_path_level() -> int:
 	return int(settings().get("max_path_level", 10))
+
+
+## "Company XP +30% on deliveries here (+40% at level 30)"
+func company_xp_text() -> String:
+	var text := "Company XP +%d%% on deliveries here" % roundi(company_xp_bonus() * 100.0)
+	var next_level := (floori(level / 10.0) + 1) * 10
+	if next_level <= Hub.max_level():
+		var step := float(Hub.settings().get("company_xp_per_10_levels", 0.1)) * (float(Hub.settings().get("hq_multiplier", 1.5)) if is_hq else 1.0)
+		text += " (+%d%% at level %d)" % [roundi((company_xp_bonus() + step) * 100.0), next_level]
+	return text

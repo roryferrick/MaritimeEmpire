@@ -64,6 +64,16 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 
+[node name="ColorLabel" type="Label" parent="Center/Card/Content"]
+layout_mode = 2
+theme_type_variation = &"DimLabel"
+text = "Company color (your name and the rings around your hubs)"
+
+[node name="ColorRow" type="HBoxContainer" parent="Center/Card/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
 [node name="Spacer" type="Control" parent="Center/Card/Content"]
 custom_minimum_size = Vector2(0, 8)
 layout_mode = 2

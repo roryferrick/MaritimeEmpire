@@ -1,11 +1,12 @@
 extends PanelContainer
-## Company name and level (with an XP bar), money and containers delivered,
+## Company name (in the company's color) and level (with an XP bar), money and containers delivered,
 ## shown above the main screens. Clicking the level opens (or closes) the
 ## level popup with XP progress, upcoming unlocks and time estimates.
 
 
 func _ready() -> void:
 	%CompanyLabel.text = GameState.company_name
+	%CompanyLabel.add_theme_color_override(&"font_color", GameState.company_color_value())
 	GameState.money_changed.connect(_on_money_changed)
 	GameState.containers_changed.connect(_on_containers_changed)
 	GameState.company_xp_changed.connect(_on_xp_changed)

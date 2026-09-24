@@ -68,7 +68,8 @@
 - The company starts with its headquarters (HQ) at its home port. It gets one more hub every 15 company levels (15, 30, 45, 60, 75, 90: 7 locations in all). A hub is founded from any port's popup ("Build a hub here", click again to confirm) and is permanent.
 - Each HQ/hub levels from 0 to 40 on the XP of every delivery unloaded at its port (the same XP the company gets). Level L to L+1 costs (5 + 0.7 x L) minutes of a quarter of a full fleet's XP at the current company level, so a hub taking about a quarter of the fleet's deliveries maxes out in about 12.5 hours.
 - Each level is an upgrade point, spent in the port popup on four paths of up to 10 points each. Each point also costs money: $1M for a path's first point, then $250k more for each point already in that path ($1.25M, $1.5M ... $3.25M for the 10th; $21.25M for a full path). The buttons show the price and grey out when you can't afford it; the Finances tab totals it as "Hub upgrades". They boost every ship docking there: Ship XP +5% per point (ship XP only, not company or hub XP), Fuel & repairs -3% price, Port stops -5% time (unloading, repairs and refueling all speed up), Pay +2% on deliveries unloaded there. The HQ's bonuses are 1.5x a hub's.
-- On the map, the HQ and hubs have a gold ring around their port (heavier for the HQ). A small red dot sits just up and to the right of any HQ or hub with an upgrade you can buy now. The Hubs tab shows a red dot while a hub has an upgrade you can buy (a point and the money) or a new hub can be founded.
+- Every delivery unloaded at an HQ or hub also earns the company extra XP, free with the hub's level: +10%, plus 10% more for every 10 hub levels (+20% at level 10 ... +50% at level 40). The HQ's is 1.5x (+15% up to +75%). The hub's own XP and the ship's aren't boosted by it. The Hubs cards and port popup show it, e.g. "Company XP +30% on deliveries here (+40% at level 30)".
+- On the map, the HQ and hubs have a ring in the company color around their port (heavier for the HQ; gray on the Route Assignment map). A small red dot sits just up and to the right of any HQ or hub with an upgrade you can buy now. The Hubs tab shows a red dot while a hub has an upgrade you can buy (a point and the money) or a new hub can be founded.
 - New ships launch at the HQ (home port); recovery boats are then re-based across the hubs (see Lost ships and recovery boats). Saves from before hubs get an HQ at their home port.
 
 ## World
@@ -124,11 +125,11 @@
 
 ### Main menu
 - New Game (confirm before overwriting an existing save) and Continue (greyed out if no save). Saves from before the Earth map can't be loaded; Continue explains this.
-- New Game → "Found your company": enter a company name and pick a home port from all ports (default Rome), then Start.
+- New Game → "Found your company": enter a company name and pick a home port from all ports (default Rome), and a company color (red, orange, yellow, green, blue or purple; default purple), then Start. The color is used for the company name in the top bar and the rings around the HQ and hubs. Saves from before colors are purple.
 - Autosave on quit and every 30 s.
 
 ### Top bar (on World, Ships, Finances, Shop screens)
-- Company name, company level with an XP bar, money, and total containers delivered.
+- Company name (in the company color), company level with an XP bar, money, and total containers delivered.
 - Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ...", "a new hub"), each with an estimate of how long until you reach it at that rate. Refreshes every second.
 
 ### Bottom navigation bar
