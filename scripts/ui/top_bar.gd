@@ -23,7 +23,7 @@ func _ready() -> void:
 	_on_time_speed_changed(GameState.time_speed)
 
 
-## F cycles the fast-forward speed (not while typing: text fields take the key first).
+## F cycles the game speed (not while typing: text fields take the key first).
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key and key.pressed and not key.echo and key.keycode == KEY_F:
@@ -40,8 +40,9 @@ func _on_containers_changed(total: int) -> void:
 
 
 func _on_time_speed_changed(speed: int) -> void:
-	%SpeedButton.text = "%dx" % speed
-	%SpeedButton.tooltip_text = "Fast forward: the game runs at %dx speed. Click to change (also the F key)." % speed
+	%SpeedButton.text = "Paused" if speed == 0 else "%dx" % speed
+	var state := "The game is paused." if speed == 0 else "The game runs at %dx speed." % speed
+	%SpeedButton.tooltip_text = state + " Click to change: paused, 1x, 2x, 4x, 8x (also the F key)."
 
 
 

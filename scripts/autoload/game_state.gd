@@ -69,8 +69,8 @@ const AUTO_RECOVERY_INTERVAL := 0.5
 const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
-## Fast-forward speeds the top bar button cycles through.
-const TIME_SPEEDS: Array[int] = [1, 2, 4]
+## Game speeds the top bar button cycles through (0 = paused).
+const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 
 var money: int = 0:
 	set(value):
@@ -90,8 +90,8 @@ var company_color := "purple"
 var home_port := ""
 var ships: Array[Ship] = []
 var in_session := false
-## Fast forward: the world advances this many times per frame. Not saved;
-## every session starts at 1x.
+## Game speed: the world advances this many times per frame (0 = paused). Not
+## saved; every session starts at 1x.
 var time_speed := 1:
 	set(value):
 		time_speed = value
@@ -154,7 +154,7 @@ func _step(delta: float) -> void:
 		_send_queued_recoveries()
 
 
-## Steps to the next of TIME_SPEEDS, back to 1x after the fastest.
+## Steps to the next of TIME_SPEEDS, back to paused after the fastest.
 func cycle_time_speed() -> void:
 	time_speed = TIME_SPEEDS[(TIME_SPEEDS.find(time_speed) + 1) % TIME_SPEEDS.size()]
 

@@ -177,7 +177,7 @@
 
 ### Top bar (on World, Ships, Finances, Shop screens)
 - Company name (in the company color), company level with an XP bar, money, a fast-forward button, and total containers delivered.
-- Fast forward: the button (or the F key) cycles 1x, 2x, 4x. The whole world runs that much faster (ships, breakdowns, XP, finances); each session starts at 1x.
+- Game speed: the button (or the F key) cycles Paused, 1x, 2x, 4x, 8x. Paused freezes the world; faster speeds run it that much faster (ships, breakdowns, XP, finances, prices); each session starts at 1x.
 - Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ...", "a new hub"), each with an estimate of how long until you reach it at that rate. Refreshes every second.
 
 ### Bottom navigation bar
