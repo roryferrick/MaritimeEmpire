@@ -4,7 +4,7 @@
 	"autosave_seconds": 30,
 	"pay_per_container_nm": 0.6125,
 	"fuel_price": 2.4,
-	"breakdowns": {"min_company_level": 6, "interval_s": 5, "chance_at_full": 0.0005, "chance_at_empty": 0.005, "age_per_hour_at_sea": 0.1, "max_age_factor": 2.0, "hit": 0.5},
+	"breakdowns": {"min_company_level": 6, "interval_s": 5, "chance_at_full": 0.0015, "chance_at_empty": 0.015, "age_per_hour_at_sea": 0.1, "max_age_factor": 2.0, "hit": 0.5},
 	"initial_view_width_deg": 45,
 
 	"_xp_comment": "XP: every delivery (when unloading finishes) gives the company and the ship XP in proportion to its pay: pay / pay_per_container_nm x xp_per_container_nm (for container ships, containers x leg distance x xp_per_container_nm). Company levels run 1 to max_company_level. Level L costs (company_level_minutes[0] + company_level_minutes[1] x (L - 1)) minutes of the XP a full fleet at that level would earn at sea (at_sea_share of the time): every unlocked cargo model with all the slots it has at that level. So each level takes about as long no matter how big the fleet has become, and level 100 takes about 40 hours. ship_slots: how many of each model you can own. [start, every]: a model gets start slots when it unlocks and one more every that many company levels, up to its max_owned. cargo is container ships and gas tankers, recovery is recovery boats. Ships level 0 to ship_max_level, one skill point per level; see ship_models.json xp_first_level and ship_level_growth. skills: the bonus per skill level (speed: top speed +2%; durability: wear and breakdown chance -5%; efficiency: fuel burn -3%), up to skill_max_level each.",
