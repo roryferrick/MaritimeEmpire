@@ -26,7 +26,7 @@ var _clock := 0.0
 func _ready() -> void:
 	super()
 	var port := GameData.get_port(port_id)
-	%TitleLabel.text = port.get("name", port_id)
+	%TitleLabel.text = "%s · %s" % [port.get("name", port_id), GameData.port_size(port_id).capitalize()]
 	%CloseButton.pressed.connect(queue_free)
 	GameState.ships_changed.connect(_refresh_ships)
 	GameState.ship_changed.connect(_refresh_ships.unbind(1))

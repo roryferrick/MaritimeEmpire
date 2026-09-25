@@ -16,14 +16,17 @@ signal empty_clicked
 signal view_changed
 
 const THEME_TYPE := &"MapView"
+## A port's dot radius by its size (ports.json size); PORT_RADIUS is a large one's.
+const PORT_RADII := {small = 3.5, medium = 4.5, large = 6.0, giant = 8.5}
 const PORT_RADIUS := 6.0
 const PORT_HIT_RADIUS := 14.0
 const SHIP_HIT_RADIUS := 12.0
 ## Docked ships are small dots in their model's color, in rings around their
-## port: the first ring this far out, each next ring DOCK_RING_GAP further,
-## with dots about DOCK_DOT_SPACING apart (so outer rings hold more).
+## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
+## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
+## rings hold more).
 const DOCK_DOT_RADIUS := 2.75
-const DOCK_FIRST_RING := PORT_RADIUS + 7.5
+const DOCK_FIRST_RING_GAP := 7.5
 const DOCK_RING_GAP := 6.0
 const DOCK_DOT_SPACING := 6.5
 ## Half the size of the docked-dot images: the dot plus room for its outline.
@@ -335,7 +338,7 @@ func ship_screen_position(ship: Ship) -> Vector2:
 				return _anchorage_slot_position(ship, crossing)
 		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
 	var slot := _dock_slot(ship)
-	var radius := DOCK_FIRST_RING
+	var radius := _port_radius(ship.docked_at) + DOCK_FIRST_RING_GAP
 	var per_ring := floori(TAU * radius / DOCK_DOT_SPACING)
 	while slot >= per_ring:
 		slot -= per_ring
@@ -567,7 +570,7 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 	for port: Dictionary in ranked:
 		var pos := port_screen_position(port.id)
 		var text_size := font.get_string_size(port.name, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE)
-		var rect := Rect2(pos + Vector2(-text_size.x / 2.0, PORT_RADIUS + 2.0), text_size)
+		var rect := Rect2(pos + Vector2(-text_size.x / 2.0, _port_radius(port.id) + 2.0), text_size)
 		if not bounds.intersects(rect) or _overlaps(rect, placed):
 			continue
 		placed.append(rect.grow(LABEL_PADDING))
@@ -619,6 +622,10 @@ func _price_color(port_id: String) -> Color:
 	return Color.WHITE.lerp(PRICE_CHEAP if t < 0.0 else PRICE_DEAR, absf(t))
 
 
+func _port_radius(port_id: String) -> float:
+	return PORT_RADII.get(GameData.port_size(port_id), PORT_RADIUS)
+
+
 func _draw_ports(labels: Array) -> void:
 	var font := get_theme_default_font()
 	var fill := _color(&"port")
@@ -626,20 +633,21 @@ func _draw_ports(labels: Array) -> void:
 	var outline := _color(&"port_outline")
 	var label_color := _color(&"label")
 	var shadow := _color(&"label_shadow")
-	var visible_area := Rect2(Vector2.ZERO, size).grow(PORT_RADIUS + 4.0)
+	var visible_area := Rect2(Vector2.ZERO, size).grow(PORT_RADII.giant + 4.0)
 	for port: Dictionary in GameData.ports:
 		var pos := port_screen_position(port.id)
 		if not visible_area.has_point(pos):
 			continue
 		var is_dimmed := dimmed_ports.has(port.id)
 		var port_fill := fill if price_commodity.is_empty() else _price_color(port.id)
-		_canvas.draw_circle(pos, PORT_RADIUS, dimmed if is_dimmed else port_fill)
-		_canvas.draw_arc(pos, PORT_RADIUS, 0.0, TAU, 24, outline, 1.5, true)
+		var radius := _port_radius(port.id)
+		_canvas.draw_circle(pos, radius, dimmed if is_dimmed else port_fill)
+		_canvas.draw_arc(pos, radius, 0.0, TAU, 24, outline, 1.5, true)
 	# The HQ and hubs get a ring in the company's color (heavier for the HQ).
 	var ring_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value()
 	for hub in GameState.hubs:
 		var width := HQ_RING_WIDTH if hub.is_hq else HUB_RING_WIDTH
-		_canvas.draw_arc(port_screen_position(hub.port_id), PORT_RADIUS + 1.0 + width / 2.0, 0.0, TAU, 32, ring_color, width, true)
+		_canvas.draw_arc(port_screen_position(hub.port_id), _port_radius(hub.port_id) + 1.0 + width / 2.0, 0.0, TAU, 32, ring_color, width, true)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
 		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
@@ -670,7 +678,7 @@ func _draw_route() -> void:
 	for port_id: String in stops:
 		var text := ", ".join(PackedStringArray(stops[port_id]))
 		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE).x
-		var pos := port_screen_position(port_id) + Vector2(-width / 2.0, -PORT_RADIUS - 5.0)
+		var pos := port_screen_position(port_id) + Vector2(-width / 2.0, -_port_radius(port_id) - 5.0)
 		_canvas.draw_string(font, pos + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 		_canvas.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 

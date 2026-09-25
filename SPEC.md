@@ -95,6 +95,7 @@
   - Added with Suez and the Great Lakes: Ain Sokhna and Port Tewfik (Egypt, south end of the Suez Canal), Eilat (Israel), Noumea (New Caledonia), Flying Fish Cove (Christmas Island), Midway Atoll; the 15 biggest Great Lakes ports (Duluth-Superior, Two Harbors, Thunder Bay, Presque Isle on Superior; Chicago, Indiana Harbor, Burns Harbor, Gary, Milwaukee on Michigan; Calcite on Huron; Detroit, Toledo, Cleveland on Erie; Toronto, Hamilton on Ontario); and six Antarctic stations (King George Island, Palmer, Rothera, McMurdo, Davis, Mawson).
 - The map opens centered on the company's home port (45 degrees of longitude across); the route screen opens centered on the ship.
 - Ports are white circles with names; when names would overlap, the HQ's or a hub's name wins, then the bigger port's, and the other shows on zoom.
+- Every port has a size: Small, Medium, Large or Giant (ports.json size). Within each market region (East Asia, the Mediterranean, the Great Lakes, Antarctica...), ports are sized by real container volume: the top ~15% Giant, the next ~25% Large, the next ~30% Medium and the rest Small, with at least one of each in every region (34 Giant, 58 Large, 69 Medium, 66 Small). The port popup's title shows it after the name ("Rome · Medium"). For now size only sets the dot on the map: 8.5 px radius for Giant, 6 for Large, 4.5 for Medium, 3.5 for Small; docked ships ring just outside it and hub rings hug it.
 - Ships follow real sea lanes around land, pre-computed for every pair of ports (25,651 lanes) into data/sea_lanes.res. Lanes use the Suez and Panama canals and the main straits and river approaches (Gibraltar, Messina, Bonifacio, the Dardanelles, Singapore, the Great Belt, the Elbe to Hamburg, the Scheldt to Antwerp, the Golden Gate, Puget Sound, the Bosphorus to the Black Sea, the Mississippi to New Orleans, Icy Strait to Juneau, the Oslofjord, the Columbia River to Portland, the Strait of Magellan, and others). All distances are real nautical miles along those lanes. Routes cross the Pacific without a seam.
 
 ## Panama Canal
@@ -192,7 +193,7 @@
 
 ### 1. World (map) screen
 - Pan (drag) and zoom (mouse wheel) supported.
-- Ports are clickable circles; ships are clickable pointed rectangles moving along their routes.
+- Ports are clickable circles (sized by the port's size); ships are clickable top-down ship shapes moving along their routes.
 - A panel in the map's top-right corner holds the Routes switch and, under it, the Prices picker. The "Routes" switch (on by default, saved with the game) draws every sea lane the fleet uses as a faint line in the color of a ship using it: each cargo ship's route loop, any new route waiting to replace it, and the leg it's sailing now. A lane shared by several ships is drawn once.
 - Only one popup open at a time; opening a new one closes the old one.
 
