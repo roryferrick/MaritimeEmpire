@@ -657,18 +657,22 @@ func _draw_ports(labels: Array) -> void:
 	var label_color := _color(&"label")
 	var shadow := _color(&"label_shadow")
 	var visible_area := Rect2(Vector2.ZERO, size).grow(PORT_RADIUS_MAX + 4.0)
-	for port: Dictionary in GameData.ports:
-		var pos := port_screen_position(port.id)
+	var draw_port := func(port_id: String) -> void:
+		var pos := port_screen_position(port_id)
 		if not visible_area.has_point(pos):
-			continue
-		var is_dimmed := dimmed_ports.has(port.id)
-		var port_fill := fill if price_commodity.is_empty() else _price_color(port.id)
-		var radius := _port_radius(port.id)
-		_canvas.draw_circle(pos, radius, dimmed if is_dimmed else port_fill)
+			return
+		var port_fill := fill if price_commodity.is_empty() else _price_color(port_id)
+		var radius := _port_radius(port_id)
+		_canvas.draw_circle(pos, radius, dimmed if dimmed_ports.has(port_id) else port_fill)
 		_canvas.draw_arc(pos, radius, 0.0, TAU, 24, outline, 1.5, true)
-	# The HQ and hubs get a ring in the company's color (heavier for the HQ).
+	for port: Dictionary in GameData.ports:
+		if not GameState.hub_at(port.id):
+			draw_port.call(port.id)
+	# The HQ and hubs go on top of the other ports, each with a ring in the
+	# company's color (heavier for the HQ).
 	var ring_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value()
 	for hub in GameState.hubs:
+		draw_port.call(hub.port_id)
 		var width := HQ_RING_WIDTH if hub.is_hq else HUB_RING_WIDTH
 		_canvas.draw_arc(port_screen_position(hub.port_id), _port_radius(hub.port_id) + 1.0 + width / 2.0, 0.0, TAU, 32, ring_color, width, true)
 	for label: Array in labels:
