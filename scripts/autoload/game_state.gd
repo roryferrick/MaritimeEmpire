@@ -53,7 +53,10 @@ signal mega_upgraded(model_id: String)
 ## The fast-forward speed changed.
 signal time_speed_changed(speed: int)
 
-const SAVE_PATH := "user://savegame.json"
+## Each save slot is its own file (see save_path()).
+const SAVE_SLOTS := 3
+## The one save from before slots; it becomes slot 1.
+const LEGACY_SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 3
 const MAX_NAME_LENGTH := 24
 const MAX_COMPANY_NAME_LENGTH := 32
@@ -108,6 +111,8 @@ var hidden_gem_claimed := false
 var home_port := ""
 var ships: Array[Ship] = []
 var in_session := false
+## The save slot (1 to SAVE_SLOTS) this session saves to.
+var save_slot := 1
 ## Game speed: the world advances this many times per frame (0 = paused). Not
 ## saved; every session starts at 1x.
 var time_speed := 1:
@@ -150,6 +155,7 @@ func _ready() -> void:
 	_autosave_timer.wait_time = float(GameData.config.get("autosave_seconds", 30))
 	_autosave_timer.timeout.connect(save_game)
 	add_child(_autosave_timer)
+	_migrate_legacy_save()
 
 
 func _notification(what: int) -> void:
@@ -320,10 +326,11 @@ func company_name_error(new_company_name: String) -> String:
 	return "Enter a company name." if new_company_name.strip_edges().is_empty() else ""
 
 
-## The company's color as a Color (purple if its id isn't in the config).
-func company_color_value() -> Color:
+## The company's color (or another color id's) as a Color (purple if the id
+## isn't in the config).
+func company_color_value(color_id := company_color) -> Color:
 	for entry: Array in GameData.config.get("company_colors", []):
-		if entry[0] == company_color:
+		if entry[0] == color_id:
 			return Color.from_string(entry[2], Color.MEDIUM_PURPLE)
 	return Color.from_string("#b67cf2", Color.MEDIUM_PURPLE)
 
@@ -1351,10 +1358,44 @@ func recent_finances() -> Dictionary:
 
 # --- Saving --------------------------------------------------------------
 
-func has_save() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+func save_path(slot: int) -> String:
+	return "user://save_%d.json" % slot
 
 
+func has_save(slot: int) -> bool:
+	return FileAccess.file_exists(save_path(slot))
+
+
+## What the main menu shows for a slot: {company_name, company_color, money,
+## date (calendar Unix time)}, plus error if it can't be loaded; {} if empty.
+func save_summary(slot: int) -> Dictionary:
+	if not has_save(slot):
+		return {}
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_path(slot)))
+	if typeof(data) != TYPE_DICTIONARY:
+		return {error = "Unreadable save"}
+	var summary := {
+		company_name = str(data.get("company_name", "")),
+		company_color = str(data.get("company_color", "purple")),
+		money = int(data.get("money", 0)),
+		date = calendar_time_at(float(data.get("play_time", 0.0))),
+	}
+	if int(data.get("version", 0)) != SAVE_VERSION:
+		summary.error = "Old save, can't be loaded"
+	return summary
+
+
+func delete_save(slot: int) -> void:
+	DirAccess.remove_absolute(save_path(slot))
+
+
+## The single save from before slots moves into slot 1.
+func _migrate_legacy_save() -> void:
+	if FileAccess.file_exists(LEGACY_SAVE_PATH) and not has_save(1):
+		DirAccess.rename_absolute(LEGACY_SAVE_PATH, save_path(1))
+
+
+## Starts a new company in save_slot, replacing any save there.
 func new_game(new_company_name: String, new_home_port: String, new_color := "purple") -> void:
 	company_name = new_company_name.strip_edges()
 	company_color = new_color
@@ -1379,14 +1420,17 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	save_game()
 
 
-## Loads the save file and starts a session. Returns why it couldn't, or "".
-func continue_game() -> String:
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+## Loads a slot's save and starts a session saving to it. Returns why it
+## couldn't, or "".
+func continue_game(slot: int) -> String:
+	var path := save_path(slot)
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(data) != TYPE_DICTIONARY:
-		push_error("GameState: save file %s is missing or corrupt" % SAVE_PATH)
+		push_error("GameState: save file %s is missing or corrupt" % path)
 		return "The saved game could not be read."
 	if int(data.get("version", 0)) != SAVE_VERSION:
-		return "This save is from before commodity trading and can't be loaded. Start a new game."
+		return "This save is from before commodity trading and can't be loaded. Delete it to start a new game in this slot."
+	save_slot = slot
 	company_name = data.get("company_name", "")
 	company_color = data.get("company_color", "purple")  # Saves from before colors: purple.
 	home_port = data.get("home_port", "")
@@ -1448,7 +1492,7 @@ func save_game() -> void:
 		"hidden_gem_claimed": hidden_gem_claimed,
 		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),
 	}
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(save_path(save_slot), FileAccess.WRITE)
 	if file == null:
 		push_error("GameState: could not write save (%s)" % error_string(FileAccess.get_open_error()))
 		return

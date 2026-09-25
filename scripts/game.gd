@@ -8,6 +8,8 @@ enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP }
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
 const ALERT_CHECK_SECONDS := 0.5
+## Ships named per reason in the Ships tab's tooltip before "and 3 more".
+const ALERT_NAMES_SHOWN := 3
 
 var _current_screen := Screen.WORLD
 
@@ -97,15 +99,21 @@ func _update_alerts() -> void:
 			buyable.append(model.get("name", model.id))
 	_shop_alert.visible = not buyable.is_empty()
 	%ShopButton.tooltip_text = "You can buy: %s" % ", ".join(buyable) if not buyable.is_empty() else ""
-	var reasons := {}
+	var reasons := {}  # reason -> names of the ships it applies to
 	for ship in GameState.ships:
 		var reason := ship.attention_reason()
 		if not reason.is_empty():
-			reasons[reason] = int(reasons.get(reason, 0)) + 1
+			if not reasons.has(reason):
+				reasons[reason] = PackedStringArray()
+			reasons[reason].append(ship.name)
 	_ships_alert.visible = not reasons.is_empty()
 	var parts := PackedStringArray()
 	for reason: String in reasons:
-		parts.append("%d %s" % [reasons[reason], reason])
+		var names: PackedStringArray = reasons[reason]
+		var named := ", ".join(names.slice(0, ALERT_NAMES_SHOWN))
+		if names.size() > ALERT_NAMES_SHOWN:
+			named += " and %d more" % (names.size() - ALERT_NAMES_SHOWN)
+		parts.append("%d %s (%s)" % [names.size(), reason, named])
 	%ShipsButton.tooltip_text = "Ships needing you: %s" % ", ".join(parts) if not reasons.is_empty() else ""
 
 

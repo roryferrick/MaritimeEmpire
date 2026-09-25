@@ -71,9 +71,20 @@ func refresh() -> void:
 	_update_info()
 
 
-## "Coffee · Lv 3" (green, with "+2", while it has skill points to spend);
-## recovery boats just say what they are.
+## Hovering shows the full name and what the ship is doing (why it's held...).
+func _get_tooltip(_at_position: Vector2) -> String:
+	return "%s\n%s" % [ship.name, ship.status_text()]
+
+
+## What needs the player (in red: "Held in port"), or else "Coffee · Lv 3"
+## (green, with "+2", while it has skill points to spend); recovery boats just
+## say what they are.
 func _update_info() -> void:
+	var reason := ship.attention_reason()
+	if not reason.is_empty() and reason != Ship.UPGRADES_REASON:
+		_info.text = reason[0].to_upper() + reason.substr(1)
+		_info.theme_type_variation = &"ErrorLabel"
+		return
 	if ship.is_recovery():
 		_info.text = "Recovery"
 		_info.theme_type_variation = &"DimLabel"

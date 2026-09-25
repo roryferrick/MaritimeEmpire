@@ -30,6 +30,9 @@ const JOB_TOW := "tow"
 
 ## A ship sells for this fraction of its price, times its maintenance.
 const SELL_FRACTION := 0.5
+## attention_reason() for skill points to spend: the one reason that isn't a
+## problem (Ship tiles show it as a green "+2", not a red warning).
+const UPGRADES_REASON := "upgrades to spend"
 
 ## Canal states (canal_state; see CanalTraffic): heading into a lock chamber
 ## it has reserved, waiting in line for one, waiting for toll money, at anchor
@@ -472,7 +475,7 @@ func attention_reason() -> String:
 	if is_docked() and paused:
 		return "paused"
 	if skill_points() > 0:
-		return "upgrades to spend"
+		return UPGRADES_REASON
 	return ""
 
 

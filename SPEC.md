@@ -173,7 +173,7 @@
 ## Screens
 
 ### Main menu
-- New Game (confirm before overwriting an existing save) and Continue (greyed out if no save). Saves from before the Earth map can't be loaded; Continue explains this.
+- 3 save slots, each its own file (user://save_1.json to save_3.json), then Quit. A slot with a save shows its company name (in the company color), money and game date; click it to continue that company, which then autosaves to the same slot. An empty slot says New Game. Each saved slot has a Delete button (with a confirmation). Saves that can't be loaded (from before commodity trading) show greyed out with the reason and can only be deleted. The single save from before slots becomes slot 1.
 - New Game → "Found your company": enter a company name, pick a home port and a company color (red, orange, yellow, green, blue or purple; default purple), then Start. The home port list starts with 25 "Great starts" (3 Scooters clear about $40,000 or more in their first 10 minutes: West Africa, Pacific Mexico, the US East Coast and Caribbean, Panama, the China coast and Korea, the Mediterranean, Ireland, Portugal, the Gulf, Chennai) and 25 "Harder starts" (about $10,000-$30,000, often island hopping: Hawaii, Samoa, Fiji, the Azores, Japan, the Malacca Strait, eastern Australia, Rotterdam and the Channel, Colombia and Jamaica, Manila, Istanbul, the Baltic), then every other port (default Rome); data/starts.json, picked by simulating each HQ. 83 ports are left out of the list: those with no port within a Scooter's range and those where a Scooter finds no profitable trade (the US West Coast and Gulf, the Great Lakes, Karachi and Mumbai, Antarctica...); they are still normal ports. A note under the picker says what kind of start the port is and why; the rest say Scooters find only thin trade in range. The color is used for the company name in the top bar and the rings around the HQ and hubs. Saves from before colors are purple.
 - Autosave on quit and every 30 s.
 
@@ -186,7 +186,7 @@
 
 ### Bottom navigation bar
 - World | Ships | Finances | Hubs | Shop. Hidden on the Route Assignment screen.
-- The Ships tab shows a red dot while any ship needs the player: lost with no recovery boat on the way, held in port, waiting at a canal for toll money, docked and paused, a docked cargo ship with no route, or upgrade points to spend. Its tooltip counts each reason. The Ships screen filter "Needs attention" shows just those ships.
+- The Ships tab shows a red dot while any ship needs the player: lost with no recovery boat on the way, held in port, waiting at a canal for toll money, docked and paused, a docked cargo ship with no route, or upgrade points to spend. Its tooltip counts each reason and names the ships ("1 held in port (Tundra Godwit)", up to 3 names then "and 2 more"). The Ships screen filter "Needs attention" shows just those ships.
 - The Shop tab shows a red dot while any ship can be bought (unlocked, a free slot, and affordable); its tooltip lists them.
 
 ### 1. World (map) screen
@@ -197,7 +197,7 @@
 
 ### 2. Ships screen
 - Scrolling list grouped by model (in shop order), each group on a faint tint of its ship line's color (the same colors as the Prices menu and Finances) under the model name in that color, 8 compact tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
-- Each tile has two lines: the ship name (cut short with "..." if it doesn't fit; hover for the full name), then its cargo and level in smaller text ("Coffee · Lv 7", in green with "+2" while it has upgrade points to spend; recovery boats say "Recovery").
+- Each tile has two lines: the ship name (cut short with "..." if it doesn't fit), then its cargo and level in smaller text ("Coffee · Lv 7", in green with "+2" while it has upgrade points to spend; recovery boats say "Recovery"). A ship that needs the player for anything but upgrade points says why instead, in red ("Held in port", "Paused", "No route", "Lost at sea", "Waiting for toll money"). Hovering a tile shows the full name and its status line (e.g. "Docked at Korsakov — not enough fuel for Hong Kong; turn on refuel").
 - Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); amber = waiting in port for money for a full load; red = docked (paused at a port, no route, or held in port).
 - Clicking a tile opens the ship popup.
 - Sort (within each model) by name, status (lost, then at risk, then held, then stopped, then running) or profit; show all ships, running, stopped, lost, or recovery boats. A count shows how many are shown. Tiles re-sort when the fleet or the sort changes, not live.
