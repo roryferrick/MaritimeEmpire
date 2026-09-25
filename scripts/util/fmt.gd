@@ -6,6 +6,19 @@ static func money(amount: int) -> String:
 	return ("-$" if amount < 0 else "$") + thousands(absi(amount))
 
 
+## Money to 3 significant figures from $100k up, for tight tables:
+## 23080085871 -> "$23.1B", -571387754 -> "-$571M", 1830000 -> "$1.83M",
+## 985485 -> "$985k"; below $100k as money() ("$29,509").
+static func money_short(amount: int) -> String:
+	var size := absf(amount)
+	if size < 1e5:
+		return money(amount)
+	var unit := "B" if size >= 1e9 else ("M" if size >= 1e6 else "k")
+	var scaled: float = size / {B = 1e9, M = 1e6, k = 1e3}[unit]
+	var places := 2 if scaled < 10.0 else (1 if scaled < 100.0 else 0)
+	return "%s$%s%s" % ["-" if amount < 0 else "", String.num(scaled, places), unit]
+
+
 ## 5.4 -> "5.40" with 2 places; trailing zeros are kept.
 static func decimal(value: float, places: int) -> String:
 	return String.num(value, places).pad_decimals(places)

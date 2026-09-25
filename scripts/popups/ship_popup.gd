@@ -24,6 +24,8 @@ var _upgrades_alert := AlertDot.new(4.0, Vector2(6, 6))
 ## "Carrying 10 containers of Toys, bought for $1,200 at Shanghai, worth about
 ## $3,500 at Rotterdam".
 var _cargo_label := Label.new()
+## The skills panel's "+" buttons, by skill (their price and state follow the money).
+var _skill_buttons := {}
 
 
 func _ready() -> void:
@@ -78,6 +80,7 @@ func _on_ship_changed(changed: Ship) -> void:
 
 func _update_live() -> void:
 	%StatusLabel.text = ship.status_text()
+	_update_skill_buttons()
 	%SpeedValue.text = "%s nm/s (top %s)" % [Fmt.decimal(ship.speed(), 2), Fmt.decimal(ship.top_speed(), 2)]
 	var fuel := roundi(ship.stop_fuel_cost)
 	var repair := roundi(ship.stop_repair_cost)
@@ -204,10 +207,22 @@ func _refresh_level() -> void:
 		effect.text = skill[2] % roundi(level * Progression.skill_step(skill[0]) * 100.0)
 		%SkillsBox.add_child(effect)
 		var add := Button.new()
-		add.text = "+"
-		add.disabled = not ship.can_level_skill(skill[0])
 		add.pressed.connect(GameState.level_skill.bind(ship, skill[0]))
 		%SkillsBox.add_child(add)
+		_skill_buttons[skill[0]] = add
+	_update_skill_buttons()
+
+
+## Each "+" shows the next level's price ("+ $1.3M"), greyed out with the reason
+## as its tooltip when it can't be bought, or "Max" once the skill is maxed out.
+func _update_skill_buttons() -> void:
+	for skill: String in _skill_buttons:
+		var add: Button = _skill_buttons[skill]
+		var maxed := int(ship.skills[skill]) >= Progression.skill_max_level()
+		var error := GameState.skill_error(ship, skill)
+		add.text = "Max" if maxed else "+ $%s" % Fmt.short(GameState.skill_cost(ship, skill))
+		add.disabled = not error.is_empty()
+		add.tooltip_text = error
 
 
 func _pip_color(filled: bool) -> Color:

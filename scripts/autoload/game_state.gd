@@ -73,7 +73,7 @@ const WINDOW_SECONDS := 600.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs", "mega"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs", "upgrades", "mega"]
 ## Order "Upgrade all" levels skills in, and breaks ties in.
 const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 ## Game speeds the top bar button cycles through (0 = paused).
@@ -358,35 +358,98 @@ func company_level() -> int:
 	return int(Progression.company_level(company_xp).level)
 
 
-## Spends one of a ship's skill points on "speed", "durability" or "efficiency".
+## What a ship's next level of a skill costs: game_config skill_costs first
+## share of the model's price, plus step more for each level the skill already
+## has (10%, 15% ... 55% for the 10th).
+func skill_cost(ship: Ship, skill: String) -> int:
+	return _skill_price(ship.model(), int(ship.skills.get(skill, 0)))
+
+
+## What a skill level costs for a model when the skill is at `level`.
+func _skill_price(model: Dictionary, level: int) -> int:
+	var settings: Dictionary = GameData.config.get("skill_costs", {})
+	var share := float(settings.get("first", 0.1)) + float(settings.get("step", 0.05)) * level
+	return roundi(float(model.get("price", 0)) * share)
+
+
+## Why a ship can't take the next level of a skill now, or "".
+func skill_error(ship: Ship, skill: String) -> String:
+	if int(ship.skills.get(skill, 0)) >= Progression.skill_max_level():
+		return "Maxed out."
+	if ship.skill_points() <= 0:
+		return "No upgrade points to spend."
+	if money < skill_cost(ship, skill):
+		return "You can't afford this (%s short)." % Fmt.money(skill_cost(ship, skill) - money)
+	return ""
+
+
+## Spends one of a ship's skill points on "speed", "durability" or
+## "efficiency", paying skill_cost().
 func level_skill(ship: Ship, skill: String) -> void:
-	if not ship.can_level_skill(skill):
+	if not skill_error(ship, skill).is_empty():
 		return
-	ship.skills[skill] = int(ship.skills[skill]) + 1
-	ship.invalidate_stats()
+	_buy_skill(ship, skill)
 	ship_changed.emit(ship)
 
 
-## Spends all of every ship's skill points round-robin: each point goes to the
-## lowest skill, ties broken in AUTO_UPGRADE_ORDER, so a ship fills speed 1,
-## efficiency 1, durability 1, speed 2... Returns how many points were spent.
-func upgrade_all() -> int:
-	var spent := 0
+func _buy_skill(ship: Ship, skill: String) -> void:
+	var cost := skill_cost(ship, skill)
+	money -= cost
+	_record(null, "upgrades", cost)
+	ship.skills[skill] = int(ship.skills[skill]) + 1
+	ship.invalidate_stats()
+
+
+## Every unspent skill point in the fleet as [cost, ship, skill], cheapest
+## first. Each ship's points go round-robin to its lowest skill (ties broken in
+## AUTO_UPGRADE_ORDER: speed 1, efficiency 1, durability 1, speed 2...), which is
+## also its cheapest, so buying in this order keeps every ship's order.
+func _upgrade_plan() -> Array:
+	var plan := []
 	for ship in ships:
-		var before := spent
-		while ship.skill_points() > 0:
+		var levels := ship.skills.duplicate()
+		for point in ship.skill_points():
 			var best := ""
 			for skill in AUTO_UPGRADE_ORDER:
-				if ship.can_level_skill(skill) and (best.is_empty() or int(ship.skills[skill]) < int(ship.skills[best])):
+				if int(levels[skill]) < Progression.skill_max_level() and (best.is_empty() or int(levels[skill]) < int(levels[best])):
 					best = skill
 			if best.is_empty():
 				break
-			ship.skills[best] = int(ship.skills[best]) + 1
-			ship.invalidate_stats()
-			spent += 1
-		if spent > before:
-			ship_changed.emit(ship)
-	return spent
+			plan.append([_skill_price(ship.model(), int(levels[best])), ship, best])
+			levels[best] = int(levels[best]) + 1
+	plan.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	return plan
+
+
+## What spending every unspent skill point would cost.
+func upgrade_all_cost() -> int:
+	var total := 0
+	for entry: Array in _upgrade_plan():
+		total += int(entry[0])
+	return total
+
+
+## The cheapest unspent upgrade in the fleet, or 0 if there's none.
+func cheapest_upgrade_cost() -> int:
+	var plan := _upgrade_plan()
+	return int(plan[0][0]) if not plan.is_empty() else 0
+
+
+## Buys the fleet's unspent upgrades, cheapest first (see _upgrade_plan()), for
+## as long as the money lasts without dipping into the bank_reserve. Returns
+## how many were bought.
+func upgrade_all() -> int:
+	var bought := 0
+	var changed := {}
+	for entry: Array in _upgrade_plan():
+		if money - int(entry[0]) < bank_reserve:
+			break
+		_buy_skill(entry[1], entry[2])
+		changed[entry[1]] = true
+		bought += 1
+	for ship: Ship in changed:
+		ship_changed.emit(ship)
+	return bought
 
 
 ## Unspent skill points across the fleet.

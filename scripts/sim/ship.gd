@@ -327,10 +327,6 @@ func skill_points() -> int:
 	return level() - int(skills.speed) - int(skills.durability) - int(skills.efficiency)
 
 
-func can_level_skill(skill: String) -> bool:
-	return skill_points() > 0 and int(skills.get(skill, 0)) < Progression.skill_max_level()
-
-
 func _skill_bonus(skill: String) -> float:
 	return int(skills.get(skill, 0)) * Progression.skill_step(skill)
 

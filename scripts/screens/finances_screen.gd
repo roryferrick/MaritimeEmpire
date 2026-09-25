@@ -19,7 +19,7 @@ const COLUMNS := [
 const TOTAL_ROWS := [
 	["Cargo sales", "income", false], ["Cargo bought", "cargo", true], ["Fuel", "fuel", true], ["Repairs", "repair", true],
 	["Canal tolls", "tolls", true],
-	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Mega upgrades", "mega", true],
+	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true],
 ]
 ## Ship table groups, in shop order: [title, ship_models.json category].
 const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
@@ -162,11 +162,11 @@ func _add_row(row: Dictionary, title_color := Color.TRANSPARENT) -> Array[Label]
 	var cells: Array[Label] = []
 	cells.append(_add_label(%ShipTable, row.name))
 	cells.append(_add_label(%ShipTable, row.model, &"DimLabel"))
-	cells.append(_add_label(%ShipTable, Fmt.money(roundi(row.income))))
+	cells.append(_add_money(roundi(row.income)))
 	for key: String in ["cargo", "fuel", "repair", "tolls"]:
-		cells.append(_add_label(%ShipTable, Fmt.money(-roundi(row[key]))))
+		cells.append(_add_money(-roundi(row[key])))
 	for key: String in ["profit", "recent"]:
-		cells.append(_add_label(%ShipTable, Fmt.money(roundi(row[key])), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel"))
+		cells.append(_add_money(roundi(row[key]), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel"))
 	if is_total:
 		cells[0].add_theme_color_override(&"font_color", title_color)
 		for cell in cells:
@@ -234,6 +234,15 @@ func _add_label(parent: Node, text: String, variation := &"") -> Label:
 	if variation != &"HeaderLabel":
 		label.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
 	parent.add_child(label)
+	return label
+
+
+## A ship table money cell, shortened ("$23.1B") so the table fits the screen,
+## with the exact amount on hover.
+func _add_money(amount: int, variation := &"") -> Label:
+	var label := _add_label(%ShipTable, Fmt.money_short(amount), variation)
+	label.tooltip_text = Fmt.money(amount)
+	label.mouse_filter = Control.MOUSE_FILTER_PASS
 	return label
 
 

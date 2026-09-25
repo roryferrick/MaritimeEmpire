@@ -19,7 +19,7 @@ const GROUP_PADDING := 8
 const MEGA_FONT_SIZE := 13
 const MEGA_COLOR := Color(1.0, 0.82, 0.3)
 ## "Upgrade all": its width, and the extra gap before it (on top of the header's own).
-const UPGRADE_ALL_WIDTH := 200.0
+const UPGRADE_ALL_WIDTH := 250.0
 const UPGRADE_ALL_GAP := 16.0
 const SORT_NAMES := {Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit"}
 const FILTER_NAMES := {
@@ -57,7 +57,6 @@ func _ready() -> void:
 	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
 	GameState.mega_upgraded.connect(func(_model_id: String) -> void: _dirty = true)
 	visibility_changed.connect(func() -> void: _dirty = true)
-	_upgrade_all.tooltip_text = "Spend every ship's upgrade points in turn: speed, efficiency, durability, speed..."
 	_upgrade_all.pressed.connect(GameState.upgrade_all)
 	_upgrade_all.custom_minimum_size.x = UPGRADE_ALL_WIDTH
 	var gap := Control.new()  # Extra room between the Show filter and Upgrade all.
@@ -122,11 +121,18 @@ func _rebuild() -> void:
 	_update_upgrade_all()
 
 
+## "Upgrade all (12): $4.2M" (what every unspent point would cost); greyed out
+## while even the cheapest would dip into the bank reserve.
 func _update_upgrade_all() -> void:
 	var points := GameState.unspent_skill_points()
-	_upgrade_all.text = "Upgrade all (%d)" % points if points > 0 else "Upgrade all"
-	_upgrade_all.disabled = points == 0
-	_upgrade_all_alert.visible = points > 0
+	var cheapest := GameState.cheapest_upgrade_cost()
+	var affordable := points > 0 and GameState.money - cheapest >= GameState.bank_reserve
+	_upgrade_all.text = "Upgrade all (%d): $%s" % [points, Fmt.short(GameState.upgrade_all_cost())] if points > 0 else "Upgrade all"
+	_upgrade_all.disabled = not affordable
+	_upgrade_all.tooltip_text = "Buy the fleet's upgrades, cheapest first, as far as the money goes (keeping the bank reserve). Each ship's go to speed, efficiency, durability, speed..."
+	if points > 0 and not affordable:
+		_upgrade_all.tooltip_text = "The cheapest upgrade costs %s." % Fmt.money(cheapest)
+	_upgrade_all_alert.visible = affordable
 
 
 ## Shows each model's "Mega upgrade" button once it qualifies (all its ships
