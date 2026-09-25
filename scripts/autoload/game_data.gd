@@ -117,11 +117,6 @@ func port_name(id: String) -> String:
 	return get_port(id).get("name", id)
 
 
-## "small", "medium", "large" or "giant" (ports.json size; large if unset).
-func port_size(id: String) -> String:
-	return get_port(id).get("size", "large")
-
-
 ## Ports sorted by name, for pickers.
 func ports_by_name() -> Array[Dictionary]:
 	var sorted: Array[Dictionary] = ports.duplicate()

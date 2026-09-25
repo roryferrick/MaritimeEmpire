@@ -20,9 +20,10 @@ func _ready() -> void:
 	%RandomButton.pressed.connect(_suggest)
 	%CancelButton.pressed.connect(queue_free)
 	%BuyButton.pressed.connect(_confirm)
-	# Ships too big for the St. Lawrence Seaway can't start on the Great Lakes.
+	# Only ports that fit the ship: big enough, and not on the Great Lakes for
+	# ships too big for the St. Lawrence Seaway.
 	for hub in GameState.hubs:
-		if not model.get("seaway", false) and GameData.get_port(hub.port_id).get("seaway", false):
+		if not GameState.can_launch_at(model_id, hub.port_id):
 			continue
 		%PortOption.add_item(hub.title())
 		%PortOption.set_item_metadata(%PortOption.item_count - 1, hub.port_id)

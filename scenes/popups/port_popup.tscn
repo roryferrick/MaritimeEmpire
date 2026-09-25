@@ -33,6 +33,14 @@ flat = true
 [node name="Separator" type="HSeparator" parent="Content"]
 layout_mode = 2
 
+[node name="SizeBox" type="VBoxContainer" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="SizeSeparator" type="HSeparator" parent="Content"]
+layout_mode = 2
+
 [node name="HubBox" type="VBoxContainer" parent="Content"]
 unique_name_in_owner = true
 layout_mode = 2

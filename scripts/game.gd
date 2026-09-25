@@ -71,6 +71,7 @@ func _ready() -> void:
 	GameState.hub_leveled.connect(_on_hub_leveled)
 	GameState.hub_built.connect(_on_hub_built)
 	GameState.mega_upgraded.connect(_on_mega_upgraded)
+	GameState.port_band_changed.connect(_on_port_band_changed)
 	_update_alerts()
 	show_screen(Screen.WORLD)
 
@@ -244,3 +245,8 @@ func _on_hub_built(hub: Hub) -> void:
 func _on_mega_upgraded(model_id: String) -> void:
 	var model_name: String = GameData.get_ship_model(model_id).get("name", model_id)
 	ActivityLog.add("Mega upgrade: every %s now has %s" % [model_name, GameState.mega_effect(model_id)], ActivityLog.Kind.GOOD)
+
+
+func _on_port_band_changed(port_id: String, band: String, grew: bool) -> void:
+	ActivityLog.add("%s %s to %s" % [GameData.port_name(port_id), "grew" if grew else "shrank", band.capitalize()],
+		ActivityLog.Kind.GOOD if grew else ActivityLog.Kind.INFO)

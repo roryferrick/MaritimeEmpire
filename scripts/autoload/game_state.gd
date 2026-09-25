@@ -50,6 +50,8 @@ signal hub_leveled(hub: Hub, level: int)
 signal hub_built(hub: Hub)
 ## A model got its mega upgrade.
 signal mega_upgraded(model_id: String)
+## A port grew or shrank into a new size band (see PortSizes).
+signal port_band_changed(port_id: String, band: String, grew: bool)
 ## The fast-forward speed changed.
 signal time_speed_changed(speed: int)
 
@@ -149,6 +151,8 @@ var _fuel_reserve_time := -1.0
 var canal_traffic := CanalTraffic.new(self)
 ## Commodity prices: drift and the impact of the player's own trades.
 var market := Market.new(self)
+## Port sizes: how they grow and shrink, and what they change.
+var port_sizes := PortSizes.new(self)
 
 
 func _ready() -> void:
@@ -156,6 +160,7 @@ func _ready() -> void:
 	_autosave_timer.timeout.connect(save_game)
 	add_child(_autosave_timer)
 	_migrate_legacy_save()
+	port_sizes.band_changed.connect(port_band_changed.emit)
 
 
 func _notification(what: int) -> void:
@@ -175,6 +180,7 @@ func _process(delta: float) -> void:
 func _step(delta: float) -> void:
 	play_time += delta
 	canal_traffic.step(delta)
+	port_sizes.step(delta)
 	for ship in ships:
 		_advance(ship, delta)
 	_roll_breakdowns(delta)
@@ -209,14 +215,13 @@ func cycle_time_speed() -> void:
 # --- Ships ---------------------------------------------------------------
 
 ## Buys a ship and launches it docked at port_id, which must be the HQ or a hub
-## (the HQ if empty).
+## it can launch at (see can_launch_at(); the HQ if empty).
 func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	ship_name = ship_name.strip_edges()
 	if port_id.is_empty():
 		port_id = home_port
 	var model := GameData.get_ship_model(model_id)
-	var too_big: bool = not model.get("seaway", false) and GameData.get_port(port_id).get("seaway", false)
-	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty() or not hub_at(port_id) or too_big:
+	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty() or not can_launch_at(model_id, port_id):
 		return null
 	var price := ship_price(model_id)
 	if price < int(model.get("price", 0)):
@@ -262,6 +267,9 @@ func buy_error(model_id: String) -> String:
 		return "All %d %s slots are full. Level %d gives another." % [slots, model.get("name", model_id), next]
 	if money < ship_price(model_id):
 		return "You can't afford this ship."
+	if not hubs.any(func(hub: Hub) -> bool: return can_launch_at(model_id, hub.port_id)):
+		return "Your HQ and hubs are all too small to launch a %s, which needs a %s port." % [
+			model.get("name", model_id), str(model.get("min_port", "")).capitalize()]
 	return ""
 
 
@@ -604,7 +612,29 @@ func route_error(route: Array[String], ship: Ship) -> String:
 	return ""
 
 
+## A port's size as shown: "Medium 29".
+func port_size_text(port_id: String) -> String:
+	return "%s %d" % [port_sizes.band(port_id).capitalize(), port_sizes.level(port_id)]
+
+
+## "Taipei (Small 11) is too small for a Dominator, which needs a Large port."
+func port_size_error(model: Dictionary, port_id: String) -> String:
+	return "%s (%s) is too small for a %s, which needs a %s port." % [GameData.port_name(port_id),
+		port_size_text(port_id), model.get("name", ""),
+		str(model.get("min_port", "")).capitalize()]
+
+
+## Whether a new ship of this model can be launched at a port (the HQ or a
+## hub): big enough for it, and not on the Great Lakes if it's too big for the Seaway.
+func can_launch_at(model_id: String, port_id: String) -> bool:
+	var model := GameData.get_ship_model(model_id)
+	var too_big_for_seaway: bool = not model.get("seaway", false) and GameData.get_port(port_id).get("seaway", false)
+	return hub_at(port_id) != null and not too_big_for_seaway and port_sizes.fits(model, port_id)
+
+
 func _range_error(ship: Ship, from: String, to: String) -> String:
+	if not ship.fits_port(to):
+		return port_size_error(ship.model(), to)
 	if not ship.fits_lane(from, to):
 		return "%s is on the Great Lakes, and a %s is too big for the St. Lawrence Seaway." % [
 			GameData.port_name(to if GameData.get_port(to).get("seaway", false) else from), ship.model().get("name", "")]
@@ -864,6 +894,7 @@ func _sell_cargo(ship: Ship) -> void:
 	money += ship.cargo_payment
 	_record(ship, "income", ship.cargo_payment)
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
+	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
 	if commodity.get("unit", "") == "container":
 		containers_delivered += ship.cargo_qty
 	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll)
@@ -916,6 +947,7 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	money -= cost
 	_record(ship, "cargo", cost)
 	market.trade(ship.docked_at, best[0], cost, true)
+	port_sizes.add_traffic(ship.docked_at, cost)
 	ship.cargo_id = best[0]
 	ship.cargo_from = ship.docked_at
 	ship.cargo_qty = quantity
@@ -960,6 +992,9 @@ func _fuel_to_leave(ship: Ship, to: String) -> float:
 func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	# Waiting for a full load, and not due another look (see _waiting_for_load()).
 	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need:
+		return
+	if not ship.fits_port(to):
+		_set_hold(ship, "%s is too small for this ship; assign a new route" % GameData.port_name(to))
 		return
 	var phase := ship.refill_phase_seconds()
 	var topping_up := ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
@@ -1221,7 +1256,7 @@ func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
 		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if tow_port == a else 1.0),
 		fuel = mammoth.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S),
 		cost = mammoth.fuel_per_s() * running * market.fuel_price(mammoth.docked_at)
-			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost(),
+			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost() * port_sizes.cost_factor(mammoth.docked_at),
 	}
 
 
@@ -1296,7 +1331,7 @@ func _repair(ship: Ship, amount: float) -> void:
 	amount = minf(amount, 1.0 - ship.maintenance)
 	if amount <= 0.0:
 		return
-	var cost := amount * ship.full_repair_cost() * (1.0 - hub_bonus(ship.docked_at, "costs"))
+	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs"))
 	var paid := _spend(ship, cost, "repair")
 	ship.stop_repair_cost += paid
 	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
@@ -1443,6 +1478,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	canal_stats = {}
 	canal_traffic.clear()
 	market.clear()
+	port_sizes.reset()
 	company_xp = 0.0
 	show_active_routes = true
 	bank_reserve = 0
@@ -1476,6 +1512,7 @@ func continue_game(slot: int) -> String:
 	totals = data.get("totals", {})
 	canal_stats = data.get("canal_stats", {})
 	market.from_dict(data.get("market", {}))
+	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	# Saves from before XP: count the XP past deliveries would have earned.
 	company_xp = float(data.get("company_xp", 0.0))
 	_window = data.get("finance_window", [])
@@ -1495,9 +1532,28 @@ func continue_game(slot: int) -> String:
 	for ship in ships:
 		if ship.is_recovery() and ship.base_port.is_empty():  # Saves from before bases.
 			ship.base_port = home_port
+	if not had_port_sizes:
+		_fit_ports_to_routes()
 	_rebalance_recovery_boats()
 	_begin_session()
 	return ""
+
+
+## Saves from before port sizes: every port a ship is at, sailing between or
+## routed through is raised just enough for it (as if the fleet's traffic had
+## already grown it), so no ship is held by the new size limits.
+func _fit_ports_to_routes() -> void:
+	for ship in ships:
+		var needs := str(ship.model().get("min_port", ""))
+		if needs.is_empty():
+			continue
+		var ports: Array[String] = []
+		ports.append_array(ship.route)
+		ports.append_array(ship.pending_route)
+		ports.append_array([ship.docked_at, ship.from_port, ship.to_port])
+		for port_id in ports:
+			if not port_id.is_empty():
+				port_sizes.raise_to(port_id, port_sizes.band_min(needs))
 
 
 func save_game() -> void:
@@ -1517,6 +1573,7 @@ func save_game() -> void:
 		"totals": totals,
 		"canal_stats": canal_stats,
 		"market": market.to_dict(),
+		"port_sizes": port_sizes.to_dict(),
 		"finance_window": _window,
 		"containers_delivered": containers_delivered,
 		"first_prices_used": first_prices_used,

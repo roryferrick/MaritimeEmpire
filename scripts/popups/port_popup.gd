@@ -1,9 +1,11 @@
 class_name PortPopup
 extends AnchoredPopup
-## Shows a port's name, its HQ or hub (level, XP and upgrade tree) or a button
-## to found a hub there when one is available, and the player's ships docked
-## there with their bars, and its market: each commodity's buy and sell price,
-## green where it's cheap compared with the world average and red where dear.
+## Shows a port's name and size (how far through its band it is, which way
+## it's going and what the size does), its HQ or hub (level, XP and upgrade
+## tree) or a button to found a hub there when one is available, and the
+## player's ships docked there with their bars, and its market: each
+## commodity's buy and sell price, green where it's cheap compared with the
+## world average and red where dear.
 
 const SHIP_BARS_WIDTH := 80.0
 ## Founding a hub takes a second click within this many seconds (it's permanent).
@@ -21,12 +23,14 @@ var port_id := ""
 var _build_confirm_until := 0.0
 var _xp_label: Label = null
 var _clock := 0.0
+var _size_label := Label.new()
+var _size_bar := ProgressBar.new()
+var _size_effects := Label.new()
 
 
 func _ready() -> void:
 	super()
-	var port := GameData.get_port(port_id)
-	%TitleLabel.text = "%s · %s" % [port.get("name", port_id), GameData.port_size(port_id).capitalize()]
+	_build_size()
 	%CloseButton.pressed.connect(queue_free)
 	GameState.ships_changed.connect(_refresh_ships)
 	GameState.ship_changed.connect(_refresh_ships.unbind(1))
@@ -43,7 +47,50 @@ func _process(delta: float) -> void:
 	if _clock >= REFRESH_SECONDS:
 		_clock = 0.0
 		_update_hub_xp()
+		_update_size()
 		_refresh_market()
+
+
+## The port's size: how far through its band it is and which way it's going,
+## what the size does here, and which ships are too big for it.
+func _build_size() -> void:
+	_size_label.theme_type_variation = &"DimLabel"
+	%SizeBox.add_child(_size_label)
+	_size_bar.show_percentage = false
+	_size_bar.custom_minimum_size.y = 8.0
+	_size_bar.max_value = 1.0
+	%SizeBox.add_child(_size_bar)
+	_size_effects.theme_type_variation = &"DimLabel"
+	_size_effects.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	%SizeBox.add_child(_size_effects)
+	_update_size()
+
+
+func _update_size() -> void:
+	var sizes := GameState.port_sizes
+	var here := sizes.size(port_id)
+	var low := sizes.band_min(sizes.band(port_id))
+	var high := sizes.next_band_min(port_id)
+	%TitleLabel.text = "%s · %s" % [GameData.port_name(port_id), GameState.port_size_text(port_id)]
+	var rate := sizes.rate(port_id)
+	var trend := "steady"
+	if rate > 0.0:
+		trend = "growing (+%s an hour)" % Fmt.decimal(rate, 1)
+	elif rate < 0.0:
+		trend = "shrinking (%s an hour)" % Fmt.decimal(rate, 1)
+	var next := sizes.band_of(high)
+	var target := "%s at %d" % [next.capitalize(), roundi(high)] if not next.is_empty() and high <= 100.0 else "the largest size"
+	_size_label.text = "Size %s of 100, %s · next: %s" % [Fmt.decimal(here, 1), trend, target]
+	_size_bar.value = clampf((here - low) / (high - low), 0.0, 1.0)
+	var costs := roundi((sizes.cost_factor(port_id) - 1.0) * 100.0)
+	var lines := PackedStringArray([
+		"Fuel & repairs %s%d%% · your trades move prices %sx" % ["+" if costs > 0 else "", costs, Fmt.decimal(sizes.impact_factor(port_id), 2)]])
+	var too_big := PackedStringArray()
+	for band: String in ["medium", "large"]:
+		if here < sizes.band_min(band):
+			too_big.append("ships needing %s ports" % band.capitalize())
+	lines.append("Too small for %s" % " or ".join(too_big) if not too_big.is_empty() else "Every ship can dock here")
+	_size_effects.text = "\n".join(lines)
 
 
 func _refresh_hub() -> void:

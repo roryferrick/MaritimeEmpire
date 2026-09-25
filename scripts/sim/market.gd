@@ -29,16 +29,18 @@ func buy_price(port_id: String, commodity_id: String) -> float:
 	return sell_price(port_id, commodity_id) * (1.0 + float(GameData.markets.get("spread", 0.0)))
 
 
-## What ships pay for their own fuel at a port: the oil price there x fuel_per_oil.
+## What ships pay for their own fuel at a port: the oil price there x
+## fuel_per_oil, x the port size's cost factor (see PortSizes).
 func fuel_price(port_id: String) -> float:
-	return sell_price(port_id, "oil") * float(GameData.markets.get("fuel_per_oil", 0.0))
+	return sell_price(port_id, "oil") * float(GameData.markets.get("fuel_per_oil", 0.0)) * _state.port_sizes.cost_factor(port_id)
 
 
 ## Selling lowers the port's price for that commodity, buying raises it: by up
-## to impact_max for a load worth impact_ref_value, less for smaller loads.
+## to impact_max for a load worth impact_ref_value, less for smaller loads,
+## times the port size's impact factor (more at small ports, less at big ones).
 func trade(port_id: String, commodity_id: String, value: float, buying: bool) -> void:
 	var size := minf(value / float(GameData.markets.get("impact_ref_value", 1.0)), 1.0)
-	var change := float(GameData.markets.get("impact_max", 0.0)) * size * (1.0 if buying else -1.0)
+	var change: float = float(GameData.markets.get("impact_max", 0.0)) * size * (1.0 if buying else -1.0) * _state.port_sizes.impact_factor(port_id)
 	_impacts["%s/%s" % [port_id, commodity_id]] = [_impact(port_id, commodity_id) + change, _state.play_time]
 
 
@@ -60,13 +62,19 @@ func _drift(port_id: String, commodity_id: String) -> float:
 	return 1.0 + amount * wave
 
 
-## The trade impact left at a port, fading with impact_half_life_s.
+## The trade impact left at a port, fading with impact_half_life_s (longer at
+## small ports, shorter at big ones; see _half_life()).
 func _impact(port_id: String, commodity_id: String) -> float:
 	var entry: Array = _impacts.get("%s/%s" % [port_id, commodity_id], [])
 	if entry.is_empty():
 		return 0.0
 	var age: float = _state.play_time - float(entry[1])
-	return float(entry[0]) * pow(0.5, age / float(GameData.markets.get("impact_half_life_s", 40)))
+	return float(entry[0]) * pow(0.5, age / _half_life(port_id))
+
+
+## How long (seconds) half of a trade's impact on a port's prices takes to fade.
+func _half_life(port_id: String) -> float:
+	return float(GameData.markets.get("impact_half_life_s", 40)) * _state.port_sizes.impact_factor(port_id)
 
 
 ## The commodity a ship of this model would load at one port to sell at the
@@ -90,8 +98,8 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String) -> Array:
 func to_dict() -> Dictionary:
 	var out := {}
 	for key: String in _impacts:
-		var entry: Array = _impacts[key]
-		var left := float(entry[0]) * pow(0.5, (_state.play_time - float(entry[1])) / float(GameData.markets.get("impact_half_life_s", 40)))
+		var parts := key.split("/")
+		var left := _impact(parts[0], parts[1])
 		if absf(left) > 0.0001:
 			out[key] = left
 	return out

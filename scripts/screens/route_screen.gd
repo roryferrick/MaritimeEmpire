@@ -1,6 +1,7 @@
 extends Control
 ## Full-screen gray map for building a looping route by clicking ports in order.
-## Ports the ship can't reach from the current stop are grayed out.
+## Ports the ship can't reach from the current stop, or that are too small for
+## it, are grayed out.
 
 ## Emitted when the player accepts or cancels.
 signal finished
@@ -25,8 +26,10 @@ func open(ship: Ship) -> void:
 	_message = ""
 	%TitleLabel.text = "Route for %s" % ship.name
 	var current := "Current route: %s" % GameData.route_text(ship.route) if ship.has_route() else "No current route."
-	%CurrentLabel.text = "%s\nRange: %s nm per leg. Starting from %s." % [
-		current, Fmt.thousands(roundi(ship.range_nm())), GameData.port_name(ship.reference_port())]
+	var needs := str(ship.model().get("min_port", ""))
+	var docks := " Docks only at %s ports or bigger." % needs.capitalize() if not needs.is_empty() else ""
+	%CurrentLabel.text = "%s\nRange: %s nm per leg.%s Starting from %s." % [
+		current, Fmt.thousands(roundi(ship.range_nm())), docks, GameData.port_name(ship.reference_port())]
 	_refresh()
 	# Refit once the top and bottom bars have gone and the map has its full size.
 	await get_tree().process_frame
@@ -48,6 +51,8 @@ func _add_waypoint(port_id: String) -> void:
 	var from := _from_port()
 	if not _waypoints.is_empty() and port_id == from:
 		_message = "Already stopping at %s. Pick a different port." % GameData.port_name(port_id)
+	elif not _ship.fits_port(port_id):
+		_message = GameState.port_size_error(_ship.model(), port_id)
 	elif port_id != from and not _ship.can_sail(from, port_id):
 		_message = "%s is out of range: %s nm from %s, and this ship's range is %s nm." % [
 			GameData.port_name(port_id), Fmt.thousands(roundi(GameData.distance_nm(from, port_id))),
@@ -106,7 +111,7 @@ func _rebuild_list() -> void:
 	var total_sailing_s := 0.0
 	for i in n:
 		var stop := Label.new()
-		stop.text = "%d. %s" % [i + 1, GameData.port_name(_waypoints[i])]
+		stop.text = "%d. %s (%s)" % [i + 1, GameData.port_name(_waypoints[i]), GameState.port_size_text(_waypoints[i])]
 		%WaypointList.add_child(stop)
 		if n < 2:
 			continue

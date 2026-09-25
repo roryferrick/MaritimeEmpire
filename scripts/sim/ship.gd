@@ -191,9 +191,10 @@ func is_recovery() -> bool:
 
 
 ## Whether a full tank at full maintenance gets this ship from one port to
-## another (with the departure margin to spare).
+## another (with the departure margin to spare), and the port there is big
+## enough for it.
 func can_reach(from: String, to: String) -> bool:
-	if not fits_lane(from, to):
+	if not fits_lane(from, to) or not fits_port(to):
 		return false
 	var seconds := leg_seconds(from, to, 0.0, GameData.distance_nm(from, to), 1.0) + GameState.DEPARTURE_MARGIN_S
 	return fuel_per_s() * seconds <= fuel_tank()
@@ -203,6 +204,12 @@ func can_reach(from: String, to: String) -> bool:
 ## model is too big for it.
 func fits_lane(from: String, to: String) -> bool:
 	return bool(model().get("seaway", false)) or not GameData.needs_seaway(from, to)
+
+
+## False if the port is too small for the model (ship_models.json min_port;
+## see PortSizes). Recovery boats dock anywhere.
+func fits_port(port_id: String) -> bool:
+	return GameState.port_sizes.fits(model(), port_id)
 
 
 ## Recovery boat only: whether it can carry this ship (models listed in

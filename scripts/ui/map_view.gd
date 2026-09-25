@@ -16,8 +16,12 @@ signal empty_clicked
 signal view_changed
 
 const THEME_TYPE := &"MapView"
-## A port's dot radius by its size (ports.json size); PORT_RADIUS is a large one's.
-const PORT_RADII := {small = 3.5, medium = 4.5, large = 6.0, giant = 8.5}
+## A port's dot radius grows with its size (see PortSizes): PORT_RADIUS_MIN at
+## size 1, PORT_RADIUS at PORT_RADIUS_SIZE (mid-Large, the size before port
+## sizes), PORT_RADIUS_MAX at 100.
+const PORT_RADIUS_MIN := 3.0
+const PORT_RADIUS_MAX := 9.0
+const PORT_RADIUS_SIZE := 63.0
 const PORT_RADIUS := 6.0
 const PORT_HIT_RADIUS := 14.0
 const SHIP_HIT_RADIUS := 12.0
@@ -59,6 +63,9 @@ const CARGO_STEPS := 4
 ## grow with the square root of the zoom, up to SHIP_MAX_SCALE times.
 const SHIP_GROW_FROM_ZOOM := 60.0
 const SHIP_MAX_SCALE := 3.0
+## Where a ship being carried sits on its recovery boat: the middle of the
+## open work deck aft (x from the stern, in art units), clear of the wheelhouse.
+const CARRY_DECK_X := 58.0
 const LOST_MARKER_SIZE := 26
 ## How far above a lost ship its "!" sits.
 const LOST_MARKER_OFFSET := 12.0
@@ -331,6 +338,8 @@ func port_screen_position(port_id: String) -> Vector2:
 ## Docked ships are dots spread in rings around their port, in fleet order,
 ## so they don't cover it or each other.
 func ship_screen_position(ship: Ship) -> Vector2:
+	if ship.is_carried():
+		return _carried_screen_position(ship)
 	if not ship.is_docked():
 		if ship.canal_state in [Ship.CANAL_ANCHORED, Ship.CANAL_CONVOY, Ship.CANAL_TOLL]:
 			var crossing := GameData.crossing_ahead(ship.from_port, ship.to_port, ship.traveled_nm)
@@ -346,6 +355,17 @@ func ship_screen_position(ship: Ship) -> Vector2:
 		per_ring = floori(TAU * radius / DOCK_DOT_SPACING)
 	var angle := -PI / 2.0 + TAU * slot / per_ring
 	return port_screen_position(ship.docked_at) + Vector2.from_angle(angle) * radius
+
+
+## A carried ship rides on its recovery boat's work deck (CARRY_DECK_X), behind
+## the boat's middle, so the wheelhouse stays in view.
+func _carried_screen_position(ship: Ship) -> Vector2:
+	var boat := ship.rescuer
+	var rect: Rect2 = _model_look(boat.model_id)[7]
+	var direction := boat.heading()
+	var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
+	var along := rect.position.x + rect.size.x * CARRY_DECK_X / SHIP_ART_WIDTH
+	return ship_screen_position(boat) + Vector2(along, 0.0).rotated(angle) * _ship_scale()
 
 
 ## A docked ship's place in its port's rings: how many of the fleet before it are
@@ -623,7 +643,10 @@ func _price_color(port_id: String) -> Color:
 
 
 func _port_radius(port_id: String) -> float:
-	return PORT_RADII.get(GameData.port_size(port_id), PORT_RADIUS)
+	var port_size: float = GameState.port_sizes.size(port_id)
+	if port_size <= PORT_RADIUS_SIZE:
+		return lerpf(PORT_RADIUS_MIN, PORT_RADIUS, (port_size - 1.0) / (PORT_RADIUS_SIZE - 1.0))
+	return lerpf(PORT_RADIUS, PORT_RADIUS_MAX, (port_size - PORT_RADIUS_SIZE) / (100.0 - PORT_RADIUS_SIZE))
 
 
 func _draw_ports(labels: Array) -> void:
@@ -633,7 +656,7 @@ func _draw_ports(labels: Array) -> void:
 	var outline := _color(&"port_outline")
 	var label_color := _color(&"label")
 	var shadow := _color(&"label_shadow")
-	var visible_area := Rect2(Vector2.ZERO, size).grow(PORT_RADII.giant + 4.0)
+	var visible_area := Rect2(Vector2.ZERO, size).grow(PORT_RADIUS_MAX + 4.0)
 	for port: Dictionary in GameData.ports:
 		var pos := port_screen_position(port.id)
 		if not visible_area.has_point(pos):
