@@ -42,6 +42,20 @@ const COUNTRY_FONT_SIZE := 13
 const LABEL_PADDING := 3.0
 ## A ship's pointed bow sticks out this many times its width.
 const BOW_LENGTH_FACTOR := 0.6
+## Ship art, per model category: <category>_hull.svg (white, tinted with the
+## model's map color), <category>_details.svg (drawn as is, over the cargo) and,
+## for categories whose cargo shows, <category>_cargo.svg. Categories without
+## art are drawn as plain shapes. The art is SHIP_ART_WIDTH wide, bow to the right.
+const SHIP_ART_DIR := "res://art/ships/"
+const SHIP_ART_WIDTH := 180.0
+## Where the cargo sits along the art (x from the stern, in art units). It
+## fills from the stern forward in CARGO_STEPS steps, so part loads show.
+const CARGO_ZONES := {container = Vector2(34.0, 138.0), vehicles = Vector2(12.0, 147.4), livestock = Vector2(34.0, 138.0)}
+const CARGO_STEPS := 4
+## Ships keep their map_size until the zoom passes SHIP_GROW_FROM_ZOOM, then
+## grow with the square root of the zoom, up to SHIP_MAX_SCALE times.
+const SHIP_GROW_FROM_ZOOM := 60.0
+const SHIP_MAX_SCALE := 3.0
 const LOST_MARKER_SIZE := 26
 ## How far above a lost ship its "!" sits.
 const LOST_MARKER_OFFSET := 12.0
@@ -265,6 +279,8 @@ func _ready() -> void:
 	_canal_layer.draw.connect(_draw_canal_layer)
 	_static_layer.draw.connect(_draw_static_layer)
 	_overlay.draw.connect(_draw_overlay)
+	# Ship art is drawn well below its size at most zooms: mipmaps keep it smooth.
+	_overlay.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 
 func _process(delta: float) -> void:
@@ -429,7 +445,7 @@ func _click(screen_pos: Vector2) -> void:
 	if show_ships:
 		for ship in _ships_topmost_first():
 			var dist := ship_screen_position(ship).distance_to(screen_pos)
-			if dist <= SHIP_HIT_RADIUS and dist < nearest_dist:
+			if dist <= SHIP_HIT_RADIUS * _ship_scale() and dist < nearest_dist:
 				nearest_dist = dist
 				nearest_ship = ship
 	if nearest_ship:
@@ -989,13 +1005,50 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 		return
 	var direction := ship.heading()
 	var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
-	_canvas.draw_set_transform(ship_screen_position(ship), angle)
+	_canvas.draw_set_transform(ship_screen_position(ship), angle, Vector2.ONE * _ship_scale())
+	var art: Dictionary = look[6]
+	if not art.is_empty():
+		_draw_ship_art(ship, art, look[7], color)
+		return
 	# The hull as a quad and the bow as a triangle: simple shapes Godot needn't
 	# triangulate each frame, unlike a general polygon.
 	var colors := PackedColorArray([color])
 	_canvas.draw_primitive(look[3], colors, PackedVector2Array())
 	_canvas.draw_primitive(look[4], colors, PackedVector2Array())
 	_canvas.draw_polyline(look[5], outline, 1.0)
+
+
+## The hull in the model's color, the cargo (cut off behind how full the hold
+## is, in CARGO_STEPS steps, any cargo showing at least one) and the details.
+func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color) -> void:
+	_canvas.draw_texture_rect(art.hull, rect, false, color)
+	var level := ship.cargo_level()
+	if art.has("cargo") and level > 0.0:
+		var zone: Vector2 = art.zone
+		var fill := ceilf(level * CARGO_STEPS) / CARGO_STEPS
+		var share := (zone.x + fill * (zone.y - zone.x)) / SHIP_ART_WIDTH
+		var texture: Texture2D = art.cargo
+		_canvas.draw_texture_rect_region(texture, Rect2(rect.position, Vector2(rect.size.x * share, rect.size.y)),
+			Rect2(Vector2.ZERO, Vector2(texture.get_width() * share, texture.get_height())))
+	_canvas.draw_texture_rect(art.details, rect, false)
+
+
+## How many times its map_size a ship at sea is drawn at this zoom.
+func _ship_scale() -> float:
+	return clampf(sqrt(_zoom / SHIP_GROW_FROM_ZOOM), 1.0, SHIP_MAX_SCALE)
+
+
+## A model category's art ({hull, details} plus {cargo, zone} if its cargo
+## shows), or {} if it has none.
+static func _load_ship_art(category: String) -> Dictionary:
+	var path := SHIP_ART_DIR + category + "_%s.svg"
+	if not ResourceLoader.exists(path % "hull") or not ResourceLoader.exists(path % "details"):
+		return {}
+	var art := {hull = load(path % "hull"), details = load(path % "details")}
+	if CARGO_ZONES.has(category) and ResourceLoader.exists(path % "cargo"):
+		art.cargo = load(path % "cargo")
+		art.zone = CARGO_ZONES[category]
+	return art
 
 
 ## A white circle image for docked-ship dots: filled (ring_width 0) or just its
@@ -1016,7 +1069,8 @@ static func _dot_image(ring_width: float) -> ImageTexture:
 
 
 ## A model's look, worked out once: [map color, length, width, hull quad, bow
-## triangle, closed outline], the shapes centered on the ship's position.
+## triangle, closed outline, art (see _load_ship_art()), art rect], the shapes
+## centered on the ship's position.
 func _model_look(model_id: String) -> Array:
 	if not _model_looks.has(model_id):
 		var model := GameData.get_ship_model(model_id)
@@ -1034,7 +1088,9 @@ func _model_look(model_id: String) -> Array:
 		_model_looks[model_id] = [Color.from_string(model.get("map_color", "#ffffff"), Color.WHITE), length, width,
 			PackedVector2Array([back_left, front_left, front_right, back_right]),
 			PackedVector2Array([front_left, tip, front_right]),
-			PackedVector2Array([back_left, front_left, tip, front_right, back_right, back_left])]
+			PackedVector2Array([back_left, front_left, tip, front_right, back_right, back_left]),
+			_load_ship_art(str(model.get("category", ""))),
+			Rect2(back, -width / 2.0, length + bow, width)]
 	return _model_looks[model_id]
 
 

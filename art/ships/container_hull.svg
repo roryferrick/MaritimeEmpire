@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<path d="M8,3 L146,3 Q170,6 178,26 Q170,46 146,49 L8,49 Q2,49 2,43 L2,9 Q2,3 8,3 Z" fill="#ffffff"/>
+<path d="M10,7 L144,7 Q164,10 171,26 Q164,42 144,45 L10,45 Q6,45 6,41 L6,11 Q6,7 10,7 Z" fill="#e2e2e2"/>
+<line x1="34" y1="9" x2="34" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="47" y1="9" x2="47" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="60" y1="9" x2="60" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="73" y1="9" x2="73" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="86" y1="9" x2="86" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="99" y1="9" x2="99" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="112" y1="9" x2="112" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="125" y1="9" x2="125" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="138" y1="9" x2="138" y2="43" stroke="#b4b4b4" stroke-width="0.8"/>
+</svg>

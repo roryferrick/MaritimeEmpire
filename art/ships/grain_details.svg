@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<rect x="10" y="10" width="16" height="32" rx="1.5" fill="#f2f2f2" stroke="#2b2b2b" stroke-width="0.8"/>
+<rect x="24" y="5" width="6" height="42" rx="1" fill="#e4e4e4" stroke="#2b2b2b" stroke-width="0.8"/>
+<line x1="28" y1="8" x2="28" y2="44" stroke="#2a3a4a" stroke-width="1.6"/>
+<rect x="13" y="21" width="6" height="10" rx="1" fill="#333333"/>
+<rect x="36" y="13" width="15" height="26" rx="1" fill="#4f7a52" stroke="#2e4a30" stroke-width="0.8"/>
+<line x1="43" y1="14" x2="43" y2="38" stroke="#3a5c3c" stroke-width="0.7"/>
+<rect x="57" y="13" width="15" height="26" rx="1" fill="#4f7a52" stroke="#2e4a30" stroke-width="0.8"/>
+<line x1="64" y1="14" x2="64" y2="38" stroke="#3a5c3c" stroke-width="0.7"/>
+<rect x="78" y="13" width="15" height="26" rx="1" fill="#4f7a52" stroke="#2e4a30" stroke-width="0.8"/>
+<line x1="85" y1="14" x2="85" y2="38" stroke="#3a5c3c" stroke-width="0.7"/>
+<rect x="99" y="13" width="15" height="26" rx="1" fill="#4f7a52" stroke="#2e4a30" stroke-width="0.8"/>
+<line x1="106" y1="14" x2="106" y2="38" stroke="#3a5c3c" stroke-width="0.7"/>
+<rect x="120" y="13" width="15" height="26" rx="1" fill="#4f7a52" stroke="#2e4a30" stroke-width="0.8"/>
+<line x1="127" y1="14" x2="127" y2="38" stroke="#3a5c3c" stroke-width="0.7"/>
+<line x1="53" y1="26" x2="62" y2="12" stroke="#c9a227" stroke-width="1.6"/>
+<circle cx="53" cy="26" r="2.6" fill="#e0b830" stroke="#5a4a10" stroke-width="0.6"/>
+<line x1="74" y1="26" x2="83" y2="12" stroke="#c9a227" stroke-width="1.6"/>
+<circle cx="74" cy="26" r="2.6" fill="#e0b830" stroke="#5a4a10" stroke-width="0.6"/>
+<line x1="95" y1="26" x2="104" y2="12" stroke="#c9a227" stroke-width="1.6"/>
+<circle cx="95" cy="26" r="2.6" fill="#e0b830" stroke="#5a4a10" stroke-width="0.6"/>
+<line x1="116" y1="26" x2="125" y2="12" stroke="#c9a227" stroke-width="1.6"/>
+<circle cx="116" cy="26" r="2.6" fill="#e0b830" stroke="#5a4a10" stroke-width="0.6"/>
+<path d="M8,3 L146,3 Q170,6 178,26 Q170,46 146,49 L8,49 Q2,49 2,43 L2,9 Q2,3 8,3 Z" fill="none" stroke="#1a1410" stroke-width="1.8"/>
+</svg>

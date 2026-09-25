@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<path d="M6,3 L158,3 Q176,4 178,16 L178,36 Q176,48 158,49 L6,49 Q2,49 2,45 L2,7 Q2,3 6,3 Z" fill="#ffffff"/>
+<path d="M8,6 L156,6 Q173,7 174,17 L174,35 Q173,45 156,46 L8,46 Q5,46 5,43 L5,9 Q5,6 8,6 Z" fill="#e2e2e2"/>
+<line x1="29" y1="8" x2="29" y2="44" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="46" y1="8" x2="46" y2="44" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="63" y1="8" x2="63" y2="44" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="80" y1="8" x2="80" y2="44" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="97" y1="8" x2="97" y2="44" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="114" y1="8" x2="114" y2="44" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="131" y1="8" x2="131" y2="44" stroke="#b4b4b4" stroke-width="0.8"/>
+<line x1="8" y1="26" x2="146" y2="26" stroke="#c4c4c4" stroke-width="0.8"/>
+</svg>
