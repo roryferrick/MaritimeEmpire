@@ -1,8 +1,9 @@
 extends Control
 ## Prices for one commodity at a time (picked at the top): the cheapest ports to
-## buy it, the dearest to sell it, and the best trades between two ports, both
-## anywhere and within SHORT_TRADE_NM (for small, short-range ships). Clicking
-## a port shows it on the World map. Refreshes every few seconds while visible.
+## buy it, the most expensive to sell it, and the best trades between two ports,
+## both anywhere and within SHORT_TRADE_NM (for small, short-range ships).
+## Clicking a port shows it on the World map. Refreshes every few seconds while
+## visible.
 
 const REFRESH_SECONDS := 3.0
 const LIST_SIZE := 10
@@ -78,11 +79,11 @@ func _refresh() -> void:
 		sells[port.id] = market.sell_price(port.id, commodity_id)
 	var cheapest: Array = buys.keys()
 	cheapest.sort_custom(func(a: String, b: String) -> bool: return buys[a] < buys[b])
-	var dearest: Array = sells.keys()
-	dearest.sort_custom(func(a: String, b: String) -> bool: return sells[a] > sells[b])
+	var most_expensive: Array = sells.keys()
+	most_expensive.sort_custom(func(a: String, b: String) -> bool: return sells[a] > sells[b])
 	_add_list("Cheapest to buy", cheapest.slice(0, LIST_SIZE).map(func(id: String) -> Array:
 		return [[id], Fmt.money(roundi(buys[id]))]))
-	_add_list("Dearest to sell", dearest.slice(0, LIST_SIZE).map(func(id: String) -> Array:
+	_add_list("Most expensive to sell", most_expensive.slice(0, LIST_SIZE).map(func(id: String) -> Array:
 		return [[id], Fmt.money(roundi(sells[id]))]))
 	var best := []
 	var best_short := []

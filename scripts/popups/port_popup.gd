@@ -5,17 +5,17 @@ extends AnchoredPopup
 ## tree) or a button to found a hub there when one is available, and the
 ## player's ships docked there with their bars, and its market: each
 ## commodity's buy and sell price, green where it's cheap compared with the
-## world average and red where dear.
+## world average and red where expensive.
 
 const SHIP_BARS_WIDTH := 80.0
 ## Founding a hub takes a second click within this many seconds (it's permanent).
 const BUILD_CONFIRM_SECONDS := 3.0
 const REFRESH_SECONDS := 1.0
 ## The market table: its text size, and how far below or above a commodity's
-## world average price counts as cheap (green) or dear (red).
+## world average price counts as cheap (green) or expensive (red).
 const MARKET_FONT_SIZE := 13
 const MARKET_CHEAP := 0.8
-const MARKET_DEAR := 1.25
+const MARKET_EXPENSIVE := 1.25
 
 ## Set before adding to the tree.
 var port_id := ""
@@ -194,7 +194,7 @@ func _refresh_market() -> void:
 	for commodity: Dictionary in GameData.commodities:
 		var sell := GameState.market.sell_price(port_id, commodity.id)
 		var ratio := sell / GameData.world_price(commodity.id)
-		var variation := &"GainLabel" if ratio < MARKET_CHEAP else (&"ErrorLabel" if ratio > MARKET_DEAR else &"")
+		var variation := &"GainLabel" if ratio < MARKET_CHEAP else (&"ErrorLabel" if ratio > MARKET_EXPENSIVE else &"")
 		_add_market_cell(commodity.name, &"")
 		_add_market_cell(Fmt.money(roundi(GameState.market.buy_price(port_id, commodity.id))), variation)
 		_add_market_cell(Fmt.money(roundi(sell)), variation)

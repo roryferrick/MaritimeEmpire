@@ -68,7 +68,7 @@ func open_ship_popup(ship: Ship) -> void:
 ## a faint tint of the line's color, each commodity with a swatch in it; the
 ## chosen one's name is shown in that color too.
 func _add_price_picker() -> void:
-	_price_button.tooltip_text = "Color the ports by a commodity's price: green where it's cheap, red where it's dear."
+	_price_button.tooltip_text = "Color the ports by a commodity's price: green where it's cheap, red where it's expensive."
 	_price_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_price_button.pressed.connect(_open_price_menu)
 	%MapControls.add_child(_price_button)

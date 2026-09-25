@@ -100,7 +100,7 @@ const CANAL_FONT_SIZE := 13
 const LOCK_WATER_SHADE := 0.3
 ## Port colors in the price overlay (see price_commodity).
 const PRICE_CHEAP := Color(0.2, 0.85, 0.3)
-const PRICE_DEAR := Color(0.95, 0.2, 0.15)
+const PRICE_EXPENSIVE := Color(0.95, 0.2, 0.15)
 ## A convoy canal's doubled stretches: how far apart its two channels are
 ## (projected degrees); how close a click must be to its channel (px) or an
 ## anchorage; and how far apart ships at anchor sit (px).
@@ -165,7 +165,7 @@ var route: Array[String] = []:
 		_static_layer.queue_redraw()
 
 ## A commodity id to color ports by (green where it's cheap, red where it's
-## dear, against its world average), or "" for plain white ports.
+## expensive, against its world average), or "" for plain white ports.
 var price_commodity := "":
 	set(value):
 		price_commodity = value
@@ -639,7 +639,7 @@ func _overlaps(rect: Rect2, placed: Array[Rect2]) -> bool:
 func _price_color(port_id: String) -> Color:
 	var ratio := GameState.market.sell_price(port_id, price_commodity) / GameData.world_price(price_commodity)
 	var t := clampf(log(ratio) / log(2.0), -1.0, 1.0)
-	return Color.WHITE.lerp(PRICE_CHEAP if t < 0.0 else PRICE_DEAR, absf(t))
+	return Color.WHITE.lerp(PRICE_CHEAP if t < 0.0 else PRICE_EXPENSIVE, absf(t))
 
 
 func _port_radius(port_id: String) -> float:

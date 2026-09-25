@@ -20,7 +20,7 @@
 - On quit, the game saves and the world freezes. On Continue, everything resumes exactly where it left off. Ships do not move and no money is earned while the game is closed.
 - Ships trade (see Trading): they buy a commodity at one port and sell it at the next. Profit is the price difference, less fuel, repairs and canal tolls.
 - Every container delivered adds to the "Containers delivered" total.
-- Ships buy their own fuel at each port's local price, which follows the oil price there (cheapest in the Gulf, dearest on remote islands); on average it's half the old $2.40. Repair costs are half what they were.
+- Ships buy their own fuel at each port's local price, which follows the oil price there (cheapest in the Gulf, most expensive on remote islands); on average it's half the old $2.40. Repair costs are half what they were.
 - Endless sandbox — no win condition.
 
 ## Trading
@@ -29,7 +29,7 @@
 - Halfway through each stop a ship sells its cargo, then buys the most profitable cargo it can carry to its next stop (after the canal tolls on the way): a full hold (less what a canal makes it leave behind), or as much as the money allows, always keeping enough for the whole fleet to fill its fuel tanks. Nothing if no cargo makes a profit (it sails empty).
 - Canal tolls are a share of the cargo's value at the destination (none for an empty ship). The rough-seas bonus (+50%), the upper-lakes bonus (+20%) and a hub's Sale prices upgrade add to a profitable trade's profit.
 - Balance: a good route earns about what the same ship earned under the old flat pay, the best about twice that; short hops earn a little, long hauls between the right regions a lot.
-- Markets tab: pick a commodity to see the cheapest ports to buy it, the dearest to sell, and the best trades anywhere and within 800 nm (port names go to the map). The port popup shows every commodity's buy and sell price there (green cheap, red dear). The World map's Prices picker colors every port by a commodity's price; its menu groups the commodities by ship line, each group on a faint tint of the line's color and each commodity with a swatch in it (containers orange, tankers teal, ore grey, grain gold, livestock pink, vehicles blue: the line's middle ship's map color, brightened a little), and the chosen one's name is shown in that color. The route screen shows what each leg would load and its expected profit.
+- Markets tab: pick a commodity to see the cheapest ports to buy it, the most expensive to sell, and the best trades anywhere and within 800 nm (port names go to the map). The port popup shows every commodity's buy and sell price there (green cheap, red expensive). The World map's Prices picker colors every port by a commodity's price; its menu groups the commodities by ship line, each group on a faint tint of the line's color and each commodity with a swatch in it (containers orange, tankers teal, ore grey, grain gold, livestock pink, vehicles blue: the line's middle ship's map color, brightened a little), and the chosen one's name is shown in that color. The route screen shows what each leg would load and its expected profit.
 
 ## Fuel, maintenance and port stops
 - Every ship has a fuel tank and a maintenance level (0–100%). Both start full when the ship is bought.

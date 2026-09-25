@@ -70,7 +70,7 @@ layout_mode = 2
 [node name="MarketLabel" type="Label" parent="Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
-text = "Market, per unit (green: cheap here, red: dear)"
+text = "Market, per unit (green: cheap here, red: expensive)"
 
 [node name="MarketGrid" type="GridContainer" parent="Content"]
 unique_name_in_owner = true
