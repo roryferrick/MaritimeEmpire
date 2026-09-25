@@ -164,6 +164,10 @@ var segment_end := 0.0
 var job_segments: Array = []
 var align_time := 0.0
 var tow_port := ""
+## Recovery boat only: the current job's miles, all told and carrying the lost
+## ship, for the XP it earns when it drops the ship off (see GameState._deliver()).
+var job_nm := 0.0
+var carry_nm := 0.0
 ## Recovery boat only: the HQ or hub port it's based at, returns to after a
 ## job, and sails to when the boats are rebalanced across hubs.
 var base_port := ""
@@ -247,7 +251,8 @@ func fuel_tank() -> float:
 	return float(model().get("fuel_tank", 0))
 
 
-## Fuel burned per second at sea, less the efficiency skill.
+## Fuel burned per second at sea, less the efficiency skill (and a recovery
+## boat's mega upgrade).
 func fuel_per_s() -> float:
 	if _stats_dirty:
 		_refresh_stats()
@@ -266,9 +271,14 @@ func wear_per_s() -> float:
 ## invalidate_stats() (called when a skill is spent or a mega upgrade bought).
 func _refresh_stats() -> void:
 	var data := model()
-	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("speed_bonus", 0.5)) if GameState.has_mega(model_id) else 0.0)
+	var settings: Dictionary = GameData.config.get("mega", {})
+	var has_mega := GameState.has_mega(model_id)
+	var mega := 1.0 + (float(settings.get("speed_bonus", 0.5)) if has_mega else 0.0)
+	# A recovery boat's mega upgrade also cuts its fuel burn (a cargo ship's
+	# raises its profit instead; see GameState.trade_bonus()).
+	var mega_fuel := 1.0 - (float(settings.get("recovery_fuel_saving", 0.5)) if has_mega and is_recovery() else 0.0)
 	_top_speed = float(data.get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency"))
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency")) * mega_fuel
 	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability"))
 	_stats_dirty = false
 
@@ -294,7 +304,7 @@ func breakdown_chance() -> float:
 	return chance * float(model().get("breakdown_factor", 1.0)) * age * (1.0 - breakdown_resistance())
 
 
-## {level, xp (into the level), cost (of the level)}; recovery boats stay at 0.
+## {level, xp (into the level), cost (of the level)}.
 func level_info() -> Dictionary:
 	if xp != _level_xp:  # Worked out again only when the XP changes.
 		_level_info = Progression.ship_level(model(), xp)
@@ -777,6 +787,8 @@ func to_dict() -> Dictionary:
 		"job_segments": job_segments,
 		"align_time": align_time,
 		"tow_port": tow_port,
+		"job_nm": job_nm,
+		"carry_nm": carry_nm,
 		"base_port": base_port,
 		"auto_recover": auto_recover,
 		"full_loads": full_loads,
@@ -837,6 +849,8 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.job_segments = data.get("job_segments", [])
 	ship.align_time = float(data.get("align_time", 0.0))
 	ship.tow_port = data.get("tow_port", "")
+	ship.job_nm = float(data.get("job_nm", 0.0))
+	ship.carry_nm = float(data.get("carry_nm", 0.0))
 	ship.base_port = data.get("base_port", "")
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.full_loads = bool(data.get("full_loads", true))

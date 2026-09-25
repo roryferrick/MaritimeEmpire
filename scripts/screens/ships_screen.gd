@@ -179,7 +179,7 @@ func _add_group(model: Dictionary) -> GridContainer:
 	mega.add_child(mega_alert)
 	title_row.add_child(mega)
 	var badge := Label.new()
-	badge.text = "★ Mega: +50% speed and profit"
+	badge.text = "★ Mega: %s" % GameState.mega_effect(model.id)
 	badge.add_theme_font_size_override(&"font_size", MEGA_FONT_SIZE)
 	badge.add_theme_color_override(&"font_color", MEGA_COLOR)
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER

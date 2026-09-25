@@ -243,4 +243,4 @@ func _on_hub_built(hub: Hub) -> void:
 
 func _on_mega_upgraded(model_id: String) -> void:
 	var model_name: String = GameData.get_ship_model(model_id).get("name", model_id)
-	ActivityLog.add("Mega upgrade: every %s is now 50%% faster and earns 50%% more profit" % model_name, ActivityLog.Kind.GOOD)
+	ActivityLog.add("Mega upgrade: every %s now has %s" % [model_name, GameState.mega_effect(model_id)], ActivityLog.Kind.GOOD)

@@ -43,8 +43,6 @@ func _ready() -> void:
 	_cargo_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	%CostLabel.add_sibling(_cargo_label)
 	%BarsSlot.add_child(ShipBars.new(ship))
-	for node: Control in [%SkillsButton, %LevelName, %LevelValue]:
-		node.visible = not ship.is_recovery()
 	%SkillsButton.toggled.connect(_show_skills)
 	%SkillsButton.add_child(_upgrades_alert)
 	%CloseButton.pressed.connect(queue_free)
@@ -97,8 +95,7 @@ func _update_live() -> void:
 			Fmt.money(ship.stop_cost), costs, Fmt.money(ship.stop_sale - ship.stop_cost - fuel - repair - toll)]
 	_update_recovery()
 	_update_sell()
-	if not ship.is_recovery():
-		_update_level_text()
+	_update_level_text()
 
 
 ## What's aboard: its cost and what it should sell for where it's going, at
@@ -229,8 +226,7 @@ func _set_shown(control: Control, shown: bool) -> void:
 func _refresh() -> void:
 	%NameLabel.text = ship.name
 	_update_live()
-	if not ship.is_recovery():
-		_refresh_level()
+	_refresh_level()
 	%RepairToggle.set_pressed_no_signal(ship.auto_repair)
 	%RefuelToggle.set_pressed_no_signal(ship.auto_refuel)
 	%RescueToggle.set_pressed_no_signal(ship.auto_recover)

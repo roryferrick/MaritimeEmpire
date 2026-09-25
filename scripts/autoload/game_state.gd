@@ -275,11 +275,22 @@ func mega_cost(model_id: String) -> int:
 	return int(GameData.get_ship_model(model_id).get("price", 0)) * int(GameData.config.get("mega", {}).get("cost_factor", 80))
 
 
+## What a model's mega upgrade does: "+50% speed and profit" for cargo ships,
+## "+50% speed, -50% fuel" for recovery boats (from game_config mega).
+func mega_effect(model_id: String) -> String:
+	var settings: Dictionary = GameData.config.get("mega", {})
+	var speed := roundi(float(settings.get("speed_bonus", 0.5)) * 100.0)
+	if GameData.get_ship_model(model_id).get("recovery", false):
+		return "+%d%% speed, -%d%% fuel" % [speed, roundi(float(settings.get("recovery_fuel_saving", 0.5)) * 100.0)]
+	var profit := roundi(float(settings.get("profit_bonus", 0.5)) * 100.0)
+	return "+%d%% speed and profit" % speed if profit == speed else "+%d%% speed, +%d%% profit" % [speed, profit]
+
+
 ## True when a model qualifies for its mega upgrade: all max_owned ships owned,
 ## every one at the top level, and not bought yet (it may still cost too much).
 func mega_ready(model_id: String) -> bool:
 	var model := GameData.get_ship_model(model_id)
-	if model.get("recovery", false) or has_mega(model_id):
+	if has_mega(model_id):
 		return false
 	var line := ships.filter(func(ship: Ship) -> bool: return ship.model_id == model_id)
 	return line.size() >= int(model.get("max_owned", 8)) and line.all(func(ship: Ship) -> bool: return ship.level() >= Progression.ship_max_level())
@@ -1161,6 +1172,10 @@ func _send_recovery(lost: Ship, auto: bool) -> String:
 	recovery_sent.emit(lost, mammoth, roundi(plan.cost), auto)
 	mammoth.tow_port = plan.tow_port
 	mammoth.job_segments = plan.segments.duplicate(true)
+	mammoth.job_nm = 0.0
+	for segment: Array in plan.segments:
+		mammoth.job_nm += float(segment[3]) - float(segment[2])
+	mammoth.carry_nm = float(plan.segments[-1][3]) - float(plan.segments[-1][2])
 	mammoth.job_phase = Ship.JOB_APPROACH
 	_start_segment(mammoth, mammoth.job_segments.pop_front())
 	ship_changed.emit(mammoth)
@@ -1257,6 +1272,23 @@ func _deliver(mammoth: Ship) -> void:
 	_arrive(mammoth, port, false)
 	_arrive(lost, port, to_destination)
 	ship_recovered.emit(lost, mammoth, port, to_destination)
+	_gain_recovery_xp(mammoth, lost)
+
+
+## A finished recovery: the boat earns game_config recovery_xp.per_nm for every
+## mile of the job, and the company company_share of what the rescued ship's
+## full hold would earn over the miles it was carried.
+func _gain_recovery_xp(mammoth: Ship, lost: Ship) -> void:
+	var settings: Dictionary = GameData.config.get("recovery_xp", {})
+	var cargo: Array = lost.model().get("cargo", [])
+	var company := 0.0
+	if not cargo.is_empty():
+		company = Progression.xp_for_cargo(lost.capacity(), cargo[0], mammoth.carry_nm) * float(settings.get("company_share", 1.0))
+	var boat := mammoth.job_nm * float(settings.get("per_nm", 1.0))
+	if boat > 0.0:
+		_gain_xp(mammoth, boat, 1.0, company / boat)  # The company's XP as a multiple of the boat's.
+	mammoth.job_nm = 0.0
+	mammoth.carry_nm = 0.0
 
 
 ## Restores up to `amount` of maintenance, as far as money allows.
