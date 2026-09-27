@@ -66,6 +66,12 @@ const SHIP_MAX_SCALE := 3.0
 ## Where a ship being carried sits on its recovery boat: the middle of the
 ## open work deck aft (x from the stern, in art units), clear of the wheelhouse.
 const CARRY_DECK_X := 58.0
+## The land's real colors, made by tools/build_map_data.gd from Natural Earth II.
+const LAND_COLORS := "res://data/land_colors.webp"
+## How far each sea depth band is from the ocean color (shallow, the
+## continental shelf) to ocean_deep: the shelf, then 200 m, 1,000 m, 2,000 m ...
+## 10,000 m (see _depth_color()). The big steps come early, where most of the sea is.
+const DEPTH_SHADES := [0.0, 0.22, 0.36, 0.46, 0.55, 0.63, 0.71, 0.79, 0.86, 0.92, 0.96, 1.0]
 const LOST_MARKER_SIZE := 26
 ## How far above a lost ship its "!" sits.
 const LOST_MARKER_OFFSET := 12.0
@@ -110,7 +116,8 @@ const ANCHORAGE_RADIUS := 30.0
 const ANCHORAGE_SPACING := 14.0
 
 const FALLBACK_COLORS := {
-	&"ocean": Color(0.16, 0.36, 0.56),
+	&"ocean": Color(0.36, 0.59, 0.77),
+	&"ocean_deep": Color(0.05, 0.14, 0.3),
 	&"ocean_gray": Color(0.3, 0.31, 0.33),
 	&"land": Color(0.78, 0.74, 0.6),
 	&"land_gray": Color(0.5, 0.5, 0.5),
@@ -130,6 +137,8 @@ const FALLBACK_COLORS := {
 	&"lost_marker_outline": Color(1, 1, 1),
 	&"at_risk_marker": Color(1.0, 0.7, 0.1),
 	&"river": Color(0.3, 0.5, 0.72),
+	&"equator": Color(1, 1, 1, 0.22),
+	&"equator_gray": Color(1, 1, 1, 0.12),
 	&"hub_ring_gray": Color(0.75, 0.75, 0.75),
 	&"hub_alert": Color(0.92, 0.22, 0.2),
 	&"hub_alert_outline": Color(1, 1, 1),
@@ -217,8 +226,8 @@ var _static_clock := 0.0
 var _ports_by_rank: Array = []  # Label priority order, sorted on first draw.
 
 
-## Land, coastline and borders for one copy of the world. Drawn once and cached;
-## panning and zooming only move its parent.
+## Land, coastline, borders and the equator for one copy of the world. Drawn
+## once and cached; panning and zooming only move its parent.
 class WorldArt:
 	extends Node2D
 
@@ -226,15 +235,31 @@ class WorldArt:
 	var land_mesh: ArrayMesh
 	var water_mesh: ArrayMesh
 	var lake_island_mesh: ArrayMesh
+	## Per depth band (WorldMapData.depth_levels): its sea, and the shallower
+	## patches inside it.
+	var depth_meshes: Array[ArrayMesh] = []
+	var depth_hole_meshes: Array[ArrayMesh] = []
 	var white: Texture2D
+	var land_colors: Texture2D
 
 	func _draw() -> void:
 		var data := GameData.world_map
-		draw_mesh(land_mesh, white, Transform2D.IDENTITY, view._color(&"land"))
+		# The sea darkens band by band with depth (the view's own background is
+		# the shallowest); the gray route map keeps one flat sea.
+		if not view.gray_mode:
+			for band in depth_meshes.size():
+				draw_mesh(depth_meshes[band], white, Transform2D.IDENTITY, view._depth_color(band + 1))
+				draw_mesh(depth_hole_meshes[band], white, Transform2D.IDENTITY, view._depth_color(band))
+		# Land in its real colors (see MapView.LAND_COLORS), or flat gray.
+		var land_texture := white if view.gray_mode else land_colors
+		var land_tint := view._color(&"land") if view.gray_mode else Color.WHITE
+		draw_mesh(land_mesh, land_texture, Transform2D.IDENTITY, land_tint)
 		draw_mesh(water_mesh, white, Transform2D.IDENTITY, view._color(&"ocean"))
-		draw_mesh(lake_island_mesh, white, Transform2D.IDENTITY, view._color(&"land"))
+		draw_mesh(lake_island_mesh, land_texture, Transform2D.IDENTITY, land_tint)
 		draw_multiline(data.border_segments, view._color(&"border"), -1.0)
 		draw_multiline(data.coast_segments, view._color(&"coast"), -1.0)
+		# The equator (y = 0 in the projection), faint, across this copy of the world.
+		draw_line(Vector2(-Geo.WORLD_WIDTH / 2.0, 0.0), Vector2(Geo.WORLD_WIDTH / 2.0, 0.0), view._color(&"equator"), -1.0)
 
 
 ## One zoom tier of rivers for one copy of the world, shown once the view is
@@ -260,9 +285,17 @@ func _ready() -> void:
 	var land_mesh := _triangle_mesh(data.land_triangles)
 	var water_mesh := _triangle_mesh(data.water_triangles)
 	var lake_island_mesh := _triangle_mesh(data.lake_island_triangles)
+	var depth_meshes: Array[ArrayMesh] = []
+	var depth_hole_meshes: Array[ArrayMesh] = []
+	for band in data.depth_levels.size():
+		depth_meshes.append(_triangle_mesh(data.depth_triangles[band]))
+		depth_hole_meshes.append(_triangle_mesh(data.depth_hole_triangles[band]))
 	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
 	image.fill(Color.WHITE)
 	var white := ImageTexture.create_from_image(image)
+	var land_colors: Texture2D = load(LAND_COLORS) if ResourceLoader.exists(LAND_COLORS) else white
+	# The land colors are drawn far below their size when zoomed out.
+	_art_root.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(_art_root)
 	for copy in [-1, 0, 1]:
 		var art := WorldArt.new()
@@ -270,7 +303,10 @@ func _ready() -> void:
 		art.land_mesh = land_mesh
 		art.water_mesh = water_mesh
 		art.lake_island_mesh = lake_island_mesh
+		art.depth_meshes = depth_meshes
+		art.depth_hole_meshes = depth_hole_meshes
 		art.white = white
+		art.land_colors = land_colors
 		art.position.x = copy * Geo.WORLD_WIDTH
 		_art_root.add_child(art)
 		_art_copies.append(art)
@@ -306,15 +342,31 @@ func _process(delta: float) -> void:
 		_static_layer.queue_redraw()
 
 
+## A mesh of map triangles, with each point's place on LAND_COLORS as its UV
+## (the texture spans x -180 to 180 and y Geo.MAX_LAT down to -Geo.MAX_LAT).
 func _triangle_mesh(triangles: PackedVector2Array) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	if triangles.is_empty():
 		return mesh
+	var top := Geo.project(Vector2(0.0, Geo.MAX_LAT)).y
+	var uvs := PackedVector2Array()
+	uvs.resize(triangles.size())
+	for i in triangles.size():
+		var p := triangles[i]
+		uvs[i] = Vector2((p.x + Geo.WORLD_WIDTH / 2.0) / Geo.WORLD_WIDTH, (top - p.y) / (2.0 * top))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = triangles
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+
+## The sea's color for a depth band: 0 is the shallowest (the continental
+## shelf, the view's background), then each of WorldMapData.depth_levels, darker
+## by DEPTH_SHADES towards ocean_deep.
+func _depth_color(band: int) -> Color:
+	return _color(&"ocean").lerp(_color(&"ocean_deep"), DEPTH_SHADES[mini(band, DEPTH_SHADES.size() - 1)])
 
 
 # --- View ----------------------------------------------------------------
@@ -1075,7 +1127,7 @@ func _ship_scale() -> float:
 
 ## A model category's art ({hull, details} plus {cargo, zone} if its cargo
 ## shows), or {} if it has none.
-static func _load_ship_art(category: String) -> Dictionary:
+static func load_ship_art(category: String) -> Dictionary:
 	var path := SHIP_ART_DIR + category + "_%s.svg"
 	if not ResourceLoader.exists(path % "hull") or not ResourceLoader.exists(path % "details"):
 		return {}
@@ -1104,7 +1156,7 @@ static func _dot_image(ring_width: float) -> ImageTexture:
 
 
 ## A model's look, worked out once: [map color, length, width, hull quad, bow
-## triangle, closed outline, art (see _load_ship_art()), art rect], the shapes
+## triangle, closed outline, art (see load_ship_art()), art rect], the shapes
 ## centered on the ship's position.
 func _model_look(model_id: String) -> Array:
 	if not _model_looks.has(model_id):
@@ -1124,7 +1176,7 @@ func _model_look(model_id: String) -> Array:
 			PackedVector2Array([back_left, front_left, front_right, back_right]),
 			PackedVector2Array([front_left, tip, front_right]),
 			PackedVector2Array([back_left, front_left, tip, front_right, back_right, back_left]),
-			_load_ship_art(str(model.get("category", ""))),
+			load_ship_art(str(model.get("category", ""))),
 			Rect2(back, -width / 2.0, length + bow, width)]
 	return _model_looks[model_id]
 

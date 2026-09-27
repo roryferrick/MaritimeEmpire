@@ -23,3 +23,11 @@ extends Resource
 ## web-map zoom level they start showing at (river_tier_min_zoom).
 @export var river_tiers: Array[PackedVector2Array] = []
 @export var river_tier_min_zoom := PackedFloat32Array()
+
+## Sea depth bands (tools/build_map_data.gd DEPTH_BANDS), shallowest first:
+## each band's depth in m, its sea (everything at least that deep) as
+## triangles, and the shallower patches inside it (islands, banks, ridges),
+## drawn over it in the band above's color.
+@export var depth_levels := PackedInt32Array()
+@export var depth_triangles: Array[PackedVector2Array] = []
+@export var depth_hole_triangles: Array[PackedVector2Array] = []

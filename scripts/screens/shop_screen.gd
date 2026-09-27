@@ -3,7 +3,8 @@ extends Control
 ## category: container ships, ore, grain and livestock carriers, tankers,
 ## vehicle carriers, then recovery boats. Each section
 ## title runs through its models' map colors, smallest ship first, and each
-## card's name is in its model's map color. Each card shows how many of the
+## card's name is in its model's map color, above a picture of the ship as it
+## looks on the map (see ShipPicture). Each card shows how many of the
 ## model the company's level allows, and the level that unlocks the model or its
 ## next slot. Each section sits on a faint tint of its ship line's color. A red
 ## dot marks every Buy button that can be used right now;
@@ -18,6 +19,11 @@ const MAX_COLUMNS := 5
 const CARD_GAP := 12
 const CARD_WIDTH := 176.0
 const CARD_LABEL_WIDTH := 44.0
+## Each card shows the model's map art under its name, in a strip this tall;
+## see _picture_length() for how long each is.
+const SHIP_PICTURE_HEIGHT := 44.0
+const SHIP_PICTURE_MAX_LENGTH := 150.0
+const SHIP_PICTURE_SIZE_POWER := 0.5
 ## Ship names and section titles use the models' map colors, brightened to at
 ## least this luminance.
 const MIN_TEXT_LUMINANCE := 0.5
@@ -142,6 +148,23 @@ static func _map_color(model: Dictionary) -> Color:
 	return color
 
 
+## How long (pixels) a model's picture is: SHIP_PICTURE_MAX_LENGTH for the
+## longest model on the map, and the others by SHIP_PICTURE_SIZE_POWER of their
+## share of that, so small ships stay a good size (a Scooter 20 is a quarter
+## of a Mammoth's length on the map, half here).
+static func _picture_length(model: Dictionary) -> float:
+	var longest := 0.0
+	for other: Dictionary in GameData.ship_models:
+		longest = maxf(longest, _map_length(other))
+	return SHIP_PICTURE_MAX_LENGTH * pow(_map_length(model) / longest, SHIP_PICTURE_SIZE_POWER)
+
+
+## A model's length on the map (map_size length plus its bow).
+static func _map_length(model: Dictionary) -> float:
+	var dims: Array = model.get("map_size", [14, 6])
+	return float(dims[0]) + float(dims[1]) * MapView.BOW_LENGTH_FACTOR
+
+
 func _make_card(model: Dictionary) -> Control:
 	var card := PanelContainer.new()
 	card.theme_type_variation = &"ShopCard"
@@ -155,6 +178,9 @@ func _make_card(model: Dictionary) -> Control:
 	title.text = model.get("name", model.id)
 	title.add_theme_color_override(&"font_color", _map_color(model))
 	box.add_child(title)
+	var picture := ShipPicture.new(model, _picture_length(model))
+	picture.custom_minimum_size.y = SHIP_PICTURE_HEIGHT
+	box.add_child(picture)
 
 	var tank := float(model.get("fuel_tank", 0))
 	var rows := [

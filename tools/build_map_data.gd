@@ -25,9 +25,27 @@ const LAND_PATH := "res://tools/source_data/ne_10m_land.geojson"
 const COUNTRIES_PATH := "res://tools/source_data/ne_50m_admin_0_countries.geojson"
 const LAKES_PATH := "res://tools/source_data/ne_10m_lakes.geojson"
 const RIVERS_PATH := "res://tools/source_data/ne_10m_rivers_lake_centerlines.geojson"
+## Sea depth bands (nested: each is all the sea deeper than its depth), from
+## shallowest to deepest, as [depth in m, file].
+const DEPTHS_PATH := "res://tools/source_data/ne_10m_bathymetry_%s.geojson"
+const DEPTH_BANDS := [[200, "K_200"], [1000, "J_1000"], [2000, "I_2000"], [3000, "H_3000"], [4000, "G_4000"],
+	[5000, "F_5000"], [6000, "E_6000"], [7000, "D_7000"], [8000, "C_8000"], [9000, "B_9000"], [10000, "A_10000"]]
+## Natural Earth II (1:50m, shaded relief, no water), converted from its TIFF to
+## PNG: idealized land cover, in plain longitude/latitude, 30 pixels a degree.
+const LAND_COLORS_PATH := "res://tools/source_data/NE2_50M_SR.png"
+## Its sea color: pixels this exact color are sea (and floating ice shelves).
+const LAND_COLORS_SEA := Color8(251, 251, 251)
+## Depth bands are simplified more than the coast (projected degrees).
+const DEPTH_SIMPLIFY_TOLERANCE := 0.04
 const PORTS_PATH := "res://data/ports.json"
 const CANALS_PATH := "res://data/canals.json"
 const MAP_OUT := "res://data/world_map.res"
+## The land colors (see _build_land_texture()), and its size in pixels.
+const LAND_TEXTURE_OUT := "res://data/land_colors.webp"
+const LAND_TEXTURE_SIZE := 4096
+## How many pixels in from the coast the land texture's sea is filled with the
+## nearest land's color (about 1 degree).
+const LAND_FILL_RINGS := 12
 const LANES_OUT := "res://data/sea_lanes.res"
 
 ## Coastline simplification, in projected degrees (~0.7 nm at the equator).
@@ -225,12 +243,118 @@ func _build_map(land_polygons: Array) -> void:
 	_add_lakes(map)
 	_add_rivers(map)
 	_add_countries(map)
+	_add_depths(map)
+	_build_land_texture()
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 
 
+## Sea depth bands from Natural Earth's bathymetry (DEPTH_BANDS): each band's
+## sea as triangles, and the shallower patches inside it as its holes.
+func _add_depths(map: WorldMapData) -> void:
+	for band: Array in DEPTH_BANDS:
+		var triangles := PackedVector2Array()
+		var holes := PackedVector2Array()
+		for feature: Dictionary in _read_geojson(DEPTHS_PATH % band[1]):
+			for polygon: Array in _feature_polygons(feature):
+				for i in polygon.size():
+					var ring := _simplify(_project_all(_to_points(polygon[i])), DEPTH_SIMPLIFY_TOLERANCE)
+					if ring.size() < 3:
+						continue
+					if i == 0:
+						_triangulate_tiled(ring, triangles, holes)
+					else:
+						_triangulate_tiled(ring, holes, triangles)
+		map.depth_levels.append(band[0])
+		map.depth_triangles.append(triangles)
+		map.depth_hole_triangles.append(holes)
+		print("  Depth %d m: %d triangles, %d in shallower patches" % [band[0], triangles.size() / 3, holes.size() / 3])
+
+
+## The land colors as a LAND_TEXTURE_SIZE square texture in the map's
+## projection (x -180 to 180, y from Geo.MAX_LAT down to -Geo.MAX_LAT), from
+## Natural Earth II. The map draws the land triangles with it, so the coast
+## stays as sharp as the land data; only the color comes from here. Its sea
+## (LAND_COLORS_SEA) is filled in from the nearest land first, so no sea color
+## shows along a coast.
+func _build_land_texture() -> void:
+	var size := LAND_TEXTURE_SIZE
+	@warning_ignore("integer_division")
+	var rows := size / 2  # Still in plain longitude/latitude: 2 degrees wide per degree high.
+	var source := Image.load_from_file(LAND_COLORS_PATH)
+	source.convert(Image.FORMAT_RGB8)
+	var mask := source.duplicate() as Image
+	mask.resize(size, rows, Image.INTERPOLATE_NEAREST)
+	source.resize(size, rows, Image.INTERPOLATE_CUBIC)
+	var colors := source.get_data()
+	var mask_colors := mask.get_data()
+	var sea_r := LAND_COLORS_SEA.r8
+	# Sea, and anything next to it (the resize blends sea into the coast), is
+	# filled from the land around it, a ring at a time.
+	var fill := PackedByteArray()
+	fill.resize(size * rows)
+	for i in size * rows:
+		if mask_colors[i * 3] == sea_r and mask_colors[i * 3 + 1] == sea_r and mask_colors[i * 3 + 2] == sea_r:
+			fill[i] = 1
+	var sea := fill.duplicate()
+	for i in size * rows:
+		if sea[i]:
+			var col := i % size
+			for n: int in [i - 1 if col > 0 else -1, i + 1 if col < size - 1 else -1, i - size, i + size]:
+				if n >= 0 and n < size * rows:
+					fill[n] = 1
+	var frontier := PackedInt32Array()
+	for i in size * rows:
+		if fill[i] and _has_land_neighbor(fill, i, size, rows):
+			frontier.append(i)
+	for ring in LAND_FILL_RINGS:
+		var next := PackedInt32Array()
+		var done := PackedInt32Array()
+		for i in frontier:
+			if not fill[i]:
+				continue
+			var total := Vector3i.ZERO
+			var count := 0
+			var col := i % size
+			for n: int in [i - 1 if col > 0 else -1, i + 1 if col < size - 1 else -1, i - size, i + size]:
+				if n >= 0 and n < size * rows:
+					if not fill[n]:
+						total += Vector3i(colors[n * 3], colors[n * 3 + 1], colors[n * 3 + 2])
+						count += 1
+					else:
+						next.append(n)
+			if count > 0:
+				colors[i * 3] = total.x / count
+				colors[i * 3 + 1] = total.y / count
+				colors[i * 3 + 2] = total.z / count
+				done.append(i)
+			else:
+				next.append(i)
+		for i in done:
+			fill[i] = 0
+		frontier = next
+	var flat := Image.create_from_data(size, rows, false, Image.FORMAT_RGB8, colors)
+	# Into the map's projection, a row at a time (Mercator only stretches north-south).
+	var out := Image.create(size, size, false, Image.FORMAT_RGB8)
+	var top := Geo.project(Vector2(0.0, Geo.MAX_LAT)).y
+	for row in size:
+		var y := top - (row + 0.5) / size * 2.0 * top
+		var lat := Geo.unproject(Vector2(0.0, y)).y
+		var source_row := clampi(floori((90.0 - lat) / 180.0 * rows), 0, rows - 1)
+		out.blit_rect(flat, Rect2i(0, source_row, size, 1), Vector2i(0, row))
+	var err := out.save_webp(LAND_TEXTURE_OUT, true, 0.9)
+	assert(err == OK, "Couldn't save %s" % LAND_TEXTURE_OUT)
+	print("Land colors: %d x %d" % [size, size])
+
+
+static func _has_land_neighbor(fill: PackedByteArray, i: int, size: int, rows: int) -> bool:
+	var col := i % size
+	return (col > 0 and not fill[i - 1]) or (col < size - 1 and not fill[i + 1]) \
+		or (i >= size and not fill[i - size]) or (i + size < size * rows and not fill[i + size])
+
+
 ## Douglas-Peucker simplification of a closed ring.
-func _simplify(points: PackedVector2Array) -> PackedVector2Array:
+func _simplify(points: PackedVector2Array, tolerance := SIMPLIFY_TOLERANCE) -> PackedVector2Array:
 	var n := points.size()
 	if n < 4:
 		return points
@@ -244,7 +368,7 @@ func _simplify(points: PackedVector2Array) -> PackedVector2Array:
 		var a := points[span.x]
 		var b := points[span.y]
 		var worst := -1
-		var worst_dist := SIMPLIFY_TOLERANCE
+		var worst_dist := tolerance
 		for i in range(span.x + 1, span.y):
 			var d := Geometry2D.get_closest_point_to_segment(points[i], a, b).distance_to(points[i])
 			if d > worst_dist:
