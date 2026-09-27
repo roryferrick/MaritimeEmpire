@@ -6,7 +6,6 @@ extends Node
 ## and on a timer; nothing happens while the game is closed.
 
 signal money_changed(money: int)
-signal containers_changed(total: int)
 ## A ship was bought or sold.
 signal ships_changed
 ## A ship docked, finished docking, departed, was held in port, was
@@ -94,10 +93,12 @@ var money: int = 0:
 		money = value
 		money_changed.emit(money)
 
-var containers_delivered: int = 0:
-	set(value):
-		containers_delivered = value
-		containers_changed.emit(containers_delivered)
+## Units delivered of each commodity (id -> units, in its markets.json unit),
+## counted when unloading finishes.
+var delivered := {}
+## Containers delivered before deliveries were counted by commodity (saves
+## from before then only kept a container total).
+var earlier_containers := 0
 
 var company_name := ""
 ## The company's color id (see game_config company_colors): its name in the
@@ -951,15 +952,13 @@ func _unload(ship: Ship) -> void:
 
 
 func _sell_cargo(ship: Ship) -> void:
-	var commodity := GameData.commodity(ship.cargo_id)
 	ship.stop_sale = ship.cargo_payment
 	ship.stop_cost = ship.cargo_cost
 	money += ship.cargo_payment
 	_record(ship, "income", ship.cargo_payment)
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
 	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
-	if commodity.get("unit", "") == "container":
-		containers_delivered += ship.cargo_qty
+	delivered[ship.cargo_id] = int(delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
 	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll)
 	var hub := hub_at(ship.docked_at)
 	var xp := Progression.xp_for_cargo(ship.cargo_qty, ship.cargo_id, ship.cargo_leg_nm)
@@ -1531,7 +1530,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company_color = new_color
 	home_port = new_home_port
 	money = int(GameData.config.get("starting_money", 10000))
-	containers_delivered = 0
+	delivered = {}
+	earlier_containers = 0
 	first_prices_used = []
 	mega_upgrades = []
 	hidden_gem_claimed = false
@@ -1566,7 +1566,12 @@ func continue_game(slot: int) -> String:
 	company_color = data.get("company_color", "purple")  # Saves from before colors: purple.
 	home_port = data.get("home_port", "")
 	money = int(data.get("money", 0))
-	containers_delivered = int(data.get("containers_delivered", 0))
+	delivered = {}
+	for commodity_id: String in data.get("delivered", {}):
+		delivered[commodity_id] = int(data.delivered[commodity_id])
+	earlier_containers = int(data.get("earlier_containers", 0))
+	if not data.has("delivered"):  # Saves from before per-commodity counts: their container total.
+		earlier_containers = int(data.get("containers_delivered", 0))
 	first_prices_used.assign(data.get("first_prices_used", []))
 	mega_upgrades.assign(data.get("mega_upgrades", []))
 	hidden_gem_claimed = bool(data.get("hidden_gem_claimed", false))
@@ -1638,7 +1643,8 @@ func save_game() -> void:
 		"market": market.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"finance_window": _window,
-		"containers_delivered": containers_delivered,
+		"delivered": delivered,
+		"earlier_containers": earlier_containers,
 		"first_prices_used": first_prices_used,
 		"mega_upgrades": mega_upgrades,
 		"hidden_gem_claimed": hidden_gem_claimed,

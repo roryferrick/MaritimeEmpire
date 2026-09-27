@@ -21,7 +21,7 @@
 - NOT an idle game (for beta): time only passes while the game is open, at a constant speed, or 2x or 4x with fast forward (see Top bar).
 - On quit, the game saves and the world freezes. On Continue, everything resumes exactly where it left off. Ships do not move and no money is earned while the game is closed.
 - Ships trade (see Trading): they buy a commodity at one port and sell it at the next. Profit is the price difference, less fuel, repairs and canal tolls.
-- Every container delivered adds to the "Containers delivered" total.
+- Every delivery (when unloading finishes) adds its units to the company's delivered totals, by commodity (shown on the Finances screen).
 - Ships buy their own fuel at each port's local price, which follows the oil price there (cheapest in the Gulf, most expensive on remote islands); on average it's half the old $2.40. Repair costs are half what they were.
 - Endless sandbox — no win condition.
 
@@ -137,7 +137,7 @@
 
 ## Great Lakes
 - The five Great Lakes (and Lake St. Clair) are water, reached up the St. Lawrence from its estuary, with the Welland Canal (Ontario to Erie), the Detroit and St. Clair rivers (Erie to Huron), the Straits of Mackinac (Huron to Michigan) and the St. Marys River (Huron to Superior).
-- Only ships that fit the St. Lawrence Seaway (about 226 m long) can sail to a Great Lakes port: the Scooter 20, GE 100, Greenline 200 and Coastal, and the Buffalo so lake ships can be rescued. Bigger ships can't be given routes there, can't be bought at a lake hub, and Mammoths are never based at one. Only a Buffalo can recover a ship lost on a lake route.
+- Only ships that fit the St. Lawrence Seaway (about 226 m long) can sail to a Great Lakes port: the Scooter 20, GE 100, Greenline 200, Laker, Grain Laker, Cattle Coaster, Livestock Carrier, Coastal and Car Hopper, and both recovery boats (the Buffalo and the Mammoth) so lake ships can be rescued. Bigger ships can't be given routes there or be bought at a lake hub. Recovery boats of either model can be based at a lake hub and recover ships lost on lake routes (a Buffalo only the models it carries).
 - Three lock systems (type locks in data/canals.json), 3 s per lock step as at Panama:
   - St. Lawrence Seaway (Montreal to Lake Ontario): 7 single-chamber locks (St. Lambert, Côte-Sainte-Catherine, Lower and Upper Beauharnois, Snell, Eisenhower, Iroquois). Toll 10% of the leg's base pay, +25% XP.
   - Welland Canal (Lake Ontario to Lake Erie): single-chamber Locks 1–3, 7 and 8, and the twinned Flight Locks 4–6 (a lane each way). Toll 10%, +25% XP.
@@ -193,7 +193,7 @@
 - Autosave on quit and every 30 s.
 
 ### Top bar (on World, Ships, Finances, Shop screens)
-- Left: company level with an XP bar, and money. Middle: the company name (in the company color) above the calendar date and time ("Sat 1 Jan 2000, 14:30"). Right: the game speed button and total containers delivered.
+- Left: company level with an XP bar, and money. Middle: the company name (in the company color) above the calendar date and time ("Sat 1 Jan 2000, 14:30"). Right: the game speed button.
 - Calendar: a new company starts on 1 January 2000 at midnight. The clock runs 20 calendar minutes per second of play at 1x (game_config calendar), matched to real ship speeds (a Scooter's 5.44 nm a second is about 16 knots), so voyages take realistic calendar times: Rome to Tunis about 20 hours, Shanghai to Rotterdam about a month; a calendar day passes in about 72 seconds. It follows the game speed (stops when paused). The route screen shows each leg's calendar time too ("1 min 1 s (about 20 h)"), a ship at sea shows when it arrives ("arrives 3 Jan 09:10"), and activity log lines are stamped with the calendar time.
 - Game speed: the button (or the F key) cycles Paused, 1x, 2x, 4x, 8x. Paused freezes the world; faster speeds run it that much faster (ships, breakdowns, XP, finances, prices); each session starts at 1x.
 - Clicking the level (or its bar) opens a popup below it (click again to close): XP into the level and XP needed for the next, the company's XP per minute over the last 10 minutes, and "Coming up": the next level and the next few levels that unlock something (models, "+1 slot: ...", "a new hub"), each with an estimate of how long until you reach it at that rate. Refreshes every second.
@@ -226,6 +226,7 @@
 ### Finances screen
 - At the top, "Keep in the bank" (Nothing, $100,000, $250,000, $500,000, $1M, $2.5M, $5M, $10M, $25M, $50M or $100M; saved with the company, default Nothing): ships won't spend that money on cargo, so it builds up for buying ships or upgrades. Fuel and repairs can still use it, so no ship is stranded. A ship waiting for a full load says so ("... (keeping $250,000 in the bank)").
 - Totals for the last 10 minutes and all time: cargo sales, cargo bought, fuel, repairs, canal tolls, ships bought, ships sold, hub upgrades, ship upgrades, mega upgrades, and operating profit (sales − cargo bought − fuel − repairs − tolls). Smaller text and tighter columns so it all fits.
+- Beside the totals, a "Delivered" card: everything the fleet has delivered, all time, a total for each unit (Containers, Tons, Head of livestock, Vehicles) with each commodity under it when a unit has several (Toys, Clothing... ; Oil, Gas, Iron ore...). Saves from before per-commodity counts only kept a container total: it carries over as "Earlier, not split by cargo" under Containers, and everything else counts from then on.
 - Then a card per canal the fleet has used: "Panama Canal: 12 crossings · tolls −$48,000 · bonus XP 3,100" (bonus XP is the extra company XP from the canal bonus).
 - A table of every ship: model, sales, cargo bought, fuel, repairs, tolls, lifetime profit and profit over the last 10 minutes, grouped by ship line in shop order (container ships, ore, grain, livestock, tankers, vehicles, recovery boats). Each group sits on a faint band of its line's color and starts with a total row: the line's name in its color, its number of ships, and each column summed, in slightly bigger text. Click a column to sort the ships within each group; click a ship's name to open its ship popup. Refreshes every second.
 - The table's money is shortened to 3 figures from $100k up ("$23.1B", "-$571M", "$985k") so it fits the screen however big the numbers get; hover a figure for the exact amount. The totals card shows exact amounts.

@@ -1,8 +1,9 @@
 extends Control
 ## The "Keep in the bank" setting (money cargo purchases leave alone), company
-## totals (last 10 minutes and all time), a card per canal the fleet
-## has used (crossings, tolls and bonus XP), and a sortable table of each
-## ship's lifetime profit, grouped by ship line (each with a total row); click a
+## totals (last 10 minutes and all time), everything the fleet has delivered
+## (by unit and commodity), a card for the canals the fleet has used
+## (crossings, tolls and bonus XP), and a sortable table of each ship's
+## lifetime profit, grouped by ship line (each with a total row); click a
 ## ship's name to open its popup.
 ## Refreshes once a second while visible.
 
@@ -10,6 +11,8 @@ const REFRESH_SECONDS := 1.0
 ## Text size for the totals, canal and ship tables (smaller than the theme's, so
 ## the eight-column ship table fits beside the activity log).
 const TABLE_FONT_SIZE := 14
+## Space between the cards side by side (the same as between the rows of cards).
+const CARD_GAP := 12
 ## Table columns: [title, sort key]. Money columns sort biggest first.
 const COLUMNS := [
 	["Ship", "name"], ["Model", "model"], ["Sales", "income"], ["Cargo", "cargo"], ["Fuel", "fuel"],
@@ -26,6 +29,8 @@ const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], 
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"]]
 ## Money columns summed in each group's total row.
 const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "profit", "recent"]
+## The Delivered card's heading for each markets.json unit.
+const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head of livestock", vehicle = "Vehicles"}
 ## Each group's rows sit on a faint band of its ship line's color.
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0
@@ -35,6 +40,8 @@ const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 
 var _sort_key := "profit"
 var _sort_descending := true
 var _clock := 0.0
+var _delivered_card := PanelContainer.new()
+var _delivered_grid := GridContainer.new()
 var _canal_card := PanelContainer.new()
 var _canal_label := Label.new()
 var _bank_picker := OptionButton.new()
@@ -48,7 +55,20 @@ func _ready() -> void:
 	_canal_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_canal_label.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
 	_canal_card.add_child(_canal_label)
-	$Scroll/Margin/Content/TotalsCard.add_sibling(_canal_card)
+	# The Delivered card sits beside the totals.
+	var totals_card: Control = $Scroll/Margin/Content/TotalsCard
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", CARD_GAP)
+	totals_card.add_sibling(row)
+	totals_card.reparent(row)
+	totals_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_delivered_card.theme_type_variation = &"CardPanel"
+	_delivered_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_delivered_grid.columns = 2
+	_delivered_grid.add_theme_constant_override(&"h_separation", 24)
+	_delivered_card.add_child(_delivered_grid)
+	row.add_child(_delivered_card)
+	row.add_sibling(_canal_card)
 	_add_bank_row()
 	%ShipTable.draw.connect(_draw_bands)
 	visibility_changed.connect(_refresh)
@@ -71,6 +91,7 @@ func _refresh() -> void:
 	_show_bank_reserve()
 	var recent := GameState.recent_finances()
 	_fill_totals(recent.fleet)
+	_fill_delivered()
 	_fill_canals()
 	_fill_ship_table(recent.ships)
 
@@ -95,6 +116,38 @@ func _fill_totals(recent: Dictionary) -> void:
 static func _operating_profit(source: Dictionary) -> float:
 	return (float(source.get("income", 0.0)) - float(source.get("cargo", 0.0)) - float(source.get("fuel", 0.0))
 		- float(source.get("repair", 0.0)) - float(source.get("tolls", 0.0)))
+
+
+## Everything the fleet has delivered, all time: a total for each unit
+## (containers, tons, head, vehicles) with each commodity carried in it under
+## it (when there are several). Containers include those from before
+## deliveries were counted by commodity (GameState.earlier_containers).
+func _fill_delivered() -> void:
+	_clear(_delivered_grid)
+	_add_label(_delivered_grid, "Delivered", &"DimLabel")
+	_add_label(_delivered_grid, "")
+	var groups := {}  # unit -> [[commodity name, units], ...], in markets.json order
+	for commodity: Dictionary in GameData.commodities:
+		var units := int(GameState.delivered.get(commodity.id, 0))
+		if units > 0:
+			groups.get_or_add(commodity.unit, []).append([commodity.name, units])
+	if GameState.earlier_containers > 0:
+		groups.get_or_add("container", []).append(["Earlier, not split by cargo", GameState.earlier_containers])
+	if groups.is_empty():
+		_add_label(_delivered_grid, "Nothing yet")
+		_add_label(_delivered_grid, "")
+		return
+	for unit: String in groups:
+		var total := 0
+		for entry: Array in groups[unit]:
+			total += int(entry[1])
+		_add_label(_delivered_grid, DELIVERED_UNITS.get(unit, unit.capitalize()))
+		_add_label(_delivered_grid, Fmt.thousands(total)).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		if groups[unit].size() < 2:
+			continue  # One commodity: its total says it all.
+		for entry: Array in groups[unit]:
+			_add_label(_delivered_grid, "    %s" % entry[0], &"DimLabel")
+			_add_label(_delivered_grid, Fmt.thousands(int(entry[1])), &"DimLabel").horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 
 ## Crossings, tolls and bonus XP for each canal the fleet has been through.

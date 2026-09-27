@@ -97,15 +97,6 @@ size_flags_vertical = 4
 focus_mode = 0
 text = "1x"
 
-[node name="SpeedGap" type="Control" parent="Layout/TopBar/Row/Right"]
-custom_minimum_size = Vector2(24, 0)
-layout_mode = 2
-
-[node name="ContainersLabel" type="Label" parent="Layout/TopBar/Row/Right"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Containers delivered: 0"
-
 [node name="Main" type="HBoxContainer" parent="Layout"]
 layout_mode = 2
 size_flags_vertical = 3

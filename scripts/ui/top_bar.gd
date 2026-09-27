@@ -1,17 +1,15 @@
 extends PanelContainer
 ## Above the main screens: the level (with an XP bar) and money on the left;
 ## the company name (in the company's color) over the calendar date and time
-## in the middle; the game speed button (or F) and containers delivered on the
-## right. Clicking the money opens the Finances screen; clicking the level
-## opens (or closes) the level popup with XP progress, upcoming unlocks and
-## time estimates.
+## in the middle; the game speed button (or F) on the right. Clicking the
+## money opens the Finances screen; clicking the level opens (or closes) the
+## level popup with XP progress, upcoming unlocks and time estimates.
 
 
 func _ready() -> void:
 	%CompanyLabel.text = GameState.company_name
 	%CompanyLabel.add_theme_color_override(&"font_color", GameState.company_color_value())
 	GameState.money_changed.connect(_on_money_changed)
-	GameState.containers_changed.connect(_on_containers_changed)
 	GameState.company_xp_changed.connect(_on_xp_changed)
 	for control: Control in [%LevelLabel, %LevelBar]:
 		control.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -24,7 +22,6 @@ func _ready() -> void:
 	%CompanyLabel.mouse_filter = Control.MOUSE_FILTER_STOP  # The hidden gem: no cursor or tooltip.
 	%CompanyLabel.gui_input.connect(_on_company_input)
 	_on_money_changed(GameState.money)
-	_on_containers_changed(GameState.containers_delivered)
 	_on_xp_changed(GameState.company_xp)
 	%SpeedButton.pressed.connect(GameState.cycle_time_speed)
 	GameState.time_speed_changed.connect(_on_time_speed_changed)
@@ -45,10 +42,6 @@ func _on_money_changed(money: int) -> void:
 
 func _process(_delta: float) -> void:
 	%DateLabel.text = Fmt.calendar(GameState.calendar_time())
-
-
-func _on_containers_changed(total: int) -> void:
-	%ContainersLabel.text = "Containers delivered: %s" % Fmt.thousands(total)
 
 
 func _on_time_speed_changed(speed: int) -> void:
