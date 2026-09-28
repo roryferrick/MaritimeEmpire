@@ -253,9 +253,11 @@
 ## Popups
 
 ### Port popup (appears above or below the clicked port)
-- Title: port name.
-- List of the player's ships currently docked there, each with thin maintenance / fuel / cargo bars and clickable to open its ship popup.
-- Placeholder line: "Cargo market: coming soon".
+- Title: port name and size ("Hong Kong · Giant 99"), then the size's details (see Port sizes).
+- Below that, tabs (one showing at a time, so the popup always fits on screen; the tab picked last stays picked for the next port):
+  - Market: each commodity's buy and sell price there, green where cheap and red where expensive against its world average.
+  - Headquarters / Hub: level, XP, the company XP bonus and the upgrade tree; "Build a hub" instead at a port without one while a hub is available; no tab otherwise.
+  - Ships (N): the player's ships docked there, each with thin maintenance / fuel / cargo bars and clickable to open its ship popup; the list scrolls past 300 px.
 
 ### Ship popup (openable from map, Ships screen, Finances and port popups)
 - Name (top) with an Upgrades button (showing unspent points, with a red dot while there are any) and X; Model, current speed (with top speed), range, capacity, and level with XP into it (cargo ships).

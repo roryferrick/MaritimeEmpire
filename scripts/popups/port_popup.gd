@@ -1,11 +1,11 @@
 class_name PortPopup
 extends AnchoredPopup
 ## Shows a port's name and size (how far through its band it is, which way
-## it's going and what the size does), its HQ or hub (level, XP and upgrade
-## tree) or a button to found a hub there when one is available, and the
-## player's ships docked there with their bars, and its market: each
-## commodity's buy and sell price, green where it's cheap compared with the
-## world average and red where expensive.
+## it's going and what the size does), then tabs, one showing at a time: its
+## market (each commodity's buy and sell price, green where it's cheap
+## compared with the world average and red where expensive), its HQ or hub
+## (level, XP and upgrade tree) or a button to found a hub there when one is
+## available, and the player's ships docked there with their bars.
 
 const SHIP_BARS_WIDTH := 80.0
 ## Founding a hub takes a second click within this many seconds (it's permanent).
@@ -13,12 +13,20 @@ const BUILD_CONFIRM_SECONDS := 3.0
 const REFRESH_SECONDS := 1.0
 ## The market table: its text size, and how far below or above a commodity's
 ## world average price counts as cheap (green) or expensive (red).
-const MARKET_FONT_SIZE := 13
+const MARKET_FONT_SIZE := 15
 const MARKET_CHEAP := 0.8
 const MARKET_EXPENSIVE := 1.25
 
+## The docked ships' list scrolls past this height (pixels).
+const SHIP_LIST_MAX_HEIGHT := 300.0
+
+## The tab picked last in any port popup ("market", "hub" or "ships").
+static var _last_tab := "market"
+
 ## Set before adding to the tree.
 var port_id := ""
+var _tab_keys: Array[String] = []
+var _ship_count := 0
 
 var _build_confirm_until := 0.0
 var _xp_label: Label = null
@@ -36,6 +44,7 @@ func _ready() -> void:
 	GameState.ship_changed.connect(_refresh_ships.unbind(1))
 	GameState.hubs_changed.connect(_refresh_hub)
 	GameState.company_leveled.connect(_refresh_hub.unbind(2))
+	%Tabs.tab_changed.connect(_on_tab_changed)
 	_refresh_hub()
 	_refresh_ships()
 	_refresh_market()
@@ -93,6 +102,48 @@ func _update_size() -> void:
 	_size_effects.text = "\n".join(lines)
 
 
+## The tabs under the size: Market, the HQ or hub (or "Build a hub" while one
+## is available; no tab otherwise) and the ships docked here with their count.
+## The one picked last (in any port popup) stays picked.
+func _update_tabs() -> void:
+	var tabs := [["market", "Market"]]
+	var hub := GameState.hub_at(port_id)
+	if hub:
+		tabs.append(["hub", "Headquarters" if hub.is_hq else "Hub"])
+	elif GameState.hubs_available() > 0:
+		tabs.append(["hub", "Build a hub"])
+	tabs.append(["ships", "Ships (%d)" % _ship_count])
+	_tab_keys.clear()
+	%Tabs.tab_count = tabs.size()
+	for i in tabs.size():
+		_tab_keys.append(tabs[i][0])
+		%Tabs.set_tab_title(i, tabs[i][1])
+	var picked := _tab_keys.find(_last_tab)
+	%Tabs.set_block_signals(true)
+	%Tabs.current_tab = picked if picked >= 0 else 0
+	%Tabs.set_block_signals(false)
+	_show_page()
+
+
+func _on_tab_changed(tab: int) -> void:
+	_last_tab = _tab_keys[tab]
+	_show_page()
+
+
+func _show_page() -> void:
+	var key: String = _tab_keys[%Tabs.current_tab]
+	%MarketPage.visible = key == "market"
+	%HubBox.visible = key == "hub"
+	%ShipsPage.visible = key == "ships"
+	reset_size.call_deferred()
+
+
+## The docked ships' list scrolls once it's taller than SHIP_LIST_MAX_HEIGHT.
+func _fit_ship_list() -> void:
+	%ShipScroll.custom_minimum_size.y = minf(%ShipList.get_combined_minimum_size().y, SHIP_LIST_MAX_HEIGHT)
+	reset_size.call_deferred()
+
+
 func _refresh_hub() -> void:
 	for child in %HubBox.get_children():
 		%HubBox.remove_child(child)
@@ -107,9 +158,7 @@ func _refresh_hub() -> void:
 		build.tooltip_text = "Hubs level up from deliveries unloaded here and boost every ship that docks. It's permanent."
 		build.pressed.connect(_on_build_pressed.bind(build))
 		%HubBox.add_child(build)
-	%HubBox.visible = %HubBox.get_child_count() > 0
-	%HubSeparator.visible = %HubBox.visible
-	reset_size.call_deferred()
+	_update_tabs()
 
 
 func _show_hub(hub: Hub) -> void:
@@ -175,8 +224,11 @@ func _refresh_ships() -> void:
 		row.add_child(bars)
 		%ShipList.add_child(row)
 		count += 1
+	_ship_count = count
 	%NoShipsLabel.visible = count == 0
-	reset_size.call_deferred()
+	%ShipScroll.visible = count > 0
+	_fit_ship_list.call_deferred()
+	_update_tabs()
 
 
 func _open_ship(ship: Ship) -> void:
