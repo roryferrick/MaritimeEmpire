@@ -1,5 +1,5 @@
 {
-	"_comment": "Home ports on the new company screen. great: 3 Scooters on the best nearby loop clear about $40,000 or more in their first 10 minutes from $150,000 (the starting money when the lists were made; it is now $2,500,000). harder: they clear about $10,000-$30,000, often by island hopping. excluded: not offered at all, because a Scooter has no port in range (isolated) or no profitable trade nearby (it loses money or barely breaks even); they are still normal ports in the game. Every other port is offered with a 'not recommended' note. Picked by simulating each HQ; recheck after changing markets.json, ship models or ports.",
+	"_comment": "Home ports on the new company screen. great: 3 Scooters on the best nearby loop clear about $40,000 or more in their first 10 minutes from $150,000 (the starting money when the lists were made; it is now $2,500,000). harder: they clear about $10,000-$30,000, often by island hopping. excluded: not offered at all, because a Scooter has no port in range (isolated) or no profitable trade nearby (it loses money or barely breaks even); they are still normal ports in the game. great_lakes: every Great Lakes port, offered under its own heading with one note (a tough start: Scooters find little trade there, but Lakers and Grain Lakers do). Every other port is offered with a 'not recommended' note. Picked by simulating each HQ; recheck after changing markets.json, ship models or ports.",
 	"great": [
 		{"port": "FNA", "note": "West African coffee and furniture with Banjul: the richest Scooter start, and the best gold run for the Laker."},
 		{"port": "BJL", "note": "The Gambia: coffee and furniture with Freetown; gold for the Laker."},
@@ -54,10 +54,13 @@
 		{"port": "IST", "note": "The Bosphorus: the Black Sea to the Aegean."},
 		{"port": "CPH", "note": "The Baltic: furniture between Gdansk and Tallinn."}
 	],
+	"great_lakes": {
+		"note": "Great Lakes: a tough start. Scooters find little container trade on the lakes; Lakers (from level 2) haul iron ore, coal and gold, and Grain Lakers (level 8) grain. Only Seaway-sized ships can reach the lakes, so bigger ships need a hub on the coast.",
+		"ports": ["CHI", "DLH", "DET", "TOR", "CLE", "YHM", "MKE", "TOL", "YQT", "IHB", "BUH", "GRY", "TWH", "MQT", "CAL"]
+	},
 	"excluded": [
 		"LCH", "SGN", "SLL", "CGP", "LIM", "MEL", "MBA", "VER", "BUE", "GYE", "SAI", "JIB", "ANC", "AKL", "SJU", "WLG", "POM", "BWN", "GUM", "BGI", "PPT", "REK", "JNU", "DUT", "GOH", "GPS", "VVO", "LAD", "SSA", "ANF", "FOR", "KRS", "PKC", "FNC", "BDA", "PUQ", "GDX", "ROR", "FSP", "YDP", "NOU", "MDY", "MCM",
 		"YVR", "SEA", "PDX", "MRY", "OAK", "LAX", "LGB", "PWM", "BOS", "HOU", "MSY", "NGQ", "DUR", "MPM", "KAP", "JED", "MUN", "HZR", "KHI", "JNP", "SUB", "XCH",
-		"CHI", "DLH", "DET", "CLE", "MKE", "TOL", "YQT", "IHB", "BUH", "GRY", "TWH", "MQT", "CAL",
 		"KGI", "PAL", "ROT", "DAV", "MAW"
 	]
 }

@@ -124,13 +124,16 @@ func ports_by_name() -> Array[Dictionary]:
 	return sorted
 
 
-## A port's place in data/starts.json: {kind ("great" or "harder"), note}, or
-## {} if it isn't a recommended HQ.
+## A port's place in data/starts.json: {kind ("great", "harder" or
+## "great_lakes"), note}, or {} if it isn't a recommended or lake HQ.
 func start_info(port_id: String) -> Dictionary:
 	for kind: String in ["great", "harder"]:
 		for entry: Dictionary in starts.get(kind, []):
 			if entry.port == port_id:
 				return {kind = kind, note = entry.get("note", "")}
+	var lakes: Dictionary = starts.get("great_lakes", {})
+	if lakes.get("ports", []).has(port_id):
+		return {kind = "great_lakes", note = lakes.get("note", "")}
 	return {}
 
 

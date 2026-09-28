@@ -269,6 +269,9 @@ func buy_error(model_id: String) -> String:
 	if money < ship_price(model_id):
 		return "You can't afford this ship."
 	if not hubs.any(func(hub: Hub) -> bool: return can_launch_at(model_id, hub.port_id)):
+		var on_lakes := hubs.all(func(hub: Hub) -> bool: return GameData.get_port(hub.port_id).get("seaway", false))
+		if on_lakes and not model.get("seaway", false):
+			return "A %s is too big for the St. Lawrence Seaway, and your HQ and hubs are all on the Great Lakes. Found a hub on the coast to launch one." % model.get("name", model_id)
 		return "Your HQ and hubs are all too small to launch a %s, which needs a %s port." % [
 			model.get("name", model_id), str(model.get("min_port", "")).capitalize()]
 	return ""

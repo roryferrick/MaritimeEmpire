@@ -1,7 +1,7 @@
 extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
 ## to (recommended great and harder starts first, from data/starts.json, then
-## every port), and choose the company's color.
+## the Great Lakes, then every port), and choose the company's color.
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -27,9 +27,9 @@ func _ready() -> void:
 	_validate()
 
 
-## The recommended starts (great, then harder, each by name) and then every
-## port a Scooter can start from (not starts.json's excluded ones) by name,
-## under headings; each item's metadata is its port id.
+## The recommended starts (great, then harder, each by name), the Great Lakes
+## ports, and then every port a Scooter can start from (not starts.json's
+## excluded ones) by name, under headings; each item's metadata is its port id.
 func _add_ports() -> void:
 	var picker: OptionButton = %PortPicker
 	for kind: String in START_HEADINGS:
@@ -38,6 +38,11 @@ func _add_ports() -> void:
 		picker.add_separator(START_HEADINGS[kind])
 		for entry: Dictionary in entries:
 			_add_port(GameData.get_port(entry.port))
+	picker.add_separator("Great Lakes starts")
+	var lake_ports: Array = GameData.starts.get("great_lakes", {}).get("ports", []).map(GameData.get_port)
+	lake_ports.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.name < b.name)
+	for port: Dictionary in lake_ports:
+		_add_port(port)
 	picker.add_separator("All ports")
 	var excluded: Array = GameData.starts.get("excluded", [])
 	for port in GameData.ports_by_name():
@@ -67,6 +72,8 @@ func _show_start_note() -> void:
 			%StartNote.text = "Great start: %s" % info.note
 		"harder":
 			%StartNote.text = "Harder start: %s" % info.note
+		"great_lakes":
+			%StartNote.text = info.note
 		_:
 			%StartNote.text = "Not a recommended start: Scooters find only thin trade in range."
 
