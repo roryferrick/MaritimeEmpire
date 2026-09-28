@@ -85,6 +85,39 @@ const HUB_ALERT_RADIUS := 4.5
 const HUB_ALERT_OFFSET := Vector2(15, -15)
 ## The faint route lanes drawn with show_active_lanes.
 const ACTIVE_LANE_ALPHA := 0.3
+## Ore carriers' lanes are their gray map colors taken this far towards white,
+## and drawn this opaque, so they show on the dark deep sea (the ships keep
+## their gray).
+const ORE_LANE_WHITEN := 0.65
+const ORE_LANE_ALPHA := 0.55
+## Kinds of named geography (WorldMapData.feature_label_kinds).
+enum FeatureKind { OCEAN, SEA, STRAIT, RANGE, DESERT, LAKE, RIVER }
+## How each kind is labeled: [font size, color name, slanted, extra letter
+## spacing, zoom offset (added to the label's own min zoom, to keep the map
+## from filling up with small lakes and rivers)].
+const FEATURE_STYLES := {
+	FeatureKind.OCEAN: [17, &"ocean_label", true, 3, 0.0],
+	FeatureKind.SEA: [14, &"sea_label", true, 1, 0.0],
+	FeatureKind.STRAIT: [12, &"sea_label", true, 0, 0.0],
+	FeatureKind.RANGE: [12, &"range_label", false, 2, 0.0],
+	FeatureKind.DESERT: [12, &"desert_label", false, 2, 0.0],
+	FeatureKind.LAKE: [11, &"lake_label", true, 0, 1.0],
+	FeatureKind.RIVER: [11, &"lake_label", true, 0, 1.5],
+}
+## Which kinds get placed first when labels would overlap (after ports and
+## countries).
+const FEATURE_PRIORITY: Array[int] = [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.RANGE, FeatureKind.DESERT,
+	FeatureKind.STRAIT, FeatureKind.LAKE, FeatureKind.RIVER]
+## How far slanted labels lean (negative leans them right, as glyphs go up in -y).
+const FEATURE_SLANT := -0.2
+## Where an area's label may go if its best spot is taken, in label sizes
+## (widths across, heights up and down), tried in order.
+const FEATURE_LABEL_NUDGES: Array[Vector2] = [Vector2.ZERO, Vector2(0, -1.5), Vector2(0, 1.5), Vector2(-0.6, 0),
+	Vector2(0.6, 0), Vector2(0, -3), Vector2(0, 3), Vector2(-0.6, -1.5), Vector2(0.6, 1.5)]
+const NO_NUDGE: Array[Vector2] = [Vector2.ZERO]
+## Width of the dark edge round ocean, sea and strait names.
+const SEA_LABEL_OUTLINE := 3
+## Width of the dark edge round ocean, sea and strait names.
 const ACTIVE_LANE_WIDTH := 1.5
 ## Canals (data/canals.json): the channel's width in projected degrees (at
 ## least CANAL_MIN_WIDTH px), and each lock chamber's length and the width of
@@ -126,6 +159,12 @@ const FALLBACK_COLORS := {
 	&"border": Color(0.5, 0.42, 0.35, 0.8),
 	&"border_gray": Color(0.38, 0.38, 0.38),
 	&"country_label": Color(0.3, 0.27, 0.2, 0.85),
+	&"ocean_label": Color(0.8, 0.9, 1.0, 0.7),
+	&"sea_label": Color(0.82, 0.91, 1.0, 0.75),
+	&"range_label": Color(0.33, 0.25, 0.17, 0.9),
+	&"desert_label": Color(0.55, 0.35, 0.16, 0.9),
+	&"lake_label": Color(0.1, 0.3, 0.55, 0.95),
+	&"sea_label_outline": Color(0.04, 0.12, 0.25, 0.55),
 	&"country_label_gray": Color(0.3, 0.3, 0.3),
 	&"port": Color.WHITE,
 	&"port_outline": Color(0.08, 0.12, 0.2),
@@ -201,6 +240,12 @@ var _dock_dot_ring := _dot_image(1.0)
 ## redone when _labels_key (the view and the hubs) changes.
 var _port_labels := []
 var _country_labels := []
+## Placed labels for named geography: [index into WorldMapData.feature_label_*, rect].
+var _feature_labels := []
+## Feature label indices in placement priority (see FEATURE_PRIORITY), and a
+## font per kind (slanted and spaced per FEATURE_STYLES); made on first use.
+var _feature_order := PackedInt32Array()
+var _feature_fonts := {}
 var _labels_key := []
 var _zoom := 1.0  # Screen pixels per projected degree.
 var _has_fit := false
@@ -608,6 +653,8 @@ func _draw_static_layer() -> void:
 		var placed_labels: Array[Rect2] = []
 		_port_labels = _place_port_labels(placed_labels)
 		_country_labels = _place_country_labels(placed_labels)
+		_feature_labels = [] if gray_mode else _place_feature_labels(placed_labels)
+	_draw_feature_labels()
 	_draw_country_labels()
 	if show_ships and show_active_lanes:
 		_draw_active_lanes()
@@ -668,6 +715,70 @@ func _place_country_labels(placed: Array[Rect2]) -> Array:
 		placed.append(rect.grow(LABEL_PADDING))
 		labels.append([text, rect])
 	return labels
+
+
+## Named geography labels that fit around the ones already placed, most
+## important kind first (FEATURE_PRIORITY): [index, rect] pairs. Each shows
+## from its min zoom plus its kind's zoom offset (FEATURE_STYLES).
+func _place_feature_labels(placed: Array[Rect2]) -> Array:
+	var data := GameData.world_map
+	if _feature_order.is_empty():
+		var order := range(data.feature_label_names.size())
+		order.sort_custom(func(a: int, b: int) -> bool:
+			var rank_a := FEATURE_PRIORITY.find(data.feature_label_kinds[a])
+			var rank_b := FEATURE_PRIORITY.find(data.feature_label_kinds[b])
+			return rank_a < rank_b if rank_a != rank_b else data.feature_label_min_zoom[a] < data.feature_label_min_zoom[b])
+		_feature_order = PackedInt32Array(order)
+	var web_zoom := _web_zoom()
+	var bounds := Rect2(Vector2.ZERO, size)
+	var labels := []
+	for i in _feature_order:
+		var kind := data.feature_label_kinds[i]
+		var style: Array = FEATURE_STYLES[kind]
+		if data.feature_label_min_zoom[i] + style[4] > web_zoom:
+			continue
+		var text_size := _feature_font(kind).get_string_size(data.feature_label_names[i], HORIZONTAL_ALIGNMENT_LEFT, -1, style[0])
+		var center := world_to_screen(data.feature_label_positions[i])
+		# Areas may shift a little if their best spot is taken (by
+		# FEATURE_LABEL_NUDGES label sizes); a river label stays on its river.
+		var nudges: Array[Vector2] = NO_NUDGE if kind == FeatureKind.RIVER else FEATURE_LABEL_NUDGES
+		for nudge: Vector2 in nudges:
+			var rect := Rect2(center + nudge * text_size - text_size / 2.0, text_size)
+			if bounds.encloses(rect) and not _overlaps(rect, placed):
+				placed.append(rect.grow(LABEL_PADDING))
+				labels.append([i, rect])
+				break
+	return labels
+
+
+func _draw_feature_labels() -> void:
+	var data := GameData.world_map
+	for label: Array in _feature_labels:
+		var kind := data.feature_label_kinds[label[0]]
+		var style: Array = FEATURE_STYLES[kind]
+		var font := _feature_font(kind)
+		var rect: Rect2 = label[1]
+		var baseline := rect.position + Vector2(0, font.get_ascent(style[0]))
+		var text: String = data.feature_label_names[label[0]]
+		# Pale sea names get a dark edge, so they read over shallow (light) water too.
+		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
+			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, style[0], SEA_LABEL_OUTLINE,
+				_color(&"sea_label_outline"))
+		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, style[0], _color(style[1]))
+
+
+## The theme font, slanted (water, like an atlas) and letter-spaced as the
+## kind's style says.
+func _feature_font(kind: int) -> Font:
+	if not _feature_fonts.has(kind):
+		var style: Array = FEATURE_STYLES[kind]
+		var font := FontVariation.new()
+		font.base_font = get_theme_default_font()
+		if style[2]:
+			font.variation_transform = Transform2D(Vector2(1.0, 0.0), Vector2(FEATURE_SLANT, 1.0), Vector2.ZERO)
+		font.spacing_glyph = style[3]
+		_feature_fonts[kind] = font
+	return _feature_fonts[kind]
 
 
 func _draw_country_labels() -> void:
@@ -764,7 +875,7 @@ func _draw_route() -> void:
 
 ## Every lane the fleet sails: each cargo ship's route loop, any route waiting
 ## to replace it, and the leg it's on now. A lane shared by several ships is
-## drawn once, in the first one's color.
+## drawn once, in the first one's color (see ORE_LANE_WHITEN).
 func _draw_active_lanes() -> void:
 	var lanes := {}  # "A-B" (sorted) -> [from, to, color]
 	for ship in GameState.ships:
@@ -772,6 +883,9 @@ func _draw_active_lanes() -> void:
 			continue
 		var color := Color.from_string(ship.model().get("map_color", "#ffffff"), Color.WHITE)
 		color.a = ACTIVE_LANE_ALPHA
+		if ship.model().get("category", "") == "ore":
+			color = color.lerp(Color.WHITE, ORE_LANE_WHITEN)
+			color.a = ORE_LANE_ALPHA
 		var legs: Array = []
 		for stops: Array[String] in [ship.route, ship.pending_route]:
 			for i in stops.size():

@@ -37,6 +37,18 @@ const LAND_COLORS_PATH := "res://tools/source_data/NE2_50M_SR.png"
 const LAND_COLORS_SEA := Color8(251, 251, 251)
 ## Depth bands are simplified more than the coast (projected degrees).
 const DEPTH_SIMPLIFY_TOLERANCE := 0.04
+## Named geography to label (see _add_feature_labels()): marine areas and land
+## regions from Natural Earth, and the kinds (MapView.FeatureKind order: ocean,
+## sea, strait, range, desert, lake, river) each of their classes becomes.
+const MARINE_PATH := "res://tools/source_data/ne_10m_geography_marine_polys.geojson"
+const REGIONS_PATH := "res://tools/source_data/ne_10m_geography_regions_polys.geojson"
+const MARINE_KINDS := {ocean = 0, sea = 1, gulf = 1, bay = 1, sound = 1, strait = 2, channel = 2}
+const REGION_KINDS := {"Range/mtn": 3, "Desert": 4}
+const LAKE_KIND := 5
+const RIVER_KIND := 6
+## The label spot search: a grid this many points across, refined this many times.
+const LABEL_GRID := 16
+const LABEL_REFINE_ROUNDS := 3
 const PORTS_PATH := "res://data/ports.json"
 const CANALS_PATH := "res://data/canals.json"
 const MAP_OUT := "res://data/world_map.res"
@@ -244,6 +256,7 @@ func _build_map(land_polygons: Array) -> void:
 	_add_rivers(map)
 	_add_countries(map)
 	_add_depths(map)
+	_add_feature_labels(map)
 	_build_land_texture()
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
@@ -269,6 +282,135 @@ func _add_depths(map: WorldMapData) -> void:
 		map.depth_triangles.append(triangles)
 		map.depth_hole_triangles.append(holes)
 		print("  Depth %d m: %d triangles, %d in shallower patches" % [band[0], triangles.size() / 3, holes.size() / 3])
+
+
+## Labels for named geography: oceans, seas (with gulfs, bays and sounds),
+## straits (with channels), mountain ranges, deserts, lakes and rivers, each
+## with Natural Earth's min_label (the web-map zoom it's labeled from). Areas
+## are labeled at the point furthest inside their biggest part; a river on the
+## middle of its longest named stretch.
+func _add_feature_labels(map: WorldMapData) -> void:
+	var count := map.feature_label_names.size()
+	for feature: Dictionary in _read_geojson(MARINE_PATH):
+		var props: Dictionary = feature.properties
+		var kind: Variant = MARINE_KINDS.get(str(props.get("featurecla", "")))
+		if kind != null and props.get("name") != null:
+			var text := str(props.get("label")) if kind == 0 and props.get("label") != null else str(props.name)
+			_add_area_label(map, feature, text, kind, float(props.get("min_label", 5.0)))
+	for feature: Dictionary in _read_geojson(REGIONS_PATH):
+		var props: Dictionary = feature.properties
+		var kind: Variant = REGION_KINDS.get(str(props.get("FEATURECLA", "")))
+		if kind != null and props.get("NAME") != null:
+			_add_area_label(map, feature, str(props.NAME).to_upper(), kind, float(props.get("MIN_LABEL", 5.0)))
+	for feature: Dictionary in _read_geojson(LAKES_PATH):
+		var props: Dictionary = feature.properties
+		if props.get("name") != null:
+			_add_area_label(map, feature, str(props.name), LAKE_KIND, float(props.get("min_label", 7.0)))
+	# A river is many stretches; label it once, on its longest.
+	var rivers := {}  # name -> [longest stretch's points, its length, lowest min_label]
+	for feature: Dictionary in _read_geojson(RIVERS_PATH):
+		var props: Dictionary = feature.properties
+		if props.get("name") == null or str(props.get("featurecla", "")) == "Lake Centerline":
+			continue
+		var geometry: Dictionary = feature.geometry
+		var lines: Array = [geometry.coordinates] if geometry.type == "LineString" else geometry.coordinates
+		for line: Array in lines:
+			var points := _project_all(_to_points(line))
+			var length := 0.0
+			for k in range(1, points.size()):
+				length += points[k - 1].distance_to(points[k])
+			var entry: Array = rivers.get(props.name, [PackedVector2Array(), 0.0, INF])
+			if length > entry[1]:
+				entry[0] = points
+				entry[1] = length
+			entry[2] = minf(entry[2], float(props.get("min_label", 7.0)))
+			rivers[props.name] = entry
+	for river_name: String in rivers:
+		var entry: Array = rivers[river_name]
+		_add_label(map, river_name, _point_along(entry[0], entry[1] / 2.0), RIVER_KIND, entry[2])
+	print("Feature labels: %d" % (map.feature_label_names.size() - count))
+
+
+func _add_label(map: WorldMapData, text: String, position: Vector2, kind: int, min_zoom: float) -> void:
+	map.feature_label_names.append(text)
+	map.feature_label_positions.append(position)
+	map.feature_label_kinds.append(kind)
+	map.feature_label_min_zoom.append(min_zoom)
+
+
+## Labels a feature's biggest polygon (by its bounding box) at the point
+## furthest inside it.
+func _add_area_label(map: WorldMapData, feature: Dictionary, text: String, kind: int, min_zoom: float) -> void:
+	var best_rings := []
+	var best_area := -1.0
+	for polygon: Array in _feature_polygons(feature):
+		var rings := []
+		for ring: Array in polygon:
+			var points := _simplify(_project_all(_to_points(ring)), DEPTH_SIMPLIFY_TOLERANCE)
+			if points.size() >= 3:
+				rings.append(points)
+		if rings.is_empty():
+			continue
+		var area := _bounds(rings[0]).get_area()
+		if area > best_area:
+			best_area = area
+			best_rings = rings
+	if not best_rings.is_empty():
+		_add_label(map, text, _inside_point(best_rings), kind, min_zoom)
+
+
+## Roughly the point inside a polygon (outline, then holes) furthest from its
+## edges: the best of a grid over it, then of finer grids around the best so far.
+func _inside_point(rings: Array) -> Vector2:
+	var box := _bounds(rings[0])
+	var best := box.get_center()
+	var best_room := -1.0
+	var step := maxf(box.size.x, box.size.y) / LABEL_GRID
+	var center := box.get_center()
+	@warning_ignore("integer_division")
+	var half := LABEL_GRID / 2
+	for pass_index in LABEL_REFINE_ROUNDS:
+		for gy in range(-half, half + 1):
+			for gx in range(-half, half + 1):
+				var p := center + Vector2(gx, gy) * step
+				var room := _room_at(rings, p)
+				if room > best_room:
+					best_room = room
+					best = p
+		center = best
+		step /= 4.0
+	return best
+
+
+## How far a point is from a polygon's nearest edge, or -1 if it's outside.
+static func _room_at(rings: Array, p: Vector2) -> float:
+	if not Geometry2D.is_point_in_polygon(p, rings[0]):
+		return -1.0
+	for h in range(1, rings.size()):
+		if Geometry2D.is_point_in_polygon(p, rings[h]):
+			return -1.0
+	var room := INF
+	for ring: PackedVector2Array in rings:
+		for k in ring.size():
+			room = minf(room, p.distance_to(Geometry2D.get_closest_point_to_segment(p, ring[k - 1], ring[k])))
+	return room
+
+
+static func _bounds(points: PackedVector2Array) -> Rect2:
+	var box := Rect2(points[0], Vector2.ZERO)
+	for p in points:
+		box = box.expand(p)
+	return box
+
+
+## The point `distance` along a line.
+static func _point_along(points: PackedVector2Array, distance: float) -> Vector2:
+	for k in range(1, points.size()):
+		var piece := points[k - 1].distance_to(points[k])
+		if distance <= piece:
+			return points[k - 1].lerp(points[k], distance / piece)
+		distance -= piece
+	return points[-1]
 
 
 ## The land colors as a LAND_TEXTURE_SIZE square texture in the map's

@@ -31,3 +31,13 @@ extends Resource
 @export var depth_levels := PackedInt32Array()
 @export var depth_triangles: Array[PackedVector2Array] = []
 @export var depth_hole_triangles: Array[PackedVector2Array] = []
+
+## Named geography (tools/build_map_data.gd _add_feature_labels()): each
+## label's text, where it goes (well inside its area, or along the middle of a
+## river), its kind (MapView.FeatureKind: ocean, sea, strait, range, desert,
+## lake, river) and the web-map zoom level it starts showing at (Natural
+## Earth's min_label; the map may add to it per kind).
+@export var feature_label_names := PackedStringArray()
+@export var feature_label_positions := PackedVector2Array()
+@export var feature_label_kinds := PackedByteArray()
+@export var feature_label_min_zoom := PackedFloat32Array()
