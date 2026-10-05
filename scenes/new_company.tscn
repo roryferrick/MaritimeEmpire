@@ -36,7 +36,7 @@ theme_type_variation = &"CardPanel"
 
 [node name="Content" type="VBoxContainer" parent="Center/Card"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="Center/Card/Content"]
 layout_mode = 2
@@ -97,15 +97,41 @@ tooltip_text = "The most this company's game can be sped up."
 mouse_filter = 1
 text = "Fastest game speed"
 
-[node name="TutorialToggle" type="CheckButton" parent="Center/Card/Content"]
+[node name="StormRow" type="HBoxContainer" parent="Center/Card/Content"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Tips that explain the basics as you play, one at a time. You can switch them off later from the map; if you leave this off, the game won't offer them."
+theme_override_constants/separation = 8
+
+[node name="StormLabel" type="Label" parent="Center/Card/Content/StormRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DimLabel"
+tooltip_text = "Storms form in their real seasons and seas. From company level 6 they slow ships, wear them, and the strongest close ports while they pass."
+mouse_filter = 1
+text = "Storms"
+
+[node name="ToggleRow" type="HBoxContainer" parent="Center/Card/Content"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TutorialToggle" type="CheckButton" parent="Center/Card/Content/ToggleRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Recommended for new players: tips that explain the basics as you play, one at a time. You can switch them off later from the map; if you leave this off, the game won't offer them."
 button_pressed = true
-text = "Tutorial (recommended for new players)"
+text = "Tutorial"
+
+[node name="SeasonsToggle" type="CheckButton" parent="Center/Card/Content/ToggleRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Real seasonal closures: the Great Lakes locks shut in winter, Antarctica opens only in its summer, and icebound ports freeze."
+button_pressed = true
+text = "Seasonal closures"
 
 [node name="Spacer" type="Control" parent="Center/Card/Content"]
-custom_minimum_size = Vector2(0, 8)
+custom_minimum_size = Vector2(0, 2)
 layout_mode = 2
 
 [node name="Buttons" type="HBoxContainer" parent="Center/Card/Content"]

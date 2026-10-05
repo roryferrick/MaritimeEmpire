@@ -25,6 +25,35 @@ const PORT_RADIUS_SIZE := 63.0
 const PORT_RADIUS := 6.0
 const PORT_HIT_RADIUS := 14.0
 const SHIP_HIT_RADIUS := 12.0
+## Storms (see _draw_storms()): dark cloud, pale rim and calm eye colors, the haze as [share of the
+## radius, opacity] rings, the bands' opacity, how far each winds round
+## (radians) and in how many pieces, how fast they turn (radians a second of
+## play), how strong a tropical storm is before its eye shows, and from what
+## on-screen radius its name is shown.
+const STORM_CLOUD := Color(0.07, 0.07, 0.1)
+const STORM_RIM := Color(0.7, 0.74, 0.8)
+const STORM_EYE := Color(0.55, 0.62, 0.7, 0.55)
+const STORM_HAZE := [[1.0, 0.2], [0.82, 0.2], [0.64, 0.24], [0.46, 0.3], [0.3, 0.36], [0.16, 0.3]]
+const STORM_BAND_ALPHA := 0.8
+## A thin pale edge along each band, so the dark clouds stand out on deep sea.
+const STORM_RIM_ALPHA := 0.45
+const STORM_ARM_WIND := 4.2
+const STORM_ARM_STEPS := 28
+const STORM_SPIN := 0.6
+const STORM_EYE_FROM := 0.6
+const STORM_LABEL_MIN_RADIUS := 26.0
+const STORM_FONT_SIZE := 14
+## Lightning in tropical storms (see _draw_lightning()): the bolt's core and glow
+## colors, how long each flash slot lasts (seconds of play) and the share of it
+## a flash is lit, how many spots in a storm may flash per slot and the chance
+## each does at full strength, and the smallest on-screen storm radius with any.
+const LIGHTNING_CORE := Color(1.0, 1.0, 0.92)
+const LIGHTNING_GLOW := Color(0.8, 0.85, 1.0)
+const LIGHTNING_SLOT_S := 0.35
+const LIGHTNING_LIT := 0.45
+const LIGHTNING_CELLS := 4
+const LIGHTNING_CHANCE := 0.3
+const LIGHTNING_MIN_RADIUS := 18.0
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
 ## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
@@ -263,6 +292,7 @@ var _river_tiers: Array[RiverTier] = []
 ## for locks and convoys), the rest that only changes with the view, routes,
 ## hubs or prices (ports, labels, route lanes; see STATIC_REFRESH_S), and ships
 ## (every frame). _canvas is the layer being drawn, which the draw helpers use.
+var _weather_layer := Control.new()
 var _canal_layer := Control.new()
 var _static_layer := Control.new()
 var _overlay := Control.new()
@@ -363,10 +393,11 @@ func _ready() -> void:
 			art.add_child(tier)
 			_river_tiers.append(tier)
 
-	for layer: Control in [_canal_layer, _static_layer, _overlay]:
+	for layer: Control in [_weather_layer, _canal_layer, _static_layer, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
+	_weather_layer.draw.connect(_draw_weather_layer)
 	_canal_layer.draw.connect(_draw_canal_layer)
 	_static_layer.draw.connect(_draw_static_layer)
 	_overlay.draw.connect(_draw_overlay)
@@ -377,6 +408,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not show_ships or not is_visible_in_tree():
 		return
+	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_overlay.queue_redraw()
 	# Route lanes follow the ships' legs, hub rings the hubs and port colors the
@@ -634,9 +666,16 @@ func _draw() -> void:
 
 
 func _redraw_layers() -> void:
+	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_static_layer.queue_redraw()
 	_overlay.queue_redraw()
+
+
+func _draw_weather_layer() -> void:
+	_canvas = _weather_layer
+	if show_ships:
+		_draw_storms()
 
 
 func _draw_canal_layer() -> void:
@@ -1301,3 +1340,89 @@ func _draw_marker(at: Vector2, color: Color) -> void:
 	_canvas.draw_string_outline(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, 4,
 		_color(&"lost_marker_outline"))
 	_canvas.draw_string(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, color)
+
+
+# --- Storms --------------------------------------------------------------
+
+## Each storm (GameState.weather) as a soft, slowly turning cloud: a haze over
+## its reach, spiral bands that wind into the core (turning anticlockwise in
+## the north, clockwise in the south, as storms do), a clear eye once a
+## tropical storm is strong, and its name under the core when there's room.
+## The bands turn with play time, so they stop when the game is paused.
+func _draw_storms() -> void:
+	var font := get_theme_default_font()
+	for storm: Dictionary in GameState.weather.storms:
+		var lat: float = storm.lat
+		var center := world_to_screen(Geo.project(Vector2(storm.lon, lat)))
+		# Near the map's scale there, a projected degree is 60 nm x cos(latitude).
+		var radius: float = float(storm.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
+		if not Rect2(Vector2.ZERO, size).grow(radius).has_point(center):
+			continue
+		var strength := Weather.intensity(storm)
+		var alpha := lerpf(0.35, 1.0, strength)
+		var tropical := Weather.TROPICAL.has(storm.kind)
+		var cloud := STORM_CLOUD
+		for ring: Array in STORM_HAZE:
+			_canvas.draw_circle(center, radius * float(ring[0]), Color(cloud, float(ring[1]) * alpha))
+		# Map north is up on screen, so anticlockwise there is a falling angle.
+		var spin := -1.0 if lat >= 0.0 else 1.0
+		var turn := spin * GameState.play_time * STORM_SPIN
+		var arms := 3 if tropical else 2
+		for arm in arms:
+			var previous := Vector2.INF
+			for step in STORM_ARM_STEPS + 1:
+				var t := float(step) / STORM_ARM_STEPS
+				var angle := turn + TAU * arm / arms - spin * t * STORM_ARM_WIND
+				var point := center + Vector2.from_angle(angle) * radius * lerpf(0.1, 0.95, t)
+				if previous != Vector2.INF:
+					var width := maxf(radius * lerpf(0.16, 0.04, t), 1.0)
+					_canvas.draw_line(previous, point, Color(cloud, STORM_BAND_ALPHA * alpha * (1.0 - t * 0.7)), width, true)
+					_canvas.draw_line(previous, point, Color(STORM_RIM, STORM_RIM_ALPHA * alpha * (1.0 - t)), maxf(width * 0.2, 1.0), true)
+				previous = point
+		if tropical and radius > LIGHTNING_MIN_RADIUS:
+			_draw_lightning(storm, center, radius, strength)
+		if tropical and strength > STORM_EYE_FROM and radius > 12.0:
+			_canvas.draw_circle(center, maxf(radius * 0.045, 2.0), Color(STORM_EYE, STORM_EYE.a * alpha))
+		if radius > STORM_LABEL_MIN_RADIUS:
+			var text := Weather.title(storm)
+			var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE).x
+			var baseline := center + Vector2(-width / 2.0, radius * 0.18 + STORM_FONT_SIZE)
+			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, 4, Color(0, 0, 0, 0.6 * alpha))
+			_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, Color(1, 1, 1, 0.9 * alpha))
+
+
+## Lightning in a tropical storm's bands (gales have little): every
+## LIGHTNING_SLOT_S of play time, each of LIGHTNING_CELLS spots may flash, more
+## often the stronger the storm, as a jagged bolt with a fork, a glow and a
+## soft flash, lit for the first part of the slot. Where and whether is fixed
+## by the storm, spot and slot, so a flash doesn't jump about between frames,
+## and they stop when the game is paused.
+func _draw_lightning(storm: Dictionary, center: Vector2, radius: float, strength: float) -> void:
+	var slot := floori(GameState.play_time / LIGHTNING_SLOT_S)
+	var into := fmod(GameState.play_time, LIGHTNING_SLOT_S) / LIGHTNING_SLOT_S
+	if into > LIGHTNING_LIT:
+		return
+	var fade := 1.0 - into / LIGHTNING_LIT
+	var rng := RandomNumberGenerator.new()
+	for cell in LIGHTNING_CELLS:
+		rng.seed = hash([storm.basin, storm.name, cell, slot])
+		if rng.randf() > LIGHTNING_CHANCE * strength:
+			continue
+		# In the eyewall or out in the bands.
+		var at := center + Vector2.from_angle(rng.randf() * TAU) * radius * rng.randf_range(0.12, 0.75)
+		var length := clampf(radius * 0.32, 16.0, 70.0)
+		var bolt := PackedVector2Array([at])
+		var direction := Vector2.from_angle(rng.randf_range(0.9, 2.2))  # Mostly downward on screen.
+		for k in 5:
+			var step := direction.rotated(rng.randf_range(-0.7, 0.7)) * length / 5.0
+			bolt.append(bolt[-1] + step)
+		var fork := PackedVector2Array([bolt[2]])
+		for k in 2:
+			fork.append(fork[-1] + direction.rotated(rng.randf_range(0.4, 1.1) * (1.0 if rng.randf() < 0.5 else -1.0)) * length / 6.0)
+		# The cloud lit up around the bolt: a wide faint glow and a brighter middle.
+		var middle := at.lerp(bolt[-1], 0.5)
+		_canvas.draw_circle(middle, length * 0.85, Color(LIGHTNING_GLOW, 0.06 * fade))
+		_canvas.draw_circle(middle, length * 0.45, Color(LIGHTNING_GLOW, 0.08 * fade))
+		for line: PackedVector2Array in [bolt, fork]:
+			_canvas.draw_polyline(line, Color(LIGHTNING_GLOW, 0.35 * fade), 6.0, true)
+			_canvas.draw_polyline(line, Color(LIGHTNING_CORE, fade), 2.2, true)

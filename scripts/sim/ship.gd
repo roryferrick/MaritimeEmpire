@@ -116,6 +116,10 @@ var full_loads := true
 ## Why it is waiting in port for a full load ("waiting for money for a full
 ## load"), or "". Not a problem, so not a hold.
 var load_wait := ""
+## Why weather is keeping it in port or off its next one ("waiting off Miami
+## for Hurricane Ana to pass"), or "". Not a problem for the player either, and
+## not saved: it's worked out again as the ship moves.
+var weather_wait := ""
 ## When a ship waiting for a full load next looks for one (play_time); not saved.
 var load_check_time := 0.0
 ## The money a full hold needed at its last look (see GameState._load_cargo()).
@@ -676,10 +680,14 @@ func status_text() -> String:
 			text += " (paused)"
 		elif is_held():
 			text += " — %s" % hold_reason
+		elif not weather_wait.is_empty():
+			text += " — %s" % weather_wait
 		elif not load_wait.is_empty():
 			text += " — %s" % load_wait
 		return text
 	var destination := GameData.port_name(to_port)
+	if not weather_wait.is_empty():
+		return weather_wait[0].to_upper() + weather_wait.substr(1)
 	if not canal.is_empty():
 		return "%s — to %s" % [canal, destination]
 	if paused:

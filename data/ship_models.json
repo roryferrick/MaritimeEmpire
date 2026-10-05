@@ -469,7 +469,7 @@
 			"seaway": true,
 			"name": "Buffalo",
 			"category": "recovery",
-			"unlock_level": 8,
+			"unlock_level": 6,
 			"recovery": true,
 			"carries": ["model_1", "model_2", "model_3", "model_8", "model_11", "model_14", "model_17", "model_20"],
 			"price": 1250000,

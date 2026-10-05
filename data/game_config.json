@@ -5,6 +5,38 @@
 	"company_colors": [["red", "Red", "#e5484d"], ["orange", "Orange", "#f5a524"], ["yellow", "Yellow", "#f2d64b"], ["lime", "Lime", "#a3e635"], ["green", "Green", "#46c37b"], ["teal", "Teal", "#14b8a6"], ["cyan", "Cyan", "#5ee0f0"], ["blue", "Blue", "#4a9df8"], ["navy", "Navy", "#2b3f9e"], ["purple", "Purple", "#b67cf2"], ["magenta", "Magenta", "#e040c8"], ["pink", "Pink", "#f59ac0"], ["maroon", "Maroon", "#8e1b2c"], ["brown", "Brown", "#8b5a2b"], ["tan", "Tan", "#d2b48c"], ["gray", "Gray", "#9aa0a6"], ["white", "White", "#f5f5f5"], ["black", "Black", "#111111"]],
 	"autosave_seconds": 30,
 	"breakdowns": {"min_company_level": 6, "interval_s": 5, "chance_at_full": 0.00105, "chance_at_empty": 0.0105, "age_per_hour_at_sea": 0.1, "max_age_factor": 2.0, "hit": 0.5},
+	"_weather_comment": "Storms (scripts/sim/weather.gd), for saves founded with Moderate or Harsh storms. From company level min_company_level they slow ships, wear them and make breakdowns likelier, and the strongest hurricane, typhoon and cyclone cores close ports; before that (and in saves without storms) nothing happens to ships, though storms are still drawn. levels: slow is the most a storm's core cuts speed (fuel per mile stays the same, so a storm alone can't strand a ship), wear the most it multiplies wear and breakdown chance, close_at how strong a tropical storm must be over a port to close it (0..1), rate how many storms form, times the basins' per_year. Each basin forms storms of its kind in its months (1-12; peak months twice as often), per_year a year on average, somewhere in spawn ([[lon min, lon max], [lat min, lat max]]), with a radius_nm of effect, lasting life_days (a calendar day is 72 s of play), moving speed_nm calendar nm an hour (about knots). Tropical kinds (hurricane, typhoon, cyclone) drift west and poleward, then curve away east past recurve_lat; gales run east. names are used in turn.",
+	"weather": {
+		"min_company_level": 6,
+		"levels": {
+			"moderate": {"slow": 0.4, "wear": 2.0, "close_at": 0.85, "rate": 1.0},
+			"harsh": {"slow": 0.6, "wear": 3.0, "close_at": 0.7, "rate": 1.5}
+		},
+		"basins": [
+			{"id": "atlantic", "kind": "hurricane", "months": [6, 7, 8, 9, 10, 11], "peak": [8, 9, 10], "per_year": 7, "spawn": [[-60, -25], [10, 18]], "radius_nm": 260, "life_days": [6, 11], "speed_nm": 12, "recurve_lat": 28,
+				"names": ["Ana", "Bill", "Claudette", "Danny", "Elsa", "Fred", "Grace", "Henri", "Ida", "Julian", "Kate", "Larry", "Mindy", "Nicholas", "Odette", "Peter", "Rose", "Sam", "Teresa", "Victor", "Wanda"]},
+			{"id": "east_pacific", "kind": "hurricane", "months": [5, 6, 7, 8, 9, 10, 11], "peak": [7, 8, 9], "per_year": 8, "spawn": [[-112, -92], [10, 16]], "radius_nm": 220, "life_days": [5, 9], "speed_nm": 11, "recurve_lat": 32,
+				"names": ["Andres", "Blanca", "Carlos", "Dolores", "Enrique", "Felicia", "Guillermo", "Hilda", "Ignacio", "Jimena", "Kevin", "Linda", "Marty", "Nora", "Olaf", "Pamela", "Rick", "Sandra", "Terry", "Vivian"]},
+			{"id": "west_pacific", "kind": "typhoon", "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "peak": [7, 8, 9, 10], "per_year": 16, "spawn": [[128, 160], [8, 18]], "radius_nm": 300, "life_days": [6, 12], "speed_nm": 12, "recurve_lat": 26,
+				"names": ["Damrey", "Haikui", "Kirogi", "Yun-yeung", "Koinu", "Bolaven", "Sanba", "Jelawat", "Ewiniar", "Maliksi", "Gaemi", "Prapiroon", "Maria", "Son-Tinh", "Ampil", "Wukong", "Jongdari", "Shanshan", "Yagi", "Leepi", "Bebinca", "Rumbia", "Soulik", "Cimaron", "Jebi", "Mangkhut"]},
+			{"id": "bay_of_bengal", "kind": "cyclone", "months": [4, 5, 6, 10, 11, 12], "peak": [5, 11], "per_year": 3, "spawn": [[84, 92], [10, 16]], "radius_nm": 200, "life_days": [3, 6], "speed_nm": 9, "recurve_lat": 20,
+				"names": ["Nisarga", "Gati", "Nivar", "Burevi", "Tauktae", "Yaas", "Gulab", "Shaheen", "Jawad", "Asani", "Sitrang", "Mandous", "Mocha", "Biparjoy"]},
+			{"id": "arabian_sea", "kind": "cyclone", "months": [5, 6, 10, 11], "peak": [6, 11], "per_year": 2, "spawn": [[62, 70], [12, 18]], "radius_nm": 180, "life_days": [3, 6], "speed_nm": 8, "recurve_lat": 22,
+				"names": ["Tej", "Hamoon", "Midhili", "Michaung", "Remal", "Asna", "Dana", "Fengal"]},
+			{"id": "south_indian", "kind": "cyclone", "months": [11, 12, 1, 2, 3, 4], "peak": [1, 2, 3], "per_year": 9, "spawn": [[55, 100], [-18, -9]], "radius_nm": 240, "life_days": [6, 11], "speed_nm": 10, "recurve_lat": 24,
+				"names": ["Alicia", "Bongoyo", "Chalane", "Danilo", "Eloise", "Faraji", "Guambe", "Habana", "Iman", "Jobo", "Kanga", "Ludzi", "Melina", "Nathan", "Onias", "Pelagie"]},
+			{"id": "australia", "kind": "cyclone", "months": [11, 12, 1, 2, 3, 4], "peak": [1, 2, 3], "per_year": 7, "spawn": [[110, 158], [-17, -10]], "radius_nm": 220, "life_days": [5, 10], "speed_nm": 9, "recurve_lat": 24,
+				"names": ["Anika", "Billy", "Charlotte", "Darian", "Ellie", "Freddy", "Gabrielle", "Herman", "Ilsa", "Jasper", "Kirrily", "Lincoln", "Megan", "Neville", "Olga", "Paul"]},
+			{"id": "south_pacific", "kind": "cyclone", "months": [11, 12, 1, 2, 3, 4], "peak": [1, 2, 3], "per_year": 5, "spawn": [[160, 200], [-18, -10]], "radius_nm": 220, "life_days": [5, 9], "speed_nm": 10, "recurve_lat": 24,
+				"names": ["Ana", "Bina", "Cody", "Dovi", "Eva", "Fili", "Gina", "Hale", "Irene", "Judy", "Kevin", "Lola", "Mal", "Nat", "Osai", "Pita"]},
+			{"id": "north_atlantic_gales", "kind": "gale", "months": [10, 11, 12, 1, 2, 3], "peak": [12, 1, 2], "per_year": 12, "spawn": [[-60, -30], [38, 52]], "radius_nm": 450, "life_days": [3, 5], "speed_nm": 25,
+				"names": ["Agnes", "Babet", "Ciaran", "Debi", "Elin", "Fergus", "Gerrit", "Henk", "Isha", "Jocelyn", "Kathleen", "Lilian", "Ashley", "Bert", "Conall", "Darragh", "Eowyn", "Floris"]},
+			{"id": "north_pacific_gales", "kind": "gale", "months": [10, 11, 12, 1, 2, 3], "peak": [12, 1, 2], "per_year": 10, "spawn": [[145, 185], [36, 48]], "radius_nm": 450, "life_days": [3, 5], "speed_nm": 25,
+				"names": ["Aleutian", "Bering", "Chukchi", "Kuril", "Kamchatka", "Pribilof", "Unimak", "Attu", "Adak", "Kodiak", "Sitka", "Haida"]},
+			{"id": "southern_ocean", "kind": "gale", "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "peak": [5, 6, 7, 8, 9], "per_year": 20, "spawn": [[-180, 180], [-56, -44]], "radius_nm": 500, "life_days": [3, 5], "speed_nm": 28,
+				"names": ["Roaring", "Furious", "Screaming", "Kerguelen", "Crozet", "Heard", "Macquarie", "Bouvet", "Drake", "Scotia", "Weddell", "Ross", "Amundsen", "Bellingshausen"]}
+		]
+	},
 	"initial_view_width_deg": 45,
 	"_calendar_comment": "The in-game calendar starts at start (UTC) and runs minutes_per_second calendar minutes per second of play at 1x, matched to real ship speeds: a Scooter's 5.44 nm a second is about 16 knots, so Rome to Tunis takes about 20 hours on the calendar and Shanghai to Rotterdam about a month.",
 	"calendar": {"start": "2000-01-01T00:00:00", "minutes_per_second": 20},

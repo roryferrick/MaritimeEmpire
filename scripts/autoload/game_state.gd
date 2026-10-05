@@ -85,6 +85,14 @@ const LOAD_RECHECK_S := 2.0
 ## How often (game seconds) a ship at sea checks it can still make port (see
 ## _check_at_risk()); a breakdown or a new leg checks at once.
 const AT_RISK_CHECK_S := 0.25
+## A ship bound for a port a storm has closed waits this far off it.
+const STORM_OFFSHORE_NM := 25.0
+## How often storm warnings are looked for, and how far ahead (in seconds of
+## play: two calendar days) a storm heading for a port is warned of.
+const STORM_WARNING_CHECK_S := 1.0
+const STORM_WARNING_AHEAD_S := 144.0
+## A ship is said to be sailing through a storm once it's this strong there.
+const STORM_SHIP_NOTICE := 0.3
 ## How long (game seconds) a worked-out fuel_reserve() is used before it's redone.
 const FUEL_RESERVE_REFRESH_S := 0.25
 
@@ -126,6 +134,10 @@ var time_speed := 1:
 ## The fastest game speed this save allows (one of TIME_SPEEDS, chosen when
 ## the company is founded; saves from before the choice allow the fastest).
 var max_time_speed: int = TIME_SPEEDS[-1]
+## How stormy this save is (Weather.LEVELS: none, moderate or harsh) and
+## whether it has seasonal closures; both chosen when the company is founded.
+var storms := "none"
+var seasons := false
 
 ## Seconds the company has been playing (only counts while a session is open).
 var play_time := 0.0
@@ -155,6 +167,12 @@ var _window: Array = []
 var _autosave_timer := Timer.new()
 var _breakdown_clock := 0.0
 var _auto_recovery_clock := 0.0
+var _storm_warning_clock := 0.0
+## Storm warnings already given: port id -> the storm closing it; "storm/port"
+## keys for storms heading for a port; ship -> the storm it's sailing through.
+var _closed_ports := {}
+var _storm_warned := {}
+var _ships_in_storms := {}
 ## fuel_reserve(), and the play_time it was worked out at.
 var _fuel_reserve := 0.0
 var _fuel_reserve_time := -1.0
@@ -162,6 +180,7 @@ var _fuel_reserve_time := -1.0
 var canal_traffic := CanalTraffic.new(self)
 ## Commodity prices: drift and the impact of the player's own trades.
 var market := Market.new(self)
+var weather := Weather.new(self)
 ## Port sizes: how they grow and shrink, and what they change.
 var port_sizes := PortSizes.new(self)
 
@@ -192,9 +211,14 @@ func _step(delta: float) -> void:
 	play_time += delta
 	canal_traffic.step(delta)
 	port_sizes.step(delta)
+	weather.step(delta)
 	for ship in ships:
 		_advance(ship, delta)
 	_roll_breakdowns(delta)
+	_storm_warning_clock += delta
+	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
+		_storm_warning_clock = 0.0
+		_storm_warnings()
 	_auto_recovery_clock += delta
 	if _auto_recovery_clock >= AUTO_RECOVERY_INTERVAL:
 		_auto_recovery_clock = 0.0
@@ -839,15 +863,18 @@ func _sail(ship: Ship, delta: float) -> bool:
 	if canal_traffic.hold(ship, delta):
 		return true
 	var zone := ship.zone_factors(ship.traveled_nm)
+	var storm := _storm_factors(ship)
 	var speed := ship.speed()
 	if ship.is_recovery():
 		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
-	speed *= float(zone[0])
-	var target := canal_traffic.limit(ship, ship.traveled_nm + speed * delta)
+	speed *= float(zone[0]) * float(storm[0])
+	var target := _storm_hold(ship, canal_traffic.limit(ship, ship.traveled_nm + speed * delta))
 	var effort := clampf((target - ship.traveled_nm) / (speed * delta), 0.0, 1.0) if speed * delta > 0.0 else 1.0
 	if ship.is_running() or ship.is_recovery():
-		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * float(zone[1]) * delta * effort, 0.0)
-	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * delta * effort, 0.0)
+		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * float(zone[1]) * float(storm[1]) * delta * effort, 0.0)
+	# A storm costs time, not fuel per mile: the engines make less way, so the
+	# fuel a ship set off with still covers the leg.
+	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * float(storm[0]) * delta * effort, 0.0)
 	ship.traveled_nm = target
 	if not ship.is_recovery():
 		ship.sea_time += delta * effort
@@ -861,6 +888,87 @@ func _sail(ship: Ship, delta: float) -> bool:
 			ship.risk_check_time = play_time + AT_RISK_CHECK_S
 			_check_at_risk(ship)
 	return true
+
+
+## [speed factor, wear factor] for a ship at sea from the storms where it is
+## (see Weather.factors()); [1, 1] in port or when storms aren't active.
+func _storm_factors(ship: Ship) -> Array:
+	if not weather.active() or ship.is_docked() or ship.from_port.is_empty():
+		return [1.0, 1.0]
+	return weather.factors(Geo.unproject(ship.world_position()))
+
+
+## Where a ship may sail to this step: no closer than STORM_OFFSHORE_NM to a
+## port a storm has closed (recovery boats go in regardless), saying so in its
+## weather_wait.
+func _storm_hold(ship: Ship, target: float) -> float:
+	var storm := {} if ship.is_recovery() else weather.closed_by(ship.to_port)
+	if storm.is_empty():
+		ship.weather_wait = ""
+		return target
+	var stop := maxf(ship.leg_length() - STORM_OFFSHORE_NM, 0.0)
+	if target <= stop:
+		ship.weather_wait = ""
+		return target
+	ship.weather_wait = "waiting off %s for %s to pass" % [GameData.port_name(ship.to_port), Weather.title(storm)]
+	return maxf(ship.traveled_nm, stop)
+
+
+## Activity log warnings about storms (while they're active) for the ports
+## that matter to the player (the HQ and hubs, and every port a ship is at,
+## heading to or has on its route): a tropical storm heading for one (within
+## STORM_WARNING_AHEAD_S), one closing or reopening, and a ship sailing into a
+## storm.
+func _storm_warnings() -> void:
+	if not weather.active():
+		_closed_ports.clear()
+		_ships_in_storms.clear()
+		return
+	var ports := {}
+	for hub in hubs:
+		ports[hub.port_id] = true
+	for ship in ships:
+		for port_id: String in [ship.docked_at, ship.to_port]:
+			if not port_id.is_empty():
+				ports[port_id] = true
+		for port_id in ship.route:
+			ports[port_id] = true
+	var ahead := {}  # Tropical storm -> where it will be.
+	for storm in weather.storms:
+		if Weather.TROPICAL.has(storm.kind):
+			ahead[storm] = weather.position_after(storm, STORM_WARNING_AHEAD_S)
+	for port_id: String in ports:
+		var closing := weather.closed_by(port_id)
+		var was: String = _closed_ports.get(port_id, "")
+		if not closing.is_empty() and was.is_empty():
+			_closed_ports[port_id] = Weather.title(closing)
+			ActivityLog.add("%s is closed: %s is overhead. Ships wait until it passes." % [GameData.port_name(port_id), Weather.title(closing)], ActivityLog.Kind.BAD)
+		elif closing.is_empty() and not was.is_empty():
+			_closed_ports.erase(port_id)
+			ActivityLog.add("%s is open again: %s has passed." % [GameData.port_name(port_id), was], ActivityLog.Kind.GOOD)
+		if not closing.is_empty():
+			continue
+		var port := GameData.get_port(port_id)
+		var at := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+		for storm: Dictionary in ahead:
+			var key := "%s/%s/%s" % [storm.basin, storm.name, port_id]
+			if _storm_warned.has(key):
+				continue
+			var then: Vector2 = ahead[storm]
+			if Geo.distance_nm(then, at) < float(storm.radius_nm) * 0.5 and Geo.distance_nm(Vector2(storm.lon, storm.lat), at) >= float(storm.radius_nm) * 0.5:
+				_storm_warned[key] = true
+				ActivityLog.add("%s is heading for %s (about 2 days away)." % [Weather.title(storm), GameData.port_name(port_id)], ActivityLog.Kind.BAD)
+	for ship in ships:
+		var named := ""
+		if not ship.is_docked() and not ship.from_port.is_empty() and not ship.is_lost():
+			var found := weather.strongest_at(Geo.unproject(ship.world_position()))
+			if float(found[1]) >= STORM_SHIP_NOTICE:
+				named = Weather.title(found[0])
+		if named.is_empty():
+			_ships_in_storms.erase(ship)
+		elif _ships_in_storms.get(ship, "") != named:
+			_ships_in_storms[ship] = named
+			ActivityLog.add("%s is sailing through %s: slower, and wearing faster." % [ship.name, named], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 ## Flags a ship that no longer has the fuel (or maintenance) to finish its leg.
@@ -897,7 +1005,7 @@ func _roll_breakdowns(delta: float) -> void:
 		if company_level() < int(settings.get("min_company_level", 6)):
 			continue
 		for ship in ships:
-			if ship.is_recovery() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or randf() >= ship.breakdown_chance():
+			if ship.is_recovery() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
 				continue
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
 			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
@@ -907,6 +1015,7 @@ func _roll_breakdowns(delta: float) -> void:
 
 
 func _arrive(ship: Ship, port: String, paid := true) -> void:
+	ship.weather_wait = ""
 	ship.at_risk = false
 	canal_traffic.leave(ship)
 	ship.delivery_canals.clear()
@@ -1090,6 +1199,12 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	if not ship.fits_port(to):
 		_set_hold(ship, "%s is too small for this ship; assign a new route" % GameData.port_name(to))
 		return
+	# A storm over the port: wait it out (nothing for the player to do).
+	var storm := weather.closed_by(ship.docked_at)
+	if not storm.is_empty():
+		ship.weather_wait = "%s is closed by %s" % [GameData.port_name(ship.docked_at), Weather.title(storm)]
+		return
+	ship.weather_wait = ""
 	var phase := ship.refill_phase_seconds()
 	var topping_up := ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
 	if topping_up or ship.fuel < _fuel_to_leave(ship, to):
@@ -1528,8 +1643,8 @@ func has_save(slot: int) -> bool:
 
 
 ## What the main menu shows for a slot: {company_name, company_color,
-## home_port (id), max_time_speed, money, date (calendar Unix time)}, plus
-## error if it can't be loaded; {} if empty.
+## home_port (id), max_time_speed, storms, seasons, money, date (calendar Unix
+## time)}, plus error if it can't be loaded; {} if empty.
 func save_summary(slot: int) -> Dictionary:
 	if not has_save(slot):
 		return {}
@@ -1541,6 +1656,8 @@ func save_summary(slot: int) -> Dictionary:
 		company_color = str(data.get("company_color", "purple")),
 		home_port = str(data.get("home_port", "")),
 		max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1])),
+		storms = str(data.get("storms", "none")),
+		seasons = bool(data.get("seasons", false)),
 		money = int(data.get("money", 0)),
 		date = calendar_time_at(float(data.get("play_time", 0.0))),
 	}
@@ -1559,8 +1676,10 @@ func _migrate_legacy_save() -> void:
 		DirAccess.rename_absolute(LEGACY_SAVE_PATH, save_path(1))
 
 
-## Starts a new company in save_slot, replacing any save there.
-func new_game(new_company_name: String, new_home_port: String, new_color := "purple", with_tutorials := false, fastest_speed: int = TIME_SPEEDS[-1]) -> void:
+## Starts a new company in save_slot, replacing any save there. options (all
+## optional): tutorials (bool), max_time_speed (one of TIME_SPEEDS), storms
+## (one of Weather.LEVELS) and seasons (bool: seasonal closures).
+func new_game(new_company_name: String, new_home_port: String, new_color := "purple", options := {}) -> void:
 	company_name = new_company_name.strip_edges()
 	company_color = new_color
 	home_port = new_home_port
@@ -1579,8 +1698,11 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	port_sizes.reset()
 	company_xp = 0.0
 	show_active_routes = true
-	tutorials = with_tutorials
-	max_time_speed = fastest_speed
+	tutorials = bool(options.get("tutorials", false))
+	max_time_speed = int(options.get("max_time_speed", TIME_SPEEDS[-1]))
+	storms = str(options.get("storms", "none"))
+	seasons = bool(options.get("seasons", false))
+	weather.clear()
 	tutorials_on = true
 	tutorial_done.clear()
 	bank_reserve = 0
@@ -1626,6 +1748,10 @@ func continue_game(slot: int) -> String:
 	show_active_routes = bool(data.get("show_active_routes", true))
 	tutorials = bool(data.get("tutorials", false))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
+	# Saves from before weather have no storms or seasonal closures.
+	storms = str(data.get("storms", "none"))
+	seasons = bool(data.get("seasons", false))
+	weather.from_dict(data.get("weather", {}))
 	tutorials_on = bool(data.get("tutorials_on", true))
 	tutorial_done.assign(data.get("tutorial_done", []))
 	bank_reserve = int(data.get("bank_reserve", 0))
@@ -1681,6 +1807,9 @@ func save_game() -> void:
 		"show_active_routes": show_active_routes,
 		"tutorials": tutorials,
 		"max_time_speed": max_time_speed,
+		"storms": storms,
+		"seasons": seasons,
+		"weather": weather.to_dict(),
 		"tutorials_on": tutorials_on,
 		"tutorial_done": tutorial_done,
 		"bank_reserve": bank_reserve,

@@ -2,17 +2,20 @@ extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
 ## to (recommended great and harder starts first, from data/starts.json, then
 ## the Great Lakes, then every port), choose the company's color, its fastest
-## game speed, and whether to have the tutorial.
+## game speed, its storms (none, moderate or harsh), and whether to have seasonal
+## closures and the tutorial.
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const DEFAULT_HOME_PORT := "ROM"
 const DEFAULT_COLOR := "purple"
+const DEFAULT_STORMS := "moderate"
 const SWATCH_SIZE := Vector2(56, 36)
 const START_HEADINGS := {great = "Great starts", harder = "Harder starts"}
 
 var _color := DEFAULT_COLOR
 var _max_speed: int = GameState.TIME_SPEEDS[-1]
+var _storms := DEFAULT_STORMS
 
 
 func _ready() -> void:
@@ -22,6 +25,7 @@ func _ready() -> void:
 	_show_start_note()
 	_add_color_swatches()
 	_add_speed_choices()
+	_add_storm_choices()
 	%NameEdit.text_changed.connect(_validate.unbind(1))
 	%NameEdit.text_submitted.connect(_start.unbind(1))
 	%StartButton.pressed.connect(_start)
@@ -117,6 +121,27 @@ func _add_speed_choices() -> void:
 		%SpeedRow.add_child(button)
 
 
+## A button per storm level (Weather.LEVELS: None, Moderate, Harsh); Moderate
+## is picked to start with.
+func _add_storm_choices() -> void:
+	var group := ButtonGroup.new()
+	var tips := {
+		none = "No storms at all.",
+		moderate = "Storms up to 40% slower and 2x wear at their core; only the strongest hurricane cores close ports.",
+		harsh = "Storms up to 60% slower and 3x wear at their core, half as many again, and ports close more often.",
+	}
+	for level in Weather.LEVELS:
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.custom_minimum_size = Vector2(0, 40)
+		button.text = " %s " % level.capitalize()
+		button.tooltip_text = tips[level] + " Storms act on ships from company level 6."
+		button.button_pressed = level == _storms
+		button.pressed.connect(func() -> void: _storms = level)
+		%StormRow.add_child(button)
+
+
 static func _swatch_style(color: Color, chosen: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
@@ -135,5 +160,10 @@ func _validate() -> bool:
 func _start() -> void:
 	if not _validate():
 		return
-	GameState.new_game(%NameEdit.text, _selected_port(), _color, %TutorialToggle.button_pressed, _max_speed)
+	GameState.new_game(%NameEdit.text, _selected_port(), _color, {
+		tutorials = %TutorialToggle.button_pressed,
+		max_time_speed = _max_speed,
+		storms = _storms,
+		seasons = %SeasonsToggle.button_pressed,
+	})
 	get_tree().change_scene_to_file(GAME_SCENE)

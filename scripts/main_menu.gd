@@ -4,8 +4,8 @@ extends Control
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const NEW_COMPANY_SCENE := "res://scenes/new_company.tscn"
-const SLOT_BUTTON_SIZE := Vector2(420, 64)
-const DELETE_BUTTON_SIZE := Vector2(96, 64)
+const SLOT_BUTTON_SIZE := Vector2(420, 92)
+const DELETE_BUTTON_SIZE := Vector2(96, 92)
 
 ## The slot DeleteDialog is asking about.
 var _deleting := 0
@@ -24,8 +24,9 @@ func _show_slots() -> void:
 		%Slots.add_child(_slot_row(slot))
 
 
-## A slot's button (its company, home port, money, date and fastest game speed,
-## or New Game when empty) and, when it holds a save, a Delete button.
+## A slot's button (its company; home port, money and date; storms, seasonal
+## closures and fastest game speed; or New Game when empty) and, when it holds
+## a save, a Delete button.
 func _slot_row(slot: int) -> HBoxContainer:
 	var summary := GameState.save_summary(slot)
 	var row := HBoxContainer.new()
@@ -42,8 +43,10 @@ func _slot_row(slot: int) -> HBoxContainer:
 		button.text = "Slot %d  ·  %s" % [slot, summary.error]
 		button.disabled = true
 	else:
-		button.text = "Slot %d  ·  %s\n%s  ·  %s  ·  %s  ·  up to %dx" % [slot, summary.company_name, GameData.port_name(summary.home_port),
-			Fmt.money(summary.money), Fmt.calendar(summary.date), summary.max_time_speed]
+		button.text = "Slot %d  ·  %s\n%s  ·  %s  ·  %s\n%s  ·  %s  ·  up to %dx" % [slot, summary.company_name,
+			GameData.port_name(summary.home_port), Fmt.money(summary.money), Fmt.calendar(summary.date),
+			Weather.LEVEL_NAMES.get(summary.storms, "No storms"), "Seasonal closures" if summary.seasons else "No seasonal closures",
+			summary.max_time_speed]
 		GameState.apply_company_text_color(button, summary.company_color)
 		button.pressed.connect(_continue.bind(slot))
 	var delete := Button.new()
