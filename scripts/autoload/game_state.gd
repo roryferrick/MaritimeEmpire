@@ -120,8 +120,12 @@ var save_slot := 1
 ## saved; every session starts at 1x.
 var time_speed := 1:
 	set(value):
-		time_speed = value
+		time_speed = mini(value, max_time_speed)
 		time_speed_changed.emit(time_speed)
+
+## The fastest game speed this save allows (one of TIME_SPEEDS, chosen when
+## the company is founded; saves from before the choice allow the fastest).
+var max_time_speed: int = TIME_SPEEDS[-1]
 
 ## Seconds the company has been playing (only counts while a session is open).
 var play_time := 0.0
@@ -214,9 +218,17 @@ func calendar_seconds_per_second() -> float:
 	return float(GameData.config.get("calendar", {}).get("minutes_per_second", 20)) * 60.0
 
 
-## Steps to the next of TIME_SPEEDS, back to paused after the fastest.
+## The game speeds this save allows: TIME_SPEEDS up to max_time_speed.
+func allowed_time_speeds() -> Array[int]:
+	var speeds: Array[int] = []
+	speeds.assign(TIME_SPEEDS.filter(func(speed: int) -> bool: return speed <= max_time_speed))
+	return speeds
+
+
+## Steps to the next allowed speed, back to paused after the fastest.
 func cycle_time_speed() -> void:
-	time_speed = TIME_SPEEDS[(TIME_SPEEDS.find(time_speed) + 1) % TIME_SPEEDS.size()]
+	var speeds := allowed_time_speeds()
+	time_speed = speeds[(speeds.find(time_speed) + 1) % speeds.size()]
 
 
 # --- Ships ---------------------------------------------------------------
@@ -1516,7 +1528,8 @@ func has_save(slot: int) -> bool:
 
 
 ## What the main menu shows for a slot: {company_name, company_color,
-## home_port (id), money, date (calendar Unix time)}, plus error if it can't be loaded; {} if empty.
+## home_port (id), max_time_speed, money, date (calendar Unix time)}, plus
+## error if it can't be loaded; {} if empty.
 func save_summary(slot: int) -> Dictionary:
 	if not has_save(slot):
 		return {}
@@ -1527,6 +1540,7 @@ func save_summary(slot: int) -> Dictionary:
 		company_name = str(data.get("company_name", "")),
 		company_color = str(data.get("company_color", "purple")),
 		home_port = str(data.get("home_port", "")),
+		max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1])),
 		money = int(data.get("money", 0)),
 		date = calendar_time_at(float(data.get("play_time", 0.0))),
 	}
@@ -1546,7 +1560,7 @@ func _migrate_legacy_save() -> void:
 
 
 ## Starts a new company in save_slot, replacing any save there.
-func new_game(new_company_name: String, new_home_port: String, new_color := "purple", with_tutorials := false) -> void:
+func new_game(new_company_name: String, new_home_port: String, new_color := "purple", with_tutorials := false, fastest_speed: int = TIME_SPEEDS[-1]) -> void:
 	company_name = new_company_name.strip_edges()
 	company_color = new_color
 	home_port = new_home_port
@@ -1566,6 +1580,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company_xp = 0.0
 	show_active_routes = true
 	tutorials = with_tutorials
+	max_time_speed = fastest_speed
 	tutorials_on = true
 	tutorial_done.clear()
 	bank_reserve = 0
@@ -1610,6 +1625,7 @@ func continue_game(slot: int) -> String:
 	_window = data.get("finance_window", [])
 	show_active_routes = bool(data.get("show_active_routes", true))
 	tutorials = bool(data.get("tutorials", false))
+	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
 	tutorials_on = bool(data.get("tutorials_on", true))
 	tutorial_done.assign(data.get("tutorial_done", []))
 	bank_reserve = int(data.get("bank_reserve", 0))
@@ -1664,6 +1680,7 @@ func save_game() -> void:
 		"company_xp": company_xp,
 		"show_active_routes": show_active_routes,
 		"tutorials": tutorials,
+		"max_time_speed": max_time_speed,
 		"tutorials_on": tutorials_on,
 		"tutorial_done": tutorial_done,
 		"bank_reserve": bank_reserve,

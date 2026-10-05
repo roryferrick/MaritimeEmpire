@@ -89,13 +89,11 @@ layout_mode = 2
 size_flags_horizontal = 3
 alignment = 2
 
-[node name="SpeedButton" type="Button" parent="Layout/TopBar/Row/Right"]
+[node name="SpeedButtons" type="HBoxContainer" parent="Layout/TopBar/Row/Right"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(84, 0)
 layout_mode = 2
 size_flags_vertical = 4
-focus_mode = 0
-text = "1x"
+theme_override_constants/separation = 4
 
 [node name="Main" type="HBoxContainer" parent="Layout"]
 layout_mode = 2

@@ -1,9 +1,12 @@
 extends PanelContainer
 ## Above the main screens: the level (with an XP bar) and money on the left;
 ## the company name (in the company's color) over the calendar date and time
-## in the middle; the game speed button (or F) on the right. Clicking the
-## money opens the Finances screen; clicking the level opens (or closes) the
-## level popup with XP progress, upcoming unlocks and time estimates.
+## in the middle; the game speed buttons on the right (Pause, 1x, 2x, 4x, 8x; F
+## steps through them). Clicking the money opens the Finances screen; clicking
+## the level opens (or closes) the level popup with XP progress, upcoming
+## unlocks and time estimates.
+
+const SPEED_BUTTON_WIDTH := 64.0
 
 
 func _ready() -> void:
@@ -23,7 +26,7 @@ func _ready() -> void:
 	%CompanyLabel.gui_input.connect(_on_company_input)
 	_on_money_changed(GameState.money)
 	_on_xp_changed(GameState.company_xp)
-	%SpeedButton.pressed.connect(GameState.cycle_time_speed)
+	_add_speed_buttons()
 	GameState.time_speed_changed.connect(_on_time_speed_changed)
 	_on_time_speed_changed(GameState.time_speed)
 
@@ -44,10 +47,26 @@ func _process(_delta: float) -> void:
 	%DateLabel.text = Fmt.calendar(GameState.calendar_time())
 
 
+## One button per game speed this save allows (Pause, 1x, 2x, 4x, 8x, up to
+## GameState.max_time_speed); the current one is shown pressed.
+func _add_speed_buttons() -> void:
+	var group := ButtonGroup.new()
+	for speed in GameState.allowed_time_speeds():
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(SPEED_BUTTON_WIDTH, 0)
+		button.text = "Pause" if speed == 0 else "%dx" % speed
+		button.tooltip_text = ("Pause the game" if speed == 0 else "Run the game at %dx speed" % speed) + " (F steps through the speeds)."
+		button.pressed.connect(func() -> void: GameState.time_speed = speed)
+		%SpeedButtons.add_child(button)
+
+
 func _on_time_speed_changed(speed: int) -> void:
-	%SpeedButton.text = "Paused" if speed == 0 else "%dx" % speed
-	var state := "The game is paused." if speed == 0 else "The game runs at %dx speed." % speed
-	%SpeedButton.tooltip_text = state + " Click to change: paused, 1x, 2x, 4x, 8x (also the F key)."
+	var speeds := GameState.allowed_time_speeds()
+	for i in speeds.size():
+		(%SpeedButtons.get_child(i) as Button).set_pressed_no_signal(speeds[i] == speed)
 
 
 

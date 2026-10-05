@@ -24,8 +24,8 @@ func _show_slots() -> void:
 		%Slots.add_child(_slot_row(slot))
 
 
-## A slot's button (its company, home port, money and date, or New Game when
-## empty) and, when it holds a save, a Delete button.
+## A slot's button (its company, home port, money, date and fastest game speed,
+## or New Game when empty) and, when it holds a save, a Delete button.
 func _slot_row(slot: int) -> HBoxContainer:
 	var summary := GameState.save_summary(slot)
 	var row := HBoxContainer.new()
@@ -42,7 +42,8 @@ func _slot_row(slot: int) -> HBoxContainer:
 		button.text = "Slot %d  ·  %s" % [slot, summary.error]
 		button.disabled = true
 	else:
-		button.text = "Slot %d  ·  %s\n%s  ·  %s  ·  %s" % [slot, summary.company_name, GameData.port_name(summary.home_port), Fmt.money(summary.money), Fmt.calendar(summary.date)]
+		button.text = "Slot %d  ·  %s\n%s  ·  %s  ·  %s  ·  up to %dx" % [slot, summary.company_name, GameData.port_name(summary.home_port),
+			Fmt.money(summary.money), Fmt.calendar(summary.date), summary.max_time_speed]
 		GameState.apply_company_text_color(button, summary.company_color)
 		button.pressed.connect(_continue.bind(slot))
 	var delete := Button.new()

@@ -1,8 +1,8 @@
 extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
 ## to (recommended great and harder starts first, from data/starts.json, then
-## the Great Lakes, then every port), choose the company's color, and whether
-## to have the tutorial.
+## the Great Lakes, then every port), choose the company's color, its fastest
+## game speed, and whether to have the tutorial.
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -12,6 +12,7 @@ const SWATCH_SIZE := Vector2(56, 36)
 const START_HEADINGS := {great = "Great starts", harder = "Harder starts"}
 
 var _color := DEFAULT_COLOR
+var _max_speed: int = GameState.TIME_SPEEDS[-1]
 
 
 func _ready() -> void:
@@ -20,6 +21,7 @@ func _ready() -> void:
 	%PortPicker.item_selected.connect(_show_start_note.unbind(1))
 	_show_start_note()
 	_add_color_swatches()
+	_add_speed_choices()
 	%NameEdit.text_changed.connect(_validate.unbind(1))
 	%NameEdit.text_submitted.connect(_start.unbind(1))
 	%StartButton.pressed.connect(_start)
@@ -97,6 +99,24 @@ func _add_color_swatches() -> void:
 		%ColorRow.add_child(swatch)
 
 
+## A button per game speed (1x, 2x, 4x, 8x) for the fastest this company can
+## run at; the fastest is picked to start with.
+func _add_speed_choices() -> void:
+	var group := ButtonGroup.new()
+	for speed in GameState.TIME_SPEEDS:
+		if speed == 0:
+			continue
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.custom_minimum_size = Vector2(SWATCH_SIZE.x, 40)
+		button.text = "%dx" % speed
+		button.tooltip_text = "This company's game speed can go up to %dx." % speed
+		button.button_pressed = speed == _max_speed
+		button.pressed.connect(func() -> void: _max_speed = speed)
+		%SpeedRow.add_child(button)
+
+
 static func _swatch_style(color: Color, chosen: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
@@ -115,5 +135,5 @@ func _validate() -> bool:
 func _start() -> void:
 	if not _validate():
 		return
-	GameState.new_game(%NameEdit.text, _selected_port(), _color, %TutorialToggle.button_pressed)
+	GameState.new_game(%NameEdit.text, _selected_port(), _color, %TutorialToggle.button_pressed, _max_speed)
 	get_tree().change_scene_to_file(GAME_SCENE)
