@@ -73,6 +73,11 @@ func _ready() -> void:
 	GameState.mega_upgraded.connect(_on_mega_upgraded)
 	GameState.port_band_changed.connect(_on_port_band_changed)
 	_update_alerts()
+	if GameState.tutorials:
+		# Over the screens (and the Route Assignment map) but under the popups.
+		var tutorial := TutorialCard.new()
+		_popup_host.add_sibling(tutorial)
+		_popup_host.get_parent().move_child(tutorial, _popup_host.get_index())
 	show_screen(Screen.WORLD)
 
 
@@ -150,6 +155,10 @@ func open_route_screen(ship: Ship) -> void:
 	%ActivityLogPanel.visible = false
 	%RouteScreen.visible = true
 	%RouteScreen.open(ship)
+
+
+func is_route_screen_open() -> bool:
+	return %RouteScreen.visible
 
 
 func _close_route_screen() -> void:

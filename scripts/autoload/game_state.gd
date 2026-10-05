@@ -129,6 +129,12 @@ var play_time := 0.0
 var company_xp := 0.0
 ## The map's Routes switch: show the fleet's route lanes faintly.
 var show_active_routes := true
+## Whether this save has the tutorial (chosen when the company is founded; saves
+## from before tutorials have none), the map's Tutorial switch, and the ids
+## of the tips already seen (see TutorialCard).
+var tutorials := false
+var tutorials_on := true
+var tutorial_done: Array[String] = []
 ## Money cargo purchases leave in the bank (set on the Finances screen). Fuel
 ## and repairs can still use it, so no ship is stranded by it.
 var bank_reserve := 0
@@ -1540,7 +1546,7 @@ func _migrate_legacy_save() -> void:
 
 
 ## Starts a new company in save_slot, replacing any save there.
-func new_game(new_company_name: String, new_home_port: String, new_color := "purple") -> void:
+func new_game(new_company_name: String, new_home_port: String, new_color := "purple", with_tutorials := false) -> void:
 	company_name = new_company_name.strip_edges()
 	company_color = new_color
 	home_port = new_home_port
@@ -1559,6 +1565,9 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	port_sizes.reset()
 	company_xp = 0.0
 	show_active_routes = true
+	tutorials = with_tutorials
+	tutorials_on = true
+	tutorial_done.clear()
 	bank_reserve = 0
 	hubs.assign([Hub.new(home_port, true)])
 	_window = []
@@ -1600,6 +1609,9 @@ func continue_game(slot: int) -> String:
 	company_xp = float(data.get("company_xp", 0.0))
 	_window = data.get("finance_window", [])
 	show_active_routes = bool(data.get("show_active_routes", true))
+	tutorials = bool(data.get("tutorials", false))
+	tutorials_on = bool(data.get("tutorials_on", true))
+	tutorial_done.assign(data.get("tutorial_done", []))
 	bank_reserve = int(data.get("bank_reserve", 0))
 	hubs.clear()
 	for hub_data: Dictionary in data.get("hubs", []):
@@ -1651,6 +1663,9 @@ func save_game() -> void:
 		"play_time": play_time,
 		"company_xp": company_xp,
 		"show_active_routes": show_active_routes,
+		"tutorials": tutorials,
+		"tutorials_on": tutorials_on,
+		"tutorial_done": tutorial_done,
 		"bank_reserve": bank_reserve,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
 		"totals": totals,

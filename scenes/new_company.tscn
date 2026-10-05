@@ -84,6 +84,13 @@ theme_override_constants/h_separation = 8
 theme_override_constants/v_separation = 8
 columns = 6
 
+[node name="TutorialToggle" type="CheckButton" parent="Center/Card/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Tips that explain the basics as you play, one at a time. You can switch them off later from the map; if you leave this off, the game won't offer them."
+button_pressed = true
+text = "Tutorial (recommended for new players)"
+
 [node name="Spacer" type="Control" parent="Center/Card/Content"]
 custom_minimum_size = Vector2(0, 8)
 layout_mode = 2

@@ -1,7 +1,8 @@
 extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
 ## to (recommended great and harder starts first, from data/starts.json, then
-## the Great Lakes, then every port), and choose the company's color.
+## the Great Lakes, then every port), choose the company's color, and whether
+## to have the tutorial.
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -114,5 +115,5 @@ func _validate() -> bool:
 func _start() -> void:
 	if not _validate():
 		return
-	GameState.new_game(%NameEdit.text, _selected_port(), _color)
+	GameState.new_game(%NameEdit.text, _selected_port(), _color, %TutorialToggle.button_pressed)
 	get_tree().change_scene_to_file(GAME_SCENE)

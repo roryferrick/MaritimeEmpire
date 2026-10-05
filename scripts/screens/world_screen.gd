@@ -1,7 +1,8 @@
 extends Control
-## The main map: ports, ships and canal locks, with their popups, and the Routes switch
-## and price picker in one panel in the top right (the fleet's route lanes shown
-## faintly; ports colored by a commodity's price).
+## The main map: ports, ships and canal locks, with their popups, and the Routes switch,
+## Tutorial switch (in saves with the tutorial) and price picker in one panel in
+## the top right (the fleet's route lanes shown faintly; the tutorial's tips;
+## ports colored by a commodity's price).
 
 ## Commodity colors (their ship line's) are brightened to at least this
 ## luminance so they read on the dark panel.
@@ -24,7 +25,20 @@ func _ready() -> void:
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
+	if GameState.tutorials:
+		_add_tutorial_toggle()
 	_add_price_picker()
+
+
+## The Tutorial switch under Routes, only in saves started with the tutorial:
+## shows or hides the tutorial's tips (see TutorialCard).
+func _add_tutorial_toggle() -> void:
+	var toggle := CheckButton.new()
+	toggle.text = "Tutorial"
+	toggle.tooltip_text = "Show tips that explain the basics as you play."
+	toggle.set_pressed_no_signal(GameState.tutorials_on)
+	toggle.toggled.connect(func(on: bool) -> void: GameState.tutorials_on = on)
+	%MapControls.add_child(toggle)
 
 
 func _on_routes_toggled(on: bool) -> void:
