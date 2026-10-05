@@ -131,7 +131,8 @@ func _rebuild_list() -> void:
 		leg.text = "      %s %s · %s%s" % [prefix, GameData.port_name(next), _leg_text(distance, sailing_s, lock_s), _canal_text(_waypoints[i], next)]
 		%WaypointList.add_child(leg)
 		var trade := Label.new()
-		trade.theme_type_variation = &"GainLabel"
+		var sails_empty: bool = GameState.market.best_cargo(_ship.model(), _waypoints[i], next)[0] == ""
+		trade.theme_type_variation = &"ErrorLabel" if sails_empty else &"GainLabel"
 		trade.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		trade.text = "      %s" % _trade_text(_waypoints[i], next)
 		%WaypointList.add_child(trade)
@@ -169,6 +170,26 @@ func _sailing_seconds(from_port: String, to_port: String) -> float:
 	return seconds
 
 
+## About what a leg's fuel and wear cost to put back, at top speed through its
+## zones (rough seas wear faster), at the arrival port's prices (where it
+## refuels and repairs), less any hub discount there; INF if it can't sail.
+func _running_cost(from_port: String, to_port: String) -> float:
+	var speed := _ship.top_speed()
+	if speed <= 0.0:
+		return INF
+	var seconds := 0.0
+	var wear := 0.0
+	var mile := 0.0
+	for zone: Array in _ship.leg_zones(from_port, to_port):
+		var t := (float(zone[0]) - mile) / (speed * float(zone[1]))
+		seconds += t
+		wear += _ship.wear_per_s() * float(zone[2]) * t
+		mile = zone[0]
+	var fuel_cost := _ship.fuel_per_s() * seconds * GameState.market.fuel_price(to_port)
+	var repair_cost := minf(wear, 1.0) * _ship.full_repair_cost() * GameState.port_sizes.cost_factor(to_port)
+	return (fuel_cost + repair_cost) * (1.0 - GameState.hub_bonus(to_port, "costs"))
+
+
 ## Each canal on a leg, e.g. " · Panama Canal: toll 20% of cargo value, +50%
 ## XP", plus the longest convoy wait and any cargo unloaded to pass; "" for none.
 func _canal_text(from_port: String, to_port: String) -> String:
@@ -193,11 +214,15 @@ func _canal_text(from_port: String, to_port: String) -> String:
 
 
 ## What the ship would load for a leg and about how much it would make, at
-## today's prices: "loads Toys: about +$2,300", or that it would sail empty.
+## today's prices: "loads Toys: about +$2,300", or that it would sail empty and
+## what that costs.
 func _trade_text(from_port: String, to_port: String) -> String:
 	var model := _ship.model()
 	var best := GameState.market.best_cargo(model, from_port, to_port)
 	if best[0] == "":
-		return "nothing to trade: sails empty"
+		var cost := _running_cost(from_port, to_port)
+		if cost == INF:
+			return "nothing to trade: sails empty"
+		return "nothing to trade: sails empty, about -%s in fuel and repairs" % Fmt.money(roundi(cost))
 	var quantity := floori(_ship.capacity() * (1.0 - GameData.leg_lightening(from_port, to_port, model)))
 	return "loads %s: about +%s" % [GameData.commodity(best[0]).get("name", best[0]), Fmt.money(roundi(best[1] * quantity))]
