@@ -97,6 +97,14 @@
 			"TBU": {"toys": 1.035, "clothing": 1.035, "furniture": 1.035, "gold": 1.035},
 			"PPG": {"toys": 0.97, "clothing": 0.97, "furniture": 0.97, "gold": 1.035},
 			"APW": {"toys": 1.03, "clothing": 1.03, "furniture": 1.03, "gold": 1.035}}},
+		{"name": "Great Lakes", "note": "Chicago is the rail hub where Pacific imports arrive, and Milwaukee makes furniture and roasts coffee. Lake Erie's warehouses (Cleveland, Detroit, Toledo) are stocked with toys and furniture, which Lake Ontario (Toronto, Hamilton) lacks; Lake Ontario imports clothing and coffee up the St. Lawrence. Lake Ontario's prices are the furthest out: every way in pays a 10% toll (Welland or St. Lawrence), so only the Erie trade gains. So a Scooter can pay its way on Chicago-Milwaukee and Cleveland-Toronto.", "prices": {
+			"CHI": {"toys": 0.975, "clothing": 0.975, "furniture": 1.03, "coffee": 1.03},
+			"MKE": {"toys": 1.02, "clothing": 1.02, "furniture": 0.97, "coffee": 0.97},
+			"CLE": {"toys": 0.98, "furniture": 0.98, "clothing": 1.04, "coffee": 1.04},
+			"DET": {"toys": 0.98, "furniture": 0.98, "clothing": 1.04, "coffee": 1.04},
+			"TOL": {"toys": 0.98, "furniture": 0.98, "clothing": 1.04, "coffee": 1.04},
+			"TOR": {"toys": 1.17, "furniture": 1.17, "clothing": 0.89, "coffee": 0.89},
+			"YHM": {"toys": 1.17, "furniture": 1.17, "clothing": 0.89, "coffee": 0.89}}},
 		{"name": "Azores and Madeira", "note": "Coal lands at Ponta Delgada and goes out to Madeira and the western islands.", "prices": {
 			"PDL": {"coal": 0.968},
 			"FLW": {"coal": 1.035},

@@ -55,7 +55,7 @@
 		{"port": "CPH", "note": "The Baltic: furniture between Gdansk and Tallinn."}
 	],
 	"great_lakes": {
-		"note": "Great Lakes: a tough start. Scooters find little container trade on the lakes; Lakers (from level 2) haul iron ore, coal and gold, and Grain Lakers (level 8) grain. Only Seaway-sized ships can reach the lakes, so bigger ships need a hub on the coast.",
+		"note": "Great Lakes: Scooters pay their way on Chicago-Milwaukee and Cleveland-Toronto (through the Welland Canal), and from Calcite up to Duluth and Two Harbors; elsewhere they find little container trade. Lakers (from level 2) haul iron ore, coal and gold, and Grain Lakers (level 8) grain. Only Seaway-sized ships can reach the lakes, so bigger ships need a hub on the coast.",
 		"ports": ["CHI", "DLH", "DET", "TOR", "CLE", "YHM", "MKE", "TOL", "YQT", "IHB", "BUH", "GRY", "TWH", "MQT", "CAL"]
 	},
 	"excluded": [
