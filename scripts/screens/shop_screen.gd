@@ -199,7 +199,8 @@ func _make_card(model: Dictionary) -> Control:
 		rows.remove_at(3)
 	elif not str(model.get("icebreaker", "")).is_empty():
 		var areas: Array = GameState.icebreaking.areas().filter(func(item: Dictionary) -> bool:
-			return model.get("seaway", false) or item.id != "great_lakes").map(func(item: Dictionary) -> String: return item.name)
+			return (model.get("seaway", false) or item.id != "great_lakes") and (item.get("needs", "") != "nuclear" or model.icebreaker == "nuclear")).map(
+				func(item: Dictionary) -> String: return item.name)
 		rows[1] = ["Job", "Leads your ships through seasonal ice in convoys"]
 		rows[2] = ["Needed", "Only in winter ice: %s" % ", ".join(areas)]
 		rows.remove_at(3)

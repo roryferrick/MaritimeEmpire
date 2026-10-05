@@ -16,6 +16,7 @@ const MONTHS: Array[String] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", 
 const LEG_CHECK_S := 72.0
 
 var _state: Node  # GameState
+var _enters := {}  # "closure/FROM-TO" -> lane_enters()
 
 
 func _init(state: Node) -> void:
@@ -98,16 +99,48 @@ func leg_blocker(from_port: String, to_port: String, seconds: float) -> Dictiona
 			t += LEG_CHECK_S
 		if not closure.is_empty():
 			return closure
+	# A stretch of sea shut by ice (the Arctic routes) anywhere on the way,
+	# unless an icebreaker keeps it open.
+	for item: Dictionary in closures():
+		if not item.has("circles") or not lane_enters(item, from_port, to_port) or not _state.icebreaking.lifting(item).is_empty():
+			continue
+		var t := 0.0
+		while true:
+			if in_season(item, now + int(minf(t, seconds) * per_second)):
+				return item
+			if t >= seconds:
+				break
+			t += LEG_CHECK_S
 	return {}
 
 
+## True if a lane passes through a closure's stretch of sea (its circles).
+func lane_enters(closure: Dictionary, from_port: String, to_port: String) -> bool:
+	var key := "%s/%s-%s" % [closure.id, from_port, to_port]
+	if not _enters.has(key):
+		var found := false
+		var lane = GameData.lane(from_port, to_port)
+		if lane != null:
+			var mile := 0.0
+			while mile <= lane.length() and not found:
+				var at := Geo.unproject(lane.sample(mile)[0])
+				for circle: Array in closure.circles:
+					if Geo.distance_nm(Vector2(circle[0], circle[1]), at) <= float(circle[2]):
+						found = true
+						break
+				mile += 5.0
+		_enters[key] = found
+	return _enters[key]
+
+
 ## Every closure (whether in season or not) that a leg is subject to: its
-## destination's, and its canals'. For the route screen.
+## destination's, its canals', and any stretch of sea it passes through. For
+## the route screen.
 func leg_closures(from_port: String, to_port: String) -> Array:
 	var out := []
 	var canal_ids := GameData.canal_crossings(from_port, to_port).map(func(crossing: Dictionary) -> String: return crossing.canal.id)
 	for closure: Dictionary in closures():
-		if closure.get("ports", []).has(to_port) or canal_ids.has(closure.get("canal", "")):
+		if closure.get("ports", []).has(to_port) or canal_ids.has(closure.get("canal", "")) or (closure.has("circles") and lane_enters(closure, from_port, to_port)):
 			out.append(closure)
 	return out
 

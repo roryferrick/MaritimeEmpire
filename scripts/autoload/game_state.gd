@@ -1023,8 +1023,9 @@ func _player_ports() -> Dictionary:
 	return ports
 
 
-## The canals the player's ships use, as a set: on the leg each is sailing and
-## every leg of its route.
+## The canals the player's ships use, and the stretches of sea with a seasonal
+## closure they sail through (by closure id), as a set: on the leg each is
+## sailing and every leg of its route.
 func _player_canals() -> Dictionary:
 	var canals := {}
 	for ship in ships:
@@ -1037,6 +1038,9 @@ func _player_canals() -> Dictionary:
 			if leg[0] != leg[1]:
 				for crossing: Dictionary in GameData.canal_crossings(leg[0], leg[1]):
 					canals[crossing.canal.id] = true
+				for closure: Dictionary in seasonal.closures():
+					if closure.has("circles") and seasonal.lane_enters(closure, leg[0], leg[1]):
+						canals[closure.id] = true
 	return canals
 
 
@@ -1054,7 +1058,7 @@ func _season_warnings() -> void:
 	var canals := _player_canals()
 	var items: Array = seasonal.closures() + seasonal.ice_zones()
 	for item: Dictionary in items:
-		var relevant: bool = canals.has(item.get("canal", "")) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))
+		var relevant: bool = canals.has(item.get("canal", "")) or (item.has("circles") and canals.has(item.id)) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))
 		if item.has("center"):
 			var center := Vector2(item.center[0], item.center[1])
 			relevant = ports.keys().any(func(p: String) -> bool:
@@ -1085,7 +1089,7 @@ func _season_warnings() -> void:
 			continue
 		if _season_warned.has(item.id) or Seasons.in_season(item, now):
 			continue
-		if not (canals.has(item.get("canal", "")) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))):
+		if not (canals.has(item.get("canal", "")) or (item.has("circles") and canals.has(item.id)) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))):
 			continue
 		_season_warned[item.id] = true
 		ActivityLog.add("%s %s for %s on %s: ships won't start legs they can't finish before then." % [Seasons.subject(item),
@@ -1114,7 +1118,8 @@ func _lose(ship: Ship, reason: String) -> void:
 
 
 ## From the breakdowns min_company_level on, every interval_s each ship at sea
-## (not recovery boats, and not in a canal) rolls its own
+## (not service ships, not in a canal, and not waiting out weather or ice or
+## in an icebreaker's convoy) rolls its own
 ## Ship.breakdown_chance(); on a hit it loses hit of its maintenance, and is
 ## lost at sea if that leaves it at 0%.
 func _roll_breakdowns(delta: float) -> void:
@@ -1126,7 +1131,7 @@ func _roll_breakdowns(delta: float) -> void:
 		if company_level() < int(settings.get("min_company_level", 6)):
 			continue
 		for ship in ships:
-			if ship.is_service() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
+			if ship.is_service() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or not ship.weather_wait.is_empty() or ship.escort != null or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
 				continue
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
 			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
@@ -1456,9 +1461,11 @@ func _leave_port(ship: Ship) -> void:
 func station_icebreaker(ship: Ship, area_id: String) -> String:
 	var base := ship.reference_port()
 	if not area_id.is_empty():
-		base = icebreaking.station_port(icebreaking.area(area_id), ship.model(), ship.reference_port())
-		if base.is_empty():
-			return "A %s is too big for the St. Lawrence Seaway, so it can't work the Great Lakes." % ship.model().get("name", "")
+		var item := icebreaking.area(area_id)
+		var error := icebreaking.station_error(item, ship.model())
+		if not error.is_empty():
+			return error
+		base = icebreaking.station_port(item, ship.model(), ship.reference_port())
 	_release_convoy(ship)
 	ship.station = area_id
 	ship.base_port = base

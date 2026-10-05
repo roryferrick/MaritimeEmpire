@@ -41,3 +41,14 @@ extends Resource
 @export var feature_label_positions := PackedVector2Array()
 @export var feature_label_kinds := PackedByteArray()
 @export var feature_label_min_zoom := PackedFloat32Array()
+
+## Little drawings on the land (tools/build_map_data.gd _add_decor()): each
+## one's spot (projected), kind (an index into decor_kind_names, the art in
+## art/decor) and tier. Tier t is spaced about decor_tier_spacing[t] projected
+## degrees from the others, so the map shows a tier once that's far enough
+## apart on screen, and more tiers as it zooms in.
+@export var decor_kind_names := PackedStringArray()
+@export var decor_tier_spacing := PackedFloat32Array()
+@export var decor_positions := PackedVector2Array()
+@export var decor_kinds := PackedByteArray()
+@export var decor_tiers := PackedByteArray()

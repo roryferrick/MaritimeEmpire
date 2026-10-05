@@ -104,8 +104,29 @@ func fairway(zone_id: String) -> Array:
 	return []
 
 
-static func inside(item: Dictionary, lon_lat: Vector2) -> bool:
-	for circle: Array in item.circles:
+## The circles ([lon, lat, radius nm]) an area covers: its own, or else its
+## closure's (the Arctic routes share theirs).
+func circles(item: Dictionary) -> Array:
+	if item.has("circles"):
+		return item.circles
+	for closure: Dictionary in _state.seasonal.closures():
+		if closure.id == item.get("closure", ""):
+			return closure.get("circles", [])
+	return []
+
+
+## Why a model can't be stationed at an area, or "": the Arctic routes need a
+## nuclear icebreaker, and the Great Lakes one that fits the Seaway.
+func station_error(item: Dictionary, model: Dictionary) -> String:
+	if item.get("needs", "") == "nuclear" and model.get("icebreaker", "") != "nuclear":
+		return "Only a nuclear icebreaker can keep the %s open through the Arctic winter." % item.name
+	if station_port(item, model, str(item.get("station_ports", [""])[0])).is_empty():
+		return "A %s is too big for the St. Lawrence Seaway, so it can't work the Great Lakes." % model.get("name", "")
+	return ""
+
+
+func inside(item: Dictionary, lon_lat: Vector2) -> bool:
+	for circle: Array in circles(item):
 		if Geo.distance_nm(Vector2(circle[0], circle[1]), lon_lat) <= float(circle[2]):
 			return true
 	return false

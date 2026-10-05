@@ -1,5 +1,5 @@
 {
-	"_comment": "Real-world ports, ordered roughly by container volume (rank sets label priority on the map: lower shows first). lat/lon in degrees (north/east positive), placed at the harbor. size is where the port starts on the 1-100 size scale (game_config port_sizes: Small 1-25, Medium 26-50, Large 51-75, Giant 76-100): within each market region, the top ~15% by rank start Giant, the next ~25% Large, the next ~30% Medium and the rest Small (at least one of each per region), spread by rank within the band. seaway: true marks Great Lakes ports, lake says which Great Lake a port is on (superior, michigan, huron, erie, ontario), reached through the St. Lawrence Seaway, which only ships small enough for it can reach (ship_models.json seaway). Sea lanes between every pair are generated into data/sea_lanes.res by tools/build_map_data.gd - rerun it after changing this file.",
+	"_comment": "Real-world ports, ordered roughly by container volume (rank sets label priority on the map: lower shows first). lat/lon in degrees (north/east positive), placed at the harbor. size is where the port starts on the 1-100 size scale (game_config port_sizes: Small 1-25, Medium 26-50, Large 51-75, Giant 76-100): within each market region, the top ~15% by rank start Giant, the next ~25% Large, the next ~30% Medium and the rest Small (at least one of each per region), spread by rank within the band. arctic: true marks an Arctic port: only lanes to or from one may sail north of 66 N (tools/build_map_data.gd ARCTIC_LAT), so other lanes are as before the Arctic was added. seaway: true marks Great Lakes ports, lake says which Great Lake a port is on (superior, michigan, huron, erie, ontario), reached through the St. Lawrence Seaway, which only ships small enough for it can reach (ship_models.json seaway). Sea lanes between every pair are generated into data/sea_lanes.res by tools/build_map_data.gd - rerun it after changing this file.",
 	"ports": [
 		{ "id": "SHA", "name": "Shanghai", "country": "China", "lat": 30.62, "lon": 122.07, "rank": 1, "size": 100 },
 		{ "id": "SIN", "name": "Singapore", "country": "Singapore", "lat": 1.26, "lon": 103.82, "rank": 2, "size": 100 },
@@ -301,6 +301,22 @@
 		{ "id": "BNW", "name": "Banana", "country": "DR Congo", "lat": -6.01, "lon": 12.40, "rank": 298, "size": 10 },
 		{ "id": "OXB", "name": "Bissau", "country": "Guinea-Bissau", "lat": 11.85, "lon": -15.59, "rank": 299, "size": 10 },
 		{ "id": "DIL", "name": "Dili", "country": "Timor-Leste", "lat": -8.55, "lon": 125.57, "rank": 300, "size": 8 },
-		{ "id": "BUF", "name": "Buffalo", "country": "United States", "lat": 42.87, "lon": -78.89, "rank": 301, "size": 22, "seaway": true, "lake": "erie" }
+		{ "id": "BUF", "name": "Buffalo", "country": "United States", "lat": 42.87, "lon": -78.89, "rank": 301, "size": 22, "seaway": true, "lake": "erie" },
+		{ "id": "MMK", "name": "Murmansk", "country": "Russia", "lat": 68.97, "lon": 33.06, "rank": 302, "size": 50, "arctic": true },
+		{ "id": "ARH", "name": "Arkhangelsk", "country": "Russia", "lat": 64.54, "lon": 40.52, "rank": 303, "size": 35, "arctic": true },
+		{ "id": "TOS", "name": "Tromso", "country": "Norway", "lat": 69.65, "lon": 18.96, "rank": 304, "size": 30, "arctic": true },
+		{ "id": "HFT", "name": "Hammerfest", "country": "Norway", "lat": 70.66, "lon": 23.68, "rank": 305, "size": 25, "arctic": true },
+		{ "id": "KKN", "name": "Kirkenes", "country": "Norway", "lat": 69.73, "lon": 30.05, "rank": 306, "size": 20, "arctic": true },
+		{ "id": "SBT", "name": "Sabetta", "country": "Russia", "lat": 71.27, "lon": 72.07, "rank": 307, "size": 45, "arctic": true },
+		{ "id": "DUD", "name": "Dudinka", "country": "Russia", "lat": 69.40, "lon": 86.18, "rank": 308, "size": 30, "arctic": true },
+		{ "id": "TIK", "name": "Tiksi", "country": "Russia", "lat": 71.64, "lon": 128.87, "rank": 309, "size": 8, "arctic": true },
+		{ "id": "PWE", "name": "Pevek", "country": "Russia", "lat": 69.70, "lon": 170.30, "rank": 310, "size": 10, "arctic": true },
+		{ "id": "YYQ", "name": "Churchill", "country": "Canada", "lat": 58.77, "lon": -94.19, "rank": 311, "size": 15, "arctic": true },
+		{ "id": "YFB", "name": "Iqaluit", "country": "Canada", "lat": 63.75, "lon": -68.52, "rank": 312, "size": 10, "arctic": true },
+		{ "id": "YRB", "name": "Resolute", "country": "Canada", "lat": 74.70, "lon": -94.83, "rank": 313, "size": 3, "arctic": true },
+		{ "id": "SCC", "name": "Prudhoe Bay", "country": "United States", "lat": 70.30, "lon": -148.40, "rank": 314, "size": 15, "arctic": true },
+		{ "id": "LYR", "name": "Longyearbyen", "country": "Svalbard", "lat": 78.23, "lon": 15.60, "rank": 315, "size": 8, "arctic": true },
+		{ "id": "JHS", "name": "Sisimiut", "country": "Greenland", "lat": 66.94, "lon": -53.67, "rank": 316, "size": 8, "arctic": true },
+		{ "id": "JAV", "name": "Ilulissat", "country": "Greenland", "lat": 69.22, "lon": -51.10, "rank": 317, "size": 6, "arctic": true }
 	]
 }

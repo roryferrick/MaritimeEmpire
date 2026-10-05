@@ -61,6 +61,18 @@ const ICE_COLOR := Color(0.86, 0.95, 1.0)
 const ICE_HAZE := [[1.0, 0.1], [0.8, 0.1], [0.6, 0.12], [0.4, 0.14]]
 const ICE_CANAL_WIDTH := 5.0
 const ICE_RING_GAP := 5.0
+## Land drawings (see _draw_decor()): where their art is, the bucket size
+## (degrees) they're sorted into, how far apart on screen a tier must be to
+## show, their sizes on screen ([plants and rocks, mountains, animals] px at the
+## reference zoom), and how much they grow or shrink with the zoom.
+const DECOR_ART_DIR := "res://art/decor/"
+const DECOR_BUCKET := 10.0
+const DECOR_MIN_SPACING_PX := 32.0
+const DECOR_SIZE_PX := Vector3(20.0, 34.0, 28.0)
+const DECOR_ZOOM_REFERENCE := 30.0
+const DECOR_SCALE_RANGE := Vector2(0.9, 1.5)
+const DECOR_ANIMALS: Array[String] = ["penguin", "polar_bear", "camel", "elephant", "giraffe", "lion", "zebra", "kangaroo", "koala",
+	"panda", "tiger", "bison", "moose", "brown_bear", "reindeer", "llama", "toucan", "gorilla", "orangutan", "kiwi", "lemur"]
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
 ## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
@@ -102,7 +114,8 @@ const SHIP_MAX_SCALE := 3.0
 ## Where a ship being carried sits on its recovery boat: the middle of the
 ## open work deck aft (x from the stern, in art units), clear of the wheelhouse.
 const CARRY_DECK_X := 58.0
-## The land's real colors, made by tools/build_map_data.gd from Natural Earth II.
+## The land's colors: simplified biomes in flat colors, made by
+## tools/build_map_data.gd from Natural Earth II.
 const LAND_COLORS := "res://data/land_colors.webp"
 ## How far each sea depth band is from the ocean color (shallow, the
 ## continental shelf) to ocean_deep: the shelf, then 200 m, 1,000 m, 2,000 m ...
@@ -141,9 +154,12 @@ const FEATURE_STYLES := {
 	FeatureKind.RIVER: [11, &"lake_label", true, 0, 1.5],
 }
 ## Which kinds get placed first when labels would overlap (after ports and
-## countries).
-const FEATURE_PRIORITY: Array[int] = [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.RANGE, FeatureKind.DESERT,
-	FeatureKind.STRAIT, FeatureKind.LAKE, FeatureKind.RIVER]
+## countries); rivers before mountain ranges, so a river shows across a range.
+const FEATURE_PRIORITY: Array[int] = [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.RIVER, FeatureKind.RANGE,
+	FeatureKind.DESERT, FeatureKind.STRAIT, FeatureKind.LAKE]
+## Words that already mean "river" in a river's name ("Rio Grande", "Syr Darya",
+## "Shishhid Gol"), so it isn't given another; the rest get " River" added.
+const RIVER_WORDS: Array[String] = ["river", "rio", "río", "canal", "delta", "darya", "bahr", "gol"]
 ## How far slanted labels lean (negative leans them right, as glyphs go up in -y).
 const FEATURE_SLANT := -0.2
 ## Where an area's label may go if its best spot is taken, in label sizes
@@ -299,7 +315,12 @@ var _river_tiers: Array[RiverTier] = []
 ## for locks and convoys), the rest that only changes with the view, routes,
 ## hubs or prices (ports, labels, route lanes; see STATIC_REFRESH_S), and ships
 ## (every frame). _canvas is the layer being drawn, which the draw helpers use.
+var _decor_layer := Control.new()
 var _weather_layer := Control.new()
+## Land drawings: a texture per kind (WorldMapData.decor_kind_names), and the
+## drawings by DECOR_BUCKET-degree cell, so only those near the view are looked at.
+var _decor_textures: Array[Texture2D] = []
+var _decor_buckets := {}
 var _canal_layer := Control.new()
 var _static_layer := Control.new()
 var _overlay := Control.new()
@@ -332,7 +353,7 @@ class WorldArt:
 			for band in depth_meshes.size():
 				draw_mesh(depth_meshes[band], white, Transform2D.IDENTITY, view._depth_color(band + 1))
 				draw_mesh(depth_hole_meshes[band], white, Transform2D.IDENTITY, view._depth_color(band))
-		# Land in its real colors (see MapView.LAND_COLORS), or flat gray.
+		# Land in its biome colors (see MapView.LAND_COLORS), or flat gray.
 		var land_texture := white if view.gray_mode else land_colors
 		var land_tint := view._color(&"land") if view.gray_mode else Color.WHITE
 		draw_mesh(land_mesh, land_texture, Transform2D.IDENTITY, land_tint)
@@ -400,10 +421,13 @@ func _ready() -> void:
 			art.add_child(tier)
 			_river_tiers.append(tier)
 
-	for layer: Control in [_weather_layer, _canal_layer, _static_layer, _overlay]:
+	for layer: Control in [_decor_layer, _weather_layer, _canal_layer, _static_layer, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
+	_decor_layer.draw.connect(_draw_decor)
+	_decor_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_load_decor()
 	_weather_layer.draw.connect(_draw_weather_layer)
 	_canal_layer.draw.connect(_draw_canal_layer)
 	_static_layer.draw.connect(_draw_static_layer)
@@ -673,6 +697,7 @@ func _draw() -> void:
 
 
 func _redraw_layers() -> void:
+	_decor_layer.queue_redraw()
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_static_layer.queue_redraw()
@@ -785,7 +810,7 @@ func _place_feature_labels(placed: Array[Rect2]) -> Array:
 		var style: Array = FEATURE_STYLES[kind]
 		if data.feature_label_min_zoom[i] + style[4] > web_zoom:
 			continue
-		var text_size := _feature_font(kind).get_string_size(data.feature_label_names[i], HORIZONTAL_ALIGNMENT_LEFT, -1, style[0])
+		var text_size := _feature_font(kind).get_string_size(_feature_text(i), HORIZONTAL_ALIGNMENT_LEFT, -1, style[0])
 		var center := world_to_screen(data.feature_label_positions[i])
 		# Areas may shift a little if their best spot is taken (by
 		# FEATURE_LABEL_NUDGES label sizes); a river label stays on its river.
@@ -807,7 +832,7 @@ func _draw_feature_labels() -> void:
 		var font := _feature_font(kind)
 		var rect: Rect2 = label[1]
 		var baseline := rect.position + Vector2(0, font.get_ascent(style[0]))
-		var text: String = data.feature_label_names[label[0]]
+		var text := _feature_text(label[0])
 		# Pale sea names get a dark edge, so they read over shallow (light) water too.
 		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
 			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, style[0], SEA_LABEL_OUTLINE,
@@ -1458,6 +1483,15 @@ func _draw_ice() -> void:
 	for closure: Dictionary in seasonal.closures():
 		if not Seasons.in_season(closure, now):
 			continue
+		# A stretch of sea shut by ice (the Arctic routes): frosted over, circle
+		# by circle.
+		for circle: Array in closure.get("circles", []):
+			var lat: float = circle[1]
+			var center := world_to_screen(Geo.project(Vector2(circle[0], lat)))
+			var radius: float = float(circle[2]) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
+			if Rect2(Vector2.ZERO, size).grow(radius).has_point(center):
+				for ring: Array in ICE_HAZE:
+					_canvas.draw_circle(center, radius * float(ring[0]), Color(ICE_COLOR, float(ring[1])))
 		for port_id: String in closure.get("ports", []):
 			var at := port_screen_position(port_id)
 			if Rect2(Vector2.ZERO, size).grow(20.0).has_point(at):
@@ -1477,3 +1511,78 @@ func _draw_ice_canals() -> void:
 			var path := _canal_screen_path(GameData.get_canal(closure.canal))
 			if path.size() >= 2:
 				_canvas.draw_polyline(path, Color(ICE_COLOR, 0.8), ICE_CANAL_WIDTH, true)
+
+
+## A feature label's text: its name, with " River" added to a river's unless
+## the name already says river (see RIVER_WORDS): "Mississippi River".
+func _feature_text(index: int) -> String:
+	var data := GameData.world_map
+	var text: String = data.feature_label_names[index]
+	if data.feature_label_kinds[index] != FeatureKind.RIVER:
+		return text
+	for word in text.to_lower().split(" ", false):
+		if RIVER_WORDS.has(word):
+			return text
+	return text + " River"
+
+
+# --- Land drawings ---------------------------------------------------------
+
+## Loads each kind of land drawing's art and sorts the drawings into
+## DECOR_BUCKET-degree cells.
+func _load_decor() -> void:
+	var data := GameData.world_map
+	for kind_name in data.decor_kind_names:
+		var path := DECOR_ART_DIR + kind_name + ".svg"
+		_decor_textures.append(load(path) if ResourceLoader.exists(path) else null)
+	for i in data.decor_positions.size():
+		var p := data.decor_positions[i]
+		var cell := Vector2i(floori((p.x + 180.0) / DECOR_BUCKET), floori(p.y / DECOR_BUCKET))
+		if not _decor_buckets.has(cell):
+			_decor_buckets[cell] = PackedInt32Array()
+		_decor_buckets[cell].append(i)
+
+
+## The little drawings on the land (WorldMapData decor: mountains, trees,
+## cacti, animals...), on the full-color map only. Every tier whose spacing is
+## at least DECOR_MIN_SPACING_PX apart on screen shows, so more appear as the
+## map zooms in; each is drawn standing on its spot, a fixed size on screen
+## (a little bigger zoomed in), the lower ones in front.
+func _draw_decor() -> void:
+	_canvas = _decor_layer
+	if gray_mode:
+		return
+	var data := GameData.world_map
+	var max_tier := -1
+	for tier in data.decor_tier_spacing.size():
+		if data.decor_tier_spacing[tier] * _zoom >= DECOR_MIN_SPACING_PX:
+			max_tier = tier
+	if max_tier < 0:
+		return
+	var scale := clampf(sqrt(_zoom / DECOR_ZOOM_REFERENCE), DECOR_SCALE_RANGE.x, DECOR_SCALE_RANGE.y)
+	var margin := Vector2.ONE * DECOR_SIZE_PX.y * scale / _zoom
+	var a := screen_to_world(Vector2.ZERO)
+	var b := screen_to_world(size)
+	var low := Vector2(minf(a.x, b.x), minf(a.y, b.y)) - margin
+	var high := Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) + margin
+	var columns := ceili(Geo.WORLD_WIDTH / DECOR_BUCKET)
+	var shown := []  # [screen position, kind]
+	var screen := Rect2(Vector2.ZERO, size).grow(DECOR_SIZE_PX.y * scale)
+	var first_column := floori((low.x + 180.0) / DECOR_BUCKET)
+	var last_column := mini(floori((high.x + 180.0) / DECOR_BUCKET), first_column + columns - 1)
+	for column in range(first_column, last_column + 1):
+		for row in range(floori(low.y / DECOR_BUCKET), floori(high.y / DECOR_BUCKET) + 1):
+			for i: int in _decor_buckets.get(Vector2i(posmod(column, columns), row), PackedInt32Array()):
+				if data.decor_tiers[i] > max_tier:
+					continue
+				var at := world_to_screen(data.decor_positions[i])
+				if screen.has_point(at):
+					shown.append([at, data.decor_kinds[i]])
+	shown.sort_custom(func(p: Array, q: Array) -> bool: return p[0].y < q[0].y)
+	for item: Array in shown:
+		var texture := _decor_textures[item[1]]
+		if texture == null:
+			continue
+		var kind_name := data.decor_kind_names[item[1]]
+		var side: float = (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if DECOR_ANIMALS.has(kind_name) else DECOR_SIZE_PX.x)) * scale
+		_canvas.draw_texture_rect(texture, Rect2(item[0] - Vector2(side / 2.0, side * 0.92), Vector2(side, side)), false)

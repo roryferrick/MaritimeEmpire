@@ -59,6 +59,40 @@ const LAND_TEXTURE_SIZE := 4096
 ## How many pixels in from the coast the land texture's sea is filled with the
 ## nearest land's color (about 1 degree).
 const LAND_FILL_RINGS := 12
+## Biomes (see _build_biomes()): forest north of BOREAL_LAT is boreal, land
+## north of TUNDRA_LAT that isn't forest is tundra.
+const BOREAL_LAT := 52.0
+const TUNDRA_LAT := 62.0
+## Each majority pass's radius (cells), widest first, so specks go and edges settle.
+const BIOME_SMOOTHING_RADII: Array[int] = [2, 2, 1, 1]
+## Land drawings (see _add_decor()): each tier's spacing in projected degrees,
+## coarsest first (the map shows a tier once its spacing is far enough apart
+## on screen).
+const DECOR_TIER_SPACING: Array[float] = [12.0, 6.0, 3.0, 1.5, 0.75]
+## Animals where they live: [art name, lon, lat, tier].
+const ANIMALS := [
+	["penguin", 40.0, -69.5, 1], ["penguin", -60.5, -64.0, 2], ["penguin", 168.0, -77.0, 2], ["penguin", -69.0, -52.3, 3], ["penguin", 18.6, -34.1, 3],
+	["polar_bear", -95.0, 68.0, 1], ["polar_bear", -150.0, 69.8, 2], ["polar_bear", 17.0, 78.6, 2], ["polar_bear", -40.0, 73.0, 2], ["polar_bear", 140.0, 71.0, 3],
+	["camel", 12.0, 25.0, 1], ["camel", 46.0, 22.0, 2], ["camel", 105.0, 43.0, 2], ["camel", 28.0, 21.0, 3],
+	["elephant", 37.5, -2.8, 1], ["elephant", 24.0, -19.0, 2], ["elephant", 77.0, 12.0, 2],
+	["giraffe", 35.5, -4.0, 2], ["giraffe", 20.0, -21.0, 3],
+	["lion", 34.8, -2.3, 2], ["lion", 25.0, -23.5, 3],
+	["zebra", 36.5, -6.5, 3], ["zebra", 27.0, -17.5, 3],
+	["kangaroo", 134.0, -25.0, 1], ["kangaroo", 145.5, -28.0, 2], ["kangaroo", 121.0, -28.0, 2],
+	["koala", 150.5, -29.5, 2],
+	["panda", 103.5, 30.5, 1],
+	["tiger", 80.0, 22.0, 2], ["tiger", 135.5, 46.0, 2], ["tiger", 89.0, 22.3, 3],
+	["bison", -101.0, 44.0, 1], ["bison", -110.5, 44.6, 3],
+	["moose", -100.0, 56.0, 2], ["moose", -74.0, 49.5, 2], ["moose", 18.0, 64.0, 2], ["moose", 128.0, 61.0, 3],
+	["brown_bear", -152.0, 62.0, 2], ["brown_bear", 45.0, 62.0, 2], ["brown_bear", 159.0, 56.5, 2],
+	["reindeer", 25.0, 68.5, 1], ["reindeer", 100.0, 68.0, 2], ["reindeer", -118.0, 64.0, 2],
+	["llama", -68.5, -16.5, 1], ["llama", -72.0, -13.8, 3],
+	["toucan", -62.0, -4.0, 1], ["toucan", -71.0, 0.0, 2], ["toucan", -52.0, -9.0, 3],
+	["gorilla", 13.0, 0.5, 2], ["gorilla", 29.4, -1.5, 3],
+	["orangutan", 114.0, 1.0, 2], ["orangutan", 98.0, 3.5, 3],
+	["kiwi", 175.5, -39.0, 2], ["kiwi", 170.0, -44.0, 3],
+	["lemur", 46.5, -20.0, 2],
+]
 const LANES_OUT := "res://data/sea_lanes.res"
 
 ## Coastline simplification, in projected degrees (~0.7 nm at the equator).
@@ -72,7 +106,11 @@ const TILE_SIZE := 5.0
 const GRID_WEST := -180.0
 const GRID_EAST := 320.0
 const GRID_SOUTH_LAT := -79.0
-const GRID_NORTH_LAT := 66.0
+const GRID_NORTH_LAT := 80.5
+## Only lanes to or from an Arctic port (ports.json arctic: true) may go north
+## of this: between two other ports the Arctic counts as land (see
+## _block_arctic), so their lanes are as they were before the Arctic was added.
+const ARCTIC_LAT := 66.0
 ## Latitude where the pathfinder's distance weights stop growing (see _build_coarse_graph()).
 const WEIGHT_MAX_LAT := 66.0
 const GRID_CELL := 0.1
@@ -151,6 +189,7 @@ const CHANNELS := {
 	"Detroit and St. Clair rivers (Lake Erie to Lake Huron)": [[-83.12, 41.98], [-83.12, 42.10], [-83.10, 42.25], [-83.00, 42.33], [-82.90, 42.36], [-82.75, 42.45], [-82.60, 42.55], [-82.52, 42.62], [-82.47, 42.78], [-82.42, 42.95], [-82.42, 43.08]],
 	"St. Marys River (Lake Huron to Lake Superior)": [[-83.75, 45.98], [-83.95, 46.05], [-84.10, 46.18], [-84.20, 46.35], [-84.30, 46.48], [-84.38, 46.50], [-84.55, 46.50], [-84.70, 46.55]],
 	"Straits of Mackinac (Lake Michigan to Lake Huron)": [[-85.10, 45.80], [-84.73, 45.82], [-84.40, 45.90]],
+	"Yenisei River (Dudinka)": [[80.60, 73.30], [81.60, 72.60], [82.40, 71.90], [82.90, 71.20], [83.30, 70.60], [83.80, 70.10], [84.60, 69.75], [85.60, 69.50], [86.18, 69.40]],
 }
 
 var _cols := 0
@@ -158,6 +197,10 @@ var _rows := 0
 var _grid_origin := Vector2.ZERO  # Projected coords of cell (0, 0)'s corner.
 var _land := PackedByteArray()  # 1 = land
 var _near_land := PackedByteArray()  # 1 = land or next to land
+## The first grid row (a whole coarse cell) north of ARCTIC_LAT, and whether
+## those rows count as land (while routing lanes between non-Arctic ports).
+var _arctic_row := 0
+var _block_arctic := false
 ## 1 = water connected to the open ocean. Ports snap to these cells, so every
 ## pair of ports has a route (and no search is wasted on an enclosed pocket).
 var _ocean := PackedByteArray()
@@ -269,7 +312,9 @@ func _build_map(land_polygons: Array) -> void:
 	_add_countries(map)
 	_add_depths(map)
 	_add_feature_labels(map)
-	_build_land_texture()
+	var biomes := _build_biomes()
+	_build_land_texture(biomes)
+	_add_decor(map, biomes)
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 
@@ -425,21 +470,298 @@ static func _point_along(points: PackedVector2Array, distance: float) -> Vector2
 	return points[-1]
 
 
-## The land colors as a LAND_TEXTURE_SIZE square texture in the map's
-## projection (x -180 to 180, y from Geo.MAX_LAT down to -Geo.MAX_LAT), from
-## Natural Earth II. The map draws the land triangles with it, so the coast
-## stays as sharp as the land data; only the color comes from here. Its sea
-## (LAND_COLORS_SEA) is filled in from the nearest land first, so no sea color
-## shows along a coast.
-func _build_land_texture() -> void:
-	var size := LAND_TEXTURE_SIZE
-	@warning_ignore("integer_division")
-	var rows := size / 2  # Still in plain longitude/latitude: 2 degrees wide per degree high.
+## Each biome (BIOME_*) of the simplified land: its flat color.
+const BIOME_COLORS: Array[Color] = [
+	Color("#eef3f8"),  # Ice
+	Color("#c3c9b0"),  # Tundra (and cold high plateaus)
+	Color("#4f8a5c"),  # Boreal forest
+	Color("#78ad62"),  # Temperate forest
+	Color("#3d9150"),  # Tropical rainforest
+	Color("#b4cf7a"),  # Grassland and steppe
+	Color("#d8c776"),  # Savanna and dry scrub
+	Color("#ecd49a"),  # Desert
+]
+enum { BIOME_ICE, BIOME_TUNDRA, BIOME_BOREAL, BIOME_TEMPERATE, BIOME_RAINFOREST, BIOME_GRASSLAND, BIOME_SAVANNA, BIOME_DESERT }
+const BIOME_SEA := 255
+## The biome grid, in plain longitude/latitude (a quarter degree a cell).
+const BIOME_COLS := 1440
+const BIOME_ROWS := 720
+## How many times finer than the biome grid its edges are smoothed (see
+## _build_land_texture()).
+const BIOME_EDGE_UPSCALE := 3
+
+
+## The land as biomes (BIOME_*, BIOME_SEA for sea), a BIOME_COLS x BIOME_ROWS
+## grid in plain longitude/latitude from the north. Each cell is classified from
+## Natural Earth II's color (its land cover) and latitude: very bright blue-white
+## is ice; gray is tundra (and cold high plateaus like Tibet); dark and green is
+## forest (rainforest in the tropics, boreal north of BOREAL_LAT, else
+## temperate); pale but green is grassland (savanna in the tropics); and barely
+## green is desert. Then a few majority passes smooth it into simple patches,
+## with cells along the coast (whose color the sea washes out) taking their
+## neighbors' biome.
+func _build_biomes() -> PackedByteArray:
 	var source := Image.load_from_file(LAND_COLORS_PATH)
 	source.convert(Image.FORMAT_RGB8)
 	var mask := source.duplicate() as Image
+	mask.resize(BIOME_COLS, BIOME_ROWS, Image.INTERPOLATE_NEAREST)
+	source.resize(BIOME_COLS, BIOME_ROWS, Image.INTERPOLATE_CUBIC)
+	var colors := source.get_data()
+	var sea_colors := mask.get_data()
+	var sea_r := LAND_COLORS_SEA.r8
+	var cells := BIOME_COLS * BIOME_ROWS
+	var biomes := PackedByteArray()
+	biomes.resize(cells)
+	var coastal := PackedByteArray()
+	coastal.resize(cells)
+	for i in cells:
+		if sea_colors[i * 3] == sea_r and sea_colors[i * 3 + 1] == sea_r and sea_colors[i * 3 + 2] == sea_r:
+			biomes[i] = BIOME_SEA
+			continue
+		var lat := 90.0 - (floorf(float(i) / BIOME_COLS) + 0.5) * 180.0 / BIOME_ROWS
+		var lon := (float(i % BIOME_COLS) + 0.5) * 360.0 / BIOME_COLS - 180.0
+		biomes[i] = _biome(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2], lat + _lat_wobble(lon))
+	for i in cells:
+		if biomes[i] != BIOME_SEA:
+			for n in _biome_neighbors(i):
+				if biomes[n] == BIOME_SEA:
+					coastal[i] = 1
+					break
+	for radius: int in BIOME_SMOOTHING_RADII:
+		var next := biomes.duplicate()
+		for i in cells:
+			if biomes[i] == BIOME_SEA:
+				continue
+			var votes := PackedInt32Array()
+			votes.resize(8)
+			votes[biomes[i]] += 0 if coastal[i] else 2
+			for n in _biome_neighbors(i, radius):
+				if biomes[n] != BIOME_SEA and not coastal[n]:
+					votes[biomes[n]] += 1
+			var best := biomes[i]
+			for b in 8:
+				if votes[b] > votes[best]:
+					best = b
+			next[i] = best
+		biomes = next
+		coastal.fill(0)  # After a pass the coast has taken its neighbors' biomes.
+	return biomes
+
+
+## How far (degrees) the latitude lines between biomes (the tropics, the
+## boreal forest, the tundra) are pushed north or south at a longitude: a few
+## smooth waves, so they wander like real climate boundaries.
+static func _lat_wobble(lon: float) -> float:
+	var x := deg_to_rad(lon)
+	return 2.5 * sin(x * 11.0 + 0.7) + 1.6 * sin(x * 23.0 + 2.1) + 0.9 * sin(x * 47.0 + 4.0)
+
+
+## A biome from a Natural Earth II color (0-255) and latitude (see
+## _build_biomes()); the latitude is wobbled (see _lat_wobble()) so the climate
+## lines between biomes wander rather than run dead straight.
+static func _biome(r: int, g: int, b: int, lat: float) -> int:
+	var bright := r + g + b
+	var green := g - (r + b) / 2.0
+	if b >= r + 4 and bright > 680:
+		return BIOME_ICE
+	if green >= 22.0 and bright < 570:
+		if absf(lat) < 23.5:
+			return BIOME_RAINFOREST
+		return BIOME_BOREAL if lat > BOREAL_LAT else BIOME_TEMPERATE
+	if maxi(r, maxi(g, b)) - mini(r, mini(g, b)) < 12 or lat > TUNDRA_LAT:
+		return BIOME_TUNDRA
+	if green < 11.0:
+		return BIOME_DESERT
+	return BIOME_SAVANNA if absf(lat) < 24.0 else BIOME_GRASSLAND
+
+
+## The cells within radius of a biome cell (not wrapping at the top and
+## bottom; wrapping east-west).
+static func _biome_neighbors(i: int, radius := 1) -> PackedInt32Array:
+	@warning_ignore("integer_division")
+	var row := i / BIOME_COLS
+	var col := i % BIOME_COLS
+	var out := PackedInt32Array()
+	for dy in range(-radius, radius + 1):
+		var r: int = row + dy
+		if r < 0 or r >= BIOME_ROWS:
+			continue
+		for dx in range(-radius, radius + 1):
+			if dx == 0 and dy == 0:
+				continue
+			out.append(r * BIOME_COLS + posmod(col + dx, BIOME_COLS))
+	return out
+
+
+## Little drawings on the land for the map (art/decor): first the animals
+## (ANIMALS) where they live, then, tier by tier (DECOR_TIER_SPACING, coarsest
+## first), a spot about every spacing in each direction (jittered), kept only
+## on land, outside the big lakes and clear of every spot already placed. Each
+## spot's drawing comes from where it is: a mountain in a mountain range
+## (snow-capped ones in cold places), otherwise its biome's (see
+## _decor_for_biome()), or nothing.
+func _add_decor(map: WorldMapData, biomes: PackedByteArray) -> void:
+	var ranges := []  # [bounds, polygons (lon/lat outlines)]
+	for feature: Dictionary in _read_geojson(REGIONS_PATH):
+		if str(feature.properties.get("FEATURECLA", "")) != "Range/mtn":
+			continue
+		for polygon: Array in _feature_polygons(feature):
+			var outline := _to_points(polygon[0])
+			ranges.append([_bounds(outline), outline])
+	var lakes := []
+	for feature: Dictionary in _read_geojson(LAKES_PATH):
+		if float(feature.properties.get("scalerank", 99)) > 2.0:
+			continue
+		for polygon: Array in _feature_polygons(feature):
+			var outline := _to_points(polygon[0])
+			lakes.append([_bounds(outline), outline])
+	var kinds := {}  # Name -> index in map.decor_kind_names.
+	var add := func(name: String, lon_lat: Vector2, tier: int) -> void:
+		if not kinds.has(name):
+			kinds[name] = map.decor_kind_names.size()
+			map.decor_kind_names.append(name)
+		map.decor_positions.append(Geo.project(lon_lat))
+		map.decor_kinds.append(kinds[name])
+		map.decor_tiers.append(tier)
+	map.decor_tier_spacing = PackedFloat32Array(DECOR_TIER_SPACING)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20240611
+	for animal: Array in ANIMALS:
+		add.call(animal[0], Vector2(animal[1], animal[2]), int(animal[3]))
+	var top := Geo.project(Vector2(0.0, 80.0)).y
+	var bottom := Geo.project(Vector2(0.0, -80.0)).y
+	for tier in DECOR_TIER_SPACING.size():
+		var spacing: float = DECOR_TIER_SPACING[tier]
+		# Spots already placed, by cell of this tier's spacing, for the clearance check.
+		var taken := {}
+		for p in map.decor_positions:
+			taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
+		var y := bottom
+		while y < top:
+			var x := -180.0
+			while x < 180.0:
+				var p := Vector2(x, y) + Vector2(rng.randf(), rng.randf()) * spacing
+				x += spacing
+				if p.x >= 180.0 or not _decor_clear(taken, p, spacing):
+					continue
+				var lon_lat := Geo.unproject(p)
+				var biome := _biome_at(biomes, lon_lat)
+				if biome == BIOME_SEA or _in_any(lakes, lon_lat):
+					continue
+				var kind := ""
+				if _in_any(ranges, lon_lat) and rng.randf() < 0.9:
+					kind = "mountain_snow" if absf(lon_lat.y) > 42.0 or biome == BIOME_ICE or biome == BIOME_TUNDRA else "mountain"
+				else:
+					kind = _decor_for_biome(biome, lon_lat, rng)
+				if kind.is_empty():
+					continue
+				add.call(kind, lon_lat, tier)
+				taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
+			y += spacing
+	print("Decor: %d drawings of %d kinds" % [map.decor_positions.size(), map.decor_kind_names.size()])
+
+
+## The drawing for a spot in a biome (or "" for none, to keep the map from
+## crowding): conifers in the boreal forest, round trees in temperate ones,
+## big leafy ones (and palms) in the rainforest, grass tufts on grassland,
+## acacias on the savanna, little shrubs on the tundra, and in the deserts
+## cacti in the Americas, red rock in Australia and dunes elsewhere.
+static func _decor_for_biome(biome: int, lon_lat: Vector2, rng: RandomNumberGenerator) -> String:
+	var roll := rng.randf()
+	match biome:
+		BIOME_BOREAL:
+			return "conifer" if roll < 0.85 else ""
+		BIOME_TEMPERATE:
+			return "deciduous" if roll < 0.55 else ("conifer" if roll < 0.72 else "")
+		BIOME_RAINFOREST:
+			return "rainforest" if roll < 0.75 else ("palm" if roll < 0.88 else "")
+		BIOME_GRASSLAND:
+			return "grass" if roll < 0.4 else ""
+		BIOME_SAVANNA:
+			return "acacia" if roll < 0.45 else ("grass" if roll < 0.6 else "")
+		BIOME_TUNDRA:
+			return "shrub" if roll < 0.3 else ""
+		BIOME_DESERT:
+			if lon_lat.x < -30.0:
+				return "cactus" if roll < 0.5 else ""
+			if lon_lat.x > 110.0 and lon_lat.y < -10.0:
+				return "red_rock" if roll < 0.4 else ""
+			return "dunes" if roll < 0.45 else ""
+	return ""
+
+
+## True if no spot already placed is within 0.7 spacings of a point.
+static func _decor_clear(taken: Dictionary, p: Vector2, spacing: float) -> bool:
+	var cell := Vector2i(floori(p.x / spacing), floori(p.y / spacing))
+	for dy in [-1, 0, 1]:
+		for dx in [-1, 0, 1]:
+			for q: Vector2 in taken.get(cell + Vector2i(dx, dy), []):
+				if q.distance_to(p) < spacing * 0.7:
+					return false
+	return true
+
+
+## True if a (lon, lat) is inside any of [bounds, outline] polygons.
+static func _in_any(polygons: Array, lon_lat: Vector2) -> bool:
+	for item: Array in polygons:
+		if (item[0] as Rect2).has_point(lon_lat) and Geometry2D.is_point_in_polygon(lon_lat, item[1]):
+			return true
+	return false
+
+
+## The biome at a (lon, lat), or BIOME_SEA.
+static func _biome_at(biomes: PackedByteArray, lon_lat: Vector2) -> int:
+	var col := posmod(floori((lon_lat.x + 180.0) / 360.0 * BIOME_COLS), BIOME_COLS)
+	var row := clampi(floori((90.0 - lon_lat.y) / 180.0 * BIOME_ROWS), 0, BIOME_ROWS - 1)
+	return biomes[row * BIOME_COLS + col]
+
+
+## The land colors as a LAND_TEXTURE_SIZE square texture in the map's
+## projection (x -180 to 180, y from Geo.MAX_LAT down to -Geo.MAX_LAT): each
+## biome (see _build_biomes()) in its flat color, softly blended where biomes
+## meet. The map draws the land triangles with it, so the coast stays as sharp
+## as the land data; only the color comes from here. Its sea is filled in from
+## the nearest land first, so no sea color shows along a coast.
+func _build_land_texture(biomes: PackedByteArray) -> void:
+	var size := LAND_TEXTURE_SIZE
+	@warning_ignore("integer_division")
+	var rows := size / 2  # Still in plain longitude/latitude: 2 degrees wide per degree high.
+	# Smooth biome edges: each biome's mask is blown up BIOME_EDGE_UPSCALE times
+	# with cubic smoothing, and each pixel takes the biome strongest there, so
+	# patches get rounded outlines instead of blocky cells. (Pixels out at sea
+	# just take the nearest biome; only the land shows.)
+	var up_cols := BIOME_COLS * BIOME_EDGE_UPSCALE
+	var up_rows := BIOME_ROWS * BIOME_EDGE_UPSCALE
+	var masks: Array[PackedByteArray] = []
+	for biome in BIOME_COLORS.size():
+		var one := PackedByteArray()
+		one.resize(biomes.size())
+		for i in biomes.size():
+			one[i] = 255 if biomes[i] == biome else 0
+		var image := Image.create_from_data(BIOME_COLS, BIOME_ROWS, false, Image.FORMAT_L8, one)
+		image.resize(up_cols, up_rows, Image.INTERPOLATE_CUBIC)
+		masks.append(image.get_data())
+	var palette := PackedByteArray()
+	for color in BIOME_COLORS:
+		palette.append_array([color.r8, color.g8, color.b8])
+	var flat_colors := PackedByteArray()
+	flat_colors.resize(up_cols * up_rows * 3)
+	for i in up_cols * up_rows:
+		var best := 0
+		var best_value := -1
+		for biome in masks.size():
+			var value := masks[biome][i]
+			if value > best_value:
+				best_value = value
+				best = biome
+		flat_colors[i * 3] = palette[best * 3]
+		flat_colors[i * 3 + 1] = palette[best * 3 + 1]
+		flat_colors[i * 3 + 2] = palette[best * 3 + 2]
+	var source := Image.create_from_data(up_cols, up_rows, false, Image.FORMAT_RGB8, flat_colors)
+	var mask := Image.load_from_file(LAND_COLORS_PATH)
+	mask.convert(Image.FORMAT_RGB8)
 	mask.resize(size, rows, Image.INTERPOLATE_NEAREST)
-	source.resize(size, rows, Image.INTERPOLATE_CUBIC)
+	source.resize(size, rows, Image.INTERPOLATE_BILINEAR)
 	var colors := source.get_data()
 	var mask_colors := mask.get_data()
 	var sea_r := LAND_COLORS_SEA.r8
@@ -689,6 +1011,7 @@ func _build_grid(land_polygons: Array) -> void:
 	_grid_origin = Vector2(GRID_WEST, south)
 	_cols = ceili((GRID_EAST - GRID_WEST) / GRID_CELL)
 	_rows = ceili((north - south) / GRID_CELL)
+	_arctic_row = ceili((Geo.project(Vector2(0, ARCTIC_LAT)).y - south) / GRID_CELL / COARSE) * COARSE
 	_land.resize(_cols * _rows)
 
 	# Scanline-fill every land polygon (outline and holes, even-odd) into the
@@ -821,11 +1144,11 @@ func _in_grid(cell: Vector2i) -> bool:
 
 
 func _is_land(cell: Vector2i) -> bool:
-	return not _in_grid(cell) or _land[cell.y * _cols + cell.x] == 1
+	return not _in_grid(cell) or _land[cell.y * _cols + cell.x] == 1 or (_block_arctic and cell.y >= _arctic_row)
 
 
 func _is_near_land(cell: Vector2i) -> bool:
-	return not _in_grid(cell) or _near_land[cell.y * _cols + cell.x] == 1
+	return not _in_grid(cell) or _near_land[cell.y * _cols + cell.x] == 1 or (_block_arctic and cell.y >= _arctic_row)
 
 
 # --- Sea lanes -----------------------------------------------------------
@@ -888,60 +1211,67 @@ func _build_lanes() -> void:
 	var args := OS.get_cmdline_user_args()
 	var limit := int(args[args.find("--limit") + 1]) if "--limit" in args else pairs
 	var only := _pairs_arg(ports)
+	# Lanes between two ports that aren't in the Arctic first, with the Arctic
+	# blocked (see ARCTIC_LAT), then those to or from an Arctic port, with it open.
+	var pair_list := []
 	for i in ports.size():
+		for j in range(i + 1, ports.size()):
+			if only.is_empty() or only.has("%s-%s" % [ports[i].id, ports[j].id]):
+				pair_list.append([ports[i], ports[j]])
+	var arctic_pairs := pair_list.filter(_is_arctic_pair)
+	pair_list = pair_list.filter(func(pair: Array) -> bool: return not _is_arctic_pair(pair)) + arctic_pairs
+	_set_arctic_blocked(coarse, astar, true)
+	for pair: Array in pair_list:
 		if done >= limit:
 			break
-		for j in range(i + 1, ports.size()):
-			if done >= limit:
-				break
-			var a: Dictionary = ports[i]
-			var b: Dictionary = ports[j]
-			if not only.is_empty() and not only.has("%s-%s" % [a.id, b.id]):
-				continue
-			var best := PackedVector2Array()
-			var best_distance := INF
-			var span: float = absf(a.lon - b.lon)
-			for option_a: Array in starts[a.id]:
-				for option_b: Array in starts[b.id]:
-					if option_a[0] > 0.0 and option_b[0] > 0.0:
-						continue  # Same as both at their real longitude.
-					var shifted: bool = option_a[0] > 0.0 or option_b[0] > 0.0
-					if shifted and span <= MIN_WRAP_SPAN:
-						continue  # Close enough that the short way can't cross the Pacific seam.
-					var lon_a: float = a.lon + option_a[0]
-					var lon_b: float = b.lon + option_b[0]
-					if absf(lon_a - lon_b) > MAX_ROUTE_SPAN:
-						continue
-					var t0 := Time.get_ticks_usec()
-					var cells := _route(coarse, astar, option_a[1], option_b[1])
-					var t1 := Time.get_ticks_usec()
-					search_usec += t1 - t0
-					if cells.is_empty():
-						continue
-					var points := _lane_points(Vector2(lon_a, a.lat), cells, Vector2(lon_b, b.lat))
-					points = _splice_canals(points)
-					shape_usec += Time.get_ticks_usec() - t1
-					var distance := _length_nm(points)
-					if distance < best_distance:
-						best_distance = distance
-						best = points
-			if not best.is_empty():
-				best = _round_corners(best)
-				best_distance = _length_nm(best)
-			if best.is_empty():
-				push_error("No sea route from %s to %s" % [a.id, b.id])
-			else:
-				# Shift the lane so it starts at the first port's real longitude.
-				var shift: float = a.lon - best[0].x
-				data.keys.append("%s-%s" % [a.id, b.id])
-				data.starts.append(data.points.size())
-				for p in best:
-					data.points.append(Vector2(snappedf(p.x + shift, 0.0001), snappedf(p.y, 0.0001)))
-				data.distances.append(best_distance)
-			done += 1
-			if done % 50 == 0:
-				var elapsed := (Time.get_ticks_msec() - started) / 1000.0
-				print("  %d / %d lanes (%.0f s, ~%.0f s left; search %.0f s, shaping %.0f s)" % [done, pairs, elapsed, elapsed / done * (pairs - done), search_usec / 1e6, shape_usec / 1e6])
+		var a: Dictionary = pair[0]
+		var b: Dictionary = pair[1]
+		if _block_arctic and _is_arctic_pair(pair):
+			_set_arctic_blocked(coarse, astar, false)
+		var best := PackedVector2Array()
+		var best_distance := INF
+		var span: float = absf(a.lon - b.lon)
+		for option_a: Array in starts[a.id]:
+			for option_b: Array in starts[b.id]:
+				if option_a[0] > 0.0 and option_b[0] > 0.0:
+					continue  # Same as both at their real longitude.
+				var shifted: bool = option_a[0] > 0.0 or option_b[0] > 0.0
+				if shifted and span <= MIN_WRAP_SPAN:
+					continue  # Close enough that the short way can't cross the Pacific seam.
+				var lon_a: float = a.lon + option_a[0]
+				var lon_b: float = b.lon + option_b[0]
+				if absf(lon_a - lon_b) > MAX_ROUTE_SPAN:
+					continue
+				var t0 := Time.get_ticks_usec()
+				var cells := _route(coarse, astar, option_a[1], option_b[1])
+				var t1 := Time.get_ticks_usec()
+				search_usec += t1 - t0
+				if cells.is_empty():
+					continue
+				var points := _lane_points(Vector2(lon_a, a.lat), cells, Vector2(lon_b, b.lat))
+				points = _splice_canals(points)
+				shape_usec += Time.get_ticks_usec() - t1
+				var distance := _length_nm(points)
+				if distance < best_distance:
+					best_distance = distance
+					best = points
+		if not best.is_empty():
+			best = _round_corners(best)
+			best_distance = _length_nm(best)
+		if best.is_empty():
+			push_error("No sea route from %s to %s" % [a.id, b.id])
+		else:
+			# Shift the lane so it starts at the first port's real longitude.
+			var shift: float = a.lon - best[0].x
+			data.keys.append("%s-%s" % [a.id, b.id])
+			data.starts.append(data.points.size())
+			for p in best:
+				data.points.append(Vector2(snappedf(p.x + shift, 0.0001), snappedf(p.y, 0.0001)))
+			data.distances.append(best_distance)
+		done += 1
+		if done % 50 == 0:
+			var elapsed := (Time.get_ticks_msec() - started) / 1000.0
+			print("  %d / %d lanes (%.0f s, ~%.0f s left; search %.0f s, shaping %.0f s)" % [done, pairs, elapsed, elapsed / done * (pairs - done), search_usec / 1e6, shape_usec / 1e6])
 	data.starts.append(data.points.size())
 	if not only.is_empty():
 		data = _patch_lanes(data)
@@ -950,6 +1280,43 @@ func _build_lanes() -> void:
 	assert(err == OK, "Couldn't save %s" % LANES_OUT)
 	print("Lanes: %d, %d points" % [data.keys.size(), data.points.size()])
 	_print_stats(data)
+
+
+## True if either port of a [port, port] pair is in the Arctic (ports.json
+## arctic: true): only their lanes may sail north of ARCTIC_LAT.
+static func _is_arctic_pair(pair: Array) -> bool:
+	return bool(pair[0].get("arctic", false)) or bool(pair[1].get("arctic", false))
+
+
+## Makes the grid north of ARCTIC_LAT count as land (blocked) or water again,
+## in the coarse graph (its pieces there disabled), the fine pathfinder (its
+## water there solid) and the land checks (_is_land(), _is_near_land()).
+func _set_arctic_blocked(coarse: AStar2D, fine: AStarGrid2D, blocked: bool) -> void:
+	if _block_arctic == blocked or _arctic_row >= _rows:
+		_block_arctic = blocked
+		return
+	_block_arctic = blocked
+	var coarse_cols := ceili(float(_cols) / COARSE)
+	@warning_ignore("integer_division")
+	var first_coarse_row := _arctic_row / COARSE
+	for piece in _piece_rep.size():
+		@warning_ignore("integer_division")
+		if _piece_cell[piece] / coarse_cols >= first_coarse_row:
+			coarse.set_point_disabled(piece, blocked)
+	var region := Rect2i(0, _arctic_row, _cols, _rows - _arctic_row)
+	fine.fill_solid_region(region, blocked)
+	if not blocked:
+		for row in range(_arctic_row, _rows):
+			var col := 0
+			while col < _cols:
+				if not _land[row * _cols + col]:
+					col += 1
+					continue
+				var run_start := col
+				while col < _cols and _land[row * _cols + col]:
+					col += 1
+				fine.fill_solid_region(Rect2i(run_start, row, col - run_start, 1))
+	print("  the Arctic is %s" % ("blocked" if blocked else "open"))
 
 
 ## The lane keys to re-route (each "A-B" with the ids in alphabetical order, as
