@@ -105,7 +105,10 @@ func _update_size() -> void:
 			if not closure.get("ports", []).has(port_id):
 				continue
 			if not GameState.seasonal.port_closure(port_id, GameState.calendar_time()).is_empty():
-				lines.append("Closed by %s until %s" % [closure.why, Seasons.date_text(closure.to)])
+				if not GameState.icebreaking.lifting(closure).is_empty():
+					lines.append("Iced in until %s: your icebreaker leads ships in and out" % Seasons.date_text(closure.to))
+				else:
+					lines.append("Closed by %s until %s" % [closure.why, Seasons.date_text(closure.to)])
 			else:
 				lines.append("Closes for %s from %s to %s" % [closure.why, Seasons.date_text(closure.from), Seasons.date_text(closure.to)])
 	var storm := GameState.weather.closed_by(port_id)

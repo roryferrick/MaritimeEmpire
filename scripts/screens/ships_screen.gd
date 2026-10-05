@@ -191,6 +191,10 @@ func _add_group(model: Dictionary) -> GridContainer:
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_row.add_child(badge)
 	_megas[model.id] = [mega, mega_alert, badge]
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(spacer)
+	title_row.add_child(_mute_button(model.id))
 	var grid := GridContainer.new()
 	grid.columns = COLUMNS
 	grid.add_theme_constant_override(&"h_separation", TILE_GAP)
@@ -199,6 +203,28 @@ func _add_group(model: Dictionary) -> GridContainer:
 	%Groups.add_child(group)
 	_groups[model.id] = [group, grid]
 	return grid
+
+
+## Mutes a model's routine news in the activity log (its ships loading cargo,
+## selling at a profit and entering canals; losses and trouble still show).
+func _mute_button(model_id: String) -> Button:
+	var button := Button.new()
+	button.toggle_mode = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override(&"font_size", MEGA_FONT_SIZE)
+	button.button_pressed = GameState.muted_models.has(model_id)
+	var show_state := func(muted: bool) -> void:
+		button.text = "Muted" if muted else "Mute"
+		button.tooltip_text = ("Unmute: show these ships' loading, sales and canal entries in the activity log again." if muted
+			else "Mute: leave these ships' loading, profitable sales and canal entries out of the activity log (losses and trouble still show).")
+	show_state.call(button.button_pressed)
+	button.toggled.connect(func(muted: bool) -> void:
+		if muted and not GameState.muted_models.has(model_id):
+			GameState.muted_models.append(model_id)
+		elif not muted:
+			GameState.muted_models.erase(model_id)
+		show_state.call(muted))
+	return button
 
 
 func _ship_before(a: Ship, b: Ship) -> bool:

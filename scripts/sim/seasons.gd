@@ -86,7 +86,8 @@ func leg_blocker(from_port: String, to_port: String, seconds: float) -> Dictiona
 		seconds = 0.0  # Can't make it anyway: the fuel and range checks say so.
 	var arrive := now + int(seconds * per_second)
 	var closure := port_closure(to_port, arrive)
-	if not closure.is_empty():
+	# An icebreaker stationed in its ice area lifts it (the ships wait to be led in).
+	if not closure.is_empty() and _state.icebreaking.lifting(closure).is_empty():
 		return closure
 	for crossing: Dictionary in GameData.canal_crossings(from_port, to_port):
 		var t := 0.0
@@ -112,14 +113,16 @@ func leg_closures(from_port: String, to_port: String) -> Array:
 
 
 ## [speed factor, wear factor] at a (lon, lat) point from the ice zones in
-## season there ([1, 1] when closures aren't active).
+## season there, eased where an icebreaker keeps the fairways open (see
+## Icebreaking.fairway()); [1, 1] when closures aren't active.
 func factors(lon_lat: Vector2) -> Array:
 	if not active():
 		return [1.0, 1.0]
 	var now: int = _state.calendar_time()
 	for zone: Dictionary in ice_zones():
 		if in_season(zone, now) and Geo.distance_nm(Vector2(zone.center[0], zone.center[1]), lon_lat) <= float(zone.radius_nm):
-			return [float(zone.speed), float(zone.wear)]
+			var fairway: Array = _state.icebreaking.fairway(zone.id)
+			return fairway if not fairway.is_empty() else [float(zone.speed), float(zone.wear)]
 	return [1.0, 1.0]
 
 

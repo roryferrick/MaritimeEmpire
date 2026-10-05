@@ -145,6 +145,11 @@ var play_time := 0.0
 var company_xp := 0.0
 ## The map's Routes switch: show the fleet's route lanes faintly.
 var show_active_routes := true
+## Ship models whose routine news (loading, profitable sales, entering canals)
+## is left out of the activity log (the Ships screen's Mute buttons), and
+## whether the activity log panel is folded away.
+var muted_models: Array[String] = []
+var activity_collapsed := false
 ## Whether this save has the tutorial (chosen when the company is founded; saves
 ## from before tutorials have none), the map's Tutorial switch, and the ids
 ## of the tips already seen (see TutorialCard).
@@ -186,6 +191,7 @@ var canal_traffic := CanalTraffic.new(self)
 var market := Market.new(self)
 var weather := Weather.new(self)
 var seasonal := Seasons.new(self)
+var icebreaking := Icebreaking.new(self)
 ## Port sizes: how they grow and shrink, and what they change.
 var port_sizes := PortSizes.new(self)
 
@@ -217,6 +223,7 @@ func _step(delta: float) -> void:
 	canal_traffic.step(delta)
 	port_sizes.step(delta)
 	weather.step(delta)
+	icebreaking.refresh()
 	for ship in ships:
 		_advance(ship, delta)
 	_roll_breakdowns(delta)
@@ -280,9 +287,10 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	var ship := Ship.new(ship_name, model_id, port_id)
 	ship.purchase_price = price
 	ships.append(ship)
-	if ship.is_recovery():
+	if ship.is_service():
 		ship.base_port = port_id
-		_rebalance_recovery_boats()
+		if ship.is_recovery():
+			_rebalance_recovery_boats()
 	ships_changed.emit()
 	save_game()
 	return ship
@@ -775,7 +783,7 @@ func _range_error(ship: Ship, from: String, to: String) -> String:
 ## Gives a ship a new route and sets it running. A ship at sea finishes its
 ## current leg first.
 func assign_route(ship: Ship, route: Array[String]) -> void:
-	if ship.is_recovery() or not route_error(route, ship).is_empty():
+	if ship.is_service() or not route_error(route, ship).is_empty():
 		return
 	ship.paused = false
 	if ship.is_docked():
@@ -836,6 +844,8 @@ func sell_ship(ship: Ship) -> String:
 		return error
 	var price := ship.sell_price()
 	ships.erase(ship)
+	if ship.is_icebreaker():
+		_release_convoy(ship)
 	if ship.is_recovery():
 		_rebalance_recovery_boats()
 	money += price
@@ -850,7 +860,9 @@ func _advance(ship: Ship, delta: float) -> void:
 	# A ship waiting in port for a full load, not due another look: nothing to do.
 	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need and ship.is_docked():
 		return
-	if ship.is_on_job():
+	if ship.is_icebreaker():
+		_advance_icebreaker(ship, delta)
+	elif ship.is_on_job():
 		_advance_job(ship, delta)
 	elif ship.is_docked():
 		_advance_docked(ship, delta)
@@ -868,21 +880,23 @@ func _advance(ship: Ship, delta: float) -> void:
 func _sail(ship: Ship, delta: float) -> bool:
 	if canal_traffic.hold(ship, delta):
 		return true
+	if ship.escort != null:
+		return true  # In a convoy: its icebreaker moves it (see _escort()).
 	var zone := ship.zone_factors(ship.traveled_nm)
 	var storm := _storm_factors(ship)
 	var speed := ship.speed()
-	if ship.is_recovery():
+	if ship.is_service():
 		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
 	speed *= float(zone[0]) * float(storm[0])
-	var target := _storm_hold(ship, canal_traffic.limit(ship, ship.traveled_nm + speed * delta))
+	var target := _ice_hold(ship, _storm_hold(ship, canal_traffic.limit(ship, ship.traveled_nm + speed * delta)))
 	var effort := clampf((target - ship.traveled_nm) / (speed * delta), 0.0, 1.0) if speed * delta > 0.0 else 1.0
-	if ship.is_running() or ship.is_recovery():
+	if ship.is_running() or ship.is_service():
 		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * float(zone[1]) * float(storm[1]) * delta * effort, 0.0)
 	# A storm costs time, not fuel per mile: the engines make less way, so the
 	# fuel a ship set off with still covers the leg.
 	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * float(storm[0]) * delta * effort, 0.0)
 	ship.traveled_nm = target
-	if not ship.is_recovery():
+	if not ship.is_service():
 		ship.sea_time += delta * effort
 		if ship.fuel <= 0.0:
 			_lose(ship, "out of fuel")
@@ -912,7 +926,7 @@ func _storm_factors(ship: Ship) -> Array:
 ## port a storm has closed (recovery boats go in regardless), saying so in its
 ## weather_wait.
 func _storm_hold(ship: Ship, target: float) -> float:
-	var storm := {} if ship.is_recovery() else weather.closed_by(ship.to_port)
+	var storm := {} if ship.is_service() else weather.closed_by(ship.to_port)
 	if storm.is_empty():
 		ship.weather_wait = ""
 		return target
@@ -922,6 +936,27 @@ func _storm_hold(ship: Ship, target: float) -> float:
 		return target
 	ship.weather_wait = "waiting off %s for %s to pass" % [GameData.port_name(ship.to_port), Weather.title(storm)]
 	return maxf(ship.traveled_nm, stop)
+
+
+## Where a ship may sail to this step when its lane runs into an ice area with
+## an icebreaker (see Icebreaking): no further than the ice edge until the
+## icebreaker comes to lead it through, waiting there (engines off) in
+## ice_wait. Service ships go on regardless.
+func _ice_hold(ship: Ship, target: float) -> float:
+	if ship.is_service():
+		return target
+	var item := icebreaking.area_for_leg(ship.from_port, ship.to_port)
+	var entry := icebreaking.entry_mile(item, ship.from_port, ship.to_port) if not item.is_empty() else -1.0
+	if entry <= 0.0 or ship.traveled_nm > entry + 0.001 or target <= entry:
+		if not ship.ice_wait.is_empty() and ship.escort == null:
+			ship.ice_wait = ""  # The ice went out of season, or the icebreaker left.
+			ship.weather_wait = ""
+		return target
+	if ship.ice_wait != item.id:
+		ship.ice_wait = item.id
+		ship.ice_wait_since = play_time
+	ship.weather_wait = "waiting at the edge of the %s ice for an icebreaker" % item.name
+	return maxf(ship.traveled_nm, entry)
 
 
 ## Activity log warnings about storms (while they're active) for the ports
@@ -1033,6 +1068,9 @@ func _season_warnings() -> void:
 		var is_zone: bool = item.has("center")
 		if closed and is_zone:
 			ActivityLog.add("The %s has set in: ships crawl through it until %s." % [item.name, Seasons.date_text(item.to)], ActivityLog.Kind.BAD)
+		elif closed and not icebreaking.lifting(item).is_empty():
+			ActivityLog.add("%s %s iced in until %s, but your icebreakers will lead ships through." % [Seasons.subject(item),
+				Seasons.verb(item, "is", "are"), Seasons.date_text(item.to)], ActivityLog.Kind.INFO)
 		elif closed:
 			ActivityLog.add("%s %s closed for %s until %s." % [Seasons.subject(item), Seasons.verb(item, "has", "have"), item.why,
 				Seasons.date_text(item.to)], ActivityLog.Kind.BAD)
@@ -1088,7 +1126,7 @@ func _roll_breakdowns(delta: float) -> void:
 		if company_level() < int(settings.get("min_company_level", 6)):
 			continue
 		for ship in ships:
-			if ship.is_recovery() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
+			if ship.is_service() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
 				continue
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
 			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
@@ -1099,10 +1137,11 @@ func _roll_breakdowns(delta: float) -> void:
 
 func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.weather_wait = ""
+	ship.ice_wait = ""
 	ship.at_risk = false
 	canal_traffic.leave(ship)
 	ship.delivery_canals.clear()
-	if paid and not ship.is_recovery():
+	if paid and not ship.is_service():
 		ship.delivery_canals.assign(ship.canals_entered)
 	ship.stop_toll = ship.leg_toll
 	ship.leg_toll = 0
@@ -1116,7 +1155,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 		var sale := ship.cargo_qty * market.sell_price(port, ship.cargo_id)
 		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost, ship.model_id))
 		ship.cargo_leg_nm = GameData.distance_nm(ship.from_port, port) if paid and ship.from_port != port else 0.0
-	ship.unloaded = ship.is_recovery()
+	ship.unloaded = ship.is_service()
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""
@@ -1156,7 +1195,7 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 			return
 		ship.dock_time = -1.0
 		ship_changed.emit(ship)
-	if ship.is_recovery() and ship.docked_at != ship.base_port:
+	if ship.is_service() and not ship.base_port.is_empty() and ship.docked_at != ship.base_port and not _on_ice_duty(ship):
 		_try_depart(ship, delta, ship.base_port)
 	elif ship.is_running():
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
@@ -1216,7 +1255,7 @@ func _sell_cargo(ship: Ship) -> void:
 ## taken out of a hub by a ship that arrived empty gives the hub XP.
 ## Returns the cargo it chose (bought or not, for lack of money), or "" if none pays.
 func _load_cargo(ship: Ship, to: String) -> String:
-	if ship.is_recovery() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
+	if ship.is_service() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return ""
 	var best := market.best_cargo(ship.model(), ship.docked_at, to)
 	if best[0] == "":
@@ -1324,6 +1363,19 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 			return
 	if _waiting_for_load(ship, to):
 		return
+	# Leaving a port in an ice area that has an icebreaker: wait for it to lead
+	# the way out (it calls _depart() itself; see _begin_escort()).
+	if not ship.is_service():
+		var item := icebreaking.area_for_leg(ship.docked_at, to)
+		if not item.is_empty() and icebreaking.entry_mile(item, ship.docked_at, to) == 0.0:
+			if ship.ice_wait != item.id:
+				ship.ice_wait = item.id
+				ship.ice_wait_since = play_time
+			ship.ice_to = to
+			ship.weather_wait = "waiting for an icebreaker to lead it out through the %s ice" % item.name
+			return
+		if not ship.ice_wait.is_empty() and ship.escort == null:
+			ship.ice_wait = ""
 	_set_hold(ship, "")
 	_depart(ship, to)
 
@@ -1332,7 +1384,7 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 ## can buy a full one (see _load_cargo()), saying why in its load_wait. A leg
 ## where no cargo makes a profit is sailed empty straight away.
 func _waiting_for_load(ship: Ship, to: String) -> bool:
-	if ship.is_recovery() or not ship.full_loads or not ship.cargo_id.is_empty():
+	if ship.is_service() or not ship.full_loads or not ship.cargo_id.is_empty():
 		_set_load_wait(ship, "")
 		return false
 	# Already waiting: look again as soon as the money reaches what a full hold
@@ -1367,7 +1419,7 @@ func _set_hold(ship: Ship, reason: String) -> void:
 
 
 func _depart(ship: Ship, to: String) -> void:
-	if not ship.is_recovery():
+	if not ship.is_service():
 		ship.route_index = ship.next_route_index()
 		_load_cargo(ship, to)  # If it didn't load when unloading (a new ship, or a new route).
 	_leave_port(ship)
@@ -1396,6 +1448,195 @@ func _leave_port(ship: Ship) -> void:
 	ship.load_wait = ""
 
 
+# --- Icebreakers -----------------------------------------------------------
+
+## Stations an icebreaker at an ice area (game_config icebreaking), or at none
+## (""): it then waits at the nearest of the area's ports it can use. Returns
+## why it can't, or "". A convoy it was leading or fetching carries on alone.
+func station_icebreaker(ship: Ship, area_id: String) -> String:
+	var base := ship.reference_port()
+	if not area_id.is_empty():
+		base = icebreaking.station_port(icebreaking.area(area_id), ship.model(), ship.reference_port())
+		if base.is_empty():
+			return "A %s is too big for the St. Lawrence Seaway, so it can't work the Great Lakes." % ship.model().get("name", "")
+	_release_convoy(ship)
+	ship.station = area_id
+	ship.base_port = base
+	ship_changed.emit(ship)
+	save_game()
+	return ""
+
+
+## Lets an icebreaker's convoy go (they carry on alone, or wait for another)
+## and ends its escort. A ship it was on its way to fetch waits again.
+func _release_convoy(icebreaker: Ship) -> void:
+	for ship in icebreaker.convoy:
+		if ship.escort == icebreaker:
+			ship.escort = null
+	icebreaker.convoy.clear()
+	if icebreaker.ice_phase == "approach" or icebreaker.ice_phase == "escort":
+		icebreaker.ice_phase = ""  # It finishes the stretch of lane it's on, then docks.
+	icebreaker.job_segments.clear()
+
+
+## An icebreaker: idle in port it docks (refuels and repairs) and sails home
+## to its station, or sets off for the next convoy waiting in its area; then
+## it sails out to the convoy ("approach"), leads it through the ice
+## ("escort"), and, if it let the convoy go at the ice edge, comes back to
+## the port it led it from ("return").
+func _advance_icebreaker(ship: Ship, delta: float) -> void:
+	match ship.ice_phase:
+		"":
+			if ship.is_docked():
+				if ship.dock_time < 0.0 and not ship.station.is_empty() and icebreaking.open(icebreaking.area(ship.station)):
+					var convoy := icebreaking.next_convoy(ship)
+					if not convoy.is_empty():
+						_start_convoy(ship, convoy)
+						return
+				_advance_docked(ship, delta)
+			elif _sail(ship, delta) and ship.traveled_nm >= ship.leg_length():
+				_arrive(ship, ship.to_port, false)
+		"approach":
+			_sail(ship, delta)
+			if ship.traveled_nm >= ship.segment_end:
+				if ship.job_segments.is_empty():
+					_begin_escort(ship)
+				else:
+					_start_segment(ship, ship.job_segments.pop_front())
+		"escort":
+			_escort(ship, delta)
+		"return":
+			if _sail(ship, delta) and ship.traveled_nm >= ship.segment_end:
+				ship.ice_phase = ""
+				_arrive(ship, ship.to_port, false)
+
+
+## True while an icebreaker is docked in its own ice area while the ice is in
+## season: it stays there ready for the next convoy, rather than going home to
+## its station port (ships it just led in will want leading out).
+func _on_ice_duty(ship: Ship) -> bool:
+	if not ship.is_icebreaker() or ship.station.is_empty():
+		return false
+	var item := icebreaking.area(ship.station)
+	return icebreaking.open(item) and icebreaking.port_inside(item, ship.docked_at)
+
+
+## Sends an icebreaker docked in its area to lead a convoy: to the port they're
+## waiting in, or to the ice edge on their lane (through whichever end of the
+## lane is nearer).
+func _start_convoy(icebreaker: Ship, convoy: Array[Ship]) -> void:
+	var first := convoy[0]
+	var leg := Icebreaking.waiting_leg(first)
+	var a: String = leg[0]
+	var b: String = leg[1]
+	var item := icebreaking.area(icebreaker.station)
+	var length := GameData.distance_nm(a, b)
+	var start := 0.0 if first.is_docked() else icebreaking.entry_mile(item, a, b)
+	var here := icebreaker.docked_at
+	var segments := []
+	if first.is_docked():
+		if here != a:
+			segments.append([here, a, 0.0, GameData.distance_nm(here, a)])
+	else:
+		var via_a := (0.0 if here == a else GameData.distance_nm(here, a)) + start
+		var via_b := (0.0 if here == b else GameData.distance_nm(here, b)) + length - start
+		if via_a <= via_b:
+			if here != a:
+				segments.append([here, a, 0.0, GameData.distance_nm(here, a)])
+			if start > 0.0:
+				segments.append([a, b, 0.0, start])
+		else:
+			if here != b:
+				segments.append([here, b, 0.0, GameData.distance_nm(here, b)])
+			segments.append([b, a, 0.0, length - start])
+	icebreaker.convoy = convoy
+	for i in convoy.size():
+		convoy[i].escort = icebreaker
+		convoy[i].escort_place = i
+	icebreaker.escort_leg = [a, b, start, icebreaking.escort_end(item, a, b)]
+	_leave_port(icebreaker)
+	icebreaker.docked_at = ""
+	if segments.is_empty():
+		_begin_escort(icebreaker)
+	else:
+		icebreaker.ice_phase = "approach"
+		icebreaker.job_segments = segments
+		_start_segment(icebreaker, icebreaker.job_segments.pop_front())
+	ship_changed.emit(icebreaker)
+
+
+## The icebreaker is at the head of its convoy: it starts leading it along the
+## lane, and ships waiting in port set off behind it.
+func _begin_escort(icebreaker: Ship) -> void:
+	var leg := icebreaker.escort_leg
+	icebreaker.ice_phase = "escort"
+	_start_segment(icebreaker, [leg[0], leg[1], leg[2], leg[3]])
+	for ship in icebreaker.convoy:
+		if ship.is_docked():
+			ship.ice_wait = ""
+			ship.weather_wait = ""
+			_set_hold(ship, "")
+			_depart(ship, leg[1])
+		ship.weather_wait = "following %s through the %s ice" % [icebreaker.name, icebreaking.area(icebreaker.station).get("name", "")]
+		ship_changed.emit(ship)
+
+
+## Leads a convoy through the ice: the icebreaker ahead at escort speed, each
+## ship gap_nm behind the one before, burning fuel and wearing for the miles
+## it makes. When they're all through, they go on alone (or arrive, if the
+## lane ended in the ice) and the icebreaker docks there or turns back.
+func _escort(icebreaker: Ship, delta: float) -> void:
+	var leg := icebreaker.escort_leg
+	var end: float = leg[3]
+	var convoy := icebreaker.convoy.filter(func(ship: Ship) -> bool: return ship.escort == icebreaker and ships.has(ship))
+	var slowest := icebreaker.speed()
+	for ship: Ship in convoy:
+		slowest = minf(slowest, maxf(ship.speed(), ship.top_speed() * 0.2))
+	var speed := slowest * icebreaking.escort_factor(icebreaker)
+	var moved := minf(speed * delta, end - icebreaker.traveled_nm)
+	_burn(icebreaker, moved, speed)
+	icebreaker.traveled_nm += moved
+	var through := icebreaker.traveled_nm >= end - 0.001
+	var done := through
+	for ship: Ship in convoy:
+		var limit := end if through else icebreaker.traveled_nm - icebreaking.gap_nm() * (ship.escort_place + 1)
+		var next := clampf(minf(ship.traveled_nm + speed * delta, limit), ship.traveled_nm, end)
+		_burn(ship, next - ship.traveled_nm, speed)
+		ship.traveled_nm = next
+		if next < end - 0.001:
+			done = false
+	if not done:
+		return
+	var length := GameData.distance_nm(leg[0], leg[1])
+	var arrived := end >= length - 0.01
+	for ship: Ship in convoy:
+		ship.escort = null
+		ship.weather_wait = ""
+		if arrived:
+			_arrive(ship, leg[1])
+		else:
+			ship_changed.emit(ship)
+	icebreaker.convoy.clear()
+	if arrived:
+		icebreaker.ice_phase = ""
+		_arrive(icebreaker, leg[1], false)
+	else:
+		icebreaker.ice_phase = "return"
+		_start_segment(icebreaker, [leg[1], leg[0], length - end, length])
+
+
+## Fuel and wear for miles made at a speed (a convoy's pace, not the ship's
+## own), so a slow convoy costs no more per mile than sailing alone.
+func _burn(ship: Ship, miles: float, speed: float) -> void:
+	if miles <= 0.0 or speed <= 0.0:
+		return
+	var seconds := miles / maxf(ship.speed(), speed)
+	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * seconds, 0.0)
+	ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * seconds, 0.01)
+	if not ship.is_service():
+		ship.sea_time += seconds
+
+
 # --- Canals ----------------------------------------------------------------
 
 ## Extra money on a profitable trade from a leg's bonuses: the profit x (the
@@ -1422,7 +1663,7 @@ func fuel_reserve() -> float:
 		if port.is_empty():
 			continue
 		var fuel_left := ship.fuel
-		if not ship.is_docked() and not ship.is_recovery() and not ship.from_port.is_empty():
+		if not ship.is_docked() and not ship.is_service() and not ship.from_port.is_empty():
 			var seconds := ship.leg_seconds(ship.from_port, ship.to_port, ship.traveled_nm, ship.leg_length(), ship.maintenance)
 			fuel_left -= ship.fuel_per_s() * seconds
 		total += clampf(ship.fuel_tank() - fuel_left, 0.0, ship.fuel_tank()) * market.fuel_price(port)
@@ -1789,6 +2030,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	port_sizes.reset()
 	company_xp = 0.0
 	show_active_routes = true
+	muted_models.clear()
+	activity_collapsed = false
 	tutorials = bool(options.get("tutorials", false))
 	max_time_speed = int(options.get("max_time_speed", TIME_SPEEDS[-1]))
 	storms = str(options.get("storms", "none"))
@@ -1837,6 +2080,8 @@ func continue_game(slot: int) -> String:
 	company_xp = float(data.get("company_xp", 0.0))
 	_window = data.get("finance_window", [])
 	show_active_routes = bool(data.get("show_active_routes", true))
+	muted_models.assign(data.get("muted_models", []))
+	activity_collapsed = bool(data.get("activity_collapsed", false))
 	tutorials = bool(data.get("tutorials", false))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
 	# Saves from before weather have no storms or seasonal closures.
@@ -1896,6 +2141,8 @@ func save_game() -> void:
 		"play_time": play_time,
 		"company_xp": company_xp,
 		"show_active_routes": show_active_routes,
+		"muted_models": muted_models,
+		"activity_collapsed": activity_collapsed,
 		"tutorials": tutorials,
 		"max_time_speed": max_time_speed,
 		"storms": storms,

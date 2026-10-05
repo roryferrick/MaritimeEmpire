@@ -12,7 +12,7 @@ extends Control
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"]]
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Icebreakers (only needed in seasonal ice)", "icebreaker"]]
 ## Cards per row, fewer if they don't fit. Five fit beside the activity log
 ## at the default window size.
 const MAX_COLUMNS := 5
@@ -196,6 +196,12 @@ func _make_card(model: Dictionary) -> Control:
 	if model.get("recovery", false):
 		rows[1] = ["Carries", GameData.carries_text(model)]
 		rows[2] = ["Job", "Recovers lost ships"]
+		rows.remove_at(3)
+	elif not str(model.get("icebreaker", "")).is_empty():
+		var areas: Array = GameState.icebreaking.areas().filter(func(item: Dictionary) -> bool:
+			return model.get("seaway", false) or item.id != "great_lakes").map(func(item: Dictionary) -> String: return item.name)
+		rows[1] = ["Job", "Leads your ships through seasonal ice in convoys"]
+		rows[2] = ["Needed", "Only in winter ice: %s" % ", ".join(areas)]
 		rows.remove_at(3)
 	for row: Array in rows:
 		var line := HBoxContainer.new()

@@ -171,8 +171,11 @@ func _close_route_screen() -> void:
 
 ## "Sea Otter sold Toys at Rotterdam: +$2,300 profit (bought $1,200, sold $3,500)":
 ## the trade's profit after the canal tolls on the way; a loss is shown in red.
+## A muted model's profitable sales are left out.
 func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity: int, cost: int, sale: int, tolls: int) -> void:
 	var profit := sale - cost - tolls
+	if profit >= 0 and GameState.muted_models.has(ship.model_id):
+		return
 	var text := "%s sold %s at %s: %s%s profit (bought %s, sold %s%s)" % [ship.name, GameData.commodity(commodity_id).get("name", commodity_id),
 		GameData.port_name(port_id), "+" if profit >= 0 else "", Fmt.money(profit), Fmt.money(cost), Fmt.money(sale),
 		", tolls %s" % Fmt.money(tolls) if tolls > 0 else ""]
@@ -181,6 +184,8 @@ func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity
 
 ## "Sea Otter loaded 10 containers of Toys for Rotterdam ($1,200)".
 func _on_cargo_loaded(ship: Ship, _port_id: String, commodity_id: String, quantity: int, cost: int, to_port: String) -> void:
+	if GameState.muted_models.has(ship.model_id):
+		return
 	var commodity := GameData.commodity(commodity_id)
 	ActivityLog.add("%s loaded %s %s of %s for %s (%s)" % [ship.name, Fmt.thousands(quantity), commodity.get("units", "units"),
 		commodity.get("name", commodity_id), GameData.port_name(to_port), Fmt.money(cost)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
@@ -189,6 +194,8 @@ func _on_cargo_loaded(ship: Ship, _port_id: String, commodity_id: String, quanti
 ## "Ever Bright entered the Panama Canal: toll $4,200 (+50% XP on this delivery)";
 ## a convoy canal says the ship joined its convoy.
 func _on_canal_entered(ship: Ship, canal: Dictionary, toll: int) -> void:
+	if GameState.muted_models.has(ship.model_id):
+		return
 	var what := "joined the %s convoy" % canal.name if canal.get("type", "") == "convoy" else "entered the %s" % canal.name
 	var parts := PackedStringArray()
 	if toll > 0:

@@ -175,6 +175,25 @@ var carry_nm := 0.0
 ## Recovery boat only: the HQ or hub port it's based at, returns to after a
 ## job, and sails to when the boats are rebalanced across hubs.
 var base_port := ""
+## Icebreaker only: the ice area (game_config icebreaking) it's stationed at,
+## or ""; base_port is then the port there it waits at.
+var station := ""
+## Icebreaker only: the ships it's leading (or going to fetch) in its convoy.
+## Not saved: a convoy under way when the game is saved forms again after.
+var convoy: Array[Ship] = []
+## Icebreaker only: "approach" (sailing to the convoy) or "escort" (leading
+## it), and where the escort ends ([from, to, end mile]); not saved.
+var ice_phase := ""
+var escort_leg: Array = []
+## A ship in an icebreaker's convoy: the icebreaker, and its place in line (0
+## first). ice_wait: the ice area it's waiting at the edge of, or "".
+var escort: Ship = null
+var escort_place := 0
+var ice_wait := ""
+## When it started waiting (play time, for first come first served), and a
+## docked ship's destination for the leg it's waiting to be led out on.
+var ice_wait_since := 0.0
+var ice_to := ""
 
 
 func _init(ship_name := "", ship_model_id := "", start_port := "") -> void:
@@ -192,6 +211,18 @@ func model() -> Dictionary:
 ## A recovery boat (Mammoth or Buffalo): recovers lost ships instead of sailing routes.
 func is_recovery() -> bool:
 	return bool(model().get("recovery", false))
+
+
+## An icebreaker (diesel or nuclear): stationed at an ice area, it leads
+## convoys through its seasonal ice instead of sailing routes.
+func is_icebreaker() -> bool:
+	return not str(model().get("icebreaker", "")).is_empty()
+
+
+## A service ship (a recovery boat or an icebreaker): no route or cargo, pays
+## its own fuel and repairs, and is never lost at sea.
+func is_service() -> bool:
+	return is_recovery() or is_icebreaker()
 
 
 ## Whether a full tank at full maintenance gets this ship from one port to
@@ -490,7 +521,7 @@ func attention_reason() -> String:
 		return "held in port"
 	if canal_state == CANAL_TOLL:
 		return "waiting for toll money"
-	if not is_recovery() and is_docked() and not has_route():
+	if not is_service() and is_docked() and not has_route():
 		return "no route"
 	if is_docked() and paused:
 		return "paused"
@@ -501,6 +532,8 @@ func attention_reason() -> String:
 
 ## Green on the status dot.
 func is_active() -> bool:
+	if is_icebreaker():
+		return not ice_phase.is_empty() or not is_docked()
 	if is_recovery():
 		return is_on_job() or not is_docked()
 	return is_running() and not is_held() and not is_lost()
@@ -658,6 +691,9 @@ func next_route_index() -> int:
 
 func status_text() -> String:
 	var canal := canal_status_text()
+	if is_icebreaker():
+		var duty := _icebreaker_status_text()
+		return duty if canal.is_empty() else "%s — %s" % [duty, canal]
 	if is_recovery():
 		var job := _recovery_status_text()
 		return job if canal.is_empty() else "%s — %s" % [job, canal]
@@ -797,6 +833,38 @@ func _recovery_status_text() -> String:
 	return "Heading to base at %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
 
 
+## "Leading 3 ships to Vanino", "Standing by at Helsinki for the Gulf of
+## Finland", "Not stationed (only needed in seasonal ice)".
+func _icebreaker_status_text() -> String:
+	var area_name: String = GameState.icebreaking.area(station).get("name", "")
+	match ice_phase:
+		"approach":
+			return "Heading out to lead %s" % _convoy_text()
+		"escort":
+			return "Leading %s through the %s ice" % [_convoy_text(), area_name]
+		"return":
+			return "Heading back to %s" % GameData.port_name(to_port)
+	if is_docked():
+		var port := GameData.port_name(docked_at)
+		if is_docking():
+			return "Refueling at %s" % port
+		if station.is_empty():
+			return "Not stationed at %s (only needed in seasonal ice)" % port
+		if docked_at != base_port:
+			return "At %s, heading to its station at %s" % [port, GameData.port_name(base_port)]
+		if GameState.icebreaking.in_season(GameState.icebreaking.area(station)):
+			return "Standing by at %s for the %s ice" % [port, area_name]
+		return "Standing by at %s (the %s isn't frozen now)" % [port, area_name]
+	return "Sailing to %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
+
+
+## "Hauler" or "3 ships".
+func _convoy_text() -> String:
+	if convoy.is_empty():
+		return "a convoy"
+	return convoy[0].name if convoy.size() == 1 else "%d ships" % convoy.size()
+
+
 func to_dict() -> Dictionary:
 	return {
 		"name": name,
@@ -848,6 +916,7 @@ func to_dict() -> Dictionary:
 		"job_nm": job_nm,
 		"carry_nm": carry_nm,
 		"base_port": base_port,
+		"station": station,
 		"auto_recover": auto_recover,
 		"full_loads": full_loads,
 		"lost_order": lost_order,
@@ -910,6 +979,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.job_nm = float(data.get("job_nm", 0.0))
 	ship.carry_nm = float(data.get("carry_nm", 0.0))
 	ship.base_port = data.get("base_port", "")
+	ship.station = data.get("station", "")
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.full_loads = bool(data.get("full_loads", true))
 	ship.lost_order = int(data.get("lost_order", 0))

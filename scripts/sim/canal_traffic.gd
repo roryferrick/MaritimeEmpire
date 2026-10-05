@@ -510,9 +510,9 @@ func convoy_ships(canal: Dictionary, forward: bool) -> Array[Ship]:
 # --- Tolls ---------------------------------------------------------------------
 
 ## Charges a cargo ship a canal's toll. Returns false if it can't afford it
-## yet. Recovery boats go free.
+## yet. Recovery boats and icebreakers go free.
 func _pay_toll(ship: Ship, canal: Dictionary) -> bool:
-	if not ship.is_recovery():
+	if not ship.is_service():
 		var toll: int = _state.cargo_toll(ship, canal)
 		if _state.money < toll:
 			return false

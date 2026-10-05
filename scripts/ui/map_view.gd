@@ -927,7 +927,7 @@ func _draw_route() -> void:
 func _draw_active_lanes() -> void:
 	var lanes := {}  # "A-B" (sorted) -> [from, to, color]
 	for ship in GameState.ships:
-		if ship.is_recovery():
+		if ship.is_service():
 			continue
 		var color := Color.from_string(ship.model().get("map_color", "#ffffff"), Color.WHITE)
 		color.a = ACTIVE_LANE_ALPHA

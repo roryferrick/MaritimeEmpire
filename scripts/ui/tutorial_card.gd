@@ -142,6 +142,9 @@ func _tips_list() -> Array[Dictionary]:
 		{id = "seasons", title = "Seasonal closures",
 			show = func() -> bool: return seen.call("map") and GameState.seasonal.active(),
 			text = func() -> String: return "From now on the seasons close some places, on their real dates: the Great Lakes locks and ports in winter, Antarctica outside its summer, and icebound ports like Nain and Magadan. Ice in the Gulf of Finland slows ships instead.\n\nShips won't start a leg they can't finish before a closure; they wait in port until it reopens. The activity log warns you 10 days ahead, and a port's popup and the route screen show its dates."},
+		{id = "icebreakers", title = "Icebreakers",
+			show = func() -> bool: return seen.call("seasons") and GameState.company_level() >= _first_icebreaker_level(),
+			text = func() -> String: return "Icebreakers are in the Shop now. You only need one if your ships trade where winter ice closes ports: the Great Lakes, the Sea of Okhotsk, or the Gulf of Finland, where the ice just slows ships.\n\nBuy one, then pick its Station in its popup. While the ice is in, it leads your ships through in small convoys (or keeps the Gulf of Finland's fairways open). The rest of the year it just waits."},
 		{id = "lost", title = "Lost at sea",
 			show = func() -> bool: return GameState.ships.any(func(ship: Ship) -> bool: return ship.is_lost()),
 			text = func() -> String: return "A ship is lost at sea. A recovery boat can carry it to the nearer end of its leg: press Send Recovery in the lost ship's popup. With its Rescue switch on (it is by default), one is sent automatically.\n\nNo recovery boat yet? Buy one in the Shop when it unlocks."},
@@ -151,7 +154,7 @@ func _tips_list() -> Array[Dictionary]:
 func _cargo_ships() -> Array[Ship]:
 	var out: Array[Ship] = []
 	for ship in GameState.ships:
-		if not ship.is_recovery():
+		if not ship.is_service():
 			out.append(ship)
 	return out
 
@@ -174,5 +177,14 @@ static func _first_recovery_level() -> int:
 	var level := 999
 	for model: Dictionary in GameData.ship_models:
 		if model.get("recovery", false):
+			level = mini(level, int(model.get("unlock_level", 1)))
+	return level
+
+
+## The lowest company level an icebreaker unlocks at.
+static func _first_icebreaker_level() -> int:
+	var level := 999
+	for model: Dictionary in GameData.ship_models:
+		if not str(model.get("icebreaker", "")).is_empty():
 			level = mini(level, int(model.get("unlock_level", 1)))
 	return level

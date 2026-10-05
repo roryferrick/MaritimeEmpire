@@ -88,6 +88,8 @@ func _update_info() -> void:
 	var cargo: String = GameData.commodity(ship.cargo_id).get("name", "") if not ship.cargo_id.is_empty() else "empty"
 	if ship.is_recovery():
 		cargo = "Recovery"
+	elif ship.is_icebreaker():
+		cargo = "Icebreaker"
 	var points := ship.skill_points()
 	_info.text = "%s · Lv %d%s" % [cargo, ship.level(), " +%d" % points if points > 0 else ""]
 	_info.theme_type_variation = &"GainLabel" if points > 0 else &"DimLabel"

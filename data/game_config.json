@@ -22,6 +22,18 @@
 			{"id": "gulf_of_finland", "name": "Gulf of Finland ice", "center": [27.0, 59.9], "radius_nm": 180, "from": [1, 10], "to": [3, 31], "speed": 0.45, "wear": 1.5}
 		]
 	},
+	"_icebreaking_comment": "Icebreakers (scripts/sim/icebreaking.gd). Each ice area is covered by circles ([lon, lat, radius nm]) and is in season while its seasonal closure (closure) or ice zone (zone) is. With an icebreaker stationed there (station_ports: where it waits), the closure is lifted for ships it can lead (the Great Lakes locks still shut regardless): ships reaching the ice edge, or leaving a port in the ice, wait (engines off) for the icebreaker, which leads up to convoy_size ships on the same lane through the ice at escort_speed (by icebreaker kind: a share of the slower of it and the slowest ship), gap_nm apart, then goes back for the next. An ice zone that stays open anyway (the Gulf of Finland) has no convoys: an icebreaker stationed there keeps the fairways open, so ships in it sail at fairway speed and wear instead of crawling. Icebreakers pay their own fuel and repairs.",
+	"icebreaking": {
+		"convoy_size": 4,
+		"gap_nm": 3,
+		"escort_speed": {"diesel": 0.65, "nuclear": 0.85},
+		"fairway": {"speed": 0.8, "wear": 1.1},
+		"areas": [
+			{"id": "gulf_of_finland", "name": "Gulf of Finland", "zone": "gulf_of_finland", "circles": [[27.0, 59.9, 180]], "station_ports": ["HEL", "LED", "ULU", "TLL"]},
+			{"id": "okhotsk", "name": "Sea of Okhotsk", "closure": "okhotsk", "circles": [[150.5, 58.6, 260], [140.6, 49.4, 170]], "station_ports": ["GDX", "VNN"]},
+			{"id": "great_lakes", "name": "Great Lakes", "closure": "lakes_ice", "circles": [[-84.0, 44.8, 520]], "station_ports": ["DET", "CLE", "CHI", "DLH", "TOR", "MKE", "TOL", "YQT", "BUF", "YHM", "IHB", "BUH", "GRY", "TWH", "MQT", "CAL"]}
+		]
+	},
 	"_weather_comment": "Storms (scripts/sim/weather.gd), for saves founded with Moderate or Harsh storms. From company level min_company_level they slow ships, wear them and make breakdowns likelier, and the strongest hurricane, typhoon and cyclone cores close ports; before that (and in saves without storms) nothing happens to ships, though storms are still drawn. levels: slow is the most a storm's core cuts speed (fuel per mile stays the same, so a storm alone can't strand a ship), wear the most it multiplies wear and breakdown chance, close_at how strong a tropical storm must be over a port to close it (0..1), rate how many storms form, times the basins' per_year. Each basin forms storms of its kind in its months (1-12; peak months twice as often), per_year a year on average, somewhere in spawn ([[lon min, lon max], [lat min, lat max]]), with a radius_nm of effect, lasting life_days (a calendar day is 72 s of play), moving speed_nm calendar nm an hour (about knots). Tropical kinds (hurricane, typhoon, cyclone) drift west and poleward, then curve away east past recurve_lat; gales run east. names are used in turn.",
 	"weather": {
 		"min_company_level": 6,

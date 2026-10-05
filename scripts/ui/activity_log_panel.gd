@@ -3,12 +3,16 @@ extends PanelContainer
 ## The activity log down the left of the game screen: ActivityLog's messages,
 ## newest at the top, in small text with the calendar time they happened at. Text
 ## takes the ship's color (lightened if too dark to read); good and bad news
-## get a green or red highlight behind it.
+## get a green or red highlight behind it. The « button folds it away to a thin
+## strip (» opens it again), remembered with the game (GameState.activity_collapsed).
 
 ## Colors darker than this are lightened toward white so they read on the panel.
 const MIN_TEXT_LUMINANCE := 0.55
 
 const THEME_TYPE := &"ActivityLog"
+## The panel's width open, and folded away to just its button.
+const OPEN_WIDTH := 272.0
+const FOLDED_WIDTH := 44.0
 
 @onready var _list: VBoxContainer = %LogList
 
@@ -16,8 +20,10 @@ const THEME_TYPE := &"ActivityLog"
 func _ready() -> void:
 	ActivityLog.entry_added.connect(_add_row)
 	ActivityLog.cleared.connect(_clear)
+	%CollapseButton.pressed.connect(_toggle)
 	for entry in ActivityLog.entries:
 		_add_row(entry)
+	_show_folded(GameState.activity_collapsed)
 
 
 func _add_row(entry: Dictionary) -> void:
@@ -41,14 +47,30 @@ func _add_row(entry: Dictionary) -> void:
 		var oldest := _list.get_child(-1)
 		_list.remove_child(oldest)
 		oldest.queue_free()
-	%EmptyLabel.visible = false
+	%EmptyLabel.visible = false  # _show_folded() keeps it hidden from now on.
 
 
 func _clear() -> void:
 	for child in _list.get_children():
 		_list.remove_child(child)
 		child.queue_free()
-	%EmptyLabel.visible = true
+	%EmptyLabel.visible = not GameState.activity_collapsed
+
+
+func _toggle() -> void:
+	GameState.activity_collapsed = not GameState.activity_collapsed
+	_show_folded(GameState.activity_collapsed)
+
+
+## Folded: only the » button shows, in a thin strip. Open: the title, the
+## messages (or the empty note) and the « button.
+func _show_folded(folded: bool) -> void:
+	custom_minimum_size.x = FOLDED_WIDTH if folded else OPEN_WIDTH
+	%LogTitle.visible = not folded
+	%LogScroll.visible = not folded
+	%EmptyLabel.visible = not folded and _list.get_child_count() == 0
+	%CollapseButton.text = "»" if folded else "«"
+	%CollapseButton.tooltip_text = "Show the activity log" if folded else "Fold the activity log away"
 
 
 static func _highlight(color: Color) -> StyleBoxFlat:

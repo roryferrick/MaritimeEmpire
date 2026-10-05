@@ -36,6 +36,11 @@ func _ready() -> void:
 	if ship.is_recovery():
 		%RangeValue.text = "Recovers lost ships"
 		%CapacityValue.text = GameData.carries_text(model)
+	elif ship.is_icebreaker():
+		$Content/Stats/RangeName.text = "Job"
+		$Content/Stats/CapacityName.text = "Needed"
+		%RangeValue.text = "Leads convoys through seasonal ice"
+		%CapacityValue.text = "Only needed in winter ice"
 	else:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 		%CapacityValue.text = GameData.cargo_text(model)
@@ -44,6 +49,9 @@ func _ready() -> void:
 	_cargo_label.theme_type_variation = &"DimLabel"
 	_cargo_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	%CostLabel.add_sibling(_cargo_label)
+	if ship.is_icebreaker():
+		%Buttons.add_sibling(_station_picker())
+		%Buttons.get_parent().move_child(%Buttons, -1)
 	%BarsSlot.add_child(ShipBars.new(ship))
 	%SkillsButton.toggled.connect(_show_skills)
 	%SkillsButton.add_child(_upgrades_alert)
@@ -91,7 +99,7 @@ func _update_live() -> void:
 	var costs := "Fuel %s · Repair %s" % [Fmt.money(-fuel), Fmt.money(-repair)]
 	if toll > 0:
 		costs += " · Toll %s" % Fmt.money(-toll)
-	if ship.is_recovery():
+	if ship.is_service():
 		%CostLabel.text = "This stop: %s" % costs
 	else:
 		%CostLabel.text = "This stop: Sold %s (cargo cost %s) · %s\nProfit %s" % [Fmt.money(ship.stop_sale),
@@ -104,7 +112,7 @@ func _update_live() -> void:
 ## What's aboard: its cost and what it should sell for where it's going, at
 ## today's prices; hidden when the hold is empty (the cargo bar says so).
 func _update_cargo() -> void:
-	_set_shown(_cargo_label, not ship.is_recovery() and not %SkillsButton.button_pressed and not ship.cargo_id.is_empty())
+	_set_shown(_cargo_label, not ship.is_service() and not %SkillsButton.button_pressed and not ship.cargo_id.is_empty())
 	if ship.cargo_id.is_empty():
 		return
 	var commodity := GameData.commodity(ship.cargo_id)
@@ -238,6 +246,51 @@ func _set_shown(control: Control, shown: bool) -> void:
 		reset_size.call_deferred()
 
 
+## An icebreaker's station: "Station: [Gulf of Finland (ice 10 Jan - 31 Mar)]",
+## with a note under it of why one couldn't be picked.
+func _station_picker() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	box.add_child(row)
+	var label := Label.new()
+	label.text = "Station"
+	label.theme_type_variation = &"DimLabel"
+	row.add_child(label)
+	var picker := OptionButton.new()
+	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	picker.tooltip_text = "Icebreakers are only needed in seasonal ice: station one at an ice area and it leads your ships through it in convoys while it's frozen."
+	picker.add_item("Not stationed")
+	picker.set_item_metadata(0, "")
+	var lists := {closure = GameState.seasonal.closures(), zone = GameState.seasonal.ice_zones()}
+	for item: Dictionary in GameState.icebreaking.areas():
+		var season := ""
+		for key: String in lists:
+			for entry: Dictionary in lists[key]:
+				if entry.id == item.get(key, ""):
+					season = " (ice %s - %s)" % [Seasons.date_text(entry.from), Seasons.date_text(entry.to)]
+		picker.add_item(item.name + season)
+		picker.set_item_metadata(picker.item_count - 1, item.id)
+		if item.id == ship.station:
+			picker.select(picker.item_count - 1)
+	row.add_child(picker)
+	var error := Label.new()
+	error.theme_type_variation = &"ErrorLabel"
+	error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	error.visible = false
+	box.add_child(error)
+	picker.item_selected.connect(func(index: int) -> void:
+		var problem := GameState.station_icebreaker(ship, str(picker.get_item_metadata(index)))
+		error.text = problem
+		error.visible = not problem.is_empty()
+		if not problem.is_empty():
+			for i in picker.item_count:
+				if picker.get_item_metadata(i) == ship.station:
+					picker.select(i)
+		reset_size.call_deferred())
+	return box
+
+
 func _refresh() -> void:
 	%NameLabel.text = ship.name
 	_update_live()
@@ -246,11 +299,11 @@ func _refresh() -> void:
 	%RefuelToggle.set_pressed_no_signal(ship.auto_refuel)
 	%RescueToggle.set_pressed_no_signal(ship.auto_recover)
 	%FullToggle.set_pressed_no_signal(ship.full_loads)
-	%RescueToggle.visible = not ship.is_recovery()
-	%FullToggle.visible = not ship.is_recovery()
-	%AssignButton.visible = not ship.is_recovery()
-	%PauseButton.visible = not ship.is_recovery()
-	%RouteLabel.visible = not ship.is_recovery()
+	%RescueToggle.visible = not ship.is_service()
+	%FullToggle.visible = not ship.is_service()
+	%AssignButton.visible = not ship.is_service()
+	%PauseButton.visible = not ship.is_service()
+	%RouteLabel.visible = not ship.is_service()
 	if ship.has_route():
 		%RouteLabel.text = "Route: %s (loops)" % GameData.route_text(ship.route)
 	else:
