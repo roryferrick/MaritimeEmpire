@@ -77,10 +77,12 @@ layout_mode = 2
 theme_type_variation = &"DimLabel"
 text = "Company color (your name and the rings around your hubs)"
 
-[node name="ColorRow" type="HBoxContainer" parent="Center/Card/Content"]
+[node name="ColorRow" type="GridContainer" parent="Center/Card/Content"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 6
 
 [node name="Spacer" type="Control" parent="Center/Card/Content"]
 custom_minimum_size = Vector2(0, 8)

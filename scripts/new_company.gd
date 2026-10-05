@@ -78,7 +78,8 @@ func _show_start_note() -> void:
 			%StartNote.text = "Not a recommended start: Scooters find only thin trade in range."
 
 
-## One swatch per company color; the chosen one gets a white border.
+## One swatch per company color; the chosen one gets a white border (dark on
+## the palest colors, so it shows).
 func _add_color_swatches() -> void:
 	var group := ButtonGroup.new()
 	for entry: Array in GameData.config.get("company_colors", []):
@@ -100,7 +101,7 @@ static func _swatch_style(color: Color, chosen: bool) -> StyleBoxFlat:
 	style.bg_color = color
 	style.set_corner_radius_all(6)
 	style.set_border_width_all(3 if chosen else 0)
-	style.border_color = Color.WHITE
+	style.border_color = Color(0.1, 0.12, 0.15) if color.get_luminance() > 0.8 else Color.WHITE
 	return style
 
 

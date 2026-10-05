@@ -358,6 +358,17 @@ func company_color_value(color_id := company_color) -> Color:
 	return Color.from_string("#b67cf2", Color.MEDIUM_PURPLE)
 
 
+## Shows a control's text in a company color; dark colors (black, navy...) get
+## a light outline so they still read on the dark UI.
+func apply_company_text_color(control: Control, color_id := company_color) -> void:
+	var color := company_color_value(color_id)
+	for item: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color", &"font_hover_pressed_color"]:
+		control.add_theme_color_override(item, color)
+	if color.get_luminance() < 0.25:
+		control.add_theme_color_override(&"font_outline_color", Color(0.85, 0.87, 0.9))
+		control.add_theme_constant_override(&"outline_size", 4)
+
+
 func company_level() -> int:
 	return int(Progression.company_level(company_xp).level)
 
@@ -1498,8 +1509,8 @@ func has_save(slot: int) -> bool:
 	return FileAccess.file_exists(save_path(slot))
 
 
-## What the main menu shows for a slot: {company_name, company_color, money,
-## date (calendar Unix time)}, plus error if it can't be loaded; {} if empty.
+## What the main menu shows for a slot: {company_name, company_color,
+## home_port (id), money, date (calendar Unix time)}, plus error if it can't be loaded; {} if empty.
 func save_summary(slot: int) -> Dictionary:
 	if not has_save(slot):
 		return {}
@@ -1509,6 +1520,7 @@ func save_summary(slot: int) -> Dictionary:
 	var summary := {
 		company_name = str(data.get("company_name", "")),
 		company_color = str(data.get("company_color", "purple")),
+		home_port = str(data.get("home_port", "")),
 		money = int(data.get("money", 0)),
 		date = calendar_time_at(float(data.get("play_time", 0.0))),
 	}

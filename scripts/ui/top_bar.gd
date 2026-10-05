@@ -8,7 +8,7 @@ extends PanelContainer
 
 func _ready() -> void:
 	%CompanyLabel.text = GameState.company_name
-	%CompanyLabel.add_theme_color_override(&"font_color", GameState.company_color_value())
+	GameState.apply_company_text_color(%CompanyLabel)
 	GameState.money_changed.connect(_on_money_changed)
 	GameState.company_xp_changed.connect(_on_xp_changed)
 	for control: Control in [%LevelLabel, %LevelBar]:
