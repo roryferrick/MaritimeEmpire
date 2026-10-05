@@ -39,7 +39,7 @@
 		{"id": "na_east", "name": "North America East", "ports": ["NYC", "SAV", "CHS", "ORF", "BOS", "MIA", "PWM", "FSP", "YDP", "BDA", "BAL", "PHL", "JAX", "YHZ"]},
 		{"id": "gulf_caribbean", "name": "Gulf of Mexico & Caribbean", "ports": ["HOU", "MSY", "VER", "CUN", "HAV", "KIN", "FPO", "SJU", "PAP", "BGI", "CTG", "CLN", "BLB", "PAS", "PQZ", "PCR", "ACJ", "CIO", "PBL", "CAU", "POS", "MOB"]},
 		{"id": "na_west", "name": "North America West", "ports": ["LAX", "LGB", "OAK", "SEA", "YVR", "PDX", "MRY", "ANC", "JNU", "DUT", "CSL", "ZLO", "LZC"]},
-		{"id": "great_lakes", "name": "Great Lakes", "ports": ["CHI", "DLH", "DET", "TOR", "CLE", "YHM", "MKE", "TOL", "YQT", "IHB", "BUH", "GRY", "TWH", "MQT", "CAL"]},
+		{"id": "great_lakes", "name": "Great Lakes", "ports": ["BUF", "CHI", "DLH", "DET", "TOR", "CLE", "YHM", "MKE", "TOL", "YQT", "IHB", "BUH", "GRY", "TWH", "MQT", "CAL"]},
 		{"id": "south_america", "name": "South America", "ports": ["BUE", "PNG", "RIO", "SSZ", "SSA", "FOR", "GYE", "BUN", "LIM", "SAI", "ANF", "PUQ", "GPS", "MVD", "SUA", "VDC", "VIX", "ITJ", "RIG", "BHI", "VAP"]},
 		{"id": "oceania", "name": "Oceania & Pacific", "ports": ["MEL", "SYD", "BNE", "AKL", "WLG", "POM", "SUV", "PPT", "APW", "PPG", "TBU", "NOU", "GUM", "ROR", "HNL", "LIH", "ITO", "KWH", "MDY", "FRE", "ADL", "DRW"]},
 		{"id": "russia_far_east", "name": "Russian Far East", "ports": ["VVO", "KRS", "PKC", "GDX", "VYP", "VNN"]},
@@ -103,6 +103,7 @@
 			"CLE": {"toys": 0.98, "furniture": 0.98, "clothing": 1.04, "coffee": 1.04},
 			"DET": {"toys": 0.98, "furniture": 0.98, "clothing": 1.04, "coffee": 1.04},
 			"TOL": {"toys": 0.98, "furniture": 0.98, "clothing": 1.04, "coffee": 1.04},
+			"BUF": {"clothing": 1.02, "coffee": 1.02},
 			"TOR": {"toys": 1.17, "furniture": 1.17, "clothing": 0.89, "coffee": 0.89},
 			"YHM": {"toys": 1.17, "furniture": 1.17, "clothing": 0.89, "coffee": 0.89}}},
 		{"name": "Azores and Madeira", "note": "Coal lands at Ponta Delgada and goes out to Madeira and the western islands.", "prices": {

@@ -191,7 +191,8 @@ func _running_cost(from_port: String, to_port: String) -> float:
 
 
 ## Each canal on a leg, e.g. " · Panama Canal: toll 20% of cargo value, +50%
-## XP", plus the longest convoy wait and any cargo unloaded to pass; "" for none.
+## XP", plus the longest convoy wait and any cargo unloaded to pass, any
+## seasonal closure it's subject to, and rough seas; "" for none.
 func _canal_text(from_port: String, to_port: String) -> String:
 	var text := ""
 	for crossing: Dictionary in GameData.canal_crossings(from_port, to_port):
@@ -208,6 +209,9 @@ func _canal_text(from_port: String, to_port: String) -> String:
 		if lighten > 0.0:
 			parts.append("unloads %d%% of its cargo to pass" % roundi(lighten * 100.0))
 		text += " · %s: %s" % [canal.name, ", ".join(parts)] if not parts.is_empty() else " · %s" % canal.name
+	if GameState.seasons:
+		for closure: Dictionary in GameState.seasonal.leg_closures(from_port, to_port):
+			text += " · %s closed %s to %s (%s)" % [closure.name, Seasons.date_text(closure.from), Seasons.date_text(closure.to), closure.why]
 	if GameData.is_rough_port(from_port) or GameData.is_rough_port(to_port):
 		text += " · rough seas: +%d%% trade profit, 2x wear" % roundi(float(GameData.config.get("rough_seas", {}).get("pay_bonus", 0.0)) * 100.0)
 	return text

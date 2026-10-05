@@ -300,6 +300,7 @@
 		{ "id": "MSW", "name": "Massawa", "country": "Eritrea", "lat": 15.61, "lon": 39.45, "rank": 297, "size": 12 },
 		{ "id": "BNW", "name": "Banana", "country": "DR Congo", "lat": -6.01, "lon": 12.40, "rank": 298, "size": 10 },
 		{ "id": "OXB", "name": "Bissau", "country": "Guinea-Bissau", "lat": 11.85, "lon": -15.59, "rank": 299, "size": 10 },
-		{ "id": "DIL", "name": "Dili", "country": "Timor-Leste", "lat": -8.55, "lon": 125.57, "rank": 300, "size": 8 }
+		{ "id": "DIL", "name": "Dili", "country": "Timor-Leste", "lat": -8.55, "lon": 125.57, "rank": 300, "size": 8 },
+		{ "id": "BUF", "name": "Buffalo", "country": "United States", "lat": 42.87, "lon": -78.89, "rank": 301, "size": 22, "seaway": true, "lake": "erie" }
 	]
 }

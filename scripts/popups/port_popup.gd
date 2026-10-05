@@ -99,6 +99,18 @@ func _update_size() -> void:
 		if here < sizes.band_min(band):
 			too_big.append("ships needing %s ports" % band.capitalize())
 	lines.append("Too small for %s" % " or ".join(too_big) if not too_big.is_empty() else "Every ship can dock here")
+	# Seasonal closures (in saves with them) and a storm over the port.
+	if GameState.seasons:
+		for closure: Dictionary in GameState.seasonal.closures():
+			if not closure.get("ports", []).has(port_id):
+				continue
+			if not GameState.seasonal.port_closure(port_id, GameState.calendar_time()).is_empty():
+				lines.append("Closed by %s until %s" % [closure.why, Seasons.date_text(closure.to)])
+			else:
+				lines.append("Closes for %s from %s to %s" % [closure.why, Seasons.date_text(closure.from), Seasons.date_text(closure.to)])
+	var storm := GameState.weather.closed_by(port_id)
+	if not storm.is_empty():
+		lines.append("Closed while %s passes" % Weather.title(storm))
 	_size_effects.text = "\n".join(lines)
 
 

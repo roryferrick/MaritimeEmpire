@@ -173,6 +173,10 @@ var _storm_warning_clock := 0.0
 var _closed_ports := {}
 var _storm_warned := {}
 var _ships_in_storms := {}
+## Seasonal closures and ice zones: id -> whether in season when last looked
+## (to log changes), and the ids of closures already warned of ahead.
+var _season_closed := {}
+var _season_warned := {}
 ## fuel_reserve(), and the play_time it was worked out at.
 var _fuel_reserve := 0.0
 var _fuel_reserve_time := -1.0
@@ -181,6 +185,7 @@ var canal_traffic := CanalTraffic.new(self)
 ## Commodity prices: drift and the impact of the player's own trades.
 var market := Market.new(self)
 var weather := Weather.new(self)
+var seasonal := Seasons.new(self)
 ## Port sizes: how they grow and shrink, and what they change.
 var port_sizes := PortSizes.new(self)
 
@@ -219,6 +224,7 @@ func _step(delta: float) -> void:
 	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
 		_storm_warning_clock = 0.0
 		_storm_warnings()
+		_season_warnings()
 	_auto_recovery_clock += delta
 	if _auto_recovery_clock >= AUTO_RECOVERY_INTERVAL:
 		_auto_recovery_clock = 0.0
@@ -890,12 +896,16 @@ func _sail(ship: Ship, delta: float) -> bool:
 	return true
 
 
-## [speed factor, wear factor] for a ship at sea from the storms where it is
-## (see Weather.factors()); [1, 1] in port or when storms aren't active.
+## [speed factor, wear factor] for a ship at sea from the storms and seasonal
+## ice where it is (see Weather.factors() and Seasons.factors()); [1, 1] in
+## port or when neither is active.
 func _storm_factors(ship: Ship) -> Array:
-	if not weather.active() or ship.is_docked() or ship.from_port.is_empty():
+	if (not weather.active() and not seasonal.active()) or ship.is_docked() or ship.from_port.is_empty():
 		return [1.0, 1.0]
-	return weather.factors(Geo.unproject(ship.world_position()))
+	var at := Geo.unproject(ship.world_position())
+	var storm := weather.factors(at)
+	var ice := seasonal.factors(at)
+	return [float(storm[0]) * float(ice[0]), float(storm[1]) * float(ice[1])]
 
 
 ## Where a ship may sail to this step: no closer than STORM_OFFSHORE_NM to a
@@ -924,15 +934,7 @@ func _storm_warnings() -> void:
 		_closed_ports.clear()
 		_ships_in_storms.clear()
 		return
-	var ports := {}
-	for hub in hubs:
-		ports[hub.port_id] = true
-	for ship in ships:
-		for port_id: String in [ship.docked_at, ship.to_port]:
-			if not port_id.is_empty():
-				ports[port_id] = true
-		for port_id in ship.route:
-			ports[port_id] = true
+	var ports := _player_ports()
 	var ahead := {}  # Tropical storm -> where it will be.
 	for storm in weather.storms:
 		if Weather.TROPICAL.has(storm.kind):
@@ -969,6 +971,87 @@ func _storm_warnings() -> void:
 		elif _ships_in_storms.get(ship, "") != named:
 			_ships_in_storms[ship] = named
 			ActivityLog.add("%s is sailing through %s: slower, and wearing faster." % [ship.name, named], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
+
+
+## The ports that matter to the player, as a set: the HQ and hubs, and every
+## port a ship is at, heading to or has on its route.
+func _player_ports() -> Dictionary:
+	var ports := {}
+	for hub in hubs:
+		ports[hub.port_id] = true
+	for ship in ships:
+		for port_id: String in [ship.docked_at, ship.to_port]:
+			if not port_id.is_empty():
+				ports[port_id] = true
+		for port_id in ship.route:
+			ports[port_id] = true
+	return ports
+
+
+## The canals the player's ships use, as a set: on the leg each is sailing and
+## every leg of its route.
+func _player_canals() -> Dictionary:
+	var canals := {}
+	for ship in ships:
+		var legs := []
+		if not ship.from_port.is_empty():
+			legs.append([ship.from_port, ship.to_port])
+		for i in ship.route.size():
+			legs.append([ship.route[i], ship.route[(i + 1) % ship.route.size()]])
+		for leg: Array in legs:
+			if leg[0] != leg[1]:
+				for crossing: Dictionary in GameData.canal_crossings(leg[0], leg[1]):
+					canals[crossing.canal.id] = true
+	return canals
+
+
+## Activity log notes about the seasonal closures that touch the player's
+## ports or canals (while closures are active): warn_days calendar days before
+## one shuts, and when it shuts and reopens; and when an ice zone with one of
+## their ports in it freezes and thaws.
+func _season_warnings() -> void:
+	if not seasonal.active():
+		_season_closed.clear()
+		return
+	var now := calendar_time()
+	var ahead := now + int(float(GameData.config.get("seasons", {}).get("warn_days", 10)) * 86400.0)
+	var ports := _player_ports()
+	var canals := _player_canals()
+	var items: Array = seasonal.closures() + seasonal.ice_zones()
+	for item: Dictionary in items:
+		var relevant: bool = canals.has(item.get("canal", "")) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))
+		if item.has("center"):
+			var center := Vector2(item.center[0], item.center[1])
+			relevant = ports.keys().any(func(p: String) -> bool:
+				var port := GameData.get_port(p)
+				return Geo.distance_nm(center, Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))) <= float(item.radius_nm))
+		var closed := Seasons.in_season(item, now)
+		var was = _season_closed.get(item.id)
+		_season_closed[item.id] = closed
+		if not relevant or was == closed:
+			continue
+		var is_zone: bool = item.has("center")
+		if closed and is_zone:
+			ActivityLog.add("The %s has set in: ships crawl through it until %s." % [item.name, Seasons.date_text(item.to)], ActivityLog.Kind.BAD)
+		elif closed:
+			ActivityLog.add("%s %s closed for %s until %s." % [Seasons.subject(item), Seasons.verb(item, "has", "have"), item.why,
+				Seasons.date_text(item.to)], ActivityLog.Kind.BAD)
+		elif was != null and is_zone:
+			ActivityLog.add("The %s has cleared." % item.name, ActivityLog.Kind.GOOD)
+		elif was != null:
+			ActivityLog.add("%s %s reopened." % [Seasons.subject(item), Seasons.verb(item, "has", "have")], ActivityLog.Kind.GOOD)
+	for item: Dictionary in seasonal.closures():
+		# Warned once per season: forgotten once it's open and not closing soon.
+		if not Seasons.in_season(item, now) and not Seasons.in_season(item, ahead):
+			_season_warned.erase(item.id)
+			continue
+		if _season_warned.has(item.id) or Seasons.in_season(item, now):
+			continue
+		if not (canals.has(item.get("canal", "")) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))):
+			continue
+		_season_warned[item.id] = true
+		ActivityLog.add("%s %s for %s on %s: ships won't start legs they can't finish before then." % [Seasons.subject(item),
+			Seasons.verb(item, "closes", "close"), item.why, Seasons.date_text(item.from)], ActivityLog.Kind.BAD)
 
 
 ## Flags a ship that no longer has the fuel (or maintenance) to finish its leg.
@@ -1204,6 +1287,14 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	if not storm.is_empty():
 		ship.weather_wait = "%s is closed by %s" % [GameData.port_name(ship.docked_at), Weather.title(storm)]
 		return
+	# A leg it couldn't finish before a seasonal closure shuts its way: wait for
+	# the closure to end (again nothing for the player to do).
+	if seasonal.active():
+		var seconds := ship.leg_seconds(ship.docked_at, to, 0.0, GameData.distance_nm(ship.docked_at, to), maxf(ship.maintenance, 0.01))
+		var closure := seasonal.leg_blocker(ship.docked_at, to, seconds)
+		if not closure.is_empty():
+			ship.weather_wait = Seasons.wait_text(closure)
+			return
 	ship.weather_wait = ""
 	var phase := ship.refill_phase_seconds()
 	var topping_up := ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)

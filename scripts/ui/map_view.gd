@@ -54,6 +54,13 @@ const LIGHTNING_LIT := 0.45
 const LIGHTNING_CELLS := 4
 const LIGHTNING_CHANCE := 0.3
 const LIGHTNING_MIN_RADIUS := 18.0
+## Seasonal ice (see _draw_ice()): its color, an ice zone's haze as [share of
+## the radius, opacity] rings, a closed canal's frosted line width, and how far
+## outside a closed port's dot its ice ring is.
+const ICE_COLOR := Color(0.86, 0.95, 1.0)
+const ICE_HAZE := [[1.0, 0.1], [0.8, 0.1], [0.6, 0.12], [0.4, 0.14]]
+const ICE_CANAL_WIDTH := 5.0
+const ICE_RING_GAP := 5.0
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
 ## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
@@ -675,12 +682,14 @@ func _redraw_layers() -> void:
 func _draw_weather_layer() -> void:
 	_canvas = _weather_layer
 	if show_ships:
+		_draw_ice()
 		_draw_storms()
 
 
 func _draw_canal_layer() -> void:
 	_canvas = _canal_layer
 	_draw_canals()
+	_draw_ice_canals()
 
 
 func _draw_static_layer() -> void:
@@ -1426,3 +1435,45 @@ func _draw_lightning(storm: Dictionary, center: Vector2, radius: float, strength
 		for line: PackedVector2Array in [bolt, fork]:
 			_canvas.draw_polyline(line, Color(LIGHTNING_GLOW, 0.35 * fade), 6.0, true)
 			_canvas.draw_polyline(line, Color(LIGHTNING_CORE, fade), 2.2, true)
+
+
+# --- Seasonal ice --------------------------------------------------------
+
+## The seasonal closures in force (GameState.seasonal, while active): each ice
+## zone in season as a frosty patch, fading out to its edge, and each
+## closed port ringed in ice (closed canals: _draw_ice_canals()).
+func _draw_ice() -> void:
+	var seasonal: Seasons = GameState.seasonal
+	if not seasonal.active():
+		return
+	var now := GameState.calendar_time()
+	for zone: Dictionary in seasonal.ice_zones():
+		if not Seasons.in_season(zone, now):
+			continue
+		var lat: float = zone.center[1]
+		var center := world_to_screen(Geo.project(Vector2(zone.center[0], lat)))
+		var radius: float = float(zone.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
+		for ring: Array in ICE_HAZE:
+			_canvas.draw_circle(center, radius * float(ring[0]), Color(ICE_COLOR, float(ring[1])))
+	for closure: Dictionary in seasonal.closures():
+		if not Seasons.in_season(closure, now):
+			continue
+		for port_id: String in closure.get("ports", []):
+			var at := port_screen_position(port_id)
+			if Rect2(Vector2.ZERO, size).grow(20.0).has_point(at):
+				_canvas.draw_circle(at, _port_radius(port_id) + ICE_RING_GAP, Color(ICE_COLOR, 0.35))
+				_canvas.draw_arc(at, _port_radius(port_id) + ICE_RING_GAP, 0.0, TAU, 24, Color(ICE_COLOR, 0.95), 2.0, true)
+
+
+## Each canal shut by a seasonal closure, frosted over along its path (drawn
+## over the canal and its locks).
+func _draw_ice_canals() -> void:
+	var seasonal: Seasons = GameState.seasonal
+	if not show_ships or not seasonal.active():
+		return
+	var now := GameState.calendar_time()
+	for closure: Dictionary in seasonal.closures():
+		if closure.has("canal") and Seasons.in_season(closure, now):
+			var path := _canal_screen_path(GameData.get_canal(closure.canal))
+			if path.size() >= 2:
+				_canvas.draw_polyline(path, Color(ICE_COLOR, 0.8), ICE_CANAL_WIDTH, true)

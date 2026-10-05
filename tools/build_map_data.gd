@@ -973,7 +973,8 @@ func _pairs_arg(ports: Array) -> Dictionary:
 
 
 ## The lanes already in data/sea_lanes.res with the freshly routed ones in
-## place of theirs (for "--pairs"), printing each one's old and new length.
+## place of theirs (for "--pairs"), printing each one's old and new length, and
+## any new ones (to or from a port added to ports.json) added.
 func _patch_lanes(fresh: SeaLaneData) -> SeaLaneData:
 	var old: SeaLaneData = load(LANES_OUT)
 	var replaced := {}
@@ -991,6 +992,21 @@ func _patch_lanes(fresh: SeaLaneData) -> SeaLaneData:
 		out.starts.append(out.points.size())
 		out.points.append_array(source.points.slice(source.starts[index], source.starts[index + 1]))
 		out.distances.append(source.distances[index])
+	# Lanes to or from a newly added port aren't in the old file: add them.
+	var had := {}
+	for key in old.keys:
+		had[key] = true
+	var added := 0
+	for i in fresh.keys.size():
+		if had.has(fresh.keys[i]):
+			continue
+		out.keys.append(fresh.keys[i])
+		out.starts.append(out.points.size())
+		out.points.append_array(fresh.points.slice(fresh.starts[i], fresh.starts[i + 1]))
+		out.distances.append(fresh.distances[i])
+		added += 1
+	if added > 0:
+		print("  added %d new lanes" % added)
 	out.starts.append(out.points.size())
 	return out
 
