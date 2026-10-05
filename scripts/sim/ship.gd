@@ -292,6 +292,7 @@ func _refresh_stats() -> void:
 
 func invalidate_stats() -> void:
 	_stats_dirty = true
+	_leg_from = "?"  # The harbor speed zones follow the top speed.
 
 
 ## How much the durability skill cuts the chance of a random breakdown (0..1).
@@ -382,7 +383,9 @@ func leg_seconds(from: String, to: String, start_mile: float, end_mile: float, s
 	var seconds := 0.0
 	var m := start_maintenance
 	var mile := start_mile
-	var zones := GameData.lane_zones(from, to) if from != from_port or to != to_port else _current_zones()
+	var zones := _current_zones()
+	if from != from_port or to != to_port:
+		zones = leg_zones(from, to)
 	for zone: Array in zones:
 		if mile >= end_mile - 0.0001:
 			break
@@ -547,8 +550,52 @@ func _update_leg() -> void:
 	_leg_from = from_port
 	_leg_to = to_port
 	_leg_length = GameData.distance_nm(from_port, to_port)
-	_leg_zones = GameData.lane_zones(from_port, to_port)
+	_leg_zones = _with_harbor_speed(GameData.lane_zones(from_port, to_port), _leg_length)
 	_leg_has_canal = not GameData.canal_crossings(from_port, to_port).is_empty()
+
+
+## A leg's zones for this ship ([[end mile, speed factor, wear factor], ...]):
+## the lane's (GameData.lane_zones()) with its harbor speed laid over each end.
+func leg_zones(from: String, to: String) -> Array:
+	return _with_harbor_speed(GameData.lane_zones(from, to), GameData.distance_nm(from, to))
+
+
+## A lane's zones with the ship's harbor speed (game_config harbor_speed) laid
+## over each end: leaving port it builds up from start x its speed to full
+## speed with steady acceleration over about `seconds`, and it slows the same
+## way coming in, in `steps` pieces of speed each (at the speed halfway through
+## the piece), multiplied into whatever the lane's own zone there is.
+func _with_harbor_speed(zones: Array, length: float) -> Array:
+	var settings: Dictionary = GameData.config.get("harbor_speed", {})
+	var start := float(settings.get("start", 1.0))
+	var steps := int(settings.get("steps", 0))
+	# Distance covered speeding up from start x top speed at a steady rate.
+	var ramp := minf(top_speed() * float(settings.get("seconds", 0.0)) * (1.0 + start) / 2.0, length / 2.0)
+	if zones.is_empty() or steps <= 0 or start >= 1.0 or ramp <= 0.0:
+		return zones
+	var breaks := PackedFloat64Array()
+	for zone: Array in zones:
+		breaks.append(zone[0])
+	for k in range(1, steps + 1):
+		breaks.append(ramp * k / steps)
+		breaks.append(length - ramp * k / steps)
+	breaks.sort()
+	var out := []
+	var previous := 0.0
+	for mile in breaks:
+		if mile <= previous + 0.0001:
+			continue
+		var middle := (previous + mile) / 2.0
+		var lane_zone: Array = zones[-1]
+		for zone: Array in zones:
+			if middle < zone[0]:
+				lane_zone = zone
+				break
+		var from_port_end := minf(middle, length - middle)
+		var harbor := sqrt(start * start + (1.0 - start * start) * from_port_end / ramp) if from_port_end < ramp else 1.0
+		out.append([mile, float(lane_zone[1]) * harbor, lane_zone[2]])
+		previous = mile
+	return out
 
 
 func leg_progress() -> float:

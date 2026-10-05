@@ -7,7 +7,8 @@ extends SceneTree
 ## "-- --lanes-only" to skip rebuilding the map art, or "-- --map-only" to
 ## rebuild only the map art: land, lakes, rivers, borders and labels). After
 ## changing only data/canals.json, "-- --canals-only" lays the canals into the
-## existing lanes again in seconds:
+## existing lanes again in seconds (without rounding the corners where they
+## join; see _round_corners(), which needs the land grid of a lanes run):
 ##   Godot --headless --path . -s tools/build_map_data.gd
 ## While working on the routing, "-- --lanes-only --pairs PUS-YOK,DXB-HKG" (or
 ## "--ports CPH,GDN" for every lane to or from those ports)
@@ -93,6 +94,13 @@ const GREAT_CIRCLE_STEP_NM := 100.0
 ## a port end it may pass the coast (see _great_circle_shortcuts()).
 const ARC_CHECK_NM := 25.0
 const ARC_PORT_NM := 30.0
+## Lane corners are rounded into arcs this wide (see _round_corners()), drawn
+## in steps of at most ARC_STEP_DEG of turn; turns under MIN_TURN_DEG are left
+## alone, and an arc that hits land is tightened up to CORNER_TRIES times.
+const TURN_RADIUS_NM := 60.0
+const ARC_STEP_DEG := 12.0
+const MIN_TURN_DEG := 4.0
+const CORNER_TRIES := 5
 ## Canals (data/canals.json) are laid into the lanes that cross them, so ships
 ## follow the centerline and its locks exactly (see _splice_canal()). Lane
 ## points within this many degrees of a centerline count as on it.
@@ -167,7 +175,11 @@ func _init() -> void:
 	var started := Time.get_ticks_msec()
 	var args := OS.get_cmdline_user_args()
 	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
-		_canals.append({path = _to_points(canal.path), divide = _to_points(canal.divide)})
+		var path := _to_points(canal.path)
+		var bounds := Rect2(path[0], Vector2.ZERO)
+		for p in path:
+			bounds = bounds.expand(p)
+		_canals.append({path = path, divide = _to_points(canal.divide), bounds = bounds.grow(0.01)})
 	if "--canals-only" in args:
 		_resplice_lanes()
 		quit()
@@ -913,6 +925,9 @@ func _build_lanes() -> void:
 					if distance < best_distance:
 						best_distance = distance
 						best = points
+			if not best.is_empty():
+				best = _round_corners(best)
+				best_distance = _length_nm(best)
 			if best.is_empty():
 				push_error("No sea route from %s to %s" % [a.id, b.id])
 			else:
@@ -1364,6 +1379,119 @@ func _lay_canal(points: PackedVector2Array, path: PackedVector2Array, along_path
 	out.append(nearest[last][2] if at_end else (path[-1] if forward else path[0]))
 	out.append_array(points.slice(last))
 	return out
+
+
+## Turns every corner of a lane into a curve, so ships sweep round bends
+## rather than snapping to a new heading: each turning point becomes a circular
+## arc (on the map) of TURN_RADIUS_NM, tangent to the legs either side and
+## using at most half of each, so neighbouring curves join smoothly. An arc
+## that would cross land is tightened (halved, up to CORNER_TRIES times) and
+## the corner is kept if none fits. Points on a canal's centerline are left
+## as they are (canals and their locks are laid in exactly).
+func _round_corners(points: PackedVector2Array) -> PackedVector2Array:
+	if points.size() < 3:
+		return points
+	var projected := _project_all(points)
+	var out := PackedVector2Array([points[0]])
+	for i in range(1, points.size() - 1):
+		var arc := PackedVector2Array()
+		if not _on_canal(points[i]):
+			arc = _corner_arc(projected, i)
+		if arc.is_empty():
+			out.append(points[i])
+		else:
+			for p in arc:
+				# Neighbouring arcs can meet at the same point: keep one.
+				var lon_lat := Geo.unproject(p)
+				if lon_lat.distance_to(out[-1]) > 0.001:
+					out.append(lon_lat)
+	if points[-1].distance_to(out[-1]) <= 0.001:
+		out.remove_at(out.size() - 1)
+	out.append(points[-1])
+	return out
+
+
+## The arc (projected points, from where it leaves the leg in to where it
+## joins the leg out) rounding lane point i, or [] to keep the corner.
+func _corner_arc(projected: PackedVector2Array, i: int) -> PackedVector2Array:
+	var a := projected[i - 1]
+	var b := projected[i]
+	var c := projected[i + 1]
+	var leg_in := b - a
+	var leg_out := c - b
+	if leg_in.length() < 1e-6 or leg_out.length() < 1e-6:
+		return PackedVector2Array()
+	var turn := leg_in.angle_to(leg_out)
+	if absf(turn) < deg_to_rad(MIN_TURN_DEG) or absf(turn) > PI - 0.01:
+		return PackedVector2Array()
+	# Near the map's scale there, a projected degree is 60 nm x cos(latitude).
+	var nm_per_unit := 60.0 * cos(deg_to_rad(Geo.unproject(b).y))
+	var tangent := minf(TURN_RADIUS_NM / nm_per_unit * tan(absf(turn) / 2.0), minf(leg_in.length(), leg_out.length()) * 0.48)
+	var port_end := projected[0] if i == 1 else (projected[-1] if i == projected.size() - 2 else Vector2.INF)
+	for attempt in CORNER_TRIES:
+		var arc := _arc(b, leg_in.normalized(), leg_out.normalized(), tangent, turn)
+		if _projected_on_water(arc, port_end):
+			return arc
+		tangent *= 0.5
+	return PackedVector2Array()
+
+
+## A circular arc round a corner at b, from the leg in (direction u1) to the
+## leg out (u2), touching each `tangent` from the corner, in steps of at most
+## ARC_STEP_DEG of turn.
+static func _arc(b: Vector2, u1: Vector2, u2: Vector2, tangent: float, turn: float) -> PackedVector2Array:
+	var start := b - u1 * tangent
+	var radius := tangent / tan(absf(turn) / 2.0)
+	var center := start + u1.rotated(signf(turn) * PI / 2.0) * radius
+	var from_angle := (start - center).angle()
+	var steps := maxi(2, ceili(absf(turn) / deg_to_rad(ARC_STEP_DEG)))
+	var out := PackedVector2Array()
+	for s in steps + 1:
+		out.append(center + Vector2.from_angle(from_angle + turn * s / steps) * radius)
+	out[-1] = b + u2 * tangent
+	return out
+
+
+## True if a projected polyline crosses no land, allowing land within a few
+## cells of a port end (ports sit on the shore).
+func _projected_on_water(line: PackedVector2Array, port_end: Vector2) -> bool:
+	var port := Vector2.INF
+	if port_end != Vector2.INF:
+		port = _projected_grid_point(port_end)
+	var previous := _projected_grid_point(line[0])
+	for k in line.size():
+		var point := _projected_grid_point(line[k])
+		var steps := maxi(1, ceili(previous.distance_to(point) * 2.0))
+		for s in steps + 1:
+			var p := previous.lerp(point, float(s) / steps)
+			if port != Vector2.INF and p.distance_to(port) < 3.0:
+				continue
+			if _is_land(Vector2i(floori(p.x), floori(p.y))):
+				return false
+		previous = point
+	return true
+
+
+## A projected point in fine-grid cell units (see _grid_point()).
+func _projected_grid_point(p: Vector2) -> Vector2:
+	if p.x < GRID_WEST:
+		p.x += Geo.WORLD_WIDTH
+	return (p - _grid_origin) / GRID_CELL
+
+
+## True if a (lon, lat) lane point is on a canal's centerline (at either
+## east-west copy of the world).
+func _on_canal(p: Vector2) -> bool:
+	for canal: Dictionary in _canals:
+		for offset in [0.0, Geo.WORLD_WIDTH]:
+			var q := p - Vector2(offset, 0.0)
+			if not canal.bounds.has_point(q):
+				continue
+			var path: PackedVector2Array = canal.path
+			for k in range(1, path.size()):
+				if q.distance_to(Geometry2D.get_closest_point_to_segment(q, path[k - 1], path[k])) < 0.001:
+					return true
+	return false
 
 
 ## True if the straight (projected) line between two cells stays off the

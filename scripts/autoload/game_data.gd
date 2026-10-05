@@ -54,6 +54,10 @@ var _world_prices: Dictionary = {}  # commodity -> world_price()
 
 ## A sailing path between two ports.
 class SeaLane:
+	## How far (projected degrees) either side of a turning point a ship's
+	## heading eases round it (see sample()).
+	const HEADING_BLEND := 0.3
+
 	## Projected map coordinates, from the first port to the second.
 	var points := PackedVector2Array()
 	## Nautical miles from the start to each point.
@@ -82,14 +86,35 @@ class SeaLane:
 			lane.miles.append(total - miles[i])
 		return lane
 
-	## Position and travel direction (both projected) after sailing some distance.
+	## Position and travel direction (both projected; the direction normalized)
+	## after sailing some distance. The direction eases round each turning
+	## point: within HEADING_BLEND of one it's turned part way towards the
+	## direction of the leg on the other side, so ships swing round rather
+	## than snapping to a new heading.
 	func sample(distance: float) -> Array[Vector2]:
 		distance = clampf(distance, 0.0, length())
 		var i := miles.bsearch(distance)
 		i = clampi(i, 1, points.size() - 1)
 		var span := miles[i] - miles[i - 1]
 		var t := (distance - miles[i - 1]) / span if span > 0.0 else 1.0
-		return [points[i - 1].lerp(points[i], t), points[i] - points[i - 1]]
+		var leg := points[i] - points[i - 1]
+		var direction := leg.normalized()
+		var blend := minf(leg.length() / 2.0, HEADING_BLEND)
+		if blend > 0.0:
+			var from_start := leg.length() * t
+			var to_end := leg.length() - from_start
+			if from_start < blend and i >= 2:
+				direction = _corner_direction(i - 1).slerp(direction, from_start / blend)
+			elif to_end < blend and i <= points.size() - 2:
+				direction = _corner_direction(i).slerp(direction, to_end / blend)
+		return [points[i - 1].lerp(points[i], t), direction]
+
+	## The direction halfway between the legs into and out of point k.
+	func _corner_direction(k: int) -> Vector2:
+		var leg_in := (points[k] - points[k - 1]).normalized()
+		var leg_out := (points[k + 1] - points[k]).normalized()
+		var middle := leg_in + leg_out
+		return middle.normalized() if middle.length() > 0.01 else leg_out
 
 
 func _ready() -> void:

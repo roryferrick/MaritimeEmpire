@@ -155,14 +155,15 @@ func _leg_text(distance_nm: float, sailing_s: float, extra_s := 0.0) -> String:
 		Fmt.calendar_duration(seconds * GameState.calendar_seconds_per_second())]
 
 
-## Seconds to sail a leg at top speed, through its zones (convoy canals slow ships).
+## Seconds to sail a leg at top speed, through its zones (convoy canals slow
+## ships, and they ease in and out of port).
 func _sailing_seconds(from_port: String, to_port: String) -> float:
 	var speed := _ship.top_speed()
 	if speed <= 0.0:
 		return INF
 	var seconds := 0.0
 	var mile := 0.0
-	for zone: Array in GameData.lane_zones(from_port, to_port):
+	for zone: Array in _ship.leg_zones(from_port, to_port):
 		seconds += (float(zone[0]) - mile) / (speed * float(zone[1]))
 		mile = zone[0]
 	return seconds
