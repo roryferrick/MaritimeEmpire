@@ -1,0 +1,1284 @@
+{
+	"_comment": "Which way each port's docks face (tools/port_facing.gd): bearing is the compass bearing out to sea (0 north, 90 east), from the coastline round the port; quay is which side of the piers, looking out to sea, the quay, tugs and anchorage go (the side with more open water). Entries under manual win over the worked-out ones and are kept when the tool runs again.",
+	"manual": {
+		"GIT": {
+			"bearing": 315.0,
+			"quay": "left",
+			"note": "Gioia Tauro: its channel opens north-west"
+		},
+		"PDX": {
+			"bearing": 30.0,
+			"quay": "right",
+			"note": "Portland: up the Willamette, out towards the Columbia"
+		},
+		"DAV": {
+			"bearing": 315.0,
+			"quay": "right",
+			"note": "Davis Station: out to Prydz Bay"
+		},
+		"SBT": {
+			"bearing": 270.0,
+			"quay": "left",
+			"note": "Sabetta: on the Gulf of Ob's east shore"
+		},
+		"DUD": {
+			"bearing": 270.0,
+			"quay": "left",
+			"note": "Dudinka: on the Yenisei's east bank"
+		}
+	},
+	"facing": {
+		"SHA": {
+			"bearing": 266,
+			"quay": "right"
+		},
+		"SIN": {
+			"bearing": 183,
+			"quay": "right"
+		},
+		"NGB": {
+			"bearing": 8,
+			"quay": "right"
+		},
+		"SZX": {
+			"bearing": 129,
+			"quay": "right"
+		},
+		"TAO": {
+			"bearing": 89,
+			"quay": "left"
+		},
+		"CAN": {
+			"bearing": 183,
+			"quay": "left"
+		},
+		"PUS": {
+			"bearing": 182,
+			"quay": "right"
+		},
+		"TSN": {
+			"bearing": 114,
+			"quay": "right"
+		},
+		"DXB": {
+			"bearing": 320,
+			"quay": "right"
+		},
+		"HKG": {
+			"bearing": 194,
+			"quay": "right"
+		},
+		"PKG": {
+			"bearing": 296,
+			"quay": "left"
+		},
+		"RTM": {
+			"bearing": 291,
+			"quay": "right"
+		},
+		"XMN": {
+			"bearing": 118,
+			"quay": "right"
+		},
+		"ANR": {
+			"bearing": 326,
+			"quay": "right"
+		},
+		"TPP": {
+			"bearing": 189,
+			"quay": "left"
+		},
+		"LCH": {
+			"bearing": 274,
+			"quay": "right"
+		},
+		"KHH": {
+			"bearing": 254,
+			"quay": "right"
+		},
+		"LAX": {
+			"bearing": 182,
+			"quay": "right"
+		},
+		"TNG": {
+			"bearing": 306,
+			"quay": "right"
+		},
+		"TAC": {
+			"bearing": 109,
+			"quay": "left"
+		},
+		"LGB": {
+			"bearing": 186,
+			"quay": "left"
+		},
+		"NYC": {
+			"bearing": 163,
+			"quay": "right"
+		},
+		"HAM": {
+			"bearing": 211,
+			"quay": "left"
+		},
+		"MUN": {
+			"bearing": 112,
+			"quay": "right"
+		},
+		"SGN": {
+			"bearing": 199,
+			"quay": "left"
+		},
+		"CMB": {
+			"bearing": 270,
+			"quay": "right"
+		},
+		"RZH": {
+			"bearing": 127,
+			"quay": "right"
+		},
+		"YIK": {
+			"bearing": 300,
+			"quay": "right"
+		},
+		"JNP": {
+			"bearing": 264,
+			"quay": "left"
+		},
+		"PIR": {
+			"bearing": 189,
+			"quay": "left"
+		},
+		"VLC": {
+			"bearing": 90,
+			"quay": "right"
+		},
+		"BRV": {
+			"bearing": 292,
+			"quay": "right"
+		},
+		"MNL": {
+			"bearing": 244,
+			"quay": "right"
+		},
+		"LYG": {
+			"bearing": 34,
+			"quay": "right"
+		},
+		"JKT": {
+			"bearing": 351,
+			"quay": "right"
+		},
+		"SLL": {
+			"bearing": 146,
+			"quay": "right"
+		},
+		"SAV": {
+			"bearing": 131,
+			"quay": "left"
+		},
+		"ALG": {
+			"bearing": 155,
+			"quay": "left"
+		},
+		"HPH": {
+			"bearing": 170,
+			"quay": "right"
+		},
+		"TYO": {
+			"bearing": 178,
+			"quay": "left"
+		},
+		"JED": {
+			"bearing": 265,
+			"quay": "left"
+		},
+		"QZH": {
+			"bearing": 184,
+			"quay": "right"
+		},
+		"FOC": {
+			"bearing": 79,
+			"quay": "right"
+		},
+		"SSZ": {
+			"bearing": 168,
+			"quay": "left"
+		},
+		"HOU": {
+			"bearing": 116,
+			"quay": "left"
+		},
+		"CLN": {
+			"bearing": 335,
+			"quay": "right"
+		},
+		"BLB": {
+			"bearing": 156,
+			"quay": "left"
+		},
+		"SUB": {
+			"bearing": 96,
+			"quay": "right"
+		},
+		"SEA": {
+			"bearing": 340,
+			"quay": "left"
+		},
+		"YVR": {
+			"bearing": 211,
+			"quay": "right"
+		},
+		"YOK": {
+			"bearing": 160,
+			"quay": "left"
+		},
+		"PSD": {
+			"bearing": 350,
+			"quay": "right"
+		},
+		"DUR": {
+			"bearing": 111,
+			"quay": "right"
+		},
+		"AUH": {
+			"bearing": 306,
+			"quay": "left"
+		},
+		"DMM": {
+			"bearing": 48,
+			"quay": "right"
+		},
+		"BCN": {
+			"bearing": 134,
+			"quay": "right"
+		},
+		"KHI": {
+			"bearing": 183,
+			"quay": "right"
+		},
+		"FXT": {
+			"bearing": 136,
+			"quay": "left"
+		},
+		"GIT": {
+			"bearing": 283,
+			"quay": "left"
+		},
+		"MLA": {
+			"bearing": 128,
+			"quay": "right"
+		},
+		"LEH": {
+			"bearing": 251,
+			"quay": "right"
+		},
+		"CGP": {
+			"bearing": 251,
+			"quay": "right"
+		},
+		"UKB": {
+			"bearing": 199,
+			"quay": "left"
+		},
+		"OSA": {
+			"bearing": 259,
+			"quay": "left"
+		},
+		"NGO": {
+			"bearing": 217,
+			"quay": "left"
+		},
+		"KLF": {
+			"bearing": 85,
+			"quay": "right"
+		},
+		"OAK": {
+			"bearing": 276,
+			"quay": "right"
+		},
+		"ZLO": {
+			"bearing": 220,
+			"quay": "left"
+		},
+		"KWN": {
+			"bearing": 143,
+			"quay": "left"
+		},
+		"ICN": {
+			"bearing": 239,
+			"quay": "left"
+		},
+		"CHS": {
+			"bearing": 130,
+			"quay": "right"
+		},
+		"ORF": {
+			"bearing": 19,
+			"quay": "left"
+		},
+		"IST": {
+			"bearing": 185,
+			"quay": "right"
+		},
+		"CTG": {
+			"bearing": 286,
+			"quay": "right"
+		},
+		"LIM": {
+			"bearing": 259,
+			"quay": "right"
+		},
+		"TPE": {
+			"bearing": 326,
+			"quay": "left"
+		},
+		"MER": {
+			"bearing": 162,
+			"quay": "right"
+		},
+		"GDN": {
+			"bearing": 37,
+			"quay": "right"
+		},
+		"GOA": {
+			"bearing": 193,
+			"quay": "right"
+		},
+		"LED": {
+			"bearing": 312,
+			"quay": "right"
+		},
+		"MEL": {
+			"bearing": 183,
+			"quay": "left"
+		},
+		"SYD": {
+			"bearing": 124,
+			"quay": "left"
+		},
+		"HZR": {
+			"bearing": 231,
+			"quay": "left"
+		},
+		"MAA": {
+			"bearing": 103,
+			"quay": "right"
+		},
+		"SOH": {
+			"bearing": 51,
+			"quay": "right"
+		},
+		"HMD": {
+			"bearing": 107,
+			"quay": "right"
+		},
+		"BND": {
+			"bearing": 124,
+			"quay": "left"
+		},
+		"KAP": {
+			"bearing": 262,
+			"quay": "right"
+		},
+		"ALY": {
+			"bearing": 322,
+			"quay": "right"
+		},
+		"LFW": {
+			"bearing": 154,
+			"quay": "right"
+		},
+		"TEM": {
+			"bearing": 149,
+			"quay": "right"
+		},
+		"LOS": {
+			"bearing": 121,
+			"quay": "right"
+		},
+		"MBA": {
+			"bearing": 118,
+			"quay": "right"
+		},
+		"VER": {
+			"bearing": 49,
+			"quay": "right"
+		},
+		"LZC": {
+			"bearing": 172,
+			"quay": "right"
+		},
+		"KIN": {
+			"bearing": 179,
+			"quay": "left"
+		},
+		"FPO": {
+			"bearing": 229,
+			"quay": "right"
+		},
+		"BUE": {
+			"bearing": 50,
+			"quay": "right"
+		},
+		"PNG": {
+			"bearing": 85,
+			"quay": "right"
+		},
+		"GYE": {
+			"bearing": 224,
+			"quay": "right"
+		},
+		"SAI": {
+			"bearing": 274,
+			"quay": "left"
+		},
+		"DLC": {
+			"bearing": 113,
+			"quay": "right"
+		},
+		"YNT": {
+			"bearing": 32,
+			"quay": "right"
+		},
+		"QZJ": {
+			"bearing": 102,
+			"quay": "right"
+		},
+		"PEN": {
+			"bearing": 207,
+			"quay": "left"
+		},
+		"SOU": {
+			"bearing": 137,
+			"quay": "left"
+		},
+		"LGW": {
+			"bearing": 97,
+			"quay": "left"
+		},
+		"SIE": {
+			"bearing": 261,
+			"quay": "right"
+		},
+		"JIB": {
+			"bearing": 33,
+			"quay": "left"
+		},
+		"MRU": {
+			"bearing": 310,
+			"quay": "left"
+		},
+		"NGQ": {
+			"bearing": 130,
+			"quay": "right"
+		},
+		"ABJ": {
+			"bearing": 156,
+			"quay": "right"
+		},
+		"BNE": {
+			"bearing": 58,
+			"quay": "right"
+		},
+		"MRS": {
+			"bearing": 166,
+			"quay": "right"
+		},
+		"HFA": {
+			"bearing": 331,
+			"quay": "right"
+		},
+		"ASH": {
+			"bearing": 296,
+			"quay": "right"
+		},
+		"IZM": {
+			"bearing": 289,
+			"quay": "right"
+		},
+		"SPE": {
+			"bearing": 196,
+			"quay": "right"
+		},
+		"KOP": {
+			"bearing": 299,
+			"quay": "right"
+		},
+		"ROM": {
+			"bearing": 234,
+			"quay": "right"
+		},
+		"TUN": {
+			"bearing": 65,
+			"quay": "left"
+		},
+		"BOS": {
+			"bearing": 76,
+			"quay": "right"
+		},
+		"MIA": {
+			"bearing": 133,
+			"quay": "right"
+		},
+		"LMS": {
+			"bearing": 159,
+			"quay": "left"
+		},
+		"PMO": {
+			"bearing": 35,
+			"quay": "right"
+		},
+		"CAG": {
+			"bearing": 161,
+			"quay": "left"
+		},
+		"BIA": {
+			"bearing": 85,
+			"quay": "right"
+		},
+		"PMI": {
+			"bearing": 187,
+			"quay": "left"
+		},
+		"MRY": {
+			"bearing": 302,
+			"quay": "right"
+		},
+		"ANC": {
+			"bearing": 272,
+			"quay": "right"
+		},
+		"CSL": {
+			"bearing": 173,
+			"quay": "right"
+		},
+		"MSY": {
+			"bearing": 351,
+			"quay": "right"
+		},
+		"HNL": {
+			"bearing": 183,
+			"quay": "right"
+		},
+		"AKL": {
+			"bearing": 56,
+			"quay": "right"
+		},
+		"CND": {
+			"bearing": 91,
+			"quay": "right"
+		},
+		"GOT": {
+			"bearing": 243,
+			"quay": "left"
+		},
+		"DUB": {
+			"bearing": 91,
+			"quay": "left"
+		},
+		"CPH": {
+			"bearing": 140,
+			"quay": "left"
+		},
+		"ODS": {
+			"bearing": 106,
+			"quay": "right"
+		},
+		"NVS": {
+			"bearing": 163,
+			"quay": "right"
+		},
+		"HAV": {
+			"bearing": 343,
+			"quay": "right"
+		},
+		"SJU": {
+			"bearing": 5,
+			"quay": "right"
+		},
+		"OSL": {
+			"bearing": 225,
+			"quay": "left"
+		},
+		"AAR": {
+			"bearing": 108,
+			"quay": "left"
+		},
+		"RIX": {
+			"bearing": 319,
+			"quay": "right"
+		},
+		"KLJ": {
+			"bearing": 255,
+			"quay": "right"
+		},
+		"TLL": {
+			"bearing": 339,
+			"quay": "right"
+		},
+		"WLG": {
+			"bearing": 194,
+			"quay": "right"
+		},
+		"CEB": {
+			"bearing": 106,
+			"quay": "right"
+		},
+		"PQZ": {
+			"bearing": 179,
+			"quay": "right"
+		},
+		"BGO": {
+			"bearing": 295,
+			"quay": "left"
+		},
+		"DRZ": {
+			"bearing": 253,
+			"quay": "right"
+		},
+		"POM": {
+			"bearing": 214,
+			"quay": "left"
+		},
+		"TMM": {
+			"bearing": 100,
+			"quay": "right"
+		},
+		"BWN": {
+			"bearing": 36,
+			"quay": "right"
+		},
+		"PAP": {
+			"bearing": 310,
+			"quay": "right"
+		},
+		"GUM": {
+			"bearing": 301,
+			"quay": "right"
+		},
+		"PAS": {
+			"bearing": 204,
+			"quay": "right"
+		},
+		"CUN": {
+			"bearing": 110,
+			"quay": "right"
+		},
+		"SUV": {
+			"bearing": 174,
+			"quay": "right"
+		},
+		"BGI": {
+			"bearing": 228,
+			"quay": "right"
+		},
+		"PPT": {
+			"bearing": 326,
+			"quay": "right"
+		},
+		"REK": {
+			"bearing": 320,
+			"quay": "right"
+		},
+		"RAI": {
+			"bearing": 149,
+			"quay": "right"
+		},
+		"JNU": {
+			"bearing": 136,
+			"quay": "right"
+		},
+		"DUT": {
+			"bearing": 11,
+			"quay": "right"
+		},
+		"APW": {
+			"bearing": 14,
+			"quay": "right"
+		},
+		"PPG": {
+			"bearing": 39,
+			"quay": "right"
+		},
+		"TBU": {
+			"bearing": 11,
+			"quay": "right"
+		},
+		"LIH": {
+			"bearing": 125,
+			"quay": "right"
+		},
+		"GOH": {
+			"bearing": 230,
+			"quay": "right"
+		},
+		"IOM": {
+			"bearing": 135,
+			"quay": "left"
+		},
+		"GPS": {
+			"bearing": 161,
+			"quay": "right"
+		},
+		"VVO": {
+			"bearing": 224,
+			"quay": "left"
+		},
+		"RIO": {
+			"bearing": 123,
+			"quay": "right"
+		},
+		"LAD": {
+			"bearing": 323,
+			"quay": "right"
+		},
+		"MPM": {
+			"bearing": 105,
+			"quay": "right"
+		},
+		"SNR": {
+			"bearing": 196,
+			"quay": "right"
+		},
+		"OPO": {
+			"bearing": 252,
+			"quay": "right"
+		},
+		"SSA": {
+			"bearing": 233,
+			"quay": "left"
+		},
+		"BUN": {
+			"bearing": 250,
+			"quay": "right"
+		},
+		"ANF": {
+			"bearing": 276,
+			"quay": "right"
+		},
+		"FOR": {
+			"bearing": 30,
+			"quay": "right"
+		},
+		"PWM": {
+			"bearing": 101,
+			"quay": "left"
+		},
+		"KRS": {
+			"bearing": 216,
+			"quay": "right"
+		},
+		"PKC": {
+			"bearing": 183,
+			"quay": "right"
+		},
+		"FNA": {
+			"bearing": 295,
+			"quay": "left"
+		},
+		"BJL": {
+			"bearing": 312,
+			"quay": "right"
+		},
+		"PDL": {
+			"bearing": 200,
+			"quay": "right"
+		},
+		"FNC": {
+			"bearing": 173,
+			"quay": "right"
+		},
+		"BDA": {
+			"bearing": 191,
+			"quay": "left"
+		},
+		"PUQ": {
+			"bearing": 125,
+			"quay": "left"
+		},
+		"GDX": {
+			"bearing": 203,
+			"quay": "right"
+		},
+		"ITO": {
+			"bearing": 52,
+			"quay": "right"
+		},
+		"KWH": {
+			"bearing": 275,
+			"quay": "left"
+		},
+		"ROR": {
+			"bearing": 239,
+			"quay": "right"
+		},
+		"FSP": {
+			"bearing": 117,
+			"quay": "right"
+		},
+		"YDP": {
+			"bearing": 66,
+			"quay": "right"
+		},
+		"FLW": {
+			"bearing": 285,
+			"quay": "right"
+		},
+		"SOK": {
+			"bearing": 134,
+			"quay": "left"
+		},
+		"TEW": {
+			"bearing": 198,
+			"quay": "right"
+		},
+		"ETH": {
+			"bearing": 191,
+			"quay": "left"
+		},
+		"NOU": {
+			"bearing": 207,
+			"quay": "left"
+		},
+		"CHI": {
+			"bearing": 230,
+			"quay": "right"
+		},
+		"DLH": {
+			"bearing": 250,
+			"quay": "right"
+		},
+		"DET": {
+			"bearing": 308,
+			"quay": "right"
+		},
+		"TOR": {
+			"bearing": 333,
+			"quay": "left"
+		},
+		"CLE": {
+			"bearing": 166,
+			"quay": "right"
+		},
+		"YHM": {
+			"bearing": 244,
+			"quay": "right"
+		},
+		"MKE": {
+			"bearing": 259,
+			"quay": "right"
+		},
+		"TOL": {
+			"bearing": 231,
+			"quay": "right"
+		},
+		"YQT": {
+			"bearing": 286,
+			"quay": "right"
+		},
+		"IHB": {
+			"bearing": 214,
+			"quay": "right"
+		},
+		"BUH": {
+			"bearing": 165,
+			"quay": "right"
+		},
+		"GRY": {
+			"bearing": 191,
+			"quay": "right"
+		},
+		"TWH": {
+			"bearing": 319,
+			"quay": "right"
+		},
+		"MQT": {
+			"bearing": 231,
+			"quay": "right"
+		},
+		"CAL": {
+			"bearing": 204,
+			"quay": "right"
+		},
+		"XCH": {
+			"bearing": 7,
+			"quay": "right"
+		},
+		"MDY": {
+			"bearing": 146,
+			"quay": "right"
+		},
+		"KGI": {
+			"bearing": 280,
+			"quay": "right"
+		},
+		"MCM": {
+			"bearing": 210,
+			"quay": "right"
+		},
+		"PAL": {
+			"bearing": 213,
+			"quay": "right"
+		},
+		"ROT": {
+			"bearing": 166,
+			"quay": "left"
+		},
+		"MAW": {
+			"bearing": 322,
+			"quay": "right"
+		},
+		"VYP": {
+			"bearing": 209,
+			"quay": "left"
+		},
+		"CCU": {
+			"bearing": 187,
+			"quay": "left"
+		},
+		"BAL": {
+			"bearing": 125,
+			"quay": "left"
+		},
+		"VTZ": {
+			"bearing": 133,
+			"quay": "right"
+		},
+		"PHL": {
+			"bearing": 320,
+			"quay": "right"
+		},
+		"DAR": {
+			"bearing": 49,
+			"quay": "left"
+		},
+		"CPT": {
+			"bearing": 304,
+			"quay": "left"
+		},
+		"FRE": {
+			"bearing": 270,
+			"quay": "right"
+		},
+		"DKR": {
+			"bearing": 201,
+			"quay": "right"
+		},
+		"MVD": {
+			"bearing": 189,
+			"quay": "right"
+		},
+		"ULU": {
+			"bearing": 322,
+			"quay": "left"
+		},
+		"ITJ": {
+			"bearing": 85,
+			"quay": "left"
+		},
+		"VAP": {
+			"bearing": 311,
+			"quay": "right"
+		},
+		"CAU": {
+			"bearing": 189,
+			"quay": "right"
+		},
+		"JAX": {
+			"bearing": 72,
+			"quay": "right"
+		},
+		"HEL": {
+			"bearing": 142,
+			"quay": "right"
+		},
+		"DLA": {
+			"bearing": 236,
+			"quay": "left"
+		},
+		"COO": {
+			"bearing": 183,
+			"quay": "right"
+		},
+		"PNR": {
+			"bearing": 252,
+			"quay": "right"
+		},
+		"BLW": {
+			"bearing": 50,
+			"quay": "right"
+		},
+		"UQR": {
+			"bearing": 120,
+			"quay": "right"
+		},
+		"BEY": {
+			"bearing": 310,
+			"quay": "right"
+		},
+		"YHZ": {
+			"bearing": 140,
+			"quay": "left"
+		},
+		"MOB": {
+			"bearing": 163,
+			"quay": "right"
+		},
+		"RGN": {
+			"bearing": 170,
+			"quay": "left"
+		},
+		"COK": {
+			"bearing": 246,
+			"quay": "right"
+		},
+		"SUA": {
+			"bearing": 107,
+			"quay": "right"
+		},
+		"RIG": {
+			"bearing": 122,
+			"quay": "right"
+		},
+		"ONN": {
+			"bearing": 168,
+			"quay": "right"
+		},
+		"AQJ": {
+			"bearing": 214,
+			"quay": "right"
+		},
+		"ALR": {
+			"bearing": 12,
+			"quay": "left"
+		},
+		"KOS": {
+			"bearing": 271,
+			"quay": "right"
+		},
+		"PRT": {
+			"bearing": 139,
+			"quay": "right"
+		},
+		"UPG": {
+			"bearing": 295,
+			"quay": "right"
+		},
+		"DVO": {
+			"bearing": 156,
+			"quay": "right"
+		},
+		"VIX": {
+			"bearing": 99,
+			"quay": "right"
+		},
+		"PCR": {
+			"bearing": 325,
+			"quay": "right"
+		},
+		"POS": {
+			"bearing": 259,
+			"quay": "left"
+		},
+		"ADL": {
+			"bearing": 263,
+			"quay": "right"
+		},
+		"KWI": {
+			"bearing": 48,
+			"quay": "left"
+		},
+		"BAH": {
+			"bearing": 51,
+			"quay": "right"
+		},
+		"PZU": {
+			"bearing": 86,
+			"quay": "right"
+		},
+		"CKY": {
+			"bearing": 238,
+			"quay": "left"
+		},
+		"PBL": {
+			"bearing": 7,
+			"quay": "right"
+		},
+		"DAD": {
+			"bearing": 52,
+			"quay": "left"
+		},
+		"BEW": {
+			"bearing": 160,
+			"quay": "left"
+		},
+		"VNN": {
+			"bearing": 102,
+			"quay": "left"
+		},
+		"VDC": {
+			"bearing": 16,
+			"quay": "left"
+		},
+		"RJK": {
+			"bearing": 187,
+			"quay": "right"
+		},
+		"VAR": {
+			"bearing": 114,
+			"quay": "right"
+		},
+		"LBV": {
+			"bearing": 234,
+			"quay": "right"
+		},
+		"WVB": {
+			"bearing": 317,
+			"quay": "left"
+		},
+		"ADE": {
+			"bearing": 158,
+			"quay": "right"
+		},
+		"BPN": {
+			"bearing": 146,
+			"quay": "right"
+		},
+		"LOB": {
+			"bearing": 311,
+			"quay": "right"
+		},
+		"BHI": {
+			"bearing": 176,
+			"quay": "left"
+		},
+		"PTI": {
+			"bearing": 256,
+			"quay": "right"
+		},
+		"LTK": {
+			"bearing": 244,
+			"quay": "left"
+		},
+		"MRA": {
+			"bearing": 41,
+			"quay": "right"
+		},
+		"NKC": {
+			"bearing": 268,
+			"quay": "right"
+		},
+		"MLW": {
+			"bearing": 239,
+			"quay": "right"
+		},
+		"ACJ": {
+			"bearing": 214,
+			"quay": "right"
+		},
+		"MGL": {
+			"bearing": 254,
+			"quay": "right"
+		},
+		"MNC": {
+			"bearing": 88,
+			"quay": "left"
+		},
+		"DRW": {
+			"bearing": 338,
+			"quay": "right"
+		},
+		"CIO": {
+			"bearing": 229,
+			"quay": "right"
+		},
+		"MGQ": {
+			"bearing": 151,
+			"quay": "right"
+		},
+		"NAM": {
+			"bearing": 246,
+			"quay": "right"
+		},
+		"SSG": {
+			"bearing": 357,
+			"quay": "right"
+		},
+		"MSW": {
+			"bearing": 73,
+			"quay": "left"
+		},
+		"BNW": {
+			"bearing": 253,
+			"quay": "right"
+		},
+		"OXB": {
+			"bearing": 200,
+			"quay": "left"
+		},
+		"DIL": {
+			"bearing": 349,
+			"quay": "right"
+		},
+		"BUF": {
+			"bearing": 63,
+			"quay": "right"
+		},
+		"MMK": {
+			"bearing": 61,
+			"quay": "right"
+		},
+		"ARH": {
+			"bearing": 344,
+			"quay": "right"
+		},
+		"TOS": {
+			"bearing": 313,
+			"quay": "right"
+		},
+		"HFT": {
+			"bearing": 279,
+			"quay": "right"
+		},
+		"KKN": {
+			"bearing": 3,
+			"quay": "left"
+		},
+		"TIK": {
+			"bearing": 73,
+			"quay": "left"
+		},
+		"PWE": {
+			"bearing": 343,
+			"quay": "right"
+		},
+		"YYQ": {
+			"bearing": 352,
+			"quay": "right"
+		},
+		"YFB": {
+			"bearing": 202,
+			"quay": "right"
+		},
+		"YRB": {
+			"bearing": 200,
+			"quay": "left"
+		},
+		"SCC": {
+			"bearing": 0,
+			"quay": "right"
+		},
+		"LYR": {
+			"bearing": 359,
+			"quay": "right"
+		},
+		"JHS": {
+			"bearing": 224,
+			"quay": "left"
+		},
+		"JAV": {
+			"bearing": 269,
+			"quay": "right"
+		}
+	}
+}

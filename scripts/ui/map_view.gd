@@ -137,7 +137,7 @@ const CARGO_STEPS := 4
 ## like the coast does (tiny zoomed right out). Sea animals keep their
 ## map_size until the zoom passes SHIP_GROW_FROM_ZOOM, then
 ## grow with the square root of the zoom, up to SHIP_MAX_SCALE times.
-const SHIP_WORLD_ZOOM := 150.0
+const SHIP_WORLD_ZOOM := 75.0
 const SHIP_GROW_FROM_ZOOM := 60.0
 const SHIP_MAX_SCALE := 3.0
 ## Where a ship being carried sits on its recovery boat: the middle of the
@@ -1235,7 +1235,9 @@ const STONE_COLOR := Color(0.6, 0.6, 0.62)
 const STONE_JOINT := Color(0.42, 0.42, 0.45)
 const PIERS_BY_BAND := {small = 1, medium = 1, large = 3, giant = 4}
 const BAND_RANK := {small = 0, medium = 1, large = 2, giant = 3}
-## Port id -> the sea's direction from it on screen (see _port_sea_angle()).
+## data/port_facing.json, and port id -> the sea's direction from it on screen (see _port_sea_angle()).
+const PORT_FACING_PATH := "res://data/port_facing.json"
+static var _port_facing := {}
 var _sea_angles := {}
 ## Port id -> 1 or -1: which side of its piers its quay and tugs go (see _port_sea_angle()).
 var _dock_flips := {}
@@ -1256,11 +1258,24 @@ func docks_shown() -> bool:
 	return show_ships and not gray_mode
 
 
-## Which way the sea is from a port, as an on-screen angle: the average
+## Which way the sea is from a port, as an on-screen angle (and which side its
+## quay goes): from data/port_facing.json, or else the average
 ## way its sea lanes head out of it.
 func _port_sea_angle(port_id: String) -> float:
 	if _sea_angles.has(port_id):
 		return _sea_angles[port_id]
+	# Worked out from the coastline (data/port_facing.json; tools/port_facing.gd),
+	# or set by hand there.
+	if _port_facing.is_empty():
+		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(PORT_FACING_PATH)) if FileAccess.file_exists(PORT_FACING_PATH) else null
+		_port_facing = data if data is Dictionary else {facing = {}}
+	var entry: Dictionary = _port_facing.get("manual", {}).get(port_id, _port_facing.get("facing", {}).get(port_id, {}))
+	if entry.has("bearing"):
+		var facing := deg_to_rad(float(entry.bearing) - 90.0)  # A compass bearing on screen (y down).
+		_sea_angles[port_id] = facing
+		_dock_flips[port_id] = 1.0 if str(entry.get("quay", "right")) == "right" else -1.0
+		return facing
+	# Otherwise (a port far up a river): the way its lanes leave, and the open sea.
 	var port := GameData.get_port(port_id)
 	var at := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
 	# The sea lanes leave it through real water: the way their first miles head,
