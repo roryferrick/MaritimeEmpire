@@ -105,34 +105,77 @@ const REFILL_BILL_S := 0.25
 ## Seconds between tugs leaving port on the same job, so they head out in line.
 const TUG_STAGGER_S := 1.5
 
-var money: int = 0:
+## Every company in the game (one in single player; see Company), and the one
+## this player controls. The money, hubs, company_xp... below are its: the
+## screens use those, while the sim works with each ship's own company.
+var companies: Array[Company] = []
+var company := Company.new()
+
+var money: int:
+	get: return company.money
 	set(value):
-		money = value
-		money_changed.emit(money)
+		company.money = value
+		money_changed.emit(value)
+var delivered: Dictionary:
+	get: return company.delivered
+	set(value): company.delivered = value
+var earlier_containers: int:
+	get: return company.earlier_containers
+	set(value): company.earlier_containers = value
+var company_name: String:
+	get: return company.name
+	set(value): company.name = value
+var company_color: String:
+	get: return company.color
+	set(value): company.color = value
+var first_prices_used: Array[String]:
+	get: return company.first_prices_used
+var mega_upgrades: Array[String]:
+	get: return company.mega_upgrades
+var hidden_gem_claimed: bool:
+	get: return company.hidden_gem_claimed
+	set(value): company.hidden_gem_claimed = value
+var home_port: String:
+	get: return company.home_port
+	set(value): company.home_port = value
+var company_xp: float:
+	get: return company.xp
+	set(value): company.xp = value
+var show_active_routes: bool:
+	get: return company.show_active_routes
+	set(value): company.show_active_routes = value
+var muted_models: Array[String]:
+	get: return company.muted_models
+var activity_collapsed: bool:
+	get: return company.activity_collapsed
+	set(value): company.activity_collapsed = value
+var tutorials: bool:
+	get: return company.tutorials
+	set(value): company.tutorials = value
+var tutorials_on: bool:
+	get: return company.tutorials_on
+	set(value): company.tutorials_on = value
+var tutorial_done: Array[String]:
+	get: return company.tutorial_done
+var bank_reserve: int:
+	get: return company.bank_reserve
+	set(value): company.bank_reserve = value
+var hubs: Array[Hub]:
+	get: return company.hubs
+var totals: Dictionary:
+	get: return company.totals
+	set(value): company.totals = value
+var canal_stats: Dictionary:
+	get: return company.canal_stats
+	set(value): company.canal_stats = value
 
-## Units delivered of each commodity (id -> units, in its markets.json unit),
-## counted when unloading finishes.
-var delivered := {}
-## Containers delivered before deliveries were counted by commodity (saves
-## from before then only kept a container total).
-var earlier_containers := 0
-
-var company_name := ""
-## The company's color id (see game_config company_colors): its name in the
-## top bar and the rings around its HQ and hubs.
-var company_color := "purple"
-## Models whose first-purchase price (first_price in ship_models.json) has been used.
-var first_prices_used: Array[String] = []
-## Models with their mega upgrade (see mega_error()).
-var mega_upgrades: Array[String] = []
-## Whether the hidden gem has been claimed this run.
-var hidden_gem_claimed := false
-## New ships are delivered here.
-var home_port := ""
 var ships: Array[Ship] = []
 var in_session := false
 ## The save slot (1 to SAVE_SLOTS) this session saves to.
 var save_slot := 1
+## Whether save_slot is one of the multiplayer slots (kept apart from the
+## single player ones, and played solo until hosting is built).
+var multiplayer_save := false
 ## Game speed: the world advances this many times per frame (0 = paused). Not
 ## saved; every session starts at 1x.
 var time_speed := 1:
@@ -150,40 +193,10 @@ var seasons := false
 
 ## Seconds the company has been playing (only counts while a session is open).
 var play_time := 0.0
-## Total company XP from deliveries; see Progression for levels.
-var company_xp := 0.0
-## company_level(), and the XP it was worked out for.
-var _level := 1
-var _level_xp := -1.0
 ## The calendar's start (Unix time) and calendar seconds per second of play,
 ## read from game_config once (-1 until then).
 var _calendar_start := -1
 var _calendar_rate := 0.0
-## The map's Routes switch: show the fleet's route lanes faintly.
-var show_active_routes := true
-## Ship models whose routine news (loading, profitable sales, entering canals)
-## is left out of the activity log (the Ships screen's Mute buttons), and
-## whether the activity log panel is folded away.
-var muted_models: Array[String] = []
-var activity_collapsed := false
-## Whether this save has the tutorial (chosen when the company is founded; saves
-## from before tutorials have none), the map's Tutorial switch, and the ids
-## of the tips already seen (see TutorialCard).
-var tutorials := false
-var tutorials_on := true
-var tutorial_done: Array[String] = []
-## Money cargo purchases leave in the bank (set on the Finances screen). Fuel
-## and repairs can still use it, so no ship is stranded by it.
-var bank_reserve := 0
-## The HQ (at the home port, first) and the hubs placed since.
-var hubs: Array[Hub] = []
-## All-time totals for each of MONEY_KINDS.
-var totals := {}
-## Per canal id: {crossings, tolls, xp (the extra company XP its bonus gave)}.
-var canal_stats := {}
-## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
-## ships: {ship name: {kind: amount}}}.
-var _window: Array = []
 
 var _autosave_timer := Timer.new()
 var _breakdown_clock := 0.0
@@ -203,9 +216,6 @@ var _season_warned := {}
 ## they were worked out (play_time).
 var _player_use := {}
 var _player_use_time := 0.0
-## fuel_reserve(), and the play_time it was worked out at.
-var _fuel_reserve := 0.0
-var _fuel_reserve_time := -1.0
 ## Moves ships through canals: tolls, locks and convoys.
 var canal_traffic := CanalTraffic.new(self)
 ## Commodity prices: drift and the impact of the player's own trades.
@@ -311,6 +321,7 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	money -= price
 	_record(null, "bought", price)
 	var ship := Ship.new(ship_name, model_id, port_id)
+	ship.company = company
 	ship.purchase_price = price
 	ships.append(ship)
 	if ship.is_service():
@@ -323,7 +334,7 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 
 
 func owned_count(model_id: String) -> int:
-	return ships.filter(func(ship: Ship) -> bool: return ship.model_id == model_id).size()
+	return fleet().filter(func(ship: Ship) -> bool: return ship.model_id == model_id).size()
 
 
 ## What the next ship of this model costs: its first_price if it has one and
@@ -392,7 +403,7 @@ func mega_ready(model_id: String) -> bool:
 	var model := GameData.get_ship_model(model_id)
 	if has_mega(model_id):
 		return false
-	var line := ships.filter(func(ship: Ship) -> bool: return ship.model_id == model_id)
+	var line := fleet().filter(func(ship: Ship) -> bool: return ship.model_id == model_id)
 	return line.size() >= int(model.get("max_owned", 8)) and line.all(func(ship: Ship) -> bool: return ship.level() >= Progression.ship_max_level())
 
 
@@ -416,7 +427,7 @@ func buy_mega(model_id: String) -> void:
 	_record(null, "mega", cost)
 	mega_upgrades.append(model_id)
 	mega_upgraded.emit(model_id)
-	for ship in ships:
+	for ship in fleet():
 		if ship.model_id == model_id:
 			ship.invalidate_stats()
 			ship_changed.emit(ship)
@@ -457,13 +468,41 @@ func apply_company_text_color(control: Control, color_id := company_color) -> vo
 		control.add_theme_constant_override(&"outline_size", 4)
 
 
+## This player's company level.
 func company_level() -> int:
-	# Worked out again only when the XP changes: it walks the level costs, and
-	# the weather, seasons and icebreakers ask for every ship every step.
-	if company_xp != _level_xp:
-		_level_xp = company_xp
-		_level = int(Progression.company_level(company_xp).level)
-	return _level
+	return company.level()
+
+
+## The highest company level in the game: when the world's own features
+## (storms, seasonal closures) start (in single player, the company's level).
+func world_level() -> int:
+	var best := company.level()
+	for other in companies:
+		best = maxi(best, other.level())
+	return best
+
+
+## The company a ship belongs to (this player's, if it has none yet).
+func owner_of(ship: Ship) -> Company:
+	return ship.company if ship.company != null else company
+
+
+## A company's ships.
+func fleet(of: Company = null) -> Array[Ship]:
+	var who := of if of != null else company
+	var out: Array[Ship] = []
+	for ship in ships:
+		if owner_of(ship) == who:
+			out.append(ship)
+	return out
+
+
+## Adds money to a company (or takes it, if negative), telling the screens
+## when it's this player's.
+func _add_money(to: Company, amount: int) -> void:
+	to.money += amount
+	if to == company:
+		money_changed.emit(to.money)
 
 
 ## What a ship's next level of a skill costs: game_config skill_costs first
@@ -488,8 +527,8 @@ func skill_error(ship: Ship, skill: String) -> String:
 		return "Maxed out."
 	if ship.skill_points() <= 0:
 		return "No upgrade points to spend."
-	if money < skill_cost(ship, skill):
-		return "You can't afford this (%s short)." % Fmt.money(skill_cost(ship, skill) - money)
+	if owner_of(ship).money < skill_cost(ship, skill):
+		return "You can't afford this (%s short)." % Fmt.money(skill_cost(ship, skill) - owner_of(ship).money)
 	return ""
 
 
@@ -504,8 +543,8 @@ func level_skill(ship: Ship, skill: String) -> void:
 
 func _buy_skill(ship: Ship, skill: String) -> void:
 	var cost := skill_cost(ship, skill)
-	money -= cost
-	_record(null, "upgrades", cost)
+	_add_money(owner_of(ship), -cost)
+	_record(null, "upgrades", cost, owner_of(ship))
 	ship.skills[skill] = int(ship.skills[skill]) + 1
 	ship.invalidate_stats()
 
@@ -516,7 +555,7 @@ func _buy_skill(ship: Ship, skill: String) -> void:
 ## also its cheapest, so buying in this order keeps every ship's order.
 func _upgrade_plan() -> Array:
 	var plan := []
-	for ship in ships:
+	for ship in fleet():
 		var levels := ship.skills.duplicate()
 		for point in ship.skill_points():
 			var best := ""
@@ -565,26 +604,29 @@ func upgrade_all() -> int:
 ## Unspent skill points across the fleet.
 func unspent_skill_points() -> int:
 	var points := 0
-	for ship in ships:
+	for ship in fleet():
 		points += maxi(ship.skill_points(), 0)
 	return points
 
 
 # --- Headquarters and hubs ---------------------------------------------
 
-## The HQ or hub at a port, or null.
-func hub_at(port_id: String) -> Hub:
-	for hub in hubs:
-		if hub.port_id == port_id:
-			return hub
-	return null
+## The HQ or hub a company (this player's by default) has at a port, or null.
+func hub_at(port_id: String, of: Company = null) -> Hub:
+	return (of if of != null else company).hub_at(port_id)
 
 
-## A hub bonus for ships at a port (0 if there's no hub there): "xp", "costs",
-## "speed" or "pay".
-func hub_bonus(port_id: String, path: String) -> float:
-	var hub := hub_at(port_id)
-	return hub.bonus(path) if hub else 0.0
+## A company's hub bonus for ships at a port (0 if it has no hub there): "xp",
+## "costs", "speed" or "pay".
+func hub_bonus(port_id: String, path: String, of: Company = null) -> float:
+	return (of if of != null else company).hub_bonus(port_id, path)
+
+
+## Every company in the game (just this player's before any are listed).
+func all_companies() -> Array[Company]:
+	if companies.is_empty():
+		return [company]
+	return companies
 
 
 ## Hubs the company can still place.
@@ -650,13 +692,18 @@ func upgrade_hub(hub: Hub, path: String) -> void:
 ## re-based boat sails there once it's free. A model too big for the St.
 ## Lawrence Seaway is never based at a Great Lakes hub.
 func _rebalance_recovery_boats() -> void:
+	for who in all_companies():
+		_rebalance_boats_of(who)
+
+
+func _rebalance_boats_of(who: Company) -> void:
 	var models := {}
-	for ship in ships:
+	for ship in fleet(who):
 		if ship.is_recovery():
 			models.get_or_add(ship.model_id, []).append(ship)
 	for boats: Array in models.values():
 		var model: Dictionary = boats[0].model()
-		var ports := hubs.map(func(hub: Hub) -> String: return hub.port_id).filter(func(port: String) -> bool:
+		var ports := who.hubs.map(func(hub: Hub) -> String: return hub.port_id).filter(func(port: String) -> bool:
 			return bool(model.get("seaway", false)) or not GameData.get_port(port).get("seaway", false))
 		if ports.is_empty():
 			continue
@@ -692,23 +739,23 @@ func _rebalance_recovery_boats() -> void:
 				ship_changed.emit(boat)
 
 
-## Recovery boats based at a port.
-func recovery_boats_at(port_id: String) -> Array:
-	return ships.filter(func(ship: Ship) -> bool: return ship.is_recovery() and ship.base_port == port_id)
+## A company's (this player's by default) recovery boats based at a port.
+func recovery_boats_at(port_id: String, of: Company = null) -> Array:
+	return fleet(of).filter(func(ship: Ship) -> bool: return ship.is_recovery() and ship.base_port == port_id)
 
 
 ## XP a hub needs for its next level (0 at the max level).
-func hub_level_cost(hub: Hub) -> float:
-	return Progression.hub_level_cost(hub.level, company_level()) if hub.level < Hub.max_level() else 0.0
+func hub_level_cost(hub: Hub, of: Company = null) -> float:
+	return Progression.hub_level_cost(hub.level, (of if of != null else company).level()) if hub.level < Hub.max_level() else 0.0
 
 
-func _gain_hub_xp(hub: Hub, amount: float) -> void:
+func _gain_hub_xp(hub: Hub, amount: float, of: Company = null) -> void:
 	if hub.level >= Hub.max_level():
 		return
 	hub.xp += amount
 	var leveled := false
-	while hub.level < Hub.max_level() and hub.xp >= hub_level_cost(hub):
-		hub.xp -= hub_level_cost(hub)
+	while hub.level < Hub.max_level() and hub.xp >= hub_level_cost(hub, of):
+		hub.xp -= hub_level_cost(hub, of)
 		hub.level += 1
 		leveled = true
 		hub_leveled.emit(hub, hub.level)
@@ -738,7 +785,7 @@ func rename_ship(ship: Ship, new_name: String) -> String:
 	var error := ship_name_error(new_name, ship)
 	if not error.is_empty() or new_name == ship.name:
 		return error
-	for bucket: Dictionary in _window:
+	for bucket: Dictionary in owner_of(ship).finance_window:
 		if bucket.ships.has(ship.name):
 			bucket.ships[new_name] = bucket.ships[ship.name]
 			bucket.ships.erase(ship.name)
@@ -890,8 +937,8 @@ func sell_ship(ship: Ship) -> String:
 	if ship.is_recovery():
 		_rebalance_recovery_boats()
 	_rebalance_tugs()
-	money += price
-	_record(null, "sold", price)
+	_add_money(owner_of(ship), price)
+	_record(null, "sold", price, owner_of(ship))
 	ship_sold.emit(ship, price)
 	ships_changed.emit()
 	save_game()
@@ -900,7 +947,7 @@ func sell_ship(ship: Ship) -> String:
 
 func _advance(ship: Ship, delta: float) -> void:
 	# A ship waiting in port for a full load, not due another look: nothing to do.
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need and ship.is_docked():
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need and ship.is_docked():
 		return
 	# A recovery boat or tug standing by at its base (most of them, most of the
 	# time): nothing to do until it's sent out.
@@ -1055,7 +1102,7 @@ func _storm_warnings() -> void:
 			if Geo.distance_nm(then, at) < float(storm.radius_nm) * 0.5 and Geo.distance_nm(Vector2(storm.lon, storm.lat), at) >= float(storm.radius_nm) * 0.5:
 				_storm_warned[key] = true
 				ActivityLog.add("%s is heading for %s (about 2 days away)." % [Weather.title(storm), GameData.port_name(port_id)], ActivityLog.Kind.BAD)
-	for ship in ships:
+	for ship in fleet():
 		var named := ""
 		if not ship.is_docked() and not ship.from_port.is_empty() and not ship.is_lost():
 			var found := weather.strongest_at(Geo.unproject(ship.world_position()))
@@ -1074,7 +1121,7 @@ func _player_ports() -> Dictionary:
 	var ports := {}
 	for hub in hubs:
 		ports[hub.port_id] = true
-	for ship in ships:
+	for ship in fleet():
 		for port_id: String in [ship.docked_at, ship.to_port]:
 			if not port_id.is_empty():
 				ports[port_id] = true
@@ -1088,7 +1135,7 @@ func _player_ports() -> Dictionary:
 ## sailing and every leg of its route.
 func _player_canals() -> Dictionary:
 	var canals := {}
-	for ship in ships:
+	for ship in fleet():
 		var legs := []
 		if not ship.from_port.is_empty():
 			legs.append([ship.from_port, ship.to_port])
@@ -1195,9 +1242,10 @@ func _roll_breakdowns(delta: float) -> void:
 	_breakdown_clock += delta
 	while _breakdown_clock >= interval:
 		_breakdown_clock -= interval
-		if company_level() < int(settings.get("min_company_level", 6)):
-			continue
+		var from_level := int(settings.get("min_company_level", 6))
 		for ship in ships:
+			if owner_of(ship).level() < from_level:
+				continue  # Each company's ships break down from its own level.
 			if ship.is_service() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or not ship.weather_wait.is_empty() or ship.escort != null or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
 				continue
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
@@ -1225,7 +1273,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.cargo_leg_nm = 0.0
 	if not ship.cargo_id.is_empty():
 		var sale := ship.cargo_qty * market.sell_price(port, ship.cargo_id)
-		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost, ship.model_id))
+		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost, ship.model_id, owner_of(ship)))
 		ship.cargo_leg_nm = GameData.distance_nm(ship.from_port, port) if paid and ship.from_port != port else 0.0
 	ship.unloaded = ship.is_service()
 	ship.docked_at = port
@@ -1293,15 +1341,16 @@ func _unload(ship: Ship) -> void:
 
 
 func _sell_cargo(ship: Ship) -> void:
+	var who := owner_of(ship)
 	ship.stop_sale = ship.cargo_payment
 	ship.stop_cost = ship.cargo_cost
-	money += ship.cargo_payment
+	_add_money(who, ship.cargo_payment)
 	_record(ship, "income", ship.cargo_payment)
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
 	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
-	delivered[ship.cargo_id] = int(delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
+	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
 	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll)
-	var hub := hub_at(ship.docked_at)
+	var hub := hub_at(ship.docked_at, who)
 	var xp := Progression.xp_for_cargo(ship.cargo_qty, ship.cargo_id, ship.cargo_leg_nm)
 	# Cargo that came through canals earns their XP bonuses on top of the hub's.
 	var canal_bonus := 0.0
@@ -1310,7 +1359,7 @@ func _sell_cargo(ship: Ship) -> void:
 		var bonus := float(canal.get("xp_bonus", 0.0))
 		canal_bonus += bonus
 		if bonus > 0.0:
-			var stats: Dictionary = canal_stats.get_or_add(canal_id, {crossings = 0, tolls = 0.0, xp = 0.0})
+			var stats: Dictionary = who.canal_stats.get_or_add(canal_id, {crossings = 0, tolls = 0.0, xp = 0.0})
 			stats.xp = float(stats.xp) + xp * bonus
 	ship.delivery_canals.clear()
 	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus,
@@ -1318,7 +1367,7 @@ func _sell_cargo(ship: Ship) -> void:
 	if hub:
 		hub.deliveries += 1
 		hub.income += ship.cargo_payment
-		_gain_hub_xp(hub, xp * (1.0 + canal_bonus))
+		_gain_hub_xp(hub, xp * (1.0 + canal_bonus), who)
 	ship.cargo_id = ""
 	ship.cargo_qty = 0
 	ship.cargo_cost = 0
@@ -1327,27 +1376,28 @@ func _sell_cargo(ship: Ship) -> void:
 
 ## Buys the most profitable cargo the ship can carry to its next port (see
 ## Market.best_cargo()): a full hold (less what a canal makes it leave behind),
-## or as much as the money allows while keeping the fleet's fuel reserve (see
-## fuel_reserve()) and the bank_reserve, unless full loads are on, when it buys
-## nothing short of a full hold. Nothing if no cargo makes a profit. A full load
-## taken out of a hub by a ship that arrived empty gives the hub XP.
+## or as much as its company's money allows while keeping its fuel reserve
+## (see fuel_reserve()) and bank_reserve, unless full loads are on, when it
+## buys nothing short of a full hold. Nothing if no cargo makes a profit. A
+## full load taken out of a hub by a ship that arrived empty gives the hub XP.
 ## Returns the cargo it chose (bought or not, for lack of money), or "" if none pays.
 func _load_cargo(ship: Ship, to: String) -> String:
 	if ship.is_service() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return ""
-	var best := market.best_cargo(ship.model(), ship.docked_at, to)
+	var who := owner_of(ship)
+	var best := market.best_cargo(ship.model(), ship.docked_at, to, who)
 	if best[0] == "":
 		return ""
 	var price := market.buy_price(ship.docked_at, best[0])
-	var fuel_reserve := fuel_reserve()
+	var reserve := fuel_reserve(who)
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
-	var quantity := mini(room, floori((float(money) - ship.bill - fuel_reserve - bank_reserve) / price))
+	var quantity := mini(room, floori((float(who.money) - ship.bill - reserve - who.bank_reserve) / price))
 	if quantity <= 0 or (ship.full_loads and quantity < room):
 		# What a full hold would need in the bank, for ships waiting for one.
-		ship.load_need = roundi(room * price + ship.bill + fuel_reserve + bank_reserve)
+		ship.load_need = roundi(room * price + ship.bill + reserve + who.bank_reserve)
 		return best[0]
 	var cost := roundi(quantity * price)
-	money -= cost
+	_add_money(who, -cost)
 	_record(ship, "cargo", cost)
 	market.trade(ship.docked_at, best[0], cost, true)
 	port_sizes.add_traffic(ship.docked_at, cost)
@@ -1358,26 +1408,28 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	cargo_loaded.emit(ship, ship.docked_at, best[0], quantity, cost, to)
 	# A ship that came in empty and leaves with a full hold (a one-way route out of
 	# a hub) earns the hub the XP the load will earn where it's delivered.
-	var hub := hub_at(ship.docked_at)
+	var hub := hub_at(ship.docked_at, who)
 	if hub and ship.stop_sale == 0 and quantity >= room:
-		_gain_hub_xp(hub, Progression.xp_for_cargo(quantity, best[0], GameData.distance_nm(ship.docked_at, to)))
+		_gain_hub_xp(hub, Progression.xp_for_cargo(quantity, best[0], GameData.distance_nm(ship.docked_at, to)), who)
 	ship_changed.emit(ship)
 	return best[0]
 
 
-## Adds delivery XP to the company (times company_multiplier, from a hub's
-## company XP bonus) and to the ship (times ship_multiplier, from its ship XP
-## upgrade), announcing any level-ups.
+## Adds delivery XP to the ship's company (times company_multiplier, from a
+## hub's company XP bonus) and to the ship (times ship_multiplier, from its
+## ship XP upgrade), announcing this player's level-ups.
 func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0, company_multiplier := 1.0) -> void:
-	var company_before := company_level()
+	var who := owner_of(ship)
+	var company_before := who.level()
 	var ship_before := ship.level()
-	company_xp += amount * company_multiplier
+	who.xp += amount * company_multiplier
 	ship.xp += amount * ship_multiplier
-	var bucket := _current_bucket()
+	var bucket := _current_bucket(who)
 	bucket.fleet["xp"] = float(bucket.fleet.get("xp", 0.0)) + amount * company_multiplier
-	company_xp_changed.emit(company_xp)
-	for level in range(company_before + 1, company_level() + 1):
-		company_leveled.emit(level, Progression.unlocks_at(level))
+	if who == company:
+		company_xp_changed.emit(company_xp)
+		for level in range(company_before + 1, company_level() + 1):
+			company_leveled.emit(level, Progression.unlocks_at(level))
 	if ship.level() > ship_before:
 		ship_leveled.emit(ship, ship.level())
 		ship_changed.emit(ship)
@@ -1394,7 +1446,7 @@ func _fuel_to_leave(ship: Ship, to: String) -> float:
 ## full or the money runs out, and is held in port while it lacks fuel for the leg.
 func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	# Waiting for a full load, and not due another look (see _waiting_for_load()).
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need:
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need:
 		return
 	if not ship.fits_port(to):
 		_set_hold(ship, "%s is too small for this ship; assign a new route" % GameData.port_name(to))
@@ -1467,7 +1519,7 @@ func _waiting_for_load(ship: Ship, to: String) -> bool:
 		return false
 	# Already waiting: look again as soon as the money reaches what a full hold
 	# needed, and otherwise only every LOAD_RECHECK_S (prices drift slowly).
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need:
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need:
 		return true
 	ship.load_check_time = play_time + LOAD_RECHECK_S
 	if _load_cargo(ship, to).is_empty() or not ship.cargo_id.is_empty():
@@ -1475,8 +1527,8 @@ func _waiting_for_load(ship: Ship, to: String) -> bool:
 		return false
 	_set_hold(ship, "")
 	var reason := "waiting for money for a full load to %s" % GameData.port_name(to)
-	if bank_reserve > 0:
-		reason += " (keeping %s in the bank)" % Fmt.money(bank_reserve)
+	if owner_of(ship).bank_reserve > 0:
+		reason += " (keeping %s in the bank)" % Fmt.money(owner_of(ship).bank_reserve)
 	_set_load_wait(ship, reason)
 	return true
 
@@ -1751,11 +1803,11 @@ func _burn(ship: Ship, miles: float, speed: float) -> void:
 
 # --- Tugs ------------------------------------------------------------------
 
-## The ports on the company's cargo ships' routes (and routes they'll take up
+## The ports on a company's (this player's by default) cargo ships' routes (and routes they'll take up
 ## after this leg), sorted: each takes tugs_per_port() tugs.
-func tug_ports() -> Array[String]:
+func tug_ports(of: Company = null) -> Array[String]:
 	var ports := {}
-	for ship in ships:
+	for ship in fleet(of):
 		if ship.is_service():
 			continue
 		for port_id in ship.route:
@@ -1774,22 +1826,22 @@ func tugs_per_port() -> int:
 
 
 ## How many tugs the company can own: tugs_per_port() for each port on its routes.
-func tug_slots() -> int:
-	return tug_ports().size() * tugs_per_port()
+func tug_slots(of: Company = null) -> int:
+	return tug_ports(of).size() * tugs_per_port()
 
 
-## Tugs based at a port.
-func tugs_at(port_id: String) -> Array:
-	return ships.filter(func(ship: Ship) -> bool: return ship.is_tug() and ship.base_port == port_id)
+## A company's tugs based at a port.
+func tugs_at(port_id: String, of: Company = null) -> Array:
+	return fleet(of).filter(func(ship: Ship) -> bool: return ship.is_tug() and ship.base_port == port_id)
 
 
 ## Where a new tug is based: the route port with the fewest tugs, the busiest
 ## first (on the most ships' routes), so they spread evenly. "" if there's none.
-func tug_port_for_new() -> String:
-	var ports := tug_ports()
-	var count := _tug_counts(ports)
+func tug_port_for_new(of: Company = null) -> String:
+	var ports := tug_ports(of)
+	var count := _tug_counts(ports, of)
 	var busy := {}
-	for ship in ships:
+	for ship in fleet(of):
 		for port_id in ship.route:
 			busy[port_id] = int(busy.get(port_id, 0)) + 1
 	ports.sort_custom(func(a: String, b: String) -> bool:
@@ -1799,11 +1851,11 @@ func tug_port_for_new() -> String:
 	return ports[0] if not ports.is_empty() else ""
 
 
-func _tug_counts(ports: Array[String]) -> Dictionary:
+func _tug_counts(ports: Array[String], of: Company = null) -> Dictionary:
 	var count := {}
 	for port_id in ports:
 		count[port_id] = 0
-	for ship in ships:
+	for ship in fleet(of):
 		if ship.is_tug() and count.has(ship.base_port):
 			count[ship.base_port] += 1
 	return count
@@ -1814,11 +1866,16 @@ func _tug_counts(ports: Array[String]) -> Dictionary:
 ## short of tugs that a full tank can reach, and sails there once it's free.
 ## One with nowhere to go stays put.
 func _rebalance_tugs() -> void:
-	var ports := tug_ports()
-	var count := _tug_counts(ports)
+	for who in all_companies():
+		_rebalance_tugs_of(who)
+
+
+func _rebalance_tugs_of(of: Company) -> void:
+	var ports := tug_ports(of)
+	var count := _tug_counts(ports, of)
 	var kept := {}
 	var surplus := []
-	for ship in ships:
+	for ship in fleet(of):
 		if not ship.is_tug():
 			continue
 		if count.has(ship.base_port) and int(kept.get(ship.base_port, 0)) < tugs_per_port():
@@ -1860,7 +1917,7 @@ func tug_plan(lost: Ship) -> Dictionary:
 		var port: String = end[0]
 		var miles: float = maxf(float(end[1]), 0.0)
 		var team: Array = ships.filter(func(tug: Ship) -> bool:
-			return tug.is_tug() and tug.base_port == port and tug.docked_at == port and not tug.is_docking() \
+			return tug.is_tug() and owner_of(tug) == owner_of(lost) and tug.base_port == port and tug.docked_at == port and not tug.is_docking() \
 				and not tug.is_on_job() and tug.reach_nm() >= miles and tug.fuel >= _tug_fuel(tug, miles))
 		if team.is_empty():
 			continue
@@ -2000,11 +2057,12 @@ func _deliver_tugs(lead: Ship, team: Array[Ship]) -> void:
 ## Extra money on a profitable trade from a leg's bonuses: the profit x (the
 ## leg's sale factor (rough seas, upper lakes) x the destination hub's Pay
 ## upgrade x the model's mega upgrade, if it has one - 1). Nothing on a loss.
-func trade_bonus(from_port: String, to_port: String, profit: float, model_id := "") -> float:
+func trade_bonus(from_port: String, to_port: String, profit: float, model_id := "", of: Company = null) -> float:
 	if profit <= 0.0:
 		return 0.0
-	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("profit_bonus", 0.5)) if has_mega(model_id) else 0.0)
-	return profit * (GameData.sale_factor(from_port, to_port) * (1.0 + hub_bonus(to_port, "pay")) * mega - 1.0)
+	var who := of if of != null else company
+	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("profit_bonus", 0.5)) if who.has_mega(model_id) else 0.0)
+	return profit * (GameData.sale_factor(from_port, to_port) * (1.0 + who.hub_bonus(to_port, "pay")) * mega - 1.0)
 
 
 ## Money cargo purchases leave alone so no ship is stranded for fuel: what
@@ -2012,12 +2070,13 @@ func trade_bonus(from_port: String, to_port: String, profit: float, model_id := 
 ## cargo ship at sea counting the fuel it will burn to get there). A buffer, so
 ## it's worked out at most every FUEL_RESERVE_REFRESH_S of game time: with a big
 ## fleet it's costly, and ships buying cargo ask for it many times a second.
-func fuel_reserve() -> float:
-	if _fuel_reserve_time >= 0.0 and play_time >= _fuel_reserve_time and play_time - _fuel_reserve_time < FUEL_RESERVE_REFRESH_S:
-		return _fuel_reserve
+func fuel_reserve(of: Company = null) -> float:
+	var who := of if of != null else company
+	if who.fuel_reserve_time >= 0.0 and play_time >= who.fuel_reserve_time and play_time - who.fuel_reserve_time < FUEL_RESERVE_REFRESH_S:
+		return who.fuel_reserve
 	var total := 0.0
 	var prices := {}  # Port -> fuel price, looked up once each (many ships share ports).
-	for ship in ships:
+	for ship in fleet(who):
 		var port := ship.docked_at if ship.is_docked() else ship.to_port
 		if port.is_empty():
 			continue
@@ -2033,8 +2092,8 @@ func fuel_reserve() -> float:
 		if not prices.has(port):
 			prices[port] = market.fuel_price(port)
 		total += missing * float(prices[port])
-	_fuel_reserve = total
-	_fuel_reserve_time = play_time
+	who.fuel_reserve = total
+	who.fuel_reserve_time = play_time
 	return total
 
 
@@ -2050,7 +2109,7 @@ func cargo_toll(ship: Ship, canal: Dictionary) -> int:
 ## Charges a canal toll to a ship's ledger and the finances.
 func record_toll(ship: Ship, canal: Dictionary, toll: int) -> void:
 	_record(ship, "tolls", toll)
-	var stats: Dictionary = canal_stats.get_or_add(canal.id, {crossings = 0, tolls = 0.0, xp = 0.0})
+	var stats: Dictionary = owner_of(ship).canal_stats.get_or_add(canal.id, {crossings = 0, tolls = 0.0, xp = 0.0})
 	stats.crossings = int(stats.crossings) + 1
 	stats.tolls = float(stats.tolls) + toll
 
@@ -2067,13 +2126,14 @@ func recovery_plan(lost: Ship) -> Dictionary:
 	var tugs := tug_plan(lost)
 	if not tugs.is_empty():
 		return tugs
-	var capable := ships.filter(func(ship: Ship) -> bool:
+	var own := fleet(owner_of(lost))  # A company recovers its own ships.
+	var capable := own.filter(func(ship: Ship) -> bool:
 		return ship.can_carry(lost) and ship.fits_lane(lost.from_port, lost.to_port))
 	if capable.is_empty():
 		var model_name: String = lost.model().get("name", lost.model_id)
-		if ships.any(func(ship: Ship) -> bool: return ship.is_recovery()):
+		if own.any(func(ship: Ship) -> bool: return ship.is_recovery()):
 			return {error = "Only a Mammoth can carry a %s. Buy one in the Shop." % model_name}
-		if ships.any(func(ship: Ship) -> bool: return ship.is_tug()):
+		if own.any(func(ship: Ship) -> bool: return ship.is_tug()):
 			return {error = "No free tug is based near enough. Buy a Mammoth or Buffalo in the Shop to recover ships further out."}
 		return {error = "Buy a Mammoth or Buffalo in the Shop to recover lost ships (or tugs, for ships lost near your ports)."}
 	var best := {}
@@ -2260,7 +2320,7 @@ func _repair(ship: Ship, amount: float) -> void:
 	amount = minf(amount, 1.0 - ship.maintenance)
 	if amount <= 0.0:
 		return
-	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs"))
+	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs", owner_of(ship)))
 	var paid := _spend(ship, cost, "repair")
 	ship.stop_repair_cost += paid
 	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
@@ -2271,7 +2331,7 @@ func _refuel(ship: Ship, amount: float) -> void:
 	amount = minf(amount, ship.fuel_tank() - ship.fuel)
 	if amount <= 0.0:
 		return
-	var cost := amount * market.fuel_price(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs"))
+	var cost := amount * market.fuel_price(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs", owner_of(ship)))
 	var paid := _spend(ship, cost, "fuel")
 	ship.stop_fuel_cost += paid
 	ship.fuel = minf(ship.fuel + amount * paid / cost, ship.fuel_tank())
@@ -2283,7 +2343,7 @@ func _refuel(ship: Ship, amount: float) -> void:
 func _spend(ship: Ship, cost: float, kind: String) -> float:
 	if cost <= 0.0:
 		return 0.0
-	var paid := minf(cost, float(money) - ship.bill)
+	var paid := minf(cost, float(owner_of(ship).money) - ship.bill)
 	if paid <= 0.0:
 		return 0.0
 	_record(ship, kind, paid)
@@ -2291,12 +2351,12 @@ func _spend(ship: Ship, cost: float, kind: String) -> float:
 	var whole := floori(ship.bill)
 	if whole > 0:
 		ship.bill -= whole
-		money -= whole
+		_add_money(owner_of(ship), -whole)
 	return paid
 
 
 func _can_spend(ship: Ship) -> bool:
-	return float(money) - ship.bill > 0.0
+	return float(owner_of(ship).money) - ship.bill > 0.0
 
 
 ## Length of the overlap between the time spans [a0, a1) and [b0, b1).
@@ -2306,12 +2366,15 @@ static func _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
 
 # --- Finances ------------------------------------------------------------
 
-## Tallies money of a kind (see MONEY_KINDS) for a ship (null for the company
-## as a whole: buying and selling ships, hub upgrades). Recovery boats pay for their own
-## fuel and repairs.
-func _record(ship: Ship, kind: String, amount: float) -> void:
-	totals[kind] = float(totals.get(kind, 0.0)) + amount
-	var bucket := _current_bucket()
+## Tallies money of a kind (see MONEY_KINDS) for a ship (null for a company as
+## a whole: buying and selling ships, hub upgrades), in its company's finances
+## (who's, or else the ship's, or else this player's). Recovery boats pay for
+## their own fuel and repairs.
+func _record(ship: Ship, kind: String, amount: float, who: Company = null) -> void:
+	if who == null:
+		who = owner_of(ship) if ship else company
+	who.totals[kind] = float(who.totals.get(kind, 0.0)) + amount
+	var bucket := _current_bucket(who)
 	bucket.fleet[kind] = float(bucket.fleet.get(kind, 0.0)) + amount
 	if ship:
 		ship.ledger[kind] = float(ship.ledger.get(kind, 0.0)) + amount
@@ -2319,13 +2382,15 @@ func _record(ship: Ship, kind: String, amount: float) -> void:
 		tally[kind] = float(tally.get(kind, 0.0)) + amount
 
 
-func _current_bucket() -> Dictionary:
+## A company's (this player's by default) bucket of recent money for now.
+func _current_bucket(of: Company = null) -> Dictionary:
+	var window := (of if of != null else company).finance_window
 	var start := floorf(play_time / BUCKET_SECONDS) * BUCKET_SECONDS
-	if _window.is_empty() or _window[-1].start < start:
-		_window.append({start = start, fleet = {}, ships = {}})
-	while _window[0].start < play_time - WINDOW_SECONDS:
-		_window.pop_front()
-	return _window[-1]
+	if window.is_empty() or window[-1].start < start:
+		window.append({start = start, fleet = {}, ships = {}})
+	while window[0].start < play_time - WINDOW_SECONDS:
+		window.pop_front()
+	return window[-1]
 
 
 ## Company XP per minute over the last WINDOW_SECONDS (or the time played, if
@@ -2340,7 +2405,7 @@ func recent_xp_per_minute() -> float:
 func recent_finances() -> Dictionary:
 	var fleet := {}
 	var ship_profit := {}
-	for bucket: Dictionary in _window:
+	for bucket: Dictionary in company.finance_window:
 		if bucket.start < play_time - WINDOW_SECONDS:
 			continue
 		for kind: String in bucket.fleet:
@@ -2354,88 +2419,79 @@ func recent_finances() -> Dictionary:
 
 # --- Saving --------------------------------------------------------------
 
-func save_path(slot: int) -> String:
-	return "user://save_%d.json" % slot
+func save_path(slot: int, online := multiplayer_save) -> String:
+	return ("user://save_mp_%d.json" if online else "user://save_%d.json") % slot
 
 
-func has_save(slot: int) -> bool:
-	return FileAccess.file_exists(save_path(slot))
+func has_save(slot: int, online := multiplayer_save) -> bool:
+	return FileAccess.file_exists(save_path(slot, online))
 
 
 ## What the main menu shows for a slot: {company_name, company_color,
 ## home_port (id), max_time_speed, storms, seasons, money, date (calendar Unix
 ## time)}, plus error if it can't be loaded; {} if empty.
-func save_summary(slot: int) -> Dictionary:
-	if not has_save(slot):
+func save_summary(slot: int, online := multiplayer_save) -> Dictionary:
+	if not has_save(slot, online):
 		return {}
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_path(slot)))
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_path(slot, online)))
 	if typeof(data) != TYPE_DICTIONARY:
 		return {error = "Unreadable save"}
+	# This player's company (a save from before companies holds its one at the top).
+	var mine: Dictionary = data
+	var list: Array = data.get("companies", [])
+	if not list.is_empty():
+		mine = list[clampi(int(data.get("local_company", 0)), 0, list.size() - 1)]
 	var summary := {
-		company_name = str(data.get("company_name", "")),
-		company_color = str(data.get("company_color", "purple")),
-		home_port = str(data.get("home_port", "")),
+		company_name = str(mine.get("company_name", "")),
+		company_color = str(mine.get("company_color", "purple")),
+		home_port = str(mine.get("home_port", "")),
 		max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1])),
 		storms = str(data.get("storms", "none")),
 		seasons = bool(data.get("seasons", false)),
-		money = int(data.get("money", 0)),
+		money = int(mine.get("money", 0)),
 		date = calendar_time_at(float(data.get("play_time", 0.0))),
+		companies = maxi(list.size(), 1),
 	}
 	if int(data.get("version", 0)) != SAVE_VERSION:
 		summary.error = "Old save, can't be loaded"
 	return summary
 
 
-func delete_save(slot: int) -> void:
-	DirAccess.remove_absolute(save_path(slot))
+func delete_save(slot: int, online := multiplayer_save) -> void:
+	DirAccess.remove_absolute(save_path(slot, online))
 
 
 ## The single save from before slots moves into slot 1.
 func _migrate_legacy_save() -> void:
-	if FileAccess.file_exists(LEGACY_SAVE_PATH) and not has_save(1):
-		DirAccess.rename_absolute(LEGACY_SAVE_PATH, save_path(1))
+	if FileAccess.file_exists(LEGACY_SAVE_PATH) and not has_save(1, false):
+		DirAccess.rename_absolute(LEGACY_SAVE_PATH, save_path(1, false))
 
 
 ## Starts a new company in save_slot, replacing any save there. options (all
 ## optional): tutorials (bool), max_time_speed (one of TIME_SPEEDS), storms
 ## (one of Weather.LEVELS) and seasons (bool: seasonal closures).
 func new_game(new_company_name: String, new_home_port: String, new_color := "purple", options := {}) -> void:
-	company_name = new_company_name.strip_edges()
-	company_color = new_color
-	home_port = new_home_port
-	money = int(GameData.config.get("starting_money", 10000))
-	delivered = {}
-	earlier_containers = 0
-	first_prices_used = []
-	mega_upgrades = []
-	hidden_gem_claimed = false
+	company = Company.new(new_company_name.strip_edges(), new_color, new_home_port)
+	company.money = int(GameData.config.get("starting_money", 10000))
+	company.tutorials = bool(options.get("tutorials", false))
+	company.hubs.assign([Hub.new(new_home_port, true)])
+	companies.assign([company])
 	_clear_ships()
 	play_time = 0.0
-	totals = {}
-	canal_stats = {}
 	canal_traffic.clear()
 	market.clear()
 	port_sizes.reset()
-	company_xp = 0.0
-	show_active_routes = true
-	muted_models.clear()
-	activity_collapsed = false
-	tutorials = bool(options.get("tutorials", false))
 	max_time_speed = int(options.get("max_time_speed", TIME_SPEEDS[-1]))
 	storms = str(options.get("storms", "none"))
 	seasons = bool(options.get("seasons", false))
 	weather.clear()
-	tutorials_on = true
-	tutorial_done.clear()
-	bank_reserve = 0
-	hubs.assign([Hub.new(home_port, true)])
-	_window = []
+	money_changed.emit(money)
 	_begin_session()
 	save_game()
 
 
 ## Loads a slot's save and starts a session saving to it. Returns why it
-## couldn't, or "".
+## couldn't, or "". A save from before companies loads as its one company.
 func continue_game(slot: int) -> String:
 	var path := save_path(slot)
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -2445,58 +2501,35 @@ func continue_game(slot: int) -> String:
 	if int(data.get("version", 0)) != SAVE_VERSION:
 		return "This save is from before commodity trading and can't be loaded. Delete it to start a new game in this slot."
 	save_slot = slot
-	company_name = data.get("company_name", "")
-	company_color = data.get("company_color", "purple")  # Saves from before colors: purple.
-	home_port = data.get("home_port", "")
-	money = int(data.get("money", 0))
-	delivered = {}
-	for commodity_id: String in data.get("delivered", {}):
-		delivered[commodity_id] = int(data.delivered[commodity_id])
-	earlier_containers = int(data.get("earlier_containers", 0))
-	if not data.has("delivered"):  # Saves from before per-commodity counts: their container total.
-		earlier_containers = int(data.get("containers_delivered", 0))
-	first_prices_used.assign(data.get("first_prices_used", []))
-	mega_upgrades.assign(data.get("mega_upgrades", []))
-	hidden_gem_claimed = bool(data.get("hidden_gem_claimed", false))
+	companies.clear()
+	for company_data: Dictionary in data.get("companies", [data]):
+		companies.append(Company.from_dict(company_data))
+	company = companies[clampi(int(data.get("local_company", 0)), 0, companies.size() - 1)]
 	_clear_ships()
 	play_time = float(data.get("play_time", 0.0))
-	totals = data.get("totals", {})
-	canal_stats = data.get("canal_stats", {})
 	market.from_dict(data.get("market", {}))
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
-	# Saves from before XP: count the XP past deliveries would have earned.
-	company_xp = float(data.get("company_xp", 0.0))
-	_window = data.get("finance_window", [])
-	show_active_routes = bool(data.get("show_active_routes", true))
-	muted_models.assign(data.get("muted_models", []))
-	activity_collapsed = bool(data.get("activity_collapsed", false))
-	tutorials = bool(data.get("tutorials", false))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
 	# Saves from before weather have no storms or seasonal closures.
 	storms = str(data.get("storms", "none"))
 	seasons = bool(data.get("seasons", false))
 	weather.from_dict(data.get("weather", {}))
-	tutorials_on = bool(data.get("tutorials_on", true))
-	tutorial_done.assign(data.get("tutorial_done", []))
-	bank_reserve = int(data.get("bank_reserve", 0))
-	hubs.clear()
-	for hub_data: Dictionary in data.get("hubs", []):
-		hubs.append(Hub.from_dict(hub_data))
-	if hubs.is_empty():  # Saves from before hubs: the HQ at the home port.
-		hubs.append(Hub.new(home_port, true))
 	for ship_data: Dictionary in data.get("ships", []):
-		ships.append(Ship.from_dict(ship_data))
+		var ship := Ship.from_dict(ship_data)
+		ship.company = companies[clampi(int(ship_data.get("company", 0)), 0, companies.size() - 1)]
+		ships.append(ship)
 	Ship.link_rescues(ships)
 	for ship in ships:
 		ship.invalidate_stats()  # Skills and mega upgrades are all loaded now.
 	canal_traffic.rebuild(ships)
 	for ship in ships:
 		if ship.is_recovery() and ship.base_port.is_empty():  # Saves from before bases.
-			ship.base_port = home_port
+			ship.base_port = owner_of(ship).home_port
 	if not had_port_sizes:
 		_fit_ports_to_routes()
 	_rebalance_recovery_boats()
 	_rebalance_tugs()
+	money_changed.emit(money)
 	_begin_session()
 	return ""
 
@@ -2521,37 +2554,23 @@ func _fit_ports_to_routes() -> void:
 func save_game() -> void:
 	if not in_session:
 		return
+	var all := all_companies()
 	var data := {
 		"version": SAVE_VERSION,
-		"company_name": company_name,
-		"company_color": company_color,
-		"home_port": home_port,
-		"money": money,
+		"multiplayer": multiplayer_save,
+		"companies": all.map(func(each: Company) -> Dictionary: return each.to_dict()),
+		"local_company": all.find(company),
 		"play_time": play_time,
-		"company_xp": company_xp,
-		"show_active_routes": show_active_routes,
-		"muted_models": muted_models,
-		"activity_collapsed": activity_collapsed,
-		"tutorials": tutorials,
 		"max_time_speed": max_time_speed,
 		"storms": storms,
 		"seasons": seasons,
 		"weather": weather.to_dict(),
-		"tutorials_on": tutorials_on,
-		"tutorial_done": tutorial_done,
-		"bank_reserve": bank_reserve,
-		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
-		"totals": totals,
-		"canal_stats": canal_stats,
 		"market": market.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
-		"finance_window": _window,
-		"delivered": delivered,
-		"earlier_containers": earlier_containers,
-		"first_prices_used": first_prices_used,
-		"mega_upgrades": mega_upgrades,
-		"hidden_gem_claimed": hidden_gem_claimed,
-		"ships": ships.map(func(ship: Ship) -> Dictionary: return ship.to_dict()),
+		"ships": ships.map(func(ship: Ship) -> Dictionary:
+			var ship_data := ship.to_dict()
+			ship_data["company"] = maxi(all.find(owner_of(ship)), 0)
+			return ship_data),
 	}
 	var file := FileAccess.open(save_path(save_slot), FileAccess.WRITE)
 	if file == null:

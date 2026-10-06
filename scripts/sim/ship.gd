@@ -54,6 +54,9 @@ const CANAL_ANCHORED := CanalTraffic.ANCHORED
 const CANAL_CONVOY := CanalTraffic.CONVOY
 
 var name := ""
+## The company that owns it (see GameState.owner_of()); saved by its place in
+## GameState.companies.
+var company: Company = null
 var model_id := ""
 var route: Array[String] = []
 ## Replaces route when the ship reaches the end of its current leg.
@@ -388,7 +391,7 @@ func wear_per_s() -> float:
 func _refresh_stats() -> void:
 	var data := model()
 	var settings: Dictionary = GameData.config.get("mega", {})
-	var has_mega := GameState.has_mega(model_id)
+	var has_mega := GameState.owner_of(self).has_mega(model_id)
 	var mega := 1.0 + (float(settings.get("speed_bonus", 0.5)) if has_mega else 0.0)
 	# A recovery boat's mega upgrade also cuts its fuel burn (a cargo ship's
 	# raises its profit instead; see GameState.trade_bonus()).
@@ -457,7 +460,7 @@ func refill_phase_seconds() -> float:
 
 
 func _hub_stop_factor() -> float:
-	return 1.0 - GameState.hub_bonus(docked_at, "speed") if is_docked() else 1.0
+	return 1.0 - GameState.owner_of(self).hub_bonus(docked_at, "speed") if is_docked() else 1.0
 
 
 ## A leg within the ship's range that it fits (the Seaway) and can sail on one

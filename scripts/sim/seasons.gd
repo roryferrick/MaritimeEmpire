@@ -41,7 +41,7 @@ func ice_zones() -> Array:
 
 ## True once closures apply: a save with them, from min_company_level.
 func active() -> bool:
-	return _state.seasons and _state.company_level() >= int(_settings().get("min_company_level", 1))
+	return _state.seasons and _state.world_level() >= int(_settings().get("min_company_level", 1))
 
 
 ## True if a closure or ice zone ({from, to}: [month, day]) is in season at a

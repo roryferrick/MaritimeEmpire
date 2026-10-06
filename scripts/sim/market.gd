@@ -79,16 +79,17 @@ func _half_life(port_id: String) -> float:
 
 ## The commodity a ship of this model would load at one port to sell at the
 ## next, and its profit per unit there (after the canal tolls, and with the
-## leg's bonuses on the profit), as [commodity id, profit per unit]; ["", 0] if nothing it
+## leg's bonuses on the profit, with a company's hubs and upgrades: this
+## player's unless `of` says), as [commodity id, profit per unit]; ["", 0] if nothing it
 ## carries makes a profit.
-func best_cargo(model: Dictionary, from_port: String, to_port: String) -> Array:
+func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Company = null) -> Array:
 	var best := ""
 	var best_profit := 0.0
 	var toll_share := GameData.leg_toll_share(from_port, to_port)
 	for commodity_id: String in model.get("cargo", []):
 		var sell := sell_price(to_port, commodity_id)
 		var margin := sell - buy_price(from_port, commodity_id)
-		var profit: float = margin + _state.trade_bonus(from_port, to_port, margin, str(model.get("id", ""))) - sell * toll_share
+		var profit: float = margin + _state.trade_bonus(from_port, to_port, margin, str(model.get("id", "")), of) - sell * toll_share
 		if profit > best_profit:
 			best = commodity_id
 			best_profit = profit

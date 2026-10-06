@@ -514,9 +514,10 @@ func convoy_ships(canal: Dictionary, forward: bool) -> Array[Ship]:
 func _pay_toll(ship: Ship, canal: Dictionary) -> bool:
 	if not ship.is_service():
 		var toll: int = _state.cargo_toll(ship, canal)
-		if _state.money < toll:
+		var who: Company = _state.owner_of(ship)
+		if who.money < toll:
 			return false
-		_state.money -= toll
+		_state._add_money(who, -toll)
 		_state.record_toll(ship, canal, toll)
 		ship.leg_toll += toll
 		_state.canal_entered.emit(ship, canal, toll)

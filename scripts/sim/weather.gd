@@ -49,7 +49,7 @@ func _level() -> Dictionary:
 
 ## True once storms act on ships: a save with storms, from min_company_level.
 func active() -> bool:
-	return _state.storms != "none" and _state.company_level() >= int(_settings().get("min_company_level", 1))
+	return _state.storms != "none" and _state.world_level() >= int(_settings().get("min_company_level", 1))
 
 
 ## Forms, moves, builds up and fades the storms (in saves with storms).

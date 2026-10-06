@@ -131,7 +131,7 @@ func _update_cargo() -> void:
 		commodity.get("name", ship.cargo_id), Fmt.money(ship.cargo_cost), GameData.port_name(from)]
 	if not to.is_empty():
 		var sale := ship.cargo_qty * GameState.market.sell_price(to, ship.cargo_id)
-		var worth: float = sale + GameState.trade_bonus(from, to, sale - ship.cargo_cost, ship.model_id)
+		var worth: float = sale + GameState.trade_bonus(from, to, sale - ship.cargo_cost, ship.model_id, GameState.owner_of(ship))
 		text += ", worth about %s at %s" % [Fmt.money(roundi(worth)), GameData.port_name(to)]
 	_cargo_label.text = text
 

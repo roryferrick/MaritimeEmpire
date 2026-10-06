@@ -138,7 +138,7 @@ func step(delta: float) -> void:
 	var most := float(settings.get("max_growth_per_hour", 5.0)) * seconds / 3600.0
 	var floor_size := float(settings.get("shrink_floor", 51))
 	var shrink := 0.0
-	if _state.company_level() >= int(settings.get("shrink_from_level", 46)):
+	if _state.world_level() >= int(settings.get("shrink_from_level", 46)):
 		shrink = float(settings.get("shrink_per_hour", 0.833)) * seconds / 3600.0
 	var top := float(settings.get("max", 100))
 	for port_id: String in _sizes:
