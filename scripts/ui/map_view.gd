@@ -62,7 +62,7 @@ const ICE_CANAL_WIDTH := 5.0
 const ICE_RING_GAP := 5.0
 ## Land drawings (see _draw_decor()): where their art is, the bucket size
 ## (degrees) they're sorted into, how far apart on screen a tier must be to
-## show, their sizes on screen ([plants and rocks, mountains, animals] px at the
+## show, their sizes on screen ([plants and rocks, mountains, animals and waves] px at the
 ## reference zoom), and how much they grow or shrink with the zoom.
 const DECOR_ART_DIR := "res://art/decor/"
 const DECOR_BUCKET := 10.0
@@ -2023,7 +2023,8 @@ func _draw_decor() -> void:
 		if texture == null:
 			continue
 		var kind_name := data.decor_kind_names[item[1]]
-		var side: float = (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if DECOR_ANIMALS.has(kind_name) else DECOR_SIZE_PX.x)) * scale
+		var big := DECOR_ANIMALS.has(kind_name) or kind_name == "waves"
+		var side: float = (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if big else DECOR_SIZE_PX.x)) * scale
 		_canvas.draw_texture_rect(texture, Rect2(item[0] - Vector2(side / 2.0, side * 0.92), Vector2(side, side)), false)
 
 

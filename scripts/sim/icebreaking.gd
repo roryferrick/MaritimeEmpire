@@ -6,7 +6,7 @@ extends RefCounted
 ## closure or ice zone is (see Seasons). With an icebreaker stationed there it's
 ## open (open()): its closure no longer stops ships, but a ship reaching the
 ## ice edge (entry_mile()), or leaving a port in the ice, waits for the
-## icebreaker, which comes and leads it, with up to convoy_size others on the
+## icebreaker, which comes and leads it, with others (convoy_size ships in all) on the
 ## same lane, through the ice. GameState moves the ships; this works out the
 ## areas, where lanes meet the ice, and which ships make up the next convoy.
 
@@ -42,11 +42,11 @@ func area(area_id: String) -> Dictionary:
 
 
 func convoy_size() -> int:
-	return int(_settings().get("convoy_size", 4))
+	return int(_settings().get("convoy_size", 7))
 
 
 func gap_nm() -> float:
-	return float(_settings().get("gap_nm", 3.0))
+	return float(_settings().get("gap_nm", 30.0))
 
 
 ## The share of the slower of an icebreaker and its slowest ship a convoy

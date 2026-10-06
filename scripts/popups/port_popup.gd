@@ -228,7 +228,7 @@ func _refresh_ships() -> void:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override(&"separation", 10)
 		var button := Button.new()
-		button.text = ship.name
+		button.text = "%s · %s" % [ship.name, ship.model().get("name", ship.model_id)]
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(_open_ship.bind(ship))

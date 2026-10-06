@@ -69,6 +69,13 @@ const BIOME_SMOOTHING_RADII: Array[int] = [2, 2, 1, 1]
 ## coarsest first (the map shows a tier once its spacing is far enough apart
 ## on screen).
 const DECOR_TIER_SPACING: Array[float] = [12.0, 6.0, 3.0, 1.5, 0.75]
+## Waves dot the sea beyond this latitude, north and south (the Southern
+## Ocean's rough seas, game_config rough_seas, start at 60°S), at this share
+## of the spots a tier tries.
+const WAVES_LAT := 60.0
+const WAVES_CHANCE := 0.6
+## Only the coarsest tiers get waves, so they dot the sea rather than fill it.
+const WAVES_TIERS := 3
 ## Animals where they live: [art name, lon, lat, tier].
 const ANIMALS := [
 	["penguin", 40.0, -69.5, 1], ["penguin", -60.5, -64.0, 2], ["penguin", 168.0, -77.0, 2], ["penguin", -69.0, -52.3, 3], ["penguin", 18.6, -34.1, 3],
@@ -691,7 +698,41 @@ func _add_decor(map: WorldMapData, biomes: PackedByteArray) -> void:
 				add.call(kind, lon_lat, tier)
 				taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
 			y += spacing
+	_add_polar_waves(map, biomes, add)
 	print("Decor: %d drawings of %d kinds" % [map.decor_positions.size(), map.decor_kind_names.size()])
+
+
+## Waves on the sea beyond WAVES_LAT north and south (the rough polar waters),
+## in the coarsest WAVES_TIERS tiers like the land drawings, but in a pass of
+## their own (their own random numbers and spacing checks), so the land
+## drawings stay where they were.
+func _add_polar_waves(map: WorldMapData, biomes: PackedByteArray, add: Callable) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261006
+	var placed: Array[Vector2] = []
+	var top := Geo.project(Vector2(0.0, 80.0)).y
+	var bottom := Geo.project(Vector2(0.0, -80.0)).y
+	for tier in WAVES_TIERS:
+		var spacing: float = DECOR_TIER_SPACING[tier]
+		var taken := {}
+		for p in placed:
+			taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
+		for band: Array in [[Geo.project(Vector2(0.0, WAVES_LAT)).y, top], [bottom, Geo.project(Vector2(0.0, -WAVES_LAT)).y]]:
+			var y: float = band[0]
+			while y < band[1]:
+				var x := -180.0
+				while x < 180.0:
+					var p := Vector2(x, y) + Vector2(rng.randf(), rng.randf()) * spacing
+					x += spacing
+					if p.x >= 180.0 or rng.randf() >= WAVES_CHANCE or not _decor_clear(taken, p, spacing):
+						continue
+					var lon_lat := Geo.unproject(p)
+					if absf(lon_lat.y) < WAVES_LAT or _biome_at(biomes, lon_lat) != BIOME_SEA:
+						continue
+					add.call("waves", lon_lat, tier)
+					placed.append(p)
+					taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
+				y += spacing
 
 
 ## The drawing for a spot in a biome (or "" for none, to keep the map from

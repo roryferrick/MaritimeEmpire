@@ -29,10 +29,10 @@
 			{"id": "gulf_of_finland", "name": "Gulf of Finland ice", "center": [27.0, 59.9], "radius_nm": 180, "from": [1, 10], "to": [3, 31], "speed": 0.45, "wear": 1.5}
 		]
 	},
-	"_icebreaking_comment": "Icebreakers (scripts/sim/icebreaking.gd). Each ice area is covered by circles ([lon, lat, radius nm]) and is in season while its seasonal closure (closure) or ice zone (zone) is. With an icebreaker stationed there (station_ports: where it waits), the closure is lifted for ships it can lead (the Great Lakes locks still shut regardless): ships reaching the ice edge, or leaving a port in the ice, wait (engines off) for the icebreaker, which leads up to convoy_size ships on the same lane through the ice at escort_speed (by icebreaker kind: a share of the slower of it and the slowest ship), gap_nm apart, then goes back for the next. An ice zone that stays open anyway (the Gulf of Finland) has no convoys: an icebreaker stationed there keeps the fairways open, so ships in it sail at fairway speed and wear instead of crawling. Icebreakers pay their own fuel and repairs.",
+	"_icebreaking_comment": "Icebreakers (scripts/sim/icebreaking.gd). Each ice area is covered by circles ([lon, lat, radius nm]) and is in season while its seasonal closure (closure) or ice zone (zone) is. With an icebreaker stationed there (station_ports: where it waits), the closure is lifted for ships it can lead (the Great Lakes locks still shut regardless): ships reaching the ice edge, or leaving a port in the ice, wait (engines off) for the icebreaker, which leads up to convoy_size ships on the same lane through the ice at escort_speed (by icebreaker kind: a share of the slower of it and the slowest ship), gap_nm apart (wide enough that each ship shows on its own at the opening zoom), then goes back for the next. An ice zone that stays open anyway (the Gulf of Finland) has no convoys: an icebreaker stationed there keeps the fairways open, so ships in it sail at fairway speed and wear instead of crawling. Icebreakers pay their own fuel and repairs.",
 	"icebreaking": {
-		"convoy_size": 4,
-		"gap_nm": 3,
+		"convoy_size": 7,
+		"gap_nm": 30,
 		"escort_speed": {"diesel": 0.65, "nuclear": 0.85},
 		"fairway": {"speed": 0.8, "wear": 1.1},
 		"areas": [
