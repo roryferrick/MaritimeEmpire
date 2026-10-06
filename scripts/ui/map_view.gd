@@ -1213,6 +1213,12 @@ const BOLLARD_INSET := 0.7
 const BOLLARD_RADIUS := 0.5
 const BOLLARD_COLOR := Color(0.16, 0.15, 0.14)
 const ROPE_COLOR := Color(0.95, 0.9, 0.74)
+## Tugs tie up alongside the wharf this far apart (dock units, about a tug and a half).
+const TUG_STEP := 9.0
+## Stone blocks join the dock pieces where they meet: this wide, dressed grey stone.
+const STONE_BLOCK := 6.5
+const STONE_COLOR := Color(0.6, 0.6, 0.62)
+const STONE_JOINT := Color(0.42, 0.42, 0.45)
 const PIERS_BY_BAND := {small = 1, medium = 1, large = 3, giant = 4}
 const BAND_RANK := {small = 0, medium = 1, large = 2, giant = 3}
 ## Port id -> the sea's direction from it on screen (see _port_sea_angle()).
@@ -1356,9 +1362,23 @@ func _dock_layout(band: String, berths: int) -> Dictionary:
 		layout.berths.insert(2, [Vector2(1.0 + PIER_WIDTH / 2.0 + BERTH_GAP + width / 2.0, y0 + 1.0 + step / 2.0), PI / 2.0, Vector2(-1.0, 0.0)])
 	var reach := base_length + (rows - 1) * step
 	layout.mouth = Vector2(reach + length * 0.9, 0.0)
-	layout.tugs = Vector2(2.5, -(piers - 1) / 2.0 * spacing - spacing / 2.0)
+	layout.tugs = Vector2(0.0, -(piers - 1) / 2.0 * spacing - spacing / 2.0 - TUG_STEP / 2.0)
 	_dock_layouts[key] = layout
 	return layout
+
+
+## Where the slot-th tug lies tied up alongside the wharf (dock units, facing
+## along it): one after another from the end by the piers, TUG_STEP apart.
+static func _tug_mooring(layout: Dictionary, slot: int) -> Array:
+	var tug_width := _tug_width()
+	return [Vector2(PIER_WIDTH / 2.0 + BERTH_GAP * 0.6 + tug_width / 2.0, float(layout.tugs.y) - slot * TUG_STEP), -PI / 2.0]
+
+
+static func _tug_width() -> float:
+	for model: Dictionary in GameData.ship_models:
+		if model.get("tug", false):
+			return float(model.get("map_size", [7, 3.6])[1]) * SHIP_SIZE
+	return 2.5
 
 
 ## A port's layout as it is now (its band and berths).
@@ -1381,22 +1401,59 @@ func dock_scale(_port_id: String) -> float:
 ## Every port's piers and quay on screen, a weathered wooden grey with a dark edge.
 func _draw_docks() -> void:
 	var view := Rect2(Vector2.ZERO, size).grow(80.0 * _ship_scale())
+	var tugs := {}  # Port id -> how many tugs are tied up there.
+	for ship in GameState.ships:
+		if ship.is_tug() and ship.is_docked():
+			tugs[ship.docked_at] = int(tugs.get(ship.docked_at, 0)) + 1
 	for port: Dictionary in GameData.ports:
 		var root := port_screen_position(port.id)
 		if not view.has_point(root):
 			continue
 		var layout := _port_layout(port.id)
-		var spans: Array = []
-		# A wharf along the shore through the port joins the piers' roots (and the
-		# tugs' berth) into one harbour.
-		var first: Vector2 = layout.piers[0][0]
-		var last: Vector2 = layout.piers[-1][0]
-		spans.append([Vector2(0.0, minf(first.y, float(layout.tugs.y)) - PIER_WIDTH), Vector2(0.0, maxf(last.y, 0.0) + PIER_WIDTH)])
+		var wharf := _wharf(layout, int(tugs.get(port.id, 0)))
+		var spans: Array = [wharf]
 		spans.append_array(layout.piers)
 		if not layout.quay.is_empty():
 			spans.append(layout.quay)
 		for span: Array in spans:
 			_draw_pier(port.id, span[0], span[1])
+		# Stone blocks where the pieces meet: each pier's root on the wharf, the
+		# quay's, and the wharf's two ends.
+		var joins: Array[Vector2] = [wharf[0], wharf[1]]
+		for pier: Array in layout.piers:
+			joins.append(pier[0])
+		if not layout.quay.is_empty():
+			joins.append(Vector2(0.0, float(layout.quay[0].y)))
+		var placed: Array[Vector2] = []
+		for join in joins:
+			if placed.any(func(other: Vector2) -> bool: return other.distance_to(join) < STONE_BLOCK * 1.2):
+				continue  # A pier's root at the wharf's end: one block does for both.
+			placed.append(join)
+			_draw_stone_block(port.id, join)
+
+
+## The wharf along the shore through a port (dock units, along y): from past
+## its tugs (tied up along it, TUG_STEP apart) to past its last pier.
+static func _wharf(layout: Dictionary, tug_count: int) -> Array:
+	var first: Vector2 = layout.piers[0][0]
+	var last: Vector2 = layout.piers[-1][0]
+	var tug_end := float(layout.tugs.y) - maxi(tug_count - 1, 0) * TUG_STEP - TUG_STEP / 2.0
+	var quay_end: float = layout.quay[1].y if not layout.quay.is_empty() else last.y
+	return [Vector2(0.0, minf(first.y, tug_end) - PIER_WIDTH), Vector2(0.0, maxf(maxf(last.y, quay_end), 0.0) + PIER_WIDTH)]
+
+
+## A square block of dressed stone, split into four by its joints, where dock pieces meet.
+func _draw_stone_block(port_id: String, center: Vector2) -> void:
+	var half := STONE_BLOCK / 2.0
+	var corners := [Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)]
+	var points := PackedVector2Array()
+	for corner: Vector2 in corners:
+		points.append(_dock_point(port_id, center + corner))
+	_canvas.draw_colored_polygon(points, STONE_COLOR)
+	_canvas.draw_line(_dock_point(port_id, center + Vector2(-half, 0.0)), _dock_point(port_id, center + Vector2(half, 0.0)), STONE_JOINT, 1.0, true)
+	_canvas.draw_line(_dock_point(port_id, center + Vector2(0.0, -half)), _dock_point(port_id, center + Vector2(0.0, half)), STONE_JOINT, 1.0, true)
+	points.append(points[0])
+	_canvas.draw_polyline(points, PIER_EDGE, 1.0, true)
 
 
 func _draw_pier(port_id: String, from: Vector2, to: Vector2) -> void:
@@ -1433,24 +1490,40 @@ static func _bollard_snap(along: float) -> float:
 
 
 ## A moored ship's ropes to the bollards beside it: bow and stern lines out
-## ahead and astern, and two springs crossing back along its side.
+## ahead and astern, and two springs crossing back along its side (a tug tied
+## up at the wharf: just its bow and stern lines).
 func _draw_mooring_ropes(ship: Ship) -> void:
 	var port := ship.docked_at
 	var layout := _port_layout(port)
-	if ship.berth < 0 or ship.berth >= layout.berths.size():
-		return
-	var berth: Array = layout.berths[ship.berth]
-	var center: Vector2 = berth[0]
-	var ahead := Vector2.from_angle(float(berth[1]))
-	var toward: Vector2 = berth[2]  # Towards the pier or quay.
 	var rect: Rect2 = _model_look(ship.model_id)[7]
 	var half_length := rect.size.x / 2.0
+	var center: Vector2
+	var ahead: Vector2
+	var toward: Vector2  # Towards the pier, quay or wharf.
+	var reach: float  # From its middle to the bollards.
+	# [where on the hull, where along the pier (ahead of the middle)].
+	var ropes := [[0.8, 0.8 * half_length + 3.0], [-0.8, -0.8 * half_length - 3.0]]
+	if ship.is_tug():
+		var pose := _tug_mooring(layout, _anchor_slot(ship))
+		center = pose[0]
+		ahead = Vector2.from_angle(float(pose[1]))
+		toward = Vector2(-1.0, 0.0)
+		reach = center.x - PIER_WIDTH / 2.0 + BOLLARD_INSET
+		ropes = [[0.7, 0.7 * half_length + 1.5], [-0.7, -0.7 * half_length - 1.5]]  # Bow and stern lines.
+	else:
+		if ship.berth < 0 or ship.berth >= layout.berths.size():
+			return
+		var berth: Array = layout.berths[ship.berth]
+		center = berth[0]
+		ahead = Vector2.from_angle(float(berth[1]))
+		toward = berth[2]
+		reach = float(layout.width) / 2.0 + BERTH_GAP + BOLLARD_INSET
+		ropes.append_array([[0.35, -0.1 * half_length], [-0.35, 0.1 * half_length]])  # And springs.
 	var hull := center + toward * rect.size.y / 2.0
-	var edge := center + toward * (float(layout.width) / 2.0 + BERTH_GAP + BOLLARD_INSET)
+	var edge := center + toward * reach
 	var axis := 0 if absf(ahead.x) > 0.5 else 1
 	var width := maxf(0.35 * dock_scale(port), 1.0)
-	# [where on the hull, where along the pier (ahead of the middle)].
-	for rope: Array in [[0.8, 0.8 * half_length + 3.0], [-0.8, -0.8 * half_length - 3.0], [0.35, -0.1 * half_length], [-0.35, 0.1 * half_length]]:
+	for rope: Array in ropes:
 		var from := hull + ahead * float(rope[0]) * half_length
 		var post := edge + ahead * float(rope[1])
 		post[axis] = _bollard_snap(post[axis])
@@ -1484,7 +1557,7 @@ func _docked_pose(ship: Ship) -> Array:
 			_:
 				local = berth
 	elif ship.is_tug():
-		local = [layout.tugs + Vector2(0.0, -_anchor_slot(ship) * 4.0), PI / 2.0]
+		local = _tug_mooring(layout, _anchor_slot(ship))
 	else:
 		local = [_anchor_point(port, layout, _anchor_slot(ship)), PI]
 	return [_dock_point(port, local[0]), sea + float(local[1]) * float(_dock_flips.get(port, 1.0))]  # Mirrored with its layout.
@@ -2163,7 +2236,7 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 		angle = _screen_angle(ship)
 	if not Rect2(Vector2.ZERO, size).grow(SHIP_CULL_MARGIN * _ship_scale()).has_point(at):
 		return  # Off screen.
-	if ship.is_docked() and docks_shown() and ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
+	if ship.is_docked() and docks_shown() and (ship.is_tug() or ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE):
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		_draw_mooring_ropes(ship)  # Moored: tied up to the bollards.
 	_canvas.draw_set_transform(at, angle, Vector2.ONE * _ship_scale())
