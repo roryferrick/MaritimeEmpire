@@ -349,6 +349,9 @@ class WorldArt:
 	var land_mesh: ArrayMesh
 	var water_mesh: ArrayMesh
 	var lake_island_mesh: ArrayMesh
+	## The lakes by color group (WorldMapData.lake_triangles), and each group's color.
+	var lake_meshes: Array[ArrayMesh] = []
+	var lake_colors := PackedColorArray()
 	## Per depth band (WorldMapData.depth_levels): its sea, and the shallower
 	## patches inside it.
 	var depth_meshes: Array[ArrayMesh] = []
@@ -369,6 +372,10 @@ class WorldArt:
 		var land_tint := view._color(&"land") if view.gray_mode else Color.WHITE
 		draw_mesh(land_mesh, land_texture, Transform2D.IDENTITY, land_tint)
 		draw_mesh(water_mesh, white, Transform2D.IDENTITY, view._color(&"ocean"))
+		# Lakes in their simplified real colors (all plain water on the gray map).
+		for i in lake_meshes.size():
+			if lake_meshes[i] != null:
+				draw_mesh(lake_meshes[i], white, Transform2D.IDENTITY, view._color(&"ocean") if view.gray_mode else lake_colors[i])
 		draw_mesh(lake_island_mesh, land_texture, Transform2D.IDENTITY, land_tint)
 		draw_multiline(data.border_segments, view._color(&"border"), -1.0)
 		draw_multiline(data.coast_segments, view._color(&"coast"), -1.0)
@@ -399,6 +406,9 @@ func _ready() -> void:
 	var land_mesh := _triangle_mesh(data.land_triangles)
 	var water_mesh := _triangle_mesh(data.water_triangles)
 	var lake_island_mesh := _triangle_mesh(data.lake_island_triangles)
+	var lake_meshes: Array[ArrayMesh] = []
+	for triangles in data.lake_triangles:
+		lake_meshes.append(_triangle_mesh(triangles) if not triangles.is_empty() else null)
 	var depth_meshes: Array[ArrayMesh] = []
 	var depth_hole_meshes: Array[ArrayMesh] = []
 	for band in data.depth_levels.size():
@@ -417,6 +427,8 @@ func _ready() -> void:
 		art.land_mesh = land_mesh
 		art.water_mesh = water_mesh
 		art.lake_island_mesh = lake_island_mesh
+		art.lake_meshes = lake_meshes
+		art.lake_colors = data.lake_colors
 		art.depth_meshes = depth_meshes
 		art.depth_hole_meshes = depth_hole_meshes
 		art.white = white

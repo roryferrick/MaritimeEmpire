@@ -5,7 +5,8 @@ extends Resource
 
 ## Land fill, as a flat list of triangles (3 points each).
 @export var land_triangles := PackedVector2Array()
-## Lakes and other holes in the land, drawn in the ocean color over the land.
+## Holes in the land (inland seas like the Caspian), drawn in the ocean color
+## over the land. Lakes are lake_triangles.
 @export var water_triangles := PackedVector2Array()
 ## Coastline, as pairs of points (one line segment per pair).
 @export var coast_segments := PackedVector2Array()
@@ -52,3 +53,8 @@ extends Resource
 @export var decor_positions := PackedVector2Array()
 @export var decor_kinds := PackedByteArray()
 @export var decor_tiers := PackedByteArray()
+
+## Lakes, drawn over the land each in its group's simplified real color (see
+## tools/build_map_data.gd LAKE_GROUPS): a triangle list per group, and its color.
+@export var lake_triangles: Array[PackedVector2Array] = []
+@export var lake_colors := PackedColorArray()

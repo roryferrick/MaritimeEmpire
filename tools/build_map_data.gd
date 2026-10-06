@@ -154,6 +154,39 @@ const AUDIT_OUT := "res://build/lane_audit.tsv"
 ## Lawrence Seaway). The land data covers every lake, so these are cut back
 ## out of it as water, from their outlines in the lakes data.
 const SEA_LAKES: Array[String] = ["Lake Superior", "Lake Michigan", "Lake Huron", "Lake Erie", "Lake Ontario", "Lake Saint Clair"]
+## Lakes (see _add_lakes()): each group's simplified real color, the named
+## lakes that aren't plain fresh water (a lake not named here is "saline" if
+## Natural Earth calls it alkaline, else "fresh"), and the dry salt lakes.
+const LAKE_GROUPS := {
+	"fresh": "#5c9fd4",  # Clear fresh water.
+	"deep": "#3b7cc0",  # Deep, very clear lakes.
+	"green": "#5f9f8a",  # Shallow, plant-rich lakes.
+	"muddy": "#9a9a70",  # Silty, shallow lakes.
+	"glacial": "#46bcc6",  # Glacial meltwater turquoise.
+	"saline": "#5fc4bd",  # Salt lakes: aqua.
+	"jade": "#5fae8a",  # Lake Turkana, the Jade Sea.
+	"pink": "#d39088",  # Red-algae salt lakes.
+	"salt_pan": "#ece0d4",  # Dry salt lakes, mostly a white crust.
+}
+const LAKE_NAMES := {
+	"Lake Baikal": "deep", "Lake Tanganyika": "deep", "Lake Malawi": "deep", "Lago Titicaca": "deep", "Lake Superior": "deep",
+	"Lake Michigan": "deep", "Lake Huron": "deep", "Georgian Bay": "deep", "North Channel": "deep", "Whitefish Bay": "deep",
+	"Lake Tahoe": "deep", "Issyk-Kul": "deep", "Great Bear Lake": "deep", "Great Slave Lake": "deep", "McLeod Bay": "deep",
+	"Lake Ladoga": "deep", "Lake Onega": "deep", "Khövsgöl Nuur": "deep", "Lake Ontario": "deep", "Lago Llanquihue": "deep",
+	"Lake Victoria": "green", "Lake Okeechobee": "green", "Lake Winnipeg": "green", "Lake Erie": "green", "Lake Saint Clair": "green",
+	"Lago de Nicaragua": "green", "Hongze Hu": "green", "Lake Manitoba": "green", "Lake Winnipegosis": "green", "Lake Albert": "green",
+	"Salton Sea": "green", "IJsselmeer": "green", "Kaliningradskiy Zaliv": "green", "Zalew Wislany": "green",
+	"Lake Chad": "muddy", "Tonlé Sap": "muddy",
+	"Lago Buenos Aires": "glacial", "Lago Argentino": "glacial", "Lago Viedma": "glacial", "Lake Pukaki": "glacial", "Lake Tekapo": "glacial",
+	"Dead Sea": "saline", "Qinghai Hu": "saline", "Great Salt Lake": "saline", "South Aral Sea": "saline",
+	"Lake Turkana": "jade",
+	"Syvash": "pink", "Lake Natron": "pink", "Lake Urmia": "pink", "Lake Hillier": "pink",
+}
+## Where salt lakes not named in LAKE_NAMES are taken as dry salt pans: inland
+## Australia (lon, lat).
+const LAKE_DRY_SALT_REGION := Rect2(110.0, -40.0, 45.0, 26.0)
+const LAKE_SALT_PANS: Array[String] = ["Lake Eyre North", "Lake Eyre South", "Lake Disappointment", "Lake Mackay", "Lake Gairdner",
+	"Lake Torrens", "Lake Frome", "Lake Amadeus", "Lake Carnegie", "Chott el Djerid", "Chott Melrhir"]
 ## Rivers and straits too narrow for the grid to see. Carved as water, like
 ## the canals in data/canals.json. Each is a list of [lon, lat] points.
 const CHANNELS := {
@@ -863,16 +896,30 @@ func _simplify(points: PackedVector2Array, tolerance := SIMPLIFY_TOLERANCE) -> P
 
 ## Coastline segments, skipping the artificial edges Natural Earth adds along
 ## the antimeridian and the bottom of Antarctica.
-## Lakes as water with a shoreline; islands in them go back in as land.
+## Lakes as water with a shoreline, each in its group's simplified real color
+## (LAKE_GROUPS); islands in them go back in as land.
 func _add_lakes(map: WorldMapData) -> void:
 	var count := 0
+	var groups: Array = LAKE_GROUPS.keys()
+	for group: String in groups:
+		map.lake_triangles.append(PackedVector2Array())
+		map.lake_colors.append(Color(LAKE_GROUPS[group]))
 	for feature: Dictionary in _read_geojson(LAKES_PATH):
+		var props: Dictionary = feature.properties
+		var name := str(props.get("name", "")) if props.get("name") != null else ""
+		var group: String = LAKE_NAMES.get(name, "salt_pan" if name in LAKE_SALT_PANS else
+			("saline" if str(props.get("featurecla", "")) == "Alkaline Lake" else "fresh"))
+		# Australia's inland salt lakes are nearly always dry white crusts.
+		if group == "saline" and not LAKE_NAMES.has(name) and LAKE_DRY_SALT_REGION.has_point(_first_point(feature)):
+			group = "salt_pan"
+		var triangles: PackedVector2Array = map.lake_triangles[groups.find(group)]
 		for polygon: Array in _feature_polygons(feature):
 			var outline := _simplify(_project_all(_to_points(polygon[0])))
 			if outline.size() < 3:
 				continue
 			_add_coast(map, outline)
-			_triangulate_tiled(outline, map.water_triangles, PackedVector2Array())
+			_triangulate_tiled(outline, triangles, PackedVector2Array())
+			map.lake_triangles[groups.find(group)] = triangles  # Packed arrays copy: store it back.
 			count += 1
 			for i in range(1, polygon.size()):
 				var island := _simplify(_project_all(_to_points(polygon[i])))
@@ -880,6 +927,15 @@ func _add_lakes(map: WorldMapData) -> void:
 					_add_coast(map, island)
 					_triangulate_tiled(island, map.lake_island_triangles, PackedVector2Array())
 	print("Lakes: %d" % count)
+
+
+## The first (lon, lat) point of a feature's first polygon.
+func _first_point(feature: Dictionary) -> Vector2:
+	var polygons := _feature_polygons(feature)
+	if polygons.is_empty() or polygons[0].is_empty() or polygons[0][0].is_empty():
+		return Vector2.INF
+	var point: Array = polygons[0][0][0]
+	return Vector2(point[0], point[1])
 
 
 ## Rivers as line segments, in tiers by the web-map zoom they show from (the
