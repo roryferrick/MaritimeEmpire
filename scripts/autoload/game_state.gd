@@ -170,6 +170,8 @@ var canal_stats: Dictionary:
 	set(value): company.canal_stats = value
 
 var ships: Array[Ship] = []
+## The id the next ship bought gets (see Ship.id).
+var next_ship_id := 1
 var in_session := false
 ## The save slot (1 to SAVE_SLOTS) this session saves to.
 var save_slot := 1
@@ -180,6 +182,8 @@ var multiplayer_save := false
 ## saved; every session starts at 1x.
 var time_speed := 1:
 	set(value):
+		if Net.is_client() and not Net.syncing:
+			return  # Only the host sets the speed; it comes with its updates.
 		time_speed = mini(value, max_time_speed)
 		time_speed_changed.emit(time_speed)
 
@@ -243,6 +247,9 @@ func _notification(what: int) -> void:
 func _process(delta: float) -> void:
 	if not in_session:
 		return
+	if Net.is_client():
+		_client_frame(delta)  # The host runs the world.
+		return
 	# Fast forward runs whole extra steps rather than one longer one, so ships
 	# arrive, dock and break down exactly as they would at 1x.
 	for step in time_speed:
@@ -297,6 +304,8 @@ func allowed_time_speeds() -> Array[int]:
 
 ## Steps to the next allowed speed, back to paused after the fastest.
 func cycle_time_speed() -> void:
+	if Net.is_client():
+		return  # Only the host sets the speed.
 	var speeds := allowed_time_speeds()
 	time_speed = speeds[(speeds.find(time_speed) + 1) % speeds.size()]
 
@@ -315,12 +324,16 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 		port_id = tug_port_for_new()  # Tugs go straight to the route port that needs one most.
 	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty() or (not tug and not can_launch_at(model_id, port_id)):
 		return null
+	if Net.command(&"buy_ship", [model_id, ship_name, port_id]):
+		return null  # The host buys it (see Net).
 	var price := ship_price(model_id)
 	if price < int(model.get("price", 0)):
 		first_prices_used.append(model_id)
 	money -= price
 	_record(null, "bought", price)
 	var ship := Ship.new(ship_name, model_id, port_id)
+	ship.id = next_ship_id
+	next_ship_id += 1
 	ship.company = company
 	ship.purchase_price = price
 	ships.append(ship)
@@ -422,6 +435,8 @@ func mega_error(model_id: String) -> String:
 func buy_mega(model_id: String) -> void:
 	if not mega_error(model_id).is_empty():
 		return
+	if Net.command(&"buy_mega", [model_id]):
+		return
 	var cost := mega_cost(model_id)
 	money -= cost
 	_record(null, "mega", cost)
@@ -437,6 +452,8 @@ func buy_mega(model_id: String) -> void:
 ## Adds HIDDEN_GEM_MONEY to the bank, the first time only.
 func claim_hidden_gem() -> void:
 	if hidden_gem_claimed:
+		return
+	if Net.command(&"claim_hidden_gem"):
 		return
 	hidden_gem_claimed = true
 	money += HIDDEN_GEM_MONEY
@@ -537,6 +554,8 @@ func skill_error(ship: Ship, skill: String) -> String:
 func level_skill(ship: Ship, skill: String) -> void:
 	if not skill_error(ship, skill).is_empty():
 		return
+	if Net.command(&"level_skill", [ship, skill]):
+		return
 	_buy_skill(ship, skill)
 	ship_changed.emit(ship)
 
@@ -588,6 +607,8 @@ func cheapest_upgrade_cost() -> int:
 ## as long as the money lasts without dipping into the bank_reserve. Returns
 ## how many were bought.
 func upgrade_all() -> int:
+	if Net.command(&"upgrade_all"):
+		return 0
 	var bought := 0
 	var changed := {}
 	for entry: Array in _upgrade_plan():
@@ -649,6 +670,8 @@ func build_hub(port_id: String) -> String:
 	var error := build_hub_error(port_id)
 	if not error.is_empty():
 		return error
+	if Net.command(&"build_hub", [port_id]):
+		return ""
 	var hub := Hub.new(port_id)
 	hubs.append(hub)
 	_rebalance_recovery_boats()
@@ -677,6 +700,8 @@ func hub_can_upgrade(hub: Hub) -> bool:
 ## Spends one of a hub's upgrade points on a path, and its price.
 func upgrade_hub(hub: Hub, path: String) -> void:
 	if not upgrade_hub_error(hub, path).is_empty():
+		return
+	if Net.command(&"upgrade_hub", [hub, path]):
 		return
 	var cost := hub.upgrade_cost(path)
 	money -= cost
@@ -785,6 +810,8 @@ func rename_ship(ship: Ship, new_name: String) -> String:
 	var error := ship_name_error(new_name, ship)
 	if not error.is_empty() or new_name == ship.name:
 		return error
+	if Net.command(&"rename_ship", [ship, new_name]):
+		return ""
 	for bucket: Dictionary in owner_of(ship).finance_window:
 		if bucket.ships.has(ship.name):
 			bucket.ships[new_name] = bucket.ships[ship.name]
@@ -871,6 +898,8 @@ func _range_error(ship: Ship, from: String, to: String) -> String:
 func assign_route(ship: Ship, route: Array[String]) -> void:
 	if ship.is_service() or not route_error(route, ship).is_empty():
 		return
+	if Net.command(&"assign_route", [ship, route]):
+		return
 	ship.paused = false
 	if ship.is_docked():
 		ship.route = route.duplicate()
@@ -886,32 +915,44 @@ func assign_route(ship: Ship, route: Array[String]) -> void:
 func set_paused(ship: Ship, paused: bool) -> void:
 	if not ship.has_route():
 		return
+	if Net.command(&"set_paused", [ship, paused]):
+		return
 	ship.paused = paused
 	ship_changed.emit(ship)
 
 
 func set_auto_refuel(ship: Ship, on: bool) -> void:
+	if Net.command(&"set_auto_refuel", [ship, on]):
+		return
 	ship.auto_refuel = on
 	ship_changed.emit(ship)
 
 
 func set_auto_repair(ship: Ship, on: bool) -> void:
+	if Net.command(&"set_auto_repair", [ship, on]):
+		return
 	ship.auto_repair = on
 	ship_changed.emit(ship)
 
 
 func set_auto_recover(ship: Ship, on: bool) -> void:
+	if Net.command(&"set_auto_recover", [ship, on]):
+		return
 	ship.auto_recover = on
 	ship_changed.emit(ship)
 
 
 func set_full_loads(ship: Ship, on: bool) -> void:
+	if Net.command(&"set_full_loads", [ship, on]):
+		return
 	ship.full_loads = on
 	ship.load_check_time = 0.0  # Act on it at once rather than at the next look.
 	ship_changed.emit(ship)
 
 
 func set_bank_reserve(amount: int) -> void:
+	if Net.command(&"set_bank_reserve", [amount]):
+		return
 	bank_reserve = maxi(amount, 0)
 
 
@@ -929,6 +970,8 @@ func sell_ship(ship: Ship) -> String:
 	var error := sell_error(ship)
 	if not error.is_empty():
 		return error
+	if Net.command(&"sell_ship", [ship]):
+		return ""
 	var price := ship.sell_price()
 	ships.erase(ship)
 	if ship.is_icebreaker():
@@ -1592,6 +1635,8 @@ func station_icebreaker(ship: Ship, area_id: String) -> String:
 		if not error.is_empty():
 			return error
 		base = icebreaking.station_port(item, ship.model(), ship.reference_port())
+	if Net.command(&"station_icebreaker", [ship, area_id]):
+		return ""
 	_release_convoy(ship)
 	ship.station = area_id
 	ship.base_port = base
@@ -2164,6 +2209,11 @@ func _send_queued_recoveries() -> void:
 ## Sends the nearest free recovery boat that can carry a lost ship. Returns
 ## why it couldn't, or "".
 func send_recovery(lost: Ship) -> String:
+	var plan := recovery_plan(lost)
+	if plan.has("error"):
+		return plan.error
+	if Net.command(&"send_recovery", [lost]):
+		return ""
 	return _send_recovery(lost, false)
 
 
@@ -2417,6 +2467,84 @@ func recent_finances() -> Dictionary:
 	return {fleet = fleet, ships = ship_profit}
 
 
+
+
+# --- Multiplayer -----------------------------------------------------------
+
+## True if a ship is this player's.
+func is_mine(ship: Ship) -> bool:
+	return owner_of(ship) == company
+
+
+func ship_by_id(id: int) -> Ship:
+	for ship in ships:
+		if ship.id == id:
+			return ship
+	return null
+
+
+## Why a company can't be founded in this game with a name and home port, or
+## "": every company has its own home port.
+func found_company_error(new_name: String, new_home_port: String) -> String:
+	if new_name.strip_edges().is_empty():
+		return "Enter a company name."
+	if GameData.get_port(new_home_port).is_empty():
+		return "Pick a home port."
+	for each in all_companies():
+		if each.home_port == new_home_port:
+			return "%s is already %s's home port: pick another." % [GameData.port_name(new_home_port), each.name]
+		if each.name.to_lower() == new_name.strip_edges().to_lower():
+			return "There's already a company called %s." % each.name
+	return ""
+
+
+## Founds a company in this game (a joining player's), with the starting money
+## and its HQ at its home port. Returns its place in companies.
+func found_company(new_name: String, new_color: String, new_home_port: String) -> int:
+	var founded := Company.new(new_name.strip_edges().left(MAX_COMPANY_NAME_LENGTH), new_color, new_home_port)
+	founded.money = int(GameData.config.get("starting_money", 10000))
+	founded.hubs.assign([Hub.new(new_home_port, true)])
+	if companies.is_empty():
+		companies.assign([company])
+	companies.append(founded)
+	save_game()
+	return companies.size() - 1
+
+
+## A joined player's own map and log settings (Company.PREF_KEYS), kept in the
+## host's save.
+func set_prefs(prefs: Dictionary) -> void:
+	var kept := {}
+	for key in Company.PREF_KEYS:
+		if prefs.has(key):
+			kept[key] = prefs[key]
+	company.apply_update(kept)
+
+
+## A joined game's session: the world comes from the host (see Net), so it
+## doesn't run or save it.
+func begin_client_session() -> void:
+	ActivityLog.clear()
+	in_session = true
+
+
+## A joined game's frame: the clock and the ships move on smoothly between the
+## host's updates (each sailing ship at its speed as of the last ones), and
+## this player's storm and season warnings are looked at as in single player.
+func _client_frame(delta: float) -> void:
+	play_time += delta * time_speed
+	for ship in ships:
+		if ship.is_docked() or ship.from_port.is_empty():
+			continue
+		var rate := Net.ship_rate(ship)
+		if rate > 0.0:
+			var end := ship.segment_end if ship.is_on_job() and ship.segment_end > 0.0 else ship.leg_length()
+			ship.traveled_nm = minf(ship.traveled_nm + rate * delta, maxf(end, ship.traveled_nm))
+	_storm_warning_clock += delta * time_speed
+	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
+		_storm_warning_clock = 0.0
+		_storm_warnings()
+		_season_warnings()
 # --- Saving --------------------------------------------------------------
 
 func save_path(slot: int, online := multiplayer_save) -> String:
@@ -2477,6 +2605,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company.hubs.assign([Hub.new(new_home_port, true)])
 	companies.assign([company])
 	_clear_ships()
+	next_ship_id = 1
 	play_time = 0.0
 	canal_traffic.clear()
 	market.clear()
@@ -2501,10 +2630,19 @@ func continue_game(slot: int) -> String:
 	if int(data.get("version", 0)) != SAVE_VERSION:
 		return "This save is from before commodity trading and can't be loaded. Delete it to start a new game in this slot."
 	save_slot = slot
+	load_world(data)
+	_begin_session()
+	return ""
+
+
+## Loads a world_dict() (a save, or the host's game when joining one), with
+## this player's company the one at `local` (the save's own if -1). Saves from
+## before companies load as their one company.
+func load_world(data: Dictionary, local := -1) -> void:
 	companies.clear()
 	for company_data: Dictionary in data.get("companies", [data]):
 		companies.append(Company.from_dict(company_data))
-	company = companies[clampi(int(data.get("local_company", 0)), 0, companies.size() - 1)]
+	company = companies[clampi(local if local >= 0 else int(data.get("local_company", 0)), 0, companies.size() - 1)]
 	_clear_ships()
 	play_time = float(data.get("play_time", 0.0))
 	market.from_dict(data.get("market", {}))
@@ -2514,9 +2652,14 @@ func continue_game(slot: int) -> String:
 	storms = str(data.get("storms", "none"))
 	seasons = bool(data.get("seasons", false))
 	weather.from_dict(data.get("weather", {}))
+	next_ship_id = int(data.get("next_ship_id", 1))
 	for ship_data: Dictionary in data.get("ships", []):
 		var ship := Ship.from_dict(ship_data)
 		ship.company = companies[clampi(int(ship_data.get("company", 0)), 0, companies.size() - 1)]
+		if ship.id <= 0:  # Saves from before ship ids.
+			ship.id = next_ship_id
+			next_ship_id += 1
+		next_ship_id = maxi(next_ship_id, ship.id + 1)
 		ships.append(ship)
 	Ship.link_rescues(ships)
 	for ship in ships:
@@ -2530,8 +2673,6 @@ func continue_game(slot: int) -> String:
 	_rebalance_recovery_boats()
 	_rebalance_tugs()
 	money_changed.emit(money)
-	_begin_session()
-	return ""
 
 
 ## Saves from before port sizes: every port a ship is at, sailing between or
@@ -2552,14 +2693,25 @@ func _fit_ports_to_routes() -> void:
 
 
 func save_game() -> void:
-	if not in_session:
+	if not in_session or Net.is_client():
+		return  # A joined player's game is the host's to save.
+	var file := FileAccess.open(save_path(save_slot), FileAccess.WRITE)
+	if file == null:
+		push_error("GameState: could not write save (%s)" % error_string(FileAccess.get_open_error()))
 		return
+	file.store_string(JSON.stringify(world_dict(), "\t"))
+
+
+## The whole game as a save holds it: the world, every company (and which is
+## this player's) and every ship (with its company's place in the list).
+func world_dict() -> Dictionary:
 	var all := all_companies()
-	var data := {
+	return {
 		"version": SAVE_VERSION,
 		"multiplayer": multiplayer_save,
 		"companies": all.map(func(each: Company) -> Dictionary: return each.to_dict()),
-		"local_company": all.find(company),
+		"local_company": all.find(Net.acting_for if Net.acting_for != null else company),
+		"next_ship_id": next_ship_id,
 		"play_time": play_time,
 		"max_time_speed": max_time_speed,
 		"storms": storms,
@@ -2572,11 +2724,6 @@ func save_game() -> void:
 			ship_data["company"] = maxi(all.find(owner_of(ship)), 0)
 			return ship_data),
 	}
-	var file := FileAccess.open(save_path(save_slot), FileAccess.WRITE)
-	if file == null:
-		push_error("GameState: could not write save (%s)" % error_string(FileAccess.get_open_error()))
-		return
-	file.store_string(JSON.stringify(data, "\t"))
 
 
 ## Ships and the Mammoths recovering them point at each other; break those

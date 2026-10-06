@@ -143,7 +143,7 @@ func _update_live() -> void:
 		bar.value = 1.0 if cost <= 0.0 else hub.xp / cost
 		xp.text = "Max level" if cost <= 0.0 else "%s / %s XP to level %d" % [
 			Fmt.thousands(floori(hub.xp)), Fmt.thousands(ceili(cost)), hub.level + 1]
-		var docked := GameState.ships.filter(func(ship: Ship) -> bool: return ship.docked_at == hub.port_id).size()
+		var docked := GameState.fleet().filter(func(ship: Ship) -> bool: return ship.docked_at == hub.port_id).size()
 		var boats := GameState.recovery_boats_at(hub.port_id).map(func(boat: Ship) -> String: return boat.name)
 		traffic.text = "%d ship%s docked now · %s deliveries unloaded here · %s pay received here\nRecovery boats based here: %s" % [
 			docked, "" if docked == 1 else "s", Fmt.thousands(hub.deliveries), Fmt.money(roundi(hub.income)),

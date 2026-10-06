@@ -176,7 +176,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 			header.text += " ▼" if _sort_descending else " ▲"
 		header.pressed.connect(_sort_by.bind(column[1]))
 		%ShipTable.add_child(header)
-	var rows := GameState.ships.map(func(ship: Ship) -> Dictionary:
+	var rows := GameState.fleet().map(func(ship: Ship) -> Dictionary:
 		return {
 			ship = ship,
 			name = ship.name,

@@ -92,7 +92,7 @@ func _on_ship_changed(changed: Ship) -> void:
 
 
 func _update_live() -> void:
-	%StatusLabel.text = ship.status_text()
+	%StatusLabel.text = ship.status_text() if GameState.is_mine(ship) else "%s — %s's ship" % [ship.status_text(), GameState.owner_of(ship).name]
 	_update_skill_buttons()
 	%SpeedValue.text = "%s nm/s (top %s)" % [Fmt.decimal(ship.speed(), 2), Fmt.decimal(ship.top_speed(), 2)]
 	if ship.is_tug():
@@ -102,7 +102,7 @@ func _update_live() -> void:
 	var toll := ship.stop_toll
 	var has_costs := ship.is_docked() and (ship.stop_sale > 0 or fuel + repair + toll > 0)
 	_update_cargo()
-	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed)
+	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed and GameState.is_mine(ship))
 	var costs := "Fuel %s · Repair %s" % [Fmt.money(-fuel), Fmt.money(-repair)]
 	if toll > 0:
 		costs += " · Toll %s" % Fmt.money(-toll)
@@ -161,7 +161,7 @@ static func _seconds() -> float:
 
 ## A lost ship with no recovery boat on the way can have one sent, if one is free.
 func _update_recovery() -> void:
-	var needs_rescue := ship.is_lost() and ship.rescuer == null
+	var needs_rescue := ship.is_lost() and ship.rescuer == null and GameState.is_mine(ship)
 	_set_shown(%RecoveryButton, needs_rescue)
 	_set_shown(%RecoveryLabel, needs_rescue)
 	if not needs_rescue:
@@ -323,13 +323,17 @@ func _refresh() -> void:
 	%PendingLabel.text = "After this leg: %s" % GameData.route_text(ship.pending_route)
 	%PauseButton.disabled = not ship.has_route()
 	%PauseButton.text = "Go" if ship.paused else "Pause"
+	# Another player's ship (multiplayer): to look at, not to run.
+	if not GameState.is_mine(ship):
+		for control: Control in [%Toggles, %AssignButton, %PauseButton, %SellButton, %SkillsButton]:
+			control.visible = false
 	reset_size.call_deferred()
 
 
 ## Clicking the name swaps it for a text box to rename the ship.
 func _on_name_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
-	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT or not GameState.is_mine(ship):
 		return
 	%RenameEdit.text = ship.name
 	%RenameEdit.tooltip_text = "Enter to rename, Esc to cancel."

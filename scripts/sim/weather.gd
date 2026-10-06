@@ -218,3 +218,6 @@ func from_dict(data: Dictionary) -> void:
 	for storm: Dictionary in data.get("storms", []):
 		storms.append(storm)
 	_next_name = data.get("next_name", {})
+	_closed.clear()
+	var close_at := float(_level().get("close_at", 2.0))
+	_can_close = storms.any(func(storm: Dictionary) -> bool: return TROPICAL.has(storm.kind) and intensity(storm) >= close_at)

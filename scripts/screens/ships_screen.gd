@@ -107,7 +107,7 @@ func _rebuild() -> void:
 	_megas.clear()
 	_tiles.clear()
 	_needs_rebuild = false
-	var sorted := GameState.ships.duplicate()
+	var sorted := GameState.fleet().duplicate()
 	sorted.sort_custom(_ship_before)
 	for model: Dictionary in GameData.ship_models:
 		var model_ships := sorted.filter(func(ship: Ship) -> bool: return ship.model_id == model.id)
@@ -119,8 +119,8 @@ func _rebuild() -> void:
 			_tiles[ship] = tile
 			tile.pressed.connect(_open_ship.bind(tile))
 			grid.add_child(tile)
-	%EmptyLabel.visible = GameState.ships.is_empty()
-	%Header.visible = not GameState.ships.is_empty()
+	%EmptyLabel.visible = GameState.fleet().is_empty()
+	%Header.visible = not GameState.fleet().is_empty()
 	_apply_filter()
 	_size_tiles()
 	_update_megas()
@@ -273,7 +273,7 @@ func _apply_filter() -> void:
 			in_group += 1 if tile.visible else 0
 		group.visible = in_group > 0
 		shown += in_group
-	%CountLabel.text = "%d of %d ships" % [shown, GameState.ships.size()]
+	%CountLabel.text = "%d of %d ships" % [shown, GameState.fleet().size()]
 
 
 static func _matches(ship: Ship, filter: int) -> bool:
