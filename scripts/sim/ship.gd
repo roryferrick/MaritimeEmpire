@@ -18,15 +18,20 @@ extends RefCounted
 ## segments) to the lost ship, turns to line up with it, carries it to port,
 ## then sails home.
 
-## How long a Mammoth takes to turn and line up with a lost ship, and to turn
-## the pair around if it's towing it back the way it came.
-const ALIGN_SECONDS := 2.0
+## How long a recovery boat (or an icebreaker) takes to turn: to line up with a
+## lost ship, and to turn the pair around if it's taking it back the way it came.
+## Ships don't pivot: the map sails them round a turning circle meanwhile.
+const ALIGN_SECONDS := 3.0
 
 ## Job phases for a Mammoth.
 const JOB_NONE := ""
 const JOB_APPROACH := "approach"
 const JOB_ALIGN := "align"
 const JOB_TOW := "tow"
+const JOB_UNLOAD := "unload"
+## How long a recovery boat takes to load a lost ship (ballast down, float it
+## onto the deck, deballast and rise) and, at port, to float it off again.
+const LOAD_SECONDS := 4.5
 
 ## A ship sells for this fraction of its price, times its maintenance.
 const SELL_FRACTION := 0.5
@@ -493,14 +498,57 @@ func is_on_job() -> bool:
 	return job_phase != JOB_NONE
 
 
-## Riding on a Mammoth (from partway through its alignment until port).
+## Riding on a recovery boat (from when it's floated aboard until it's handed
+## over at port).
 func is_carried() -> bool:
 	return rescuer != null and rescuer.is_carrying()
 
 
-## Mammoth only: has the lost ship aboard.
+## Recovery boat only: has the lost ship aboard or alongside (from when it's floated onto
+## the deck until it's handed over at port).
 func is_carrying() -> bool:
-	return job_phase == JOB_TOW or (job_phase == JOB_ALIGN and align_time >= ALIGN_SECONDS)
+	if job_phase == JOB_TOW:
+		return true
+	if job_phase == JOB_UNLOAD:
+		return true  # Floated off its stern, it stays with it till handed over.
+	return job_phase == JOB_ALIGN and align_time >= ALIGN_SECONDS + LOAD_SECONDS * 2.0 / 3.0
+
+
+## Recovery boat only: seconds into taking a ship aboard (after lining up) or
+## floating it off at port, or -1 when doing neither. Like a real
+## semi-submersible heavy-lift ship, it ballasts down (its deck sinks under
+## the water), the ship floats over the deck, and it deballasts and rises; a
+## third of LOAD_SECONDS each.
+func load_time() -> float:
+	if job_phase == JOB_UNLOAD:
+		return align_time
+	if job_phase == JOB_ALIGN and align_time >= ALIGN_SECONDS and align_time <= ALIGN_SECONDS + LOAD_SECONDS:
+		return align_time - ALIGN_SECONDS
+	return -1.0
+
+
+## Recovery boat only: how far its deck is under water (0 up, 1 fully down).
+func submerged() -> float:
+	var t := load_time()
+	if t < 0.0:
+		return 0.0
+	var third := LOAD_SECONDS / 3.0
+	if t < third:
+		return t / third
+	if t < third * 2.0:
+		return 1.0
+	return clampf(1.0 - (t - third * 2.0) / third, 0.0, 1.0)
+
+
+## Recovery boat only: how far the ship has floated onto its deck (or, at
+## port, off it), 0 to 1, in the middle third of loading; -1 when it isn't
+## loading or unloading.
+func float_progress() -> float:
+	var t := load_time()
+	if t < 0.0:
+		return -1.0
+	var third := LOAD_SECONDS / 3.0
+	return clampf((t - third) / third, 0.0, 1.0)
 
 
 ## Mammoth only: turns the pair around after lining up, when towing back the way the ship came.
@@ -508,9 +556,10 @@ func tow_turns_around() -> bool:
 	return rescuing != null and tow_port == rescuing.from_port
 
 
-## Mammoth only: total seconds spent lining up (and turning around if needed).
+## Recovery boat only: total seconds spent lining up, taking the ship aboard
+## and (if needed) turning around.
 func align_seconds() -> float:
-	return ALIGN_SECONDS * (2.0 if tow_turns_around() else 1.0)
+	return ALIGN_SECONDS * (2.0 if tow_turns_around() else 1.0) + LOAD_SECONDS
 
 
 ## What the player needs to do for this ship to run at its best, or "".
@@ -670,7 +719,7 @@ func _align_heading() -> Vector2:
 	var ship_angle := _lane_heading(rescuing.from_port, rescuing.to_port, rescuing.traveled_nm).angle()
 	if align_time < ALIGN_SECONDS:
 		return Vector2.from_angle(lerp_angle(arrive, ship_angle, align_time / ALIGN_SECONDS))
-	var t := (align_time - ALIGN_SECONDS) / ALIGN_SECONDS if tow_turns_around() else 0.0
+	var t := (align_time - ALIGN_SECONDS - LOAD_SECONDS) / ALIGN_SECONDS if tow_turns_around() else 0.0
 	return Vector2.from_angle(ship_angle + PI * clampf(t, 0.0, 1.0))
 
 
@@ -820,9 +869,21 @@ func _recovery_status_text() -> String:
 		JOB_APPROACH:
 			return "Heading to recover %s" % rescuing.name
 		JOB_ALIGN:
-			return "Lining up with %s" % rescuing.name
+			var third := LOAD_SECONDS / 3.0
+			var t := load_time()
+			if align_time < ALIGN_SECONDS:
+				return "Lining up with %s" % rescuing.name
+			if t >= 0.0 and t < third:
+				return "Ballasting down to take %s aboard" % rescuing.name
+			if t >= 0.0 and t < third * 2.0:
+				return "Floating %s onto its deck" % rescuing.name
+			if t >= 0.0:
+				return "Rising with %s aboard" % rescuing.name
+			return "Turning round with %s aboard" % rescuing.name
 		JOB_TOW:
 			return "Carrying %s to %s" % [rescuing.name, GameData.port_name(tow_port)]
+		JOB_UNLOAD:
+			return "Floating %s off at %s" % [rescuing.name, GameData.port_name(tow_port)]
 	if is_docked():
 		var port := GameData.port_name(docked_at)
 		if is_docking():
@@ -840,6 +901,10 @@ func _icebreaker_status_text() -> String:
 	match ice_phase:
 		"approach":
 			return "Heading out to lead %s" % _convoy_text()
+		"turn_in":
+			return "Turning to lead %s" % _convoy_text()
+		"turn_back":
+			return "Turning back"
 		"escort":
 			return "Leading %s through the %s ice" % [_convoy_text(), area_name]
 		"return":

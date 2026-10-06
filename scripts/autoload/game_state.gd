@@ -1488,9 +1488,10 @@ func _release_convoy(icebreaker: Ship) -> void:
 
 ## An icebreaker: idle in port it docks (refuels and repairs) and sails home
 ## to its station, or sets off for the next convoy waiting in its area; then
-## it sails out to the convoy ("approach"), leads it through the ice
-## ("escort"), and, if it let the convoy go at the ice edge, comes back to
-## the port it led it from ("return").
+## it sails out to the convoy ("approach"), turns to face the way it'll lead
+## if it came in the other way ("turn_in"), leads it through the ice
+## ("escort"), and, if it let the convoy go at the ice edge, turns round
+## ("turn_back") and comes back to the port it led it from ("return").
 func _advance_icebreaker(ship: Ship, delta: float) -> void:
 	match ship.ice_phase:
 		"":
@@ -1506,10 +1507,24 @@ func _advance_icebreaker(ship: Ship, delta: float) -> void:
 		"approach":
 			_sail(ship, delta)
 			if ship.traveled_nm >= ship.segment_end:
-				if ship.job_segments.is_empty():
-					_begin_escort(ship)
-				else:
+				if not ship.job_segments.is_empty():
 					_start_segment(ship, ship.job_segments.pop_front())
+				elif _escort_turn_needed(ship):
+					ship.ice_phase = "turn_in"
+					ship.align_time = 0.0
+				else:
+					_begin_escort(ship)
+		"turn_in":
+			ship.align_time += delta
+			if ship.align_time >= Ship.ALIGN_SECONDS:
+				_begin_escort(ship)
+		"turn_back":
+			ship.align_time += delta
+			if ship.align_time >= Ship.ALIGN_SECONDS:
+				var leg := ship.escort_leg
+				var length := GameData.distance_nm(leg[0], leg[1])
+				ship.ice_phase = "return"
+				_start_segment(ship, [leg[1], leg[0], length - float(leg[3]), length])
 		"escort":
 			_escort(ship, delta)
 		"return":
@@ -1628,8 +1643,23 @@ func _escort(icebreaker: Ship, delta: float) -> void:
 		icebreaker.ice_phase = ""
 		_arrive(icebreaker, leg[1], false)
 	else:
-		icebreaker.ice_phase = "return"
-		_start_segment(icebreaker, [leg[1], leg[0], length - end, length])
+		# Turn round (a turning circle, not a pivot) before heading back.
+		icebreaker.ice_phase = "turn_back"
+		icebreaker.align_time = 0.0
+
+
+## True if an icebreaker at the head of its convoy is facing more than a right
+## angle off the way it's to lead it (it came in through the far end of the
+## lane), so it must turn first.
+func _escort_turn_needed(icebreaker: Ship) -> bool:
+	var here = GameData.lane(icebreaker.from_port, icebreaker.to_port)
+	var leg := icebreaker.escort_leg
+	var ahead = GameData.lane(leg[0], leg[1])
+	if here == null or ahead == null:
+		return false
+	var facing: Vector2 = here.sample(icebreaker.traveled_nm)[1]
+	var going: Vector2 = ahead.sample(float(leg[2]))[1]
+	return absf(facing.angle_to(going)) > PI / 2.0
 
 
 ## Fuel and wear for miles made at a speed (a convoy's pace, not the ship's
@@ -1801,7 +1831,7 @@ func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
 		segments = segments,
 		tow_port = tow_port,
 		approach_nm = approach_nm,
-		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if tow_port == a else 1.0),
+		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if tow_port == a else 1.0) + Ship.LOAD_SECONDS * 2.0,
 		fuel = mammoth.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S),
 		cost = mammoth.fuel_per_s() * running * market.fuel_price(mammoth.docked_at)
 			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost() * port_sizes.cost_factor(mammoth.docked_at),
@@ -1816,8 +1846,14 @@ func _start_segment(ship: Ship, segment: Array) -> void:
 	canal_traffic.start_leg(ship)
 
 
-## A Mammoth on a job: sail to the lost ship, line up with it, carry it to port.
+## A recovery boat on a job: sail to the lost ship, line up with it and take it
+## aboard (see Ship.LOAD_SECONDS), carry it to port and float it off there.
 func _advance_job(mammoth: Ship, delta: float) -> void:
+	if mammoth.job_phase == Ship.JOB_UNLOAD:
+		mammoth.align_time += delta
+		if mammoth.align_time >= Ship.LOAD_SECONDS:
+			_deliver(mammoth)
+		return
 	if mammoth.job_phase == Ship.JOB_ALIGN:
 		mammoth.align_time += delta
 		if mammoth.align_time >= mammoth.align_seconds():
@@ -1831,7 +1867,10 @@ func _advance_job(mammoth: Ship, delta: float) -> void:
 		return
 	mammoth.traveled_nm = mammoth.segment_end
 	if mammoth.job_phase == Ship.JOB_TOW:
-		_deliver(mammoth)
+		# At the port: ballast down and float the ship off before handing it over.
+		mammoth.job_phase = Ship.JOB_UNLOAD
+		mammoth.align_time = 0.0
+		ship_changed.emit(mammoth)
 	elif mammoth.job_segments.size() > 1:
 		_start_segment(mammoth, mammoth.job_segments.pop_front())
 	else:

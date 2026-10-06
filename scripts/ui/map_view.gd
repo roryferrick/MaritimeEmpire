@@ -114,6 +114,17 @@ const SHIP_MAX_SCALE := 3.0
 ## Where a ship being carried sits on its recovery boat: the middle of the
 ## open work deck aft (x from the stern, in art units), clear of the wheelhouse.
 const CARRY_DECK_X := 58.0
+## A recovery boat taking a ship aboard or floating it off (see
+## _recovery_offset(), _draw_ballast()): how far (a share of its length) the
+## ship slides over its stern, its work deck's stretch [from, to] in art units,
+## and the sea over the deck when it's ballasted down, with its ripples.
+const RECOVERY_SLIDE := 0.55
+## How wide a turning circle recovery boats and icebreakers sail round (in
+## their own lengths), so they never pivot on the spot.
+const TURN_RADIUS_LENGTHS := 0.9
+const BALLAST_DECK := Vector2(4.0, 104.0)
+const BALLAST_WATER_ALPHA := 0.75
+const BALLAST_RIPPLE := Color(0.85, 0.93, 1.0, 0.7)
 ## The land's colors: simplified biomes in flat colors, made by
 ## tools/build_map_data.gd from Natural Earth II.
 const LAND_COLORS := "res://data/land_colors.webp"
@@ -505,6 +516,9 @@ func ship_screen_position(ship: Ship) -> Vector2:
 			var crossing := GameData.crossing_ahead(ship.from_port, ship.to_port, ship.traveled_nm)
 			if not crossing.is_empty() and crossing.canal.get("type", "") == "convoy":
 				return _anchorage_slot_position(ship, crossing)
+		var pose := _turning_pose(ship)
+		if not pose.is_empty():
+			return pose[0]
 		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
 	var slot := _dock_slot(ship)
 	var radius := _port_radius(ship.docked_at) + DOCK_FIRST_RING_GAP
@@ -518,14 +532,156 @@ func ship_screen_position(ship: Ship) -> Vector2:
 
 
 ## A carried ship rides on its recovery boat's work deck (CARRY_DECK_X), behind
-## the boat's middle, so the wheelhouse stays in view.
+## the boat's middle, so the wheelhouse stays in view. Being floated off at
+## port, it slides back off the stern (see Ship.float_progress()).
 func _carried_screen_position(ship: Ship) -> Vector2:
 	var boat := ship.rescuer
 	var rect: Rect2 = _model_look(boat.model_id)[7]
-	var direction := boat.heading()
-	var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
-	var along := rect.position.x + rect.size.x * CARRY_DECK_X / SHIP_ART_WIDTH
-	return ship_screen_position(boat) + Vector2(along, 0.0).rotated(angle) * _ship_scale()
+	var along := _deck_along(rect)
+	if boat.job_phase == Ship.JOB_UNLOAD:
+		along -= rect.size.x * RECOVERY_SLIDE * maxf(boat.float_progress(), 0.0)
+	return ship_screen_position(boat) + Vector2(along, 0.0).rotated(_screen_angle(boat)) * _ship_scale()
+
+
+## Where a recovery boat's work deck is, ahead of its middle (negative: behind),
+## in its art's units.
+func _deck_along(rect: Rect2) -> float:
+	return rect.position.x + rect.size.x * CARRY_DECK_X / SHIP_ART_WIDTH
+
+
+## A ship's heading as an on-screen angle (0 when docked). A carried ship faces
+## the way its recovery boat does, and a recovery boat or icebreaker that's
+## turning faces along its turning circle (see _turning_pose()).
+func _screen_angle(ship: Ship) -> float:
+	if ship.is_carried():
+		return _screen_angle(ship.rescuer)
+	var pose := _turning_pose(ship)
+	if not pose.is_empty():
+		return pose[1]
+	return _heading_angle(ship.heading())
+
+
+static func _heading_angle(direction: Vector2) -> float:
+	return Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
+
+
+## The on-screen angle of a lane's heading `mile` along it.
+static func _lane_angle(from_port: String, to_port: String, mile: float) -> float:
+	var lane = GameData.lane(from_port, to_port)
+	return _heading_angle(lane.sample(mile)[1]) if lane else 0.0
+
+
+## Where a recovery boat or icebreaker is drawn, and which way it faces,
+## while it's maneuvering ([screen position, angle]), or [] when it's just
+## sailing its lane. Ships don't pivot: a turn is sailed round a turning
+## circle (_turn_pose()) - a recovery boat lining up with a lost ship (and
+## pulling ahead of it) or turning round with it aboard, an icebreaker turning
+## to lead its convoy or turning back from the ice edge - and a recovery boat
+## loading a ship slides under it (_recovery_offset()).
+func _turning_pose(ship: Ship) -> Array:
+	if ship.is_docked() or ship.from_port.is_empty() or not (ship.is_recovery() or ship.is_icebreaker()):
+		return []
+	var base := world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
+	var look_rect: Rect2 = _model_look(ship.model_id)[7]
+	var radius := look_rect.size.x * TURN_RADIUS_LENGTHS * _ship_scale()
+	var lane_angle := _lane_angle(ship.from_port, ship.to_port, ship.traveled_nm)
+	if ship.is_icebreaker():
+		var t := clampf(ship.align_time / Ship.ALIGN_SECONDS, 0.0, 1.0)
+		if ship.ice_phase == "turn_in":
+			var leg := ship.escort_leg
+			return _turn_pose(base, lane_angle, base, _lane_angle(leg[0], leg[1], leg[2]), radius, t)
+		if ship.ice_phase == "turn_back":
+			return _turn_pose(base, lane_angle, base, lane_angle + PI, radius, t)
+		return []
+	if ship.job_phase != Ship.JOB_ALIGN or ship.rescuing == null:
+		return []
+	var lost := ship.rescuing
+	var ship_angle := _lane_angle(lost.from_port, lost.to_port, lost.traveled_nm)
+	var rect: Rect2 = _model_look(ship.model_id)[7]
+	if ship.align_time < Ship.ALIGN_SECONDS:
+		var ahead := (-_deck_along(rect) + rect.size.x * RECOVERY_SLIDE) * _ship_scale()
+		return _turn_pose(base, lane_angle, base + Vector2.from_angle(ship_angle) * ahead, ship_angle, radius,
+			ship.align_time / Ship.ALIGN_SECONDS)
+	if ship.load_time() >= 0.0:
+		return [base + Vector2.from_angle(ship_angle) * _recovery_offset(ship) * _ship_scale(), ship_angle]
+	var t := (ship.align_time - Ship.ALIGN_SECONDS - Ship.LOAD_SECONDS) / Ship.ALIGN_SECONDS
+	return _turn_pose(base, ship_angle, base, ship_angle + PI, radius, clampf(t, 0.0, 1.0))
+
+
+## A point t (0 to 1) along a smooth turn from one screen pose (a, facing
+## angle_a) to another (b, angle_b), as [position, facing angle], like a ship
+## on its turning circle rather than pivoting: two curves through a point out
+## ahead to the side it turns to, further out the sharper the turn (a U-turn
+## loops out radius wide and comes back), eased in and out.
+static func _turn_pose(a: Vector2, angle_a: float, b: Vector2, angle_b: float, radius: float, t: float) -> Array:
+	var turn := wrapf(angle_b - angle_a, -PI, PI)
+	if absf(turn) > PI - 0.01:
+		turn = PI  # A U-turn: round to starboard.
+	var middle_angle := angle_a + turn / 2.0
+	var middle := (a + b) / 2.0 + Vector2.from_angle(middle_angle) * radius * absf(turn) / PI
+	var reach := maxf(radius * 0.6, a.distance_to(b) * 0.35)
+	t = smoothstep(0.0, 1.0, t)
+	var curve := [a, a + Vector2.from_angle(angle_a) * reach, middle - Vector2.from_angle(middle_angle) * reach, middle]
+	var u := t * 2.0
+	if t >= 0.5:
+		curve = [middle, middle + Vector2.from_angle(middle_angle) * reach, b - Vector2.from_angle(angle_a + turn) * reach, b]
+		u = t * 2.0 - 1.0
+	var point := _bezier(curve, u)
+	var tangent := _bezier(curve, minf(u + 0.02, 1.0)) - _bezier(curve, maxf(u - 0.02, 0.0))
+	var facing := tangent.angle() if tangent.length() > 0.001 else angle_a + turn * t
+	return [point, facing]
+
+
+static func _bezier(points: Array, u: float) -> Vector2:
+	var p0: Vector2 = points[0]
+	var p1: Vector2 = points[1]
+	var p2: Vector2 = points[2]
+	var p3: Vector2 = points[3]
+	var v := 1.0 - u
+	return p0 * v * v * v + p1 * 3.0 * v * v * u + p2 * 3.0 * v * u * u + p3 * u * u * u
+
+
+## How far ahead of the lost ship (in its art's units, along its heading) a
+## recovery boat is drawn while it takes the ship aboard, like a real
+## semi-submersible heavy-lift ship: it pulls ahead of the ship as it lines up,
+## ballasts down there, backs under the ship (which floats in over its open
+## stern) until the ship is over its deck, then rises and sets off. 0 otherwise.
+func _recovery_offset(boat: Ship) -> float:
+	if boat.job_phase != Ship.JOB_ALIGN:
+		return 0.0
+	var rect: Rect2 = _model_look(boat.model_id)[7]
+	var under := -_deck_along(rect)  # The deck right under the ship.
+	var ahead := under + rect.size.x * RECOVERY_SLIDE  # Clear ahead of it, stern to its bow.
+	var t := boat.load_time()
+	if t < 0.0:
+		return ahead if boat.align_time < Ship.ALIGN_SECONDS else 0.0  # Lining up, or turning round after.
+	var third := Ship.LOAD_SECONDS / 3.0
+	if t < third:
+		return ahead
+	if t < third * 2.0:
+		return lerpf(ahead, under, smoothstep(0.0, 1.0, (t - third) / third))
+	return lerpf(under, 0.0, smoothstep(0.0, 1.0, (t - third * 2.0) / third))
+
+
+## A recovery boat ballasted down (Ship.submerged()): the sea over its work
+## deck, with a few ripples, the wheelhouse still above water. Drawn in the
+## boat's own (art) coordinates.
+func _draw_ballast(boat: Ship, rect: Rect2) -> void:
+	var level := boat.submerged()
+	if level <= 0.0:
+		return
+	var deck := Rect2(rect.position.x + rect.size.x * BALLAST_DECK.x / SHIP_ART_WIDTH, rect.position.y + rect.size.y * 0.08,
+		rect.size.x * (BALLAST_DECK.y - BALLAST_DECK.x) / SHIP_ART_WIDTH, rect.size.y * 0.84)
+	_canvas.draw_rect(deck, Color(_color(&"ocean"), BALLAST_WATER_ALPHA * level))
+	var ripple := Color(BALLAST_RIPPLE, BALLAST_RIPPLE.a * level)
+	var phase := GameState.play_time * 3.0
+	for row in 3:
+		var y := deck.position.y + deck.size.y * (row + 1) / 4.0
+		var points := PackedVector2Array()
+		for step in 9:
+			var x := deck.position.x + deck.size.x * step / 8.0
+			points.append(Vector2(x, y + sin(step * 1.6 + phase + row) * deck.size.y * 0.06))
+		_canvas.draw_polyline(points, ripple, 0.8, true)
 
 
 ## A docked ship's place in its port's rings: how many of the fleet before it are
@@ -1277,12 +1433,12 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 		_canvas.draw_texture_rect(_dock_dot_fill, rect, false, color)
 		_canvas.draw_texture_rect(_dock_dot_ring, rect, false, outline)
 		return
-	var direction := ship.heading()
-	var angle := Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
-	_canvas.draw_set_transform(ship_screen_position(ship), angle, Vector2.ONE * _ship_scale())
+	_canvas.draw_set_transform(ship_screen_position(ship), _screen_angle(ship), Vector2.ONE * _ship_scale())
 	var art: Dictionary = look[6]
 	if not art.is_empty():
 		_draw_ship_art(ship, art, look[7], color)
+		if ship.is_recovery():
+			_draw_ballast(ship, look[7])
 		return
 	# The hull as a quad and the bow as a triangle: simple shapes Godot needn't
 	# triangulate each frame, unlike a general polygon.
