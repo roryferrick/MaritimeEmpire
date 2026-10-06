@@ -346,6 +346,6 @@
 - Under the hood: Company (scripts/sim/company.gd) holds everything a player owns; GameState.company is this player's, and the screens use GameState's money, hubs... (that company's), while the sim pays, charges and levels each ship's own company. Net (scripts/autoload/net.gd) does the hosting, joining, updates, commands, events, chat and finding games; Steam lobbies and relay (no port forwarding) can replace its ENet transport later.
 
 ## Explicitly NOT in beta
-- Crew wages, port fees, fuel prices that differ by port, cargo types, upgrades, achievements, renaming ships, offline progress, audio, mobile, multiplayer and clans.
+- Crew wages, port fees, fuel prices that differ by port, cargo types, upgrades, achievements, renaming ships, offline progress, audio, mobile and clans.
 
 <sub><sup>p.s. the company name in the top bar is worth a click, once per company: a hidden gem, $10,000,000.</sup></sub>
