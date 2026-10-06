@@ -13,10 +13,13 @@ extends Node
 ## level-ups...) is sent back to them as GameState's own signals, so their
 ## activity log reads as in single player.
 ##
-## Games are found on the local network (the host announces itself every
-## ANNOUNCE_S on DISCOVERY_PORT) or joined by address. A host can set a
-## password; joining needs it. Built on Godot's ENet: Steam lobbies and relay
-## can be put in its place later without changing the rest.
+## Games go over Steam when it's running (GodotSteam): the host opens a Steam
+## lobby that joining games find in their list (or are invited to), and they
+## connect through Steam's relay, so no addresses or port forwarding. Without
+## Steam (or if the host picks it), games go over Godot's ENet: found on the
+## local network (the host announces itself every ANNOUNCE_S on
+## DISCOVERY_PORT) or joined by address. A host can set a password; joining
+## needs it. Everything past connecting is the same either way.
 
 ## A joined game asked to join, was turned down, picked a company, started.
 signal join_status(text: String)
@@ -29,15 +32,29 @@ signal joined
 ## The connection to the host was lost or the host left (joined games only).
 signal left(reason: String)
 signal players_changed
-## Games found on the local network changed (see games).
+## Games found on Steam or the local network changed (see games).
 signal games_changed
 
 enum Role { OFFLINE, HOST, CLIENT }
 
 const PORT := 24565
 const DISCOVERY_PORT := 24566
+## Valve's test app (Spacewar), which any Steam account can use, until the
+## game has its own app id.
+const STEAM_APP_ID := 480
+## Our lobbies' "game" data: the list asks Steam for these only (other games
+## share the test app's lobbies).
+const LOBBY_GAME := "maritime_empire"
+## How often the games list asks Steam for lobbies again.
+const LOBBY_REFRESH_S := 5.0
+## Steam's lobby types and its "joined the lobby" response (Steam's own numbers).
+const LOBBY_TYPE_PUBLIC := 2
+const LOBBY_ENTER_SUCCESS := 1
+## The whole game a newcomer starts from goes in parts no bigger than this
+## (Steam won't send a message over 512 KB).
+const START_PART_BYTES := 256 * 1024
 ## Bumped whenever games of different versions couldn't play together.
-const PROTOCOL := 1
+const PROTOCOL := 2
 const MAX_PLAYERS := 8
 ## How often the host sends what changed, and announces itself.
 const SYNC_S := 0.15
@@ -76,9 +93,20 @@ var max_players := 4
 ## Players in the game, by peer id (the host is 1): {name, company (index in
 ## GameState.companies, -1 while choosing)}. Joined games get the host's list.
 var players := {}
-## Games found on the local network: "address:port" -> {name, company,
-## players, max_players, locked, address, port, seen (msec)}.
+## Games found: "address:port" -> {name, company, players, max_players,
+## locked, address, port, seen (msec)} for the local network, and "steam:id" ->
+## {name, company, players, max_players, locked, lobby} for Steam lobbies.
 var games := {}
+
+## Steam (GodotSteam's Steam singleton) if it's running and logged in, else
+## null and steam_problem says why.
+var steam: Object = null
+var steam_problem := ""
+## The Steam lobby this game is hosting or has joined (0 if none).
+var lobby_id := 0
+## A Steam invite accepted (or a friend's game joined from Steam's friends
+## list) away from the join page: the join page joins it when it opens.
+var invited_lobby := 0
 
 ## Set while the host does a joined player's command: their peer id (their
 ## company is GameState.company meanwhile).
@@ -90,9 +118,17 @@ var host_error := ""
 ## Set while a joined game applies the host's update (so the game speed can change).
 var syncing := false
 
-var _peer: ENetMultiplayerPeer = null
+var _peer: MultiplayerPeer = null
 var _announcer: PacketPeerUDP = null
 var _listener: PacketPeerUDP = null
+## Whether the games list is open (looking for Steam lobbies), and time
+## towards asking again.
+var _browsing := false
+var _lobby_clock := 0.0
+## Joined game: the Steam lobby being joined (until in it), and the parts of
+## the host's whole game so far (see _start_part()).
+var _joining_lobby := 0
+var _start_bytes := PackedByteArray()
 var _sync_clock := 0.0
 var _announce_clock := 0.0
 ## Host: what was last sent ({t, speed, weather, market, ports, companies,
@@ -135,6 +171,31 @@ func _ready() -> void:
 	GameState.ship_changed.connect(func(ship: Ship) -> void:
 		if is_host():
 			_dirty[ship.id] = true)
+	_start_steam()
+
+
+## Starts Steam (as STEAM_APP_ID) if this game has GodotSteam and Steam is
+## running; otherwise games go over the local network or by address only.
+func _start_steam() -> void:
+	if not Engine.has_singleton("Steam") or not ClassDB.class_exists("SteamMultiplayerPeer"):
+		steam_problem = "This version of the game can't use Steam."
+		return
+	var api: Object = Engine.get_singleton("Steam")
+	var result: Dictionary = api.steamInitEx(STEAM_APP_ID, false)
+	if int(result.get("status", 1)) != 0:
+		steam_problem = "Steam isn't running. Start Steam and log in, then restart the game to play over Steam."
+		return
+	steam = api
+	steam.initRelayNetworkAccess()
+	steam.lobby_created.connect(_on_lobby_created)
+	steam.lobby_joined.connect(_on_lobby_joined)
+	steam.lobby_match_list.connect(_on_lobby_list)
+	steam.join_requested.connect(_on_join_requested)
+
+
+## The player's Steam name ("" without Steam).
+func steam_name() -> String:
+	return steam.getPersonaName() if steam != null else ""
 
 
 func is_host() -> bool:
@@ -150,6 +211,12 @@ func is_online() -> bool:
 
 
 func _process(delta: float) -> void:
+	if steam != null:
+		steam.run_callbacks()
+		if _browsing:
+			_lobby_clock += delta
+			if _lobby_clock >= LOBBY_REFRESH_S:
+				_request_lobbies()
 	if is_host():
 		_sync_clock += delta
 		if _sync_clock >= SYNC_S and _anyone_playing():
@@ -171,7 +238,9 @@ func _process(delta: float) -> void:
 # --- Hosting -----------------------------------------------------------------
 
 ## Starts hosting the game that's open (GameState's session): others can join
-## it. Returns why it couldn't, or "".
+## it. Over Steam (a lobby friends find in their list) when it's running,
+## unless settings.steam is false; otherwise on the local network and by
+## address. Returns why it couldn't, or "".
 func host(settings := {}) -> String:
 	leave()
 	game_name = str(settings.get("name", GameState.company_name)).strip_edges().left(40)
@@ -179,23 +248,80 @@ func host(settings := {}) -> String:
 		game_name = GameState.company_name
 	password = str(settings.get("password", ""))
 	max_players = clampi(int(settings.get("max_players", 4)), 2, MAX_PLAYERS)
+	var on_steam: bool = steam != null and settings.get("steam", true)
 	var port := int(settings.get("port", PORT))
-	_peer = ENetMultiplayerPeer.new()
-	var error := _peer.create_server(port, max_players - 1)
+	var error := OK
+	if on_steam:
+		_peer = ClassDB.instantiate("SteamMultiplayerPeer")
+		error = _peer.call(&"create_host", 0)
+	else:
+		_peer = ENetMultiplayerPeer.new()
+		error = (_peer as ENetMultiplayerPeer).create_server(port, max_players - 1)
 	if error != OK:
 		_peer = null
+		if on_steam:
+			return "Couldn't host on Steam (%s)." % error_string(error)
 		return "Couldn't host on port %d (%s). Is another game already hosting?" % [port, error_string(error)]
 	multiplayer.multiplayer_peer = _peer
 	role = Role.HOST
 	players = {1: {name = GameState.company_name, company = GameState.companies.find(GameState.company)}}
 	_sent = {}
 	_events = {}
-	_announcer = PacketPeerUDP.new()
-	_announcer.set_broadcast_enabled(true)
-	_announcer.set_dest_address("255.255.255.255", DISCOVERY_PORT)
+	if on_steam:
+		steam.createLobby(LOBBY_TYPE_PUBLIC, max_players)  # See _on_lobby_created().
+	else:
+		_announcer = PacketPeerUDP.new()
+		_announcer.set_broadcast_enabled(true)
+		_announcer.set_dest_address("255.255.255.255", DISCOVERY_PORT)
 	_broadcast()  # Sets the baseline joiners' updates build on.
 	_announce()
 	players_changed.emit()
+	return ""
+
+
+## Whether this game is hosted or joined over Steam.
+func is_on_steam() -> bool:
+	return _peer != null and not _peer is ENetMultiplayerPeer
+
+
+## Host: the Steam lobby is open: it gets the game's details for joining
+## players' lists (see _update_lobby()).
+func _on_lobby_created(result: int, id: int) -> void:
+	if not is_host() or not is_on_steam():
+		if id != 0:
+			steam.leaveLobby(id)  # Left before Steam answered.
+		return
+	if result != 1:
+		ActivityLog.add("Couldn't open this game on Steam, so friends can't find it. Try hosting again.", ActivityLog.Kind.BAD)
+		return
+	lobby_id = id
+	steam.setLobbyJoinable(id, true)
+	steam.setLobbyData(id, "game", LOBBY_GAME)
+	steam.setLobbyData(id, "proto", str(PROTOCOL))
+	_update_lobby()
+	players_changed.emit()  # Invite Friends can now be offered.
+
+
+## Host: the lobby's details as of now: the game's name, the host's company,
+## how many are playing of how many, and whether it needs a password.
+func _update_lobby() -> void:
+	if steam == null or lobby_id == 0 or not is_host():
+		return
+	steam.setLobbyData(lobby_id, "name", game_name)
+	steam.setLobbyData(lobby_id, "company", GameState.company_name)
+	steam.setLobbyData(lobby_id, "players", str(players.size()))
+	steam.setLobbyData(lobby_id, "max_players", str(max_players))
+	steam.setLobbyData(lobby_id, "locked", "1" if not password.is_empty() else "0")
+
+
+## Host on Steam: opens Steam's overlay to invite friends. Returns why it
+## can't ("" if it did).
+func invite_friends() -> String:
+	if steam == null or lobby_id == 0:
+		return "The game isn't open on Steam yet."
+	if not steam.isOverlayEnabled():
+		return "Steam's overlay isn't available (it only opens when Steam starts the game). Friends can find this game under Join a Friend's Game."
+	steam.activateGameOverlayInviteDialog(lobby_id)
 	return ""
 
 
@@ -205,6 +331,11 @@ func leave() -> void:
 		_peer.close()
 	_peer = null
 	multiplayer.multiplayer_peer = null
+	if steam != null and lobby_id != 0:
+		steam.leaveLobby(lobby_id)
+	lobby_id = 0
+	_joining_lobby = 0
+	_start_bytes = PackedByteArray()
 	role = Role.OFFLINE
 	players = {}
 	_sent = {}
@@ -222,9 +353,10 @@ func leave() -> void:
 func _announce() -> void:
 	if _announcer == null:
 		return
+	var enet := _peer as ENetMultiplayerPeer
 	var info := {proto = PROTOCOL, name = game_name, company = GameState.company_name,
 		players = players.size(), max_players = max_players, locked = not password.is_empty(),
-		port = _peer.get_host().get_local_port() if _peer and _peer.get_host() else PORT}
+		port = enet.get_host().get_local_port() if enet and enet.get_host() else PORT}
 	_announcer.put_packet(JSON.stringify(info).to_utf8_buffer())
 
 
@@ -313,7 +445,11 @@ func _choose(choice: Dictionary) -> void:
 	players[id].company = index
 	players[id].name = GameState.companies[index].name
 	_broadcast()  # Everyone (and the baseline) up to date, then the newcomer gets the same state whole.
-	_start.rpc_id(id, index, _pack(GameState.world_dict()))
+	var world := _pack(GameState.world_dict())
+	var bytes: PackedByteArray = world[1]
+	for start in range(0, bytes.size(), START_PART_BYTES):
+		_start_part.rpc_id(id, bytes.slice(start, start + START_PART_BYTES))
+	_start.rpc_id(id, index, int(world[0]))
 	_send_players()
 	ActivityLog.add("%s joined the game." % GameState.companies[index].name, ActivityLog.Kind.GOOD)
 
@@ -324,6 +460,7 @@ func _send_players() -> void:
 	for id: int in players:
 		if id != 1:
 			_players.rpc_id(id, players)
+	_update_lobby()
 	players_changed.emit()
 
 
@@ -334,8 +471,9 @@ func _send_players() -> void:
 ## choose_company()) or join_failed.
 func join(address: String, port := PORT, join_password := "", player_name := "") -> String:
 	leave()
-	_peer = ENetMultiplayerPeer.new()
-	var error := _peer.create_client(address.strip_edges(), port)
+	var enet := ENetMultiplayerPeer.new()
+	var error := enet.create_client(address.strip_edges(), port)
+	_peer = enet
 	if error != OK:
 		_peer = null
 		return "Couldn't connect to %s (%s)." % [address, error_string(error)]
@@ -345,6 +483,57 @@ func join(address: String, port := PORT, join_password := "", player_name := "")
 	_join_name = player_name
 	join_status.emit("Connecting to %s..." % address)
 	return ""
+
+
+## Joins the game hosting a Steam lobby: into the lobby, then connected to its
+## host through Steam's relay (see _on_lobby_joined()); then as join().
+func join_lobby(id: int, join_password := "", player_name := "") -> String:
+	if steam == null:
+		return steam_problem
+	leave()
+	role = Role.CLIENT
+	_joining_lobby = id
+	_join_password = join_password
+	_join_name = player_name
+	steam.joinLobby(id)
+	join_status.emit("Joining on Steam...")
+	return ""
+
+
+func _on_lobby_joined(id: int, _permissions: int, _locked: bool, response: int) -> void:
+	if id != _joining_lobby or not is_client() or _peer != null:
+		return  # A lobby this game made (hosting), or one it stopped joining.
+	_joining_lobby = 0
+	if response != LOBBY_ENTER_SUCCESS:
+		steam.leaveLobby(id)
+		leave()
+		join_failed.emit({2: "That game has ended.", 4: "This game is full."}.get(response, "Couldn't join that game on Steam."))
+		return
+	lobby_id = id
+	var owner: int = steam.getLobbyOwner(id)
+	if owner == steam.getSteamID():
+		leave()
+		join_failed.emit("That's your own game.")
+		return
+	_peer = ClassDB.instantiate("SteamMultiplayerPeer")
+	var error: int = _peer.call(&"create_client", owner, 0)
+	if error != OK:
+		leave()
+		join_failed.emit("Couldn't connect to that game on Steam (%s)." % error_string(error))
+		return
+	multiplayer.multiplayer_peer = _peer
+	join_status.emit("Connecting to %s through Steam..." % steam.getLobbyData(id, "name"))
+
+
+## A Steam invite was accepted (or a friend's game joined from Steam's friends
+## list): the join page joins it, now if no game is open, or once this one's left.
+func _on_join_requested(id: int, friend: int) -> void:
+	invited_lobby = id
+	if GameState.in_session or is_online():
+		ActivityLog.add("%s invited you to their game. Leave this one (from the players list or the title screen) to join it." % steam.getFriendPersonaName(friend),
+			ActivityLog.Kind.INFO)
+	else:
+		get_tree().change_scene_to_file("res://scenes/join_game.tscn")
 
 
 func _on_connected() -> void:
@@ -393,10 +582,22 @@ func choose_company(choice: Dictionary) -> void:
 		_choose.rpc_id(1, choice)
 
 
-## The host's whole game, with this player's company: play starts.
+## Part of the host's whole game (packed), in order; _start() follows.
 @rpc("authority", "reliable")
-func _start(local_index: int, world: Array) -> void:
-	var data: Dictionary = _unpack(world)
+func _start_part(bytes: PackedByteArray) -> void:
+	_start_bytes.append_array(bytes)
+
+
+## The host's whole game (its parts came first; size is its unpacked size),
+## with this player's company: play starts.
+@rpc("authority", "reliable")
+func _start(local_index: int, size: int) -> void:
+	var data: Dictionary = _unpack([size, _start_bytes])
+	_start_bytes = PackedByteArray()
+	if data.is_empty():
+		leave()
+		join_failed.emit("The host's game didn't arrive whole. Try joining again.")
+		return
 	GameState.multiplayer_save = true
 	GameState.load_world(data, local_index)
 	_sent = _state_of(data)
@@ -877,15 +1078,18 @@ func _log(text: String, kind: int, color: Color) -> void:
 	ActivityLog.add(text, kind, color)
 
 
-# --- Finding games on the local network ------------------------------------------
+# --- Finding games on Steam and the local network ----------------------------------
 
-## Starts listening for games announced on the local network (see games).
+## Starts looking for games: Steam lobbies (asked for every LOBBY_REFRESH_S)
+## and games announced on the local network (see games).
 func start_browsing() -> void:
 	stop_browsing()
 	_listener = PacketPeerUDP.new()
 	if _listener.bind(DISCOVERY_PORT) != OK:
 		_listener = null
 	games = {}
+	_browsing = true
+	_request_lobbies()
 	games_changed.emit()
 
 
@@ -893,6 +1097,33 @@ func stop_browsing() -> void:
 	if _listener != null:
 		_listener.close()
 	_listener = null
+	_browsing = false
+
+
+## Asks Steam for our lobbies, anywhere in the world (see _on_lobby_list()).
+func _request_lobbies() -> void:
+	_lobby_clock = 0.0
+	if steam == null:
+		return
+	steam.addRequestLobbyListStringFilter("game", LOBBY_GAME, 0)  # 0: equal.
+	steam.addRequestLobbyListDistanceFilter(3)  # 3: worldwide.
+	steam.requestLobbyList()
+
+
+## Steam's lobbies replace the Steam games in the list (those of this version only).
+func _on_lobby_list(lobbies: Array) -> void:
+	if not _browsing:
+		return
+	for key: String in games.keys():
+		if key.begins_with("steam:"):
+			games.erase(key)
+	for id: int in lobbies:
+		if steam.getLobbyData(id, "proto") != str(PROTOCOL) or steam.getLobbyOwner(id) == steam.getSteamID():
+			continue
+		games["steam:%d" % id] = {lobby = id, name = steam.getLobbyData(id, "name"), company = steam.getLobbyData(id, "company"),
+			players = int(steam.getLobbyData(id, "players")), max_players = int(steam.getLobbyData(id, "max_players")),
+			locked = steam.getLobbyData(id, "locked") == "1"}
+	games_changed.emit()
 
 
 func _listen() -> void:
@@ -910,7 +1141,7 @@ func _listen() -> void:
 		games["%s:%d" % [address, port]] = info
 		changed = true
 	for key: String in games.keys():
-		if Time.get_ticks_msec() - int(games[key].seen) > GAME_TIMEOUT_S * 1000.0:
+		if games[key].has("seen") and Time.get_ticks_msec() - int(games[key].seen) > GAME_TIMEOUT_S * 1000.0:
 			games.erase(key)
 			changed = true
 	if changed:

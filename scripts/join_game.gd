@@ -1,7 +1,8 @@
 extends Control
-## Joining a friend's multiplayer game: the games hosted on this network (each
-## with its host's company, players and a lock if it has a password), or one
-## at an address; then a password if it needs one; then picking a company:
+## Joining a friend's multiplayer game: the games hosted on Steam and on this
+## network (each with its host's company, players and a lock if it has a
+## password), or one at an address (a Steam invite joins its game straight
+## away); then a password if it needs one; then picking a company:
 ## taking back one of the game's companies no one is playing, or founding a
 ## new one at a home port no company has. Once the host lets you in, the game
 ## opens (see Net).
@@ -23,8 +24,8 @@ var _address_edit := LineEdit.new()
 var _port_edit := LineEdit.new()
 var _password_dialog := ConfirmationDialog.new()
 var _password_edit := LineEdit.new()
-## The game a password is being asked for: [address, port].
-var _asking := []
+## The game a password is being asked for (one of Net.games).
+var _asking := {}
 ## Picking a company (see _show_choice()).
 var _color := "red"
 var _port_picker := OptionButton.new()
@@ -54,15 +55,21 @@ func _ready() -> void:
 	_password_edit.placeholder_text = "This game's password"
 	_password_dialog.add_child(_password_edit)
 	_password_dialog.register_text_enter(_password_edit)
-	_password_dialog.confirmed.connect(func() -> void: _join(_asking[0], _asking[1], _password_edit.text))
+	_password_dialog.confirmed.connect(func() -> void: _join_game(_asking, _password_edit.text))
 	add_child(_password_dialog)
 	Net.games_changed.connect(_show_games)
 	Net.join_status.connect(func(text: String) -> void: _status.text = text)
 	Net.join_failed.connect(_on_failed)
 	Net.join_choose.connect(_show_choice)
 	Net.joined.connect(func() -> void: get_tree().change_scene_to_file(GAME_SCENE))
+	if player_name.is_empty():
+		player_name = Net.steam_name()
 	Net.start_browsing()
 	_show_find()
+	if Net.invited_lobby != 0:  # A Steam invite accepted: join it.
+		var lobby := Net.invited_lobby
+		Net.invited_lobby = 0
+		_join_game({lobby = lobby, locked = false}, "")
 
 
 func _exit_tree() -> void:
@@ -105,9 +112,11 @@ func _show_find() -> void:
 	_name_edit.text_changed.connect(func(text: String) -> void: player_name = text)
 	name_row.add_child(_name_edit)
 	_page.add_child(name_row)
-	_page.add_child(_dim("Games on your network:"))
+	_page.add_child(_dim("Games on Steam and your network:" if Net.steam != null else "Games on your network:"))
 	_page.add_child(_games)
 	_show_games()
+	if Net.steam == null:
+		_page.add_child(_dim(Net.steam_problem))
 	_page.add_child(_dim("Or join by address (your friend's IP address; over the internet they'll need to forward port %d):" % Net.PORT))
 	var address_row := HBoxContainer.new()
 	_address_edit.placeholder_text = "e.g. 192.168.1.20"
@@ -122,7 +131,7 @@ func _show_find() -> void:
 	join.pressed.connect(func() -> void:
 		last_address = _address_edit.text.strip_edges()
 		if not last_address.is_empty():
-			_join(last_address, int(_port_edit.text) if _port_edit.text.is_valid_int() else Net.PORT, ""))
+			_join_game({address = last_address, port = int(_port_edit.text) if _port_edit.text.is_valid_int() else Net.PORT}, ""))
 	address_row.add_child(join)
 	_page.add_child(address_row)
 	_status.text = ""
@@ -142,8 +151,8 @@ func _back_button() -> Button:
 	return back
 
 
-## A row per game found: "Rory's Empire · Host Co · 2/4 players · Password"
-## and Join (asking for the password first if it has one).
+## A row per game found: "Rory's Empire · Host Co · 2/4 players · Password
+## · Steam" and Join (asking for the password first if it has one).
 func _show_games() -> void:
 	if not is_instance_valid(_games) or not _games.is_inside_tree():
 		return
@@ -158,30 +167,31 @@ func _show_games() -> void:
 		var row := HBoxContainer.new()
 		var label := Label.new()
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.text = "%s  ·  %s  ·  %d/%d players%s" % [game.name, game.company, int(game.players), int(game.max_players),
-			"  ·  Password" if game.locked else ""]
+		label.text = "%s  ·  %s  ·  %d/%d players%s  ·  %s" % [game.name, game.company, int(game.players), int(game.max_players),
+			"  ·  Password" if game.locked else "", "Steam" if game.has("lobby") else "Network"]
 		row.add_child(label)
 		var join := Button.new()
 		join.text = "Join"
 		join.disabled = int(game.players) >= int(game.max_players)
 		join.pressed.connect(func() -> void:
 			if game.locked:
-				_asking = [game.address, int(game.port)]
+				_asking = game
 				_password_edit.text = ""
 				_password_dialog.popup_centered(Vector2i(320, 100))
 				_password_edit.grab_focus()
 			else:
-				_join(game.address, int(game.port), ""))
+				_join_game(game, ""))
 		row.add_child(join)
 		_games.add_child(row)
 
 
-func _join(address: String, port: int, password: String) -> void:
+## Joins a game: a Steam lobby ({lobby}) or one at an address ({address, port}).
+func _join_game(game: Dictionary, password: String) -> void:
 	var who := _name_edit.text.strip_edges()
 	if who.is_empty():
 		_status.text = "Enter your name first."
 		return
-	var error := Net.join(address, port, password, who)
+	var error := Net.join_lobby(int(game.lobby), password, who) if game.has("lobby") else Net.join(str(game.address), int(game.port), password, who)
 	if not error.is_empty():
 		_status.text = error
 

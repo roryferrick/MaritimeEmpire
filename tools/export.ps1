@@ -3,7 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File tools/export.ps1              # Windows + macOS
 #   powershell -ExecutionPolicy Bypass -File tools/export.ps1 -Only macOS  # just one preset
 #
-# Output: build/MaritimeEmpire-windows.zip (single .exe with the game data embedded)
+# Output: build/MaritimeEmpire-windows.zip (.exe with the game data embedded, and the Steam DLLs beside it)
 #         build/MaritimeEmpire-macos.zip   (universal .app, ad-hoc signed, not notarized)
 #         build/MaritimeEmpire-web.zip     (-Only Web; upload to itch.io as an HTML game)
 # Set $env:GODOT to point at a different Godot executable.

@@ -75,7 +75,7 @@ func _add_speed_buttons() -> void:
 		%SpeedButtons.add_child(button)
 
 
-## "Hosting · 3 players" or "In Host Co's game · 3 players" (the tooltip names
+## "Hosting · 3 players" or "Joined on Steam · 3 players" (the tooltip names
 ## them); hidden in single player. A joined player's speed buttons only show
 ## the host's speed.
 func _update_players() -> void:
@@ -85,7 +85,7 @@ func _update_players() -> void:
 		var who: Dictionary = Net.players[id]
 		names.append("%s%s" % [who.name, " (host)" if id == 1 else ""])
 	var count := "%d player%s" % [Net.players.size(), "" if Net.players.size() == 1 else "s"]
-	_players.text = ("Hosting · %s" if Net.is_host() else "Joined · %s") % count
+	_players.text = "%s%s · %s" % ["Hosting" if Net.is_host() else "Joined", " on Steam" if Net.is_on_steam() else "", count]
 	_players.tooltip_text = "Playing: %s" % ", ".join(names)
 	for button: Button in %SpeedButtons.get_children():
 		button.disabled = Net.is_client()
@@ -140,8 +140,9 @@ func _on_company_input(event: InputEvent) -> void:
 	host.open(popup)
 
 
-## Clicking the players opens who's playing (each company, the host marked)
-## and Leave Game: the host saves and stops hosting; a joined player leaves
+## Clicking the players opens who's playing (each company, the host marked),
+## Invite Friends for a host on Steam, and Leave Game: the host saves and
+## stops hosting; a joined player leaves
 ## (their company carries on in the host's game). Both go back to the title.
 func _on_players_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
@@ -156,6 +157,12 @@ func _on_players_input(event: InputEvent) -> void:
 	dialog.dialog_text = "\n".join(lines) + ("\n\nLeaving saves the game and ends it for everyone." if Net.is_host() else "\n\nYour company carries on in the host's game; join again to take it back.")
 	dialog.ok_button_text = "Leave Game"
 	dialog.cancel_button_text = "Close"
+	if Net.is_host() and Net.is_on_steam():  # Steam's overlay, to invite friends.
+		dialog.add_button("Invite Friends", false, "invite")
+		dialog.custom_action.connect(func(_action: StringName) -> void:
+			var problem := Net.invite_friends()
+			if not problem.is_empty():
+				dialog.dialog_text = "\n".join(lines) + "\n\n" + problem)
 	dialog.confirmed.connect(func() -> void:
 		if Net.is_host():
 			GameState.save_game()

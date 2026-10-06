@@ -18,8 +18,9 @@ const JOIN_SCENE := "res://scenes/join_game.tscn"
 ## "multi" for that mode's slots (so Back from New Company returns to them).
 static var page := ""
 ## The Multiplayer page's hosting settings: {name ("" for the company's), password
-## ("" for none), max_players}, used when a multiplayer game opens (see Net.host()).
-static var host_settings := {name = "", password = "", max_players = 4}
+## ("" for none), max_players, steam (over Steam if it's running, or the local
+## network and by address)}, used when a multiplayer game opens (see Net.host()).
+static var host_settings := {name = "", password = "", max_players = 4, steam = true}
 
 ## The slot DeleteDialog is asking about.
 var _deleting := 0
@@ -29,6 +30,9 @@ func _ready() -> void:
 	%QuitButton.pressed.connect(get_tree().quit)
 	%DeleteDialog.confirmed.connect(_delete)
 	Net.leave()  # Back at the title screen: no longer hosting or joined.
+	if Net.invited_lobby != 0:  # A Steam invite accepted while playing: join it now.
+		get_tree().change_scene_to_file.call_deferred(JOIN_SCENE)
+		return
 	if page.is_empty():
 		_show_modes()
 	else:
@@ -177,7 +181,17 @@ func _host_settings() -> GridContainer:
 		if count == int(host_settings.max_players):
 			players.select(players.item_count - 1)
 	players.item_selected.connect(func(index: int) -> void: host_settings.max_players = players.get_item_id(index))
-	for row: Array in [["Game name", name_edit], ["Password", password_edit], ["Up to", players]]:
+	var connection := OptionButton.new()
+	connection.add_item("Steam: friends anywhere find it in their list")
+	connection.add_item("Local network, or by address")
+	if Net.steam == null:
+		connection.select(1)
+		connection.disabled = true
+		connection.tooltip_text = Net.steam_problem
+	else:
+		connection.select(0 if host_settings.steam else 1)
+	connection.item_selected.connect(func(index: int) -> void: host_settings.steam = index == 0)
+	for row: Array in [["Game name", name_edit], ["Password", password_edit], ["Up to", players], ["Over", connection]]:
 		var label := Label.new()
 		label.text = row[0]
 		label.theme_type_variation = &"DimLabel"
