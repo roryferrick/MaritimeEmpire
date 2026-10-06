@@ -6,6 +6,11 @@
 			"quay": "left",
 			"note": "Gioia Tauro: its channel opens north-west"
 		},
+		"SHA": {
+			"bearing": 100.0,
+			"quay": "right",
+			"note": "Shanghai (Yangshan): out to the open East China Sea, not across the islands"
+		},
 		"PDX": {
 			"bearing": 30.0,
 			"quay": "right",
