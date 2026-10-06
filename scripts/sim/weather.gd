@@ -25,6 +25,8 @@ const DAYS_PER_MONTH := 30.44
 var storms: Array[Dictionary] = []
 var _state: Node  # GameState
 var _next_name := {}  # Basin id -> index of its next name.
+var _closed := {}  # Port id -> closed_by(), worked out once a step (every ship asks).
+
 
 
 func _init(state: Node) -> void:
@@ -51,6 +53,7 @@ func active() -> bool:
 
 ## Forms, moves, builds up and fades the storms (in saves with storms).
 func step(delta: float) -> void:
+	_closed.clear()
 	if _state.storms == "none":
 		if not storms.is_empty():
 			storms.clear()
@@ -134,6 +137,8 @@ static func intensity(storm: Dictionary) -> float:
 
 ## A storm's strength at a (lon, lat) point (0..1).
 static func strength_at(storm: Dictionary, lon_lat: Vector2) -> float:
+	if absf(float(storm.lat) - lon_lat.y) * 60.0 >= float(storm.radius_nm):
+		return 0.0  # Too far north or south to reach (a degree of latitude is 60 nm): quick to rule out.
 	var reach := Geo.distance_nm(Vector2(storm.lon, storm.lat), lon_lat) / float(storm.radius_nm)
 	if reach >= 1.0:
 		return 0.0
@@ -168,13 +173,18 @@ func factors(lon_lat: Vector2) -> Array:
 func closed_by(port_id: String) -> Dictionary:
 	if not active() or storms.is_empty():
 		return {}
+	if _closed.has(port_id):
+		return _closed[port_id]
 	var close_at := float(_level().get("close_at", 2.0))
 	var port := GameData.get_port(port_id)
 	var at := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+	var found := {}
 	for storm in storms:
 		if TROPICAL.has(storm.kind) and strength_at(storm, at) >= close_at:
-			return storm
-	return {}
+			found = storm
+			break
+	_closed[port_id] = found
+	return found
 
 
 ## "Hurricane Ana".

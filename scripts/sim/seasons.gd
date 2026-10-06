@@ -17,6 +17,9 @@ const LEG_CHECK_S := 72.0
 
 var _state: Node  # GameState
 var _enters := {}  # "closure/FROM-TO" -> lane_enters()
+## zones_now(), and the month x 100 + day it was worked out for.
+var _zones_cache := []
+var _zones_day := -1
 
 
 func _init(state: Node) -> void:
@@ -43,11 +46,23 @@ func active() -> bool:
 ## True if a closure or ice zone ({from, to}: [month, day]) is in season at a
 ## calendar (Unix) time.
 static func in_season(item: Dictionary, unix_time: int) -> bool:
-	var date := Time.get_datetime_dict_from_unix_time(unix_time)
-	var today := int(date.month) * 100 + int(date.day)
+	var today := _month_day(unix_time)
 	var from := int(item.from[0]) * 100 + int(item.from[1])
 	var to := int(item.to[0]) * 100 + int(item.to[1])
 	return today >= from and today <= to if from <= to else today >= from or today <= to
+
+
+## A calendar time's month x 100 + day, remembered for the last time asked
+## (every ship asks about the same time each step).
+static var _md_time := -1
+static var _md := 0
+
+static func _month_day(unix_time: int) -> int:
+	if unix_time != _md_time:
+		var date := Time.get_datetime_dict_from_unix_time(unix_time)
+		_md_time = unix_time
+		_md = int(date.month) * 100 + int(date.day)
+	return _md
 
 
 ## "22 Mar" for a [month, day].
@@ -151,12 +166,22 @@ func leg_closures(from_port: String, to_port: String) -> Array:
 func factors(lon_lat: Vector2) -> Array:
 	if not active():
 		return [1.0, 1.0]
-	var now: int = _state.calendar_time()
-	for zone: Dictionary in ice_zones():
-		if in_season(zone, now) and Geo.distance_nm(Vector2(zone.center[0], zone.center[1]), lon_lat) <= float(zone.radius_nm):
+	for zone: Dictionary in zones_now():
+		if Geo.distance_nm(Vector2(zone.center[0], zone.center[1]), lon_lat) <= float(zone.radius_nm):
 			var fairway: Array = _state.icebreaking.fairway(zone.id)
 			return fairway if not fairway.is_empty() else [float(zone.speed), float(zone.wear)]
 	return [1.0, 1.0]
+
+
+## The ice zones in season now (all of them, whether or not closures are
+## active), worked out again when the calendar day changes.
+func zones_now() -> Array:
+	var today := _month_day(_state.calendar_time())
+	if today != _zones_day:
+		_zones_day = today
+		var now: int = _state.calendar_time()
+		_zones_cache = ice_zones().filter(func(zone: Dictionary) -> bool: return in_season(zone, now))
+	return _zones_cache
 
 
 ## Where the sea is frozen now, for the map: [lon, lat, radius nm] circles of

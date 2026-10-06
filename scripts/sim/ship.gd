@@ -38,6 +38,11 @@ const SELL_FRACTION := 0.5
 ## attention_reason() for skill points to spend: the one reason that isn't a
 ## problem (Ship tiles show it as a green "+2", not a red warning).
 const UPGRADES_REASON := "upgrades to spend"
+## Kinds of ship (see _kind()).
+const KIND_CARGO := 0
+const KIND_RECOVERY := 1
+const KIND_ICEBREAKER := 2
+const KIND_TUG := 3
 
 ## Canal states (canal_state; see CanalTraffic): heading into a lock chamber
 ## it has reserved, waiting in line for one, waiting for toll money, at anchor
@@ -137,6 +142,8 @@ var _top_speed := 0.0
 var _fuel_per_s := 0.0
 var _wear_per_s := 0.0
 var _stats_dirty := true
+## _kind(), once looked up (-1 until then).
+var _kind_cache := -1
 ## The leg the cached length and zones are for (see _update_leg()).
 var _leg_from := "?"
 var _leg_to := "?"
@@ -183,6 +190,13 @@ var base_port := ""
 ## Tug only: true for the tug that leads (drags) its job's tow; the other one
 ## pushes at the stern.
 var tug_lead := false
+## Recovery boat only: the ship it's carrying faces the other way from it (it
+## met the ship head on); set as it lines up.
+var carry_reversed := false
+## Recovery boat only: it turned round with the ship aboard before setting
+## off with it (the map eases it back onto the lane from its turning circle).
+## Not saved.
+var turned_round := false
 ## Icebreaker only: the ice area (game_config icebreaking) it's stationed at,
 ## or ""; base_port is then the port there it waits at.
 var station := ""
@@ -218,26 +232,41 @@ func model() -> Dictionary:
 
 ## A recovery boat (Mammoth or Buffalo): recovers lost ships instead of sailing routes.
 func is_recovery() -> bool:
-	return bool(model().get("recovery", false))
+	return _kind() == KIND_RECOVERY
 
 
 ## An icebreaker (diesel or nuclear): stationed at an ice area, it leads
 ## convoys through its seasonal ice instead of sailing routes.
 func is_icebreaker() -> bool:
-	return not str(model().get("icebreaker", "")).is_empty()
+	return _kind() == KIND_ICEBREAKER
 
 
 ## A tug: based at a port on the company's routes, it pushes or drags ships
 ## lost near there back in (see GameState.tug_plan()).
 func is_tug() -> bool:
-	return bool(model().get("tug", false))
+	return _kind() == KIND_TUG
 
 
 ## A service ship (a recovery boat, an icebreaker or a tug): no route or
 ## cargo, pays its own fuel and repairs, and is never lost at sea.
 func is_service() -> bool:
-	return is_recovery() or is_icebreaker() or is_tug()
+	return _kind() != KIND_CARGO
 
+
+## What kind of ship its model is (KIND_*), looked up once: the model never
+## changes, and these are asked for every ship many times a step.
+func _kind() -> int:
+	if _kind_cache < 0:
+		var data := model()
+		if data.get("recovery", false):
+			_kind_cache = KIND_RECOVERY
+		elif not str(data.get("icebreaker", "")).is_empty():
+			_kind_cache = KIND_ICEBREAKER
+		elif data.get("tug", false):
+			_kind_cache = KIND_TUG
+		else:
+			_kind_cache = KIND_CARGO
+	return _kind_cache
 
 ## The skill paths its upgrade points go on: a tug's range in place of
 ## durability (it never breaks down).
@@ -588,9 +617,17 @@ func float_progress() -> float:
 	return clampf((t - third) / third, 0.0, 1.0)
 
 
-## Mammoth only: turns the pair around after lining up, when towing back the way the ship came.
+## Recovery boat only: turns round with the ship aboard, when the port it's
+## carrying it to is back the way the boat came (its carry segment starts at
+## the end of the lane the boat was sailing towards).
 func tow_turns_around() -> bool:
-	return rescuing != null and tow_port == rescuing.from_port
+	return rescuing != null and not is_tug() and not job_segments.is_empty() and str(job_segments[0][0]) == to_port
+
+
+## Recovery boat only: true if the ship it's carrying faces the other way from
+## it (the boat met it head on, so it floated aboard stern first).
+func carry_flipped() -> bool:
+	return rescuing != null and carry_reversed
 
 
 ## Recovery boat only: total seconds spent lining up, taking the ship aboard
@@ -740,7 +777,9 @@ func world_position() -> Vector2:
 
 ## Direction of travel in projected map coordinates (zero when docked).
 func heading() -> Vector2:
-	if is_carried() or is_towed():
+	if is_carried():
+		return -rescuer.heading() if rescuer.carry_flipped() else rescuer.heading()
+	if is_towed():
 		return rescuer.heading()
 	if is_docked():
 		return Vector2.ZERO
@@ -753,15 +792,13 @@ func heading() -> Vector2:
 	return _lane_heading(from_port, to_port, traveled_nm)
 
 
-## Turns from the approach heading to the lost ship's heading, then (if
-## towing it back) on round to face the way it came.
+## Keeps the heading it arrived on (it pulls ahead past the ship and backs
+## under it), then, if the port it's carrying the ship to is back the way it
+## came, turns round.
 func _align_heading() -> Vector2:
 	var arrive := _lane_heading(from_port, to_port, traveled_nm).angle()
-	var ship_angle := _lane_heading(rescuing.from_port, rescuing.to_port, rescuing.traveled_nm).angle()
-	if align_time < ALIGN_SECONDS:
-		return Vector2.from_angle(lerp_angle(arrive, ship_angle, align_time / ALIGN_SECONDS))
 	var t := (align_time - ALIGN_SECONDS - LOAD_SECONDS) / ALIGN_SECONDS if tow_turns_around() else 0.0
-	return Vector2.from_angle(ship_angle + PI * clampf(t, 0.0, 1.0))
+	return Vector2.from_angle(arrive + PI * clampf(t, 0.0, 1.0))
 
 
 static func _lane_heading(from: String, to: String, distance: float) -> Vector2:
@@ -918,7 +955,7 @@ func _recovery_status_text() -> String:
 			var third := LOAD_SECONDS / 3.0
 			var t := load_time()
 			if align_time < ALIGN_SECONDS:
-				return "Lining up with %s" % rescuing.name
+				return "Pulling up ahead of %s" % rescuing.name
 			if t >= 0.0 and t < third:
 				return "Ballasting down to take %s aboard" % rescuing.name
 			if t >= 0.0 and t < third * 2.0:
@@ -1076,6 +1113,7 @@ func to_dict() -> Dictionary:
 		"base_port": base_port,
 		"station": station,
 		"tug_lead": tug_lead,
+		"carry_reversed": carry_reversed,
 		"auto_recover": auto_recover,
 		"full_loads": full_loads,
 		"lost_order": lost_order,
@@ -1140,6 +1178,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.base_port = data.get("base_port", "")
 	ship.station = data.get("station", "")
 	ship.tug_lead = bool(data.get("tug_lead", false))
+	ship.carry_reversed = bool(data.get("carry_reversed", false))
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.full_loads = bool(data.get("full_loads", true))
 	ship.lost_order = int(data.get("lost_order", 0))

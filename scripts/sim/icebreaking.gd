@@ -13,6 +13,9 @@ extends RefCounted
 var _state: Node  # GameState
 var _edges := {}  # "area/FROM-TO" -> [entry mile, exit mile] (see _edge_miles())
 var _open := {}  # Area id -> open(), worked out once a step (see refresh()).
+var _any_open_closure := false  # Any open area with a closure (one that leads convoys).
+var _season_day := -1  # in_season() results, kept for a calendar day.
+var _season_cache := {}
 
 
 func _init(state: Node) -> void:
@@ -54,13 +57,21 @@ func in_season(item: Dictionary) -> bool:
 	if not _state.seasonal.active():
 		return false
 	var now: int = _state.calendar_time()
+	var day := Seasons._month_day(now)
+	if day != _season_day:  # Seasons change by the day, but ships ask every step.
+		_season_day = day
+		_season_cache.clear()
+	if _season_cache.has(item.id):
+		return _season_cache[item.id]
+	var found := false
 	var lists := {closure = _state.seasonal.closures(), zone = _state.seasonal.ice_zones()}
 	for key: String in lists:
 		if item.has(key):
 			for season: Dictionary in lists[key]:
 				if season.id == item[key] and Seasons.in_season(season, now):
-					return true
-	return false
+					found = true
+	_season_cache[item.id] = found
+	return found
 
 
 ## The icebreakers stationed at an area.
@@ -81,8 +92,15 @@ func open(item: Dictionary) -> bool:
 
 ## Works out which areas are open, once a step (ships ask many times a step).
 func refresh() -> void:
+	_any_open_closure = false
+	var stationed_at := {}
+	for ship: Ship in _state.ships:
+		if ship.is_icebreaker() and not ship.station.is_empty():
+			stationed_at[ship.station] = true
 	for item: Dictionary in areas():
-		_open[item.id] = in_season(item) and not stationed(item.id).is_empty()
+		_open[item.id] = stationed_at.has(item.id) and in_season(item)
+		if _open[item.id] and item.has("closure"):
+			_any_open_closure = true
 
 
 ## The open area a seasonal closure belongs to, or {}: that closure no longer
@@ -140,6 +158,8 @@ func port_inside(item: Dictionary, port_id: String) -> bool:
 ## The open area a ship needs leading through on a leg: one its lane enters, or
 ## starts in. {} if none.
 func area_for_leg(from_port: String, to_port: String) -> Dictionary:
+	if not _any_open_closure:
+		return {}  # The usual case, asked for every ship every step.
 	for item: Dictionary in areas():
 		# An ice zone stays open anyway: its icebreaker keeps the fairways open
 		# instead of leading convoys (see fairway()).

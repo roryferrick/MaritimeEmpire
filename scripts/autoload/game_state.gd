@@ -93,6 +93,9 @@ const STORM_WARNING_AHEAD_S := 144.0
 const STORM_SHIP_NOTICE := 0.3
 ## How long (game seconds) a worked-out fuel_reserve() is used before it's redone.
 const FUEL_RESERVE_REFRESH_S := 0.25
+## How often (seconds of play) the season warnings look again at which ports,
+## canals and Arctic routes the player uses.
+const PLAYER_USE_REFRESH_S := 10.0
 
 var money: int = 0:
 	set(value):
@@ -141,6 +144,13 @@ var seasons := false
 var play_time := 0.0
 ## Total company XP from deliveries; see Progression for levels.
 var company_xp := 0.0
+## company_level(), and the XP it was worked out for.
+var _level := 1
+var _level_xp := -1.0
+## The calendar's start (Unix time) and calendar seconds per second of play,
+## read from game_config once (-1 until then).
+var _calendar_start := -1
+var _calendar_rate := 0.0
 ## The map's Routes switch: show the fleet's route lanes faintly.
 var show_active_routes := true
 ## Ship models whose routine news (loading, profitable sales, entering canals)
@@ -180,6 +190,11 @@ var _ships_in_storms := {}
 ## (to log changes), and the ids of closures already warned of ahead.
 var _season_closed := {}
 var _season_warned := {}
+## For the season warnings: the ports, canals and Arctic routes the player uses
+## ({ports, canals, zones: ice zone id -> touches one of the ports}), and when
+## they were worked out (play_time).
+var _player_use := {}
+var _player_use_time := 0.0
 ## fuel_reserve(), and the play_time it was worked out at.
 var _fuel_reserve := 0.0
 var _fuel_reserve_time := -1.0
@@ -243,9 +258,11 @@ func calendar_time() -> int:
 
 ## The calendar date and time at a play time.
 func calendar_time_at(at_play_time: float) -> int:
-	var calendar: Dictionary = GameData.config.get("calendar", {})
-	var start := Time.get_unix_time_from_datetime_string(str(calendar.get("start", "2000-01-01T00:00:00")))
-	return int(start + at_play_time * calendar_seconds_per_second())
+	if _calendar_start < 0:  # Parsed once: every ship asks every step.
+		var calendar: Dictionary = GameData.config.get("calendar", {})
+		_calendar_start = Time.get_unix_time_from_datetime_string(str(calendar.get("start", "2000-01-01T00:00:00")))
+		_calendar_rate = calendar_seconds_per_second()
+	return int(_calendar_start + at_play_time * _calendar_rate)
 
 
 ## Calendar seconds that pass per second of play (at 1x).
@@ -433,7 +450,12 @@ func apply_company_text_color(control: Control, color_id := company_color) -> vo
 
 
 func company_level() -> int:
-	return int(Progression.company_level(company_xp).level)
+	# Worked out again only when the XP changes: it walks the level costs, and
+	# the weather, seasons and icebreakers ask for every ship every step.
+	if company_xp != _level_xp:
+		_level_xp = company_xp
+		_level = int(Progression.company_level(company_xp).level)
+	return _level
 
 
 ## What a ship's next level of a skill costs: game_config skill_costs first
@@ -927,11 +949,16 @@ func _sail(ship: Ship, delta: float) -> bool:
 ## ice where it is (see Weather.factors() and Seasons.factors()); [1, 1] in
 ## port or when neither is active.
 func _storm_factors(ship: Ship) -> Array:
-	if (not weather.active() and not seasonal.active()) or ship.is_docked() or ship.from_port.is_empty():
+	if ship.is_docked() or ship.from_port.is_empty():
+		return [1.0, 1.0]
+	# Nothing to ask about where the ship is unless a storm is out or some ice is in.
+	var storms_out := weather.active() and not weather.storms.is_empty()
+	var ice_in := seasonal.active() and not seasonal.zones_now().is_empty()
+	if not storms_out and not ice_in:
 		return [1.0, 1.0]
 	var at := Geo.unproject(ship.world_position())
-	var storm := weather.factors(at)
-	var ice := seasonal.factors(at)
+	var storm := weather.factors(at) if storms_out else [1.0, 1.0]
+	var ice := seasonal.factors(at) if ice_in else [1.0, 1.0]
 	return [float(storm[0]) * float(ice[0]), float(storm[1]) * float(ice[1])]
 
 
@@ -1067,16 +1094,23 @@ func _season_warnings() -> void:
 		return
 	var now := calendar_time()
 	var ahead := now + int(float(GameData.config.get("seasons", {}).get("warn_days", 10)) * 86400.0)
-	var ports := _player_ports()
-	var canals := _player_canals()
+	# What the player uses changes slowly, and working it out walks every leg
+	# of every route: refreshed every PLAYER_USE_REFRESH_S of play.
+	if _player_use.is_empty() or play_time - _player_use_time >= PLAYER_USE_REFRESH_S:
+		_player_use_time = play_time
+		_player_use = {ports = _player_ports(), canals = _player_canals(), zones = {}}
+	var ports: Dictionary = _player_use.ports
+	var canals: Dictionary = _player_use.canals
 	var items: Array = seasonal.closures() + seasonal.ice_zones()
 	for item: Dictionary in items:
 		var relevant: bool = canals.has(item.get("canal", "")) or (item.has("circles") and canals.has(item.id)) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))
 		if item.has("center"):
-			var center := Vector2(item.center[0], item.center[1])
-			relevant = ports.keys().any(func(p: String) -> bool:
-				var port := GameData.get_port(p)
-				return Geo.distance_nm(center, Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))) <= float(item.radius_nm))
+			if not _player_use.zones.has(item.id):
+				var center := Vector2(item.center[0], item.center[1])
+				_player_use.zones[item.id] = ports.keys().any(func(p: String) -> bool:
+					var port := GameData.get_port(p)
+					return Geo.distance_nm(center, Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))) <= float(item.radius_nm))
+			relevant = _player_use.zones[item.id]
 		var closed := Seasons.in_season(item, now)
 		var was = _season_closed.get(item.id)
 		_season_closed[item.id] = closed
@@ -2088,7 +2122,7 @@ func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
 		segments = segments,
 		tow_port = tow_port,
 		approach_nm = approach_nm,
-		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if tow_port == a else 1.0) + Ship.LOAD_SECONDS * 2.0,
+		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if (tow_port == a) == (via_a <= via_b) else 1.0) + Ship.LOAD_SECONDS * 2.0,
 		fuel = mammoth.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S),
 		cost = mammoth.fuel_per_s() * running * market.fuel_price(mammoth.docked_at)
 			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost() * port_sizes.cost_factor(mammoth.docked_at),
@@ -2114,6 +2148,7 @@ func _advance_job(mammoth: Ship, delta: float) -> void:
 	if mammoth.job_phase == Ship.JOB_ALIGN:
 		mammoth.align_time += delta
 		if mammoth.align_time >= mammoth.align_seconds():
+			mammoth.turned_round = mammoth.tow_turns_around()
 			mammoth.job_phase = Ship.JOB_TOW
 			_start_segment(mammoth, mammoth.job_segments.pop_front())
 			ship_changed.emit(mammoth)
@@ -2133,6 +2168,8 @@ func _advance_job(mammoth: Ship, delta: float) -> void:
 	else:
 		mammoth.job_phase = Ship.JOB_ALIGN
 		mammoth.align_time = 0.0
+		# Met head on (sailing towards the end it came from): it floats aboard stern first.
+		mammoth.carry_reversed = mammoth.to_port == mammoth.rescuing.from_port
 		ship_changed.emit(mammoth)
 
 

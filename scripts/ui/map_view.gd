@@ -126,7 +126,10 @@ const CARRY_DECK_X := 58.0
 const RECOVERY_SLIDE := 0.55
 ## How wide a turning circle recovery boats and icebreakers sail round (in
 ## their own lengths), so they never pivot on the spot.
-const TURN_RADIUS_LENGTHS := 0.9
+const TURN_RADIUS_LENGTHS := 0.7
+## How many of its lengths a recovery boat that turned round with a ship aboard
+## takes to ease back onto the lane from its turning circle.
+const RECOVERY_REJOIN_LENGTHS := 3.0
 ## Tugs on a tow: how long the lead's tow line is on screen (px, before
 ## scaling up zoomed in), and its color.
 const TOW_LINE_PX := 5.0
@@ -775,7 +778,7 @@ func _deck_along(rect: Rect2) -> float:
 ## turning faces along its turning circle (see _turning_pose()).
 func _screen_angle(ship: Ship) -> float:
 	if ship.is_carried():
-		return _screen_angle(ship.rescuer)
+		return _screen_angle(ship.rescuer) + (PI if ship.rescuer.carry_flipped() else 0.0)  # Met head on: aboard stern first.
 	var pose := _turning_pose(ship)
 	if not pose.is_empty():
 		return pose[1]
@@ -822,19 +825,38 @@ func _turning_pose(ship: Ship) -> Array:
 		if ship.ice_phase == "turn_back":
 			return _turn_pose(base, lane_angle, base, lane_angle + PI, radius, t)
 		return []
+	if ship.job_phase == Ship.JOB_TOW and ship.turned_round:
+		return _rejoin_pose(ship, base, radius, lane_angle)
 	if ship.job_phase != Ship.JOB_ALIGN or ship.rescuing == null:
 		return []
-	var lost := ship.rescuing
-	var ship_angle := _lane_angle(lost.from_port, lost.to_port, lost.traveled_nm)
+	# A recovery boat keeps the heading it came in on: it eases on past the
+	# lost ship and stops clear ahead of it, backs under it, rises, and only
+	# then (if it's carrying it back the way it came) turns round, on a half
+	# circle to starboard.
+	if ship.align_time < Ship.ALIGN_SECONDS + Ship.LOAD_SECONDS:
+		return [base + Vector2.from_angle(lane_angle) * _recovery_offset(ship) * _ship_scale(), lane_angle]
+	var t := smoothstep(0.0, 1.0, (ship.align_time - Ship.ALIGN_SECONDS - Ship.LOAD_SECONDS) / Ship.ALIGN_SECONDS)
+	var center := base + Vector2.from_angle(lane_angle + PI / 2.0) * radius
+	return [center + Vector2.from_angle(lane_angle - PI / 2.0 + PI * t) * radius, lane_angle + PI * t]
+
+
+## A recovery boat that turned round with a ship aboard finishes its half
+## circle a turning circle across from the lane: it eases back onto it over
+## its first RECOVERY_REJOIN_LENGTHS lengths of the way home, angled in a
+## little as it goes. [] once it's back on (or if it didn't turn).
+func _rejoin_pose(ship: Ship, base: Vector2, radius: float, lane_angle: float) -> Array:
+	var lane = GameData.lane(ship.from_port, ship.to_port)
+	if lane == null:
+		return []
+	var start: Vector2 = lane.sample(ship.segment_end - ship.carry_nm)[0]
 	var rect: Rect2 = _model_look(ship.model_id)[7]
-	if ship.align_time < Ship.ALIGN_SECONDS:
-		var ahead := (-_deck_along(rect) + rect.size.x * RECOVERY_SLIDE) * _ship_scale()
-		return _turn_pose(base, lane_angle, base + Vector2.from_angle(ship_angle) * ahead, ship_angle, radius,
-			ship.align_time / Ship.ALIGN_SECONDS)
-	if ship.load_time() >= 0.0:
-		return [base + Vector2.from_angle(ship_angle) * _recovery_offset(ship) * _ship_scale(), ship_angle]
-	var t := (ship.align_time - Ship.ALIGN_SECONDS - Ship.LOAD_SECONDS) / Ship.ALIGN_SECONDS
-	return _turn_pose(base, ship_angle, base, ship_angle + PI, radius, clampf(t, 0.0, 1.0))
+	var span := rect.size.x * _ship_scale() * RECOVERY_REJOIN_LENGTHS
+	var x := (base - world_to_screen(start)).length() / span
+	if x >= 1.0:
+		return []
+	var off := 2.0 * radius * (1.0 - smoothstep(0.0, 1.0, x))
+	var yaw := atan(2.0 * radius * 6.0 * x * (1.0 - x) / span)
+	return [base + Vector2.from_angle(lane_angle - PI / 2.0) * off, lane_angle + yaw]
 
 
 ## Where a tug on a tow sits (screen px along the way it's towing, from the
@@ -858,7 +880,9 @@ static func _turn_pose(a: Vector2, angle_a: float, b: Vector2, angle_b: float, r
 		turn = PI  # A U-turn: round to starboard.
 	var middle_angle := angle_a + turn / 2.0
 	var middle := (a + b) / 2.0 + Vector2.from_angle(middle_angle) * radius * absf(turn) / PI
-	var reach := maxf(radius * 0.6, a.distance_to(b) * 0.35)
+	# Handles long enough to swing round a turn, but no longer than a third of
+	# each half on a straight run (longer ones overshoot, so the ship lurches).
+	var reach := maxf(radius * 0.6 * absf(turn) / PI, a.distance_to(b) / 6.0)
 	t = smoothstep(0.0, 1.0, t)
 	var curve := [a, a + Vector2.from_angle(angle_a) * reach, middle - Vector2.from_angle(middle_angle) * reach, middle]
 	var u := t * 2.0
@@ -892,8 +916,12 @@ func _recovery_offset(boat: Ship) -> float:
 	var under := -_deck_along(rect)  # The deck right under the ship.
 	var ahead := under + rect.size.x * RECOVERY_SLIDE  # Clear ahead of it, stern to its bow.
 	var t := boat.load_time()
+	if t < 0.0 and boat.align_time < Ship.ALIGN_SECONDS:
+		# Easing on past the ship from where it reached it, slowing to a stop.
+		var x := boat.align_time / Ship.ALIGN_SECONDS
+		return ahead * (1.0 - (1.0 - x) * (1.0 - x))
 	if t < 0.0:
-		return ahead if boat.align_time < Ship.ALIGN_SECONDS else 0.0  # Lining up, or turning round after.
+		return 0.0  # Turning round after.
 	var third := Ship.LOAD_SECONDS / 3.0
 	if t < third:
 		return ahead
@@ -2031,8 +2059,13 @@ func _update_ice() -> void:
 	_ice_borders = _segments_near(GameData.world_map.border_segments, bounds)
 	for node in _ice_arts:
 		node.queue_redraw()
+	# With no ice, hide every ice layer: the lake mask (clip_children) costs an
+	# extra render pass a frame even with nothing to clip.
 	for k in range(0, _ice_arts.size(), 3):
-		_ice_arts[k].visible = not _ice_circles.is_empty()
+		var any := not _ice_circles.is_empty()
+		_ice_arts[k].visible = any
+		_ice_arts[k + 1].get_parent().visible = any
+		_ice_arts[k + 2].visible = any
 
 
 static func _segments_near(segments: PackedVector2Array, bounds: Array) -> PackedVector2Array:
