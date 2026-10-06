@@ -30,7 +30,9 @@ text = "Sort by"
 
 [node name="SortOption" type="OptionButton" parent="Header"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 0)
+custom_minimum_size = Vector2(170, 0)
+clip_text = true
+fit_to_longest_item = false
 layout_mode = 2
 
 [node name="FilterLabel" type="Label" parent="Header"]
@@ -40,7 +42,9 @@ text = "Show"
 
 [node name="FilterOption" type="OptionButton" parent="Header"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(180, 0)
+custom_minimum_size = Vector2(200, 0)
+clip_text = true
+fit_to_longest_item = false
 layout_mode = 2
 
 [node name="CountLabel" type="Label" parent="Header"]
@@ -49,6 +53,8 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"DimLabel"
 horizontal_alignment = 2
+clip_text = true
+text_overrun_behavior = 3
 
 [node name="Scroll" type="ScrollContainer" parent="."]
 layout_mode = 1
@@ -58,7 +64,7 @@ anchor_bottom = 1.0
 offset_top = 64.0
 grow_horizontal = 2
 grow_vertical = 2
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 3
 
 [node name="Margin" type="MarginContainer" parent="Scroll"]
 layout_mode = 2

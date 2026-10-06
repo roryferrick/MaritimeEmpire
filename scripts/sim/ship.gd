@@ -74,6 +74,9 @@ var auto_refuel := true
 var auto_repair := true
 ## Seconds since the ship docked at the end of a leg; -1 when not unloading/loading.
 var dock_time := -1.0
+## How far into its stop (dock_time) its repairs and fuel have been done and
+## paid for. Not saved: a stop carries on from where it was loaded.
+var refill_billed := 0.0
 ## Cargo aboard (see Market): the commodity id ("" when empty), how many units,
 ## and what they cost to buy. On arrival, cargo_payment is what they sell for
 ## (paid when unloading finishes) and cargo_leg_nm the leg they came (for XP).
@@ -150,6 +153,12 @@ var _leg_to := "?"
 var _leg_length := 0.0
 var _leg_zones: Array = []
 var _leg_has_canal := false
+## The current leg's lane, and its sample() where the ship is ([position,
+## heading]) with the mile it was taken at: the map asks for both every frame,
+## so they're kept until the ship moves (see lane_sample()).
+var _leg_lane: GameData.SeaLane = null
+var _here_cache: Array = []
+var _here_mile := -1.0
 ## When it was lost, relative to other lost ships (lower = earlier), for the recovery queue.
 var lost_order := 0
 ## At sea without the fuel (or maintenance) to reach the end of its leg.
@@ -157,6 +166,11 @@ var at_risk := false
 ## When it next checks whether it can make port (play_time; see
 ## GameState._check_at_risk()). Not saved.
 var risk_check_time := 0.0
+## The storm and ice [speed, wear] factors where it is (see
+## GameState._storm_factors()) and when they're next looked at again. Not
+## saved.
+var storm_factors := [1.0, 1.0]
+var storm_check_time := 0.0
 ## Seconds spent sailing since it was bought; older ships break down more.
 var sea_time := 0.0
 ## Lifetime money in (income: cargo sold) and out (cargo bought, fuel, repair
@@ -712,6 +726,26 @@ func _update_leg() -> void:
 	_leg_length = GameData.distance_nm(from_port, to_port)
 	_leg_zones = _with_harbor_speed(GameData.lane_zones(from_port, to_port), _leg_length)
 	_leg_has_canal = not GameData.canal_crossings(from_port, to_port).is_empty()
+	_leg_lane = GameData.lane(from_port, to_port)
+	_here_cache = []
+
+
+## The current lane's sample() where the ship is ([position, heading]), or []
+## if it isn't on a lane; taken again only once it has moved.
+func lane_sample() -> Array:
+	_update_leg()
+	if _leg_lane == null:
+		return []
+	if _here_cache.is_empty() or traveled_nm != _here_mile:
+		_here_mile = traveled_nm
+		_here_cache = _leg_lane.sample(traveled_nm)
+	return _here_cache
+
+
+## The heading of its lane where it is (zero off a lane).
+func lane_heading() -> Vector2:
+	var here := lane_sample()
+	return here[1] if not here.is_empty() else Vector2.ZERO
 
 
 ## A leg's zones for this ship ([[end mile, speed factor, wear factor], ...]):
@@ -769,10 +803,8 @@ func world_position() -> Vector2:
 		return rescuer.world_position()
 	if is_docked():
 		return GameData.port_position(docked_at)
-	var sea_lane = GameData.lane(from_port, to_port)
-	if sea_lane == null:
-		return GameData.port_position(from_port)
-	return sea_lane.sample(traveled_nm)[0]
+	var here := lane_sample()
+	return here[0] if not here.is_empty() else GameData.port_position(from_port)
 
 
 ## Direction of travel in projected map coordinates (zero when docked).
@@ -785,25 +817,20 @@ func heading() -> Vector2:
 		return Vector2.ZERO
 	if job_phase == JOB_ALIGN and is_tug():
 		# Sailed out from its port: turns round to take the ship back there.
-		var arrive := _lane_heading(from_port, to_port, traveled_nm).angle()
+		var arrive := lane_heading().angle()
 		return Vector2.from_angle(arrive + PI * clampf(align_time / ALIGN_SECONDS, 0.0, 1.0))
 	if job_phase == JOB_ALIGN:
 		return _align_heading()
-	return _lane_heading(from_port, to_port, traveled_nm)
+	return lane_heading()
 
 
 ## Keeps the heading it arrived on (it pulls ahead past the ship and backs
 ## under it), then, if the port it's carrying the ship to is back the way it
 ## came, turns round.
 func _align_heading() -> Vector2:
-	var arrive := _lane_heading(from_port, to_port, traveled_nm).angle()
+	var arrive := lane_heading().angle()
 	var t := (align_time - ALIGN_SECONDS - LOAD_SECONDS) / ALIGN_SECONDS if tow_turns_around() else 0.0
 	return Vector2.from_angle(arrive + PI * clampf(t, 0.0, 1.0))
-
-
-static func _lane_heading(from: String, to: String, distance: float) -> Vector2:
-	var sea_lane = GameData.lane(from, to)
-	return sea_lane.sample(distance)[1] if sea_lane else Vector2.ZERO
 
 
 ## Index of the route stop to sail to next from the port the ship is docked at.
@@ -1141,6 +1168,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.auto_refuel = bool(data.get("auto_refuel", true))
 	ship.auto_repair = bool(data.get("auto_repair", true))
 	ship.dock_time = float(data.get("dock_time", -1.0))
+	ship.refill_billed = maxf(ship.dock_time, 0.0)
 	ship.cargo_id = str(data.get("cargo_id", ""))
 	ship.cargo_from = str(data.get("cargo_from", ""))
 	ship.cargo_qty = int(data.get("cargo_qty", 0))

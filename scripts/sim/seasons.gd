@@ -17,6 +17,7 @@ const LEG_CHECK_S := 72.0
 
 var _state: Node  # GameState
 var _enters := {}  # "closure/FROM-TO" -> lane_enters()
+var _bounds := {}  # Closure id -> _circles_bounds().
 ## zones_now(), and the month x 100 + day it was worked out for.
 var _zones_cache := []
 var _zones_day := -1
@@ -135,7 +136,8 @@ func lane_enters(closure: Dictionary, from_port: String, to_port: String) -> boo
 	if not _enters.has(key):
 		var found := false
 		var lane = GameData.lane(from_port, to_port)
-		if lane != null:
+		# Most lanes go nowhere near: ruled out at once by the boxes round them.
+		if lane != null and lane.bounds().intersects(_circles_bounds(closure)):
 			var mile := 0.0
 			while mile <= lane.length() and not found:
 				var at := Geo.unproject(lane.sample(mile)[0])
@@ -146,6 +148,20 @@ func lane_enters(closure: Dictionary, from_port: String, to_port: String) -> boo
 				mile += 5.0
 		_enters[key] = found
 	return _enters[key]
+
+
+## A box (projected) round a closure's circles, a little generous; worked out once.
+func _circles_bounds(closure: Dictionary) -> Rect2:
+	if not _bounds.has(closure.id):
+		var box := Rect2()
+		for i in closure.circles.size():
+			var circle: Array = closure.circles[i]
+			var center := Geo.project(Vector2(circle[0], circle[1]))
+			var radius := float(circle[2]) / (60.0 * maxf(cos(deg_to_rad(float(circle[1]))), 0.1)) * 1.5
+			var one := Rect2(center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0)
+			box = one if i == 0 else box.merge(one)
+		_bounds[closure.id] = box
+	return _bounds[closure.id]
 
 
 ## Every closure (whether in season or not) that a leg is subject to: its

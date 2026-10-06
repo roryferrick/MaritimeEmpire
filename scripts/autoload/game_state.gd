@@ -82,7 +82,7 @@ const HIDDEN_GEM_MONEY := 10000000
 const LOAD_RECHECK_S := 2.0
 ## How often (game seconds) a ship at sea checks it can still make port (see
 ## _check_at_risk()); a breakdown or a new leg checks at once.
-const AT_RISK_CHECK_S := 0.25
+const AT_RISK_CHECK_S := 1.0
 ## A ship bound for a port a storm has closed waits this far off it.
 const STORM_OFFSHORE_NM := 25.0
 ## How often storm warnings are looked for, and how far ahead (in seconds of
@@ -92,10 +92,16 @@ const STORM_WARNING_AHEAD_S := 144.0
 ## A ship is said to be sailing through a storm once it's this strong there.
 const STORM_SHIP_NOTICE := 0.3
 ## How long (game seconds) a worked-out fuel_reserve() is used before it's redone.
-const FUEL_RESERVE_REFRESH_S := 0.25
+const FUEL_RESERVE_REFRESH_S := 3.0
 ## How often (seconds of play) the season warnings look again at which ports,
 ## canals and Arctic routes the player uses.
 const PLAYER_USE_REFRESH_S := 10.0
+## How often (seconds of play) a ship at sea looks again at the storms and ice
+## where it is.
+const STORM_FACTOR_REFRESH_S := 0.25
+## How often (seconds of play) a docking ship is repaired and refueled (and
+## pays for it).
+const REFILL_BILL_S := 0.25
 
 var money: int = 0:
 	set(value):
@@ -878,6 +884,7 @@ func sell_ship(ship: Ship) -> String:
 	ships.erase(ship)
 	if ship.is_icebreaker():
 		_release_convoy(ship)
+		icebreaking.refresh(true)
 	if ship.is_recovery():
 		_rebalance_recovery_boats()
 	_rebalance_tugs()
@@ -892,6 +899,11 @@ func sell_ship(ship: Ship) -> String:
 func _advance(ship: Ship, delta: float) -> void:
 	# A ship waiting in port for a full load, not due another look: nothing to do.
 	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and money < ship.load_need and ship.is_docked():
+		return
+	# A recovery boat or tug standing by at its base (most of them, most of the
+	# time): nothing to do until it's sent out.
+	if ship.dock_time < 0.0 and ship.docked_at == ship.base_port and ship.hold_reason.is_empty() \
+			and not ship.docked_at.is_empty() and (ship.is_recovery() or ship.is_tug()) and not ship.is_on_job():
 		return
 	if ship.is_icebreaker():
 		_advance_icebreaker(ship, delta)
@@ -951,15 +963,21 @@ func _sail(ship: Ship, delta: float) -> bool:
 func _storm_factors(ship: Ship) -> Array:
 	if ship.is_docked() or ship.from_port.is_empty():
 		return [1.0, 1.0]
+	# Storms drift and ice comes and goes slowly: each ship looks again only
+	# every STORM_FACTOR_REFRESH_S (and on a new leg: see _depart(), _start_segment()).
+	if play_time < ship.storm_check_time:
+		return ship.storm_factors
+	ship.storm_check_time = play_time + STORM_FACTOR_REFRESH_S
+	ship.storm_factors = [1.0, 1.0]
 	# Nothing to ask about where the ship is unless a storm is out or some ice is in.
 	var storms_out := weather.active() and not weather.storms.is_empty()
 	var ice_in := seasonal.active() and not seasonal.zones_now().is_empty()
-	if not storms_out and not ice_in:
-		return [1.0, 1.0]
-	var at := Geo.unproject(ship.world_position())
-	var storm := weather.factors(at) if storms_out else [1.0, 1.0]
-	var ice := seasonal.factors(at) if ice_in else [1.0, 1.0]
-	return [float(storm[0]) * float(ice[0]), float(storm[1]) * float(ice[1])]
+	if storms_out or ice_in:
+		var at := Geo.unproject(ship.world_position())
+		var storm := weather.factors(at) if storms_out else [1.0, 1.0]
+		var ice := seasonal.factors(at) if ice_in else [1.0, 1.0]
+		ship.storm_factors = [float(storm[0]) * float(ice[0]), float(storm[1]) * float(ice[1])]
+	return ship.storm_factors
 
 
 ## Where a ship may sail to this step: no closer than STORM_OFFSHORE_NM to a
@@ -1217,6 +1235,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 		ship.pending_route.clear()
 		ship.route_index = ship.route.find(port)
 	ship.dock_time = 0.0
+	ship.refill_billed = 0.0
 	var phase := ship.refill_phase_seconds()
 	ship.repair_rate = (1.0 - ship.maintenance) / phase
 	ship.refuel_rate = (ship.fuel_tank() - ship.fuel) / phase
@@ -1233,17 +1252,22 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 ## the fuel for its next leg, and a Mammoth away from home sails back.
 func _advance_docked(ship: Ship, delta: float) -> void:
 	if ship.is_docking():
-		var phase := ship.refill_phase_seconds()
-		var start := ship.dock_time
-		var end := start + delta
-		if ship.auto_repair:
-			_repair(ship, ship.repair_rate * _overlap(start, end, 0.0, phase))
-		if ship.auto_refuel:
-			_refuel(ship, ship.refuel_rate * _overlap(start, end, phase, 2.0 * phase))
+		var end := ship.dock_time + delta
+		var dock_s := ship.dock_seconds()
+		# Repairs and fuel are done (and paid for) every REFILL_BILL_S rather than
+		# every step: the same amounts at the same pace, for less work.
+		if end >= dock_s or end - ship.refill_billed >= REFILL_BILL_S or end < ship.refill_billed:
+			var phase := ship.refill_phase_seconds()
+			var start := minf(ship.refill_billed, end)
+			if ship.auto_repair:
+				_repair(ship, ship.repair_rate * _overlap(start, end, 0.0, phase))
+			if ship.auto_refuel:
+				_refuel(ship, ship.refuel_rate * _overlap(start, end, phase, 2.0 * phase))
+			ship.refill_billed = end
 		ship.dock_time = end
-		if not ship.unloaded and end >= ship.dock_seconds() / 2.0:
+		if not ship.unloaded and end >= dock_s / 2.0:
 			_unload(ship)
-		if end < ship.dock_seconds():
+		if end < dock_s:
 			return
 		ship.dock_time = -1.0
 		ship_changed.emit(ship)
@@ -1478,6 +1502,7 @@ func _depart(ship: Ship, to: String) -> void:
 	ship.from_port = ship.docked_at
 	ship.to_port = to
 	ship.risk_check_time = 0.0
+	ship.storm_check_time = 0.0
 	ship.traveled_nm = 0.0
 	ship.docked_at = ""
 	canal_traffic.start_leg(ship)
@@ -1516,6 +1541,7 @@ func station_icebreaker(ship: Ship, area_id: String) -> String:
 	_release_convoy(ship)
 	ship.station = area_id
 	ship.base_port = base
+	icebreaking.refresh(true)
 	ship_changed.emit(ship)
 	save_game()
 	return ""
@@ -1977,15 +2003,23 @@ func fuel_reserve() -> float:
 	if _fuel_reserve_time >= 0.0 and play_time >= _fuel_reserve_time and play_time - _fuel_reserve_time < FUEL_RESERVE_REFRESH_S:
 		return _fuel_reserve
 	var total := 0.0
+	var prices := {}  # Port -> fuel price, looked up once each (many ships share ports).
 	for ship in ships:
 		var port := ship.docked_at if ship.is_docked() else ship.to_port
 		if port.is_empty():
 			continue
 		var fuel_left := ship.fuel
 		if not ship.is_docked() and not ship.is_service() and not ship.from_port.is_empty():
-			var seconds := ship.leg_seconds(ship.from_port, ship.to_port, ship.traveled_nm, ship.leg_length(), ship.maintenance)
+			# The rest of the leg at its speed now: near enough for a buffer, and
+			# far quicker than leg_seconds() for every ship at sea.
+			var seconds := (ship.leg_length() - ship.traveled_nm) / maxf(ship.speed(), 0.01)
 			fuel_left -= ship.fuel_per_s() * seconds
-		total += clampf(ship.fuel_tank() - fuel_left, 0.0, ship.fuel_tank()) * market.fuel_price(port)
+		var missing := clampf(ship.fuel_tank() - fuel_left, 0.0, ship.fuel_tank())
+		if missing <= 0.0:
+			continue
+		if not prices.has(port):
+			prices[port] = market.fuel_price(port)
+		total += missing * float(prices[port])
 	_fuel_reserve = total
 	_fuel_reserve_time = play_time
 	return total
@@ -2134,6 +2168,7 @@ func _start_segment(ship: Ship, segment: Array) -> void:
 	ship.to_port = segment[1]
 	ship.traveled_nm = segment[2]
 	ship.segment_end = segment[3]
+	ship.storm_check_time = 0.0
 	canal_traffic.start_leg(ship)
 
 
@@ -2525,4 +2560,5 @@ func _begin_session() -> void:
 	ActivityLog.clear()
 	time_speed = 1
 	in_session = true
+	icebreaking.refresh(true)
 	_autosave_timer.start()

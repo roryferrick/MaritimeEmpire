@@ -26,6 +26,7 @@ var storms: Array[Dictionary] = []
 var _state: Node  # GameState
 var _next_name := {}  # Basin id -> index of its next name.
 var _closed := {}  # Port id -> closed_by(), worked out once a step (every ship asks).
+var _can_close := false  # Any storm strong enough to close a port this step.
 
 
 
@@ -62,6 +63,10 @@ func step(delta: float) -> void:
 		_move(storm, delta)
 		storm.age += delta
 	storms = storms.filter(func(storm: Dictionary) -> bool: return storm.age < storm.life)
+	# Whether any storm is strong enough to close a port at all (at its core),
+	# so ships needn't ask about their ports when none is.
+	var close_at := float(_level().get("close_at", 2.0))
+	_can_close = storms.any(func(storm: Dictionary) -> bool: return TROPICAL.has(storm.kind) and intensity(storm) >= close_at)
 	var month := _month()
 	var day_s := 86400.0 / float(_state.calendar_seconds_per_second())
 	var rate_factor := float(_level().get("rate", 1.0))
@@ -172,6 +177,8 @@ func factors(lon_lat: Vector2) -> Array:
 ## close_at), or {} if it's open.
 func closed_by(port_id: String) -> Dictionary:
 	if not active() or storms.is_empty():
+		return {}
+	if not _can_close:
 		return {}
 	if _closed.has(port_id):
 		return _closed[port_id]

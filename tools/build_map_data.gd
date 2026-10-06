@@ -1018,12 +1018,15 @@ func _fit_waterway_mouths(map: WorldMapData) -> void:
 			line.append(segments[k + 1])
 			k += 2
 		start = k
-		# In short steps, so a long hand-traced segment can't cut across water.
+		# In short steps, so a long hand-traced segment can't cut across water;
+		# only the line's own points (and the cuts at the shore) are kept.
 		var dense := PackedVector2Array([line[0]])
+		var own := [true]
 		for i in range(1, line.size()):
 			var steps := ceili(line[i - 1].distance_to(line[i]) / WATERWAY_STEP)
 			for s in range(1, steps + 1):
 				dense.append(line[i - 1].lerp(line[i], float(s) / steps))
+				own.append(s == steps)
 		line = dense
 		var water := []
 		for p in line:
@@ -1045,7 +1048,8 @@ func _fit_waterway_mouths(map: WorldMapData) -> void:
 				var cut := _shore_cut(map, shore, line[i], line[i - 1])
 				run.append(cut[0])
 				run_mouths.append([0, cut[1]])
-			run.append(line[i])
+			if own[i] or run.is_empty():
+				run.append(line[i])
 		mouths += _add_waterway_run(out, widths, run, run_mouths)
 	map.waterway_segments = out
 	map.waterway_widths = widths

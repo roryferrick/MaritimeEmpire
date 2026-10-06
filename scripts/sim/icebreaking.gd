@@ -10,12 +10,16 @@ extends RefCounted
 ## same lane, through the ice. GameState moves the ships; this works out the
 ## areas, where lanes meet the ice, and which ships make up the next convoy.
 
+## How often (seconds of play) refresh() works the open areas out again.
+const REFRESH_S := 0.25
+
 var _state: Node  # GameState
 var _edges := {}  # "area/FROM-TO" -> [entry mile, exit mile] (see _edge_miles())
-var _open := {}  # Area id -> open(), worked out once a step (see refresh()).
+var _open := {}  # Area id -> open(), as of the last refresh().
 var _any_open_closure := false  # Any open area with a closure (one that leads convoys).
 var _season_day := -1  # in_season() results, kept for a calendar day.
 var _season_cache := {}
+var _refreshed_at := -INF  # play_time of the last refresh().
 
 
 func _init(state: Node) -> void:
@@ -91,7 +95,12 @@ func open(item: Dictionary) -> bool:
 
 
 ## Works out which areas are open, once a step (ships ask many times a step).
-func refresh() -> void:
+func refresh(now := false) -> void:
+	# Stations and seasons change rarely: every REFRESH_S is plenty (or now,
+	# when an icebreaker is stationed).
+	if not now and _state.play_time >= _refreshed_at and _state.play_time - _refreshed_at < REFRESH_S:
+		return
+	_refreshed_at = _state.play_time
 	_any_open_closure = false
 	var stationed_at := {}
 	for ship: Ship in _state.ships:

@@ -10,6 +10,11 @@ enum Sort { NAME, STATUS, PROFIT }
 enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY }
 
 const COLUMNS := 8
+## Fewer columns rather than tiles narrower than this (px).
+const MIN_TILE_WIDTH := 100.0
+## The page margins either side (see the scene), and room for the scrollbar.
+const MARGIN := 24.0
+const SCROLLBAR_ROOM := 12.0
 const TILE_GAP := 6
 ## Each model group sits on a faint tint of its ship line's color (see
 ## GameData.category_color()), with this much padding inside.
@@ -59,6 +64,7 @@ func _ready() -> void:
 	visibility_changed.connect(func() -> void: _dirty = true)
 	_upgrade_all.pressed.connect(GameState.upgrade_all)
 	_upgrade_all.custom_minimum_size.x = UPGRADE_ALL_WIDTH
+	_upgrade_all.clip_text = true  # So it never widens the header past the screen.
 	var gap := Control.new()  # Extra room between the Show filter and Upgrade all.
 	gap.custom_minimum_size.x = UPGRADE_ALL_GAP
 	%Header.add_child(gap)
@@ -66,7 +72,7 @@ func _ready() -> void:
 	%Header.add_child(_upgrade_all)
 	_upgrade_all.add_child(_upgrade_all_alert)
 	%Header.move_child(_upgrade_all, %CountLabel.get_index())
-	%Groups.resized.connect(_size_tiles)
+	$Scroll.resized.connect(_size_tiles)
 	_rebuild()
 
 
@@ -150,10 +156,16 @@ func _update_megas() -> void:
 		entry[2].visible = GameState.has_mega(model_id)
 
 
-## Every tile is an eighth of the row wide, so part-filled rows line up.
+## Every tile is the same width, a row of up to COLUMNS (fewer if they'd be
+## narrower than MIN_TILE_WIDTH), so part-filled rows line up. Worked out from
+## the scroll area's width, which follows the screen (the activity log opening
+## or closing, the window resizing), never from the tiles themselves.
 func _size_tiles() -> void:
-	var width := floorf((%Groups.size.x - 2.0 * GROUP_PADDING - (COLUMNS - 1) * TILE_GAP) / COLUMNS)
+	var inner: float = $Scroll.size.x - MARGIN * 2.0 - SCROLLBAR_ROOM - 2.0 * GROUP_PADDING
+	var columns := clampi(floori((inner + TILE_GAP) / (MIN_TILE_WIDTH + TILE_GAP)), 1, COLUMNS)
+	var width := floorf((inner - (columns - 1) * TILE_GAP) / columns)
 	for entry: Array in _groups.values():
+		entry[1].columns = columns
 		for tile: ShipTile in entry[1].get_children():
 			tile.custom_minimum_size.x = width
 
