@@ -12,6 +12,8 @@ signal ship_clicked(ship: Ship)
 signal lock_clicked(canal_id: String, lock_index: int)
 signal canal_clicked(canal_id: String)
 signal empty_clicked
+## A storm was clicked (by its Weather.key()).
+signal storm_clicked(storm_key: String)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 
@@ -43,6 +45,17 @@ const STORM_SPIN := 0.6
 const STORM_EYE_FROM := 0.6
 const STORM_LABEL_MIN_RADIUS := 26.0
 const STORM_FONT_SIZE := 14
+## Each storm's track (where it has been and where it's going, see
+## _draw_storm_tracks()): a thick grey dashed line, stronger for the storm
+## under the mouse or whose popup is open (which also gets a dashed ring at
+## its edge and its core's edge). Hovering or clicking within
+## STORM_HIT_SHARE of its radius (or STORM_HIT_MIN_PX) picks a storm.
+const STORM_TRACK_COLOR := Color(0.78, 0.78, 0.8, 0.3)
+const STORM_TRACK_HIGHLIGHT_ALPHA := 0.65
+const STORM_TRACK_WIDTH := 3.5
+const STORM_TRACK_DASH := Vector2(12.0, 8.0)
+const STORM_HIT_SHARE := 0.5
+const STORM_HIT_MIN_PX := 24.0
 ## Lightning in tropical storms (see _draw_lightning()): the bolt's core and glow
 ## colors, how long each flash slot lasts (seconds of play) and the share of it
 ## a flash is lit, how many spots in a storm may flash per slot and the chance
@@ -396,6 +409,9 @@ var _lake_cells := {}
 ## (every frame). _canvas is the layer being drawn, which the draw helpers use.
 var _decor_layer := Control.new()
 var _weather_layer := Control.new()
+## The storm whose popup is open, and the one under the mouse (Weather.key()s; "" for none).
+var selected_storm := ""
+var _hovered_storm := ""
 ## Land drawings: a texture per kind (WorldMapData.decor_kind_names), and the
 ## drawings by DECOR_BUCKET-degree cell, so only those near the view are looked at.
 var _decor_textures: Array[Texture2D] = []
@@ -986,10 +1002,26 @@ func _gui_input(event: InputEvent) -> void:
 			_center += Vector2(-motion.relative.x, motion.relative.y) / _zoom
 			_changed()
 		accept_event()
+	elif motion:
+		_hover_storm(_storm_at(motion.position) if show_ships else "")
+
+
+## The storm under the mouse: its track and edges show stronger, and the
+## pointer shows it can be clicked.
+func _hover_storm(storm_key: String) -> void:
+	if storm_key == _hovered_storm:
+		return
+	_hovered_storm = storm_key
+	mouse_default_cursor_shape = CURSOR_POINTING_HAND if not storm_key.is_empty() else CURSOR_ARROW
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_MOUSE_EXIT:
+		_hover_storm("")
 
 
 ## Picks whichever port or ship is closest to the click, within its hit radius,
-## or else a canal lock under it.
+## or else a canal lock under it, or else a storm (see _storm_at()).
 func _click(screen_pos: Vector2) -> void:
 	var nearest_port := ""
 	var nearest_ship: Ship = null
@@ -1014,6 +1046,8 @@ func _click(screen_pos: Vector2) -> void:
 		lock_clicked.emit(lock[0], lock[1])
 	elif not _convoy_canal_at(screen_pos).is_empty():
 		canal_clicked.emit(_convoy_canal_at(screen_pos))
+	elif show_ships and not _storm_at(screen_pos).is_empty():
+		storm_clicked.emit(_storm_at(screen_pos))
 	else:
 		empty_clicked.emit()
 
@@ -1840,12 +1874,13 @@ func _draw_marker(at: Vector2, color: Color) -> void:
 ## tropical storm is strong, and its name under the core when there's room.
 ## The bands turn with play time, so they stop when the game is paused.
 func _draw_storms() -> void:
+	_draw_storm_tracks()
 	var font := get_theme_default_font()
 	for storm: Dictionary in GameState.weather.storms:
 		var lat: float = storm.lat
-		var center := world_to_screen(Geo.project(Vector2(storm.lon, lat)))
-		# Near the map's scale there, a projected degree is 60 nm x cos(latitude).
-		var radius: float = float(storm.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
+		var circle := _storm_circle(storm)
+		var center: Vector2 = circle[0]
+		var radius: float = circle[1]
 		if not Rect2(Vector2.ZERO, size).grow(radius).has_point(center):
 			continue
 		var strength := Weather.intensity(storm)
@@ -1879,6 +1914,123 @@ func _draw_storms() -> void:
 			var baseline := center + Vector2(-width / 2.0, radius * 0.18 + STORM_FONT_SIZE)
 			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, 4, Color(0, 0, 0, 0.6 * alpha))
 			_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, Color(1, 1, 1, 0.9 * alpha))
+
+
+## A storm's center on screen and its radius there (px): [center, radius].
+func _storm_circle(storm: Dictionary) -> Array:
+	var lat: float = storm.lat
+	# Near the map's scale there, a projected degree is 60 nm x cos(latitude).
+	var radius: float = float(storm.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
+	return [world_to_screen(Geo.project(Vector2(storm.lon, lat))), radius]
+
+
+## The storm with the given key, or {} if it has blown out.
+static func storm_by_key(storm_key: String) -> Dictionary:
+	for storm: Dictionary in GameState.weather.storms:
+		if Weather.key(storm) == storm_key:
+			return storm
+	return {}
+
+
+## Where a storm's center is on screen (local to this control), or
+## Vector2.INF if it has blown out.
+func storm_screen_position(storm_key: String) -> Vector2:
+	var storm := storm_by_key(storm_key)
+	return _storm_circle(storm)[0] if not storm.is_empty() else Vector2.INF
+
+
+## The storm under a screen point (within STORM_HIT_SHARE of its radius, or
+## STORM_HIT_MIN_PX of its center), the nearest if several: its key, or "".
+func _storm_at(screen_pos: Vector2) -> String:
+	var best := ""
+	var best_share := INF
+	for storm: Dictionary in GameState.weather.storms:
+		var circle := _storm_circle(storm)
+		var distance: float = (circle[0] as Vector2).distance_to(screen_pos)
+		var reach := maxf(float(circle[1]) * STORM_HIT_SHARE, STORM_HIT_MIN_PX)
+		if distance <= reach and distance / reach < best_share:
+			best_share = distance / reach
+			best = Weather.key(storm)
+	return best
+
+
+## Every storm's track: where it has been and where it will go (it keeps a
+## fixed course; see Weather.track_ahead()), as one thick grey dashed line.
+## The storm under the mouse or whose popup is open shows its track stronger,
+## with dashed rings at its edge and at its core's edge (Weather.CORE).
+func _draw_storm_tracks() -> void:
+	var view := Rect2(Vector2.ZERO, size)
+	for storm: Dictionary in GameState.weather.storms:
+		var behind := Weather.track_behind(storm)
+		var points := behind.duplicate()
+		points.append_array(GameState.weather.track_ahead(storm).slice(1))
+		var path := _storm_path_on_screen(points, behind.size() - 1)
+		var storm_key := Weather.key(storm)
+		var highlight := storm_key == _hovered_storm or storm_key == selected_storm
+		var color := Color(STORM_TRACK_COLOR, STORM_TRACK_HIGHLIGHT_ALPHA if highlight else STORM_TRACK_COLOR.a)
+		var bounds := Rect2(path[0], Vector2.ZERO)
+		for p in path:
+			bounds = bounds.expand(p)
+		if view.intersects(bounds.grow(STORM_TRACK_WIDTH)):
+			_draw_dashed_path(path, color, STORM_TRACK_WIDTH)
+		if highlight:
+			var circle := _storm_circle(storm)
+			for share: float in [1.0, Weather.CORE]:
+				_draw_dashed_path(_circle_points(circle[0], float(circle[1]) * share), color, 2.0)
+
+
+## A storm's track points (lon, lat) on screen, unwrapped so it runs smoothly
+## across the date line, placed so its point `now` (the storm's position)
+## is where the storm itself is drawn.
+func _storm_path_on_screen(points: PackedVector2Array, now: int) -> PackedVector2Array:
+	var projected := PackedVector2Array()
+	for i in points.size():
+		var p := Geo.project(points[i])
+		if i > 0:
+			p.x = projected[i - 1].x + wrapf(p.x - projected[i - 1].x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0)
+		projected.append(p)
+	var shift := _wrap_near(projected[now].x, _center.x) - projected[now].x
+	var out := PackedVector2Array()
+	for p in projected:
+		out.append(size / 2.0 + Vector2(p.x + shift - _center.x, _center.y - p.y) * _zoom)
+	return out
+
+
+static func _circle_points(center: Vector2, radius: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var steps := clampi(int(radius / 4.0), 24, 160)
+	for i in steps + 1:
+		out.append(center + Vector2.from_angle(TAU * i / steps) * radius)
+	return out
+
+
+## A line through points, dashed along its whole length (STORM_TRACK_DASH:
+## [dash, gap] px), each dash one polyline so its joins don't overlap.
+func _draw_dashed_path(points: PackedVector2Array, color: Color, width: float) -> void:
+	var on := true
+	var left := STORM_TRACK_DASH.x
+	var dash := PackedVector2Array()
+	for i in range(1, points.size()):
+		var a := points[i - 1]
+		var b := points[i]
+		var length := a.distance_to(b)
+		var at := 0.0
+		while at < length:
+			var step := minf(left, length - at)
+			if on:
+				if dash.is_empty():
+					dash.append(a.lerp(b, at / length))
+				dash.append(a.lerp(b, (at + step) / length))
+			at += step
+			left -= step
+			if left <= 0.0:
+				if on and dash.size() >= 2:
+					_canvas.draw_polyline(dash, color, width, true)
+				dash.clear()
+				on = not on
+				left = STORM_TRACK_DASH.x if on else STORM_TRACK_DASH.y
+	if on and dash.size() >= 2:
+		_canvas.draw_polyline(dash, color, width, true)
 
 
 ## Lightning in a tropical storm's bands (gales have little): every

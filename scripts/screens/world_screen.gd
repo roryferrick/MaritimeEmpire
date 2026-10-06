@@ -1,5 +1,5 @@
 extends Control
-## The main map: ports, ships and canal locks, with their popups, and the Routes switch,
+## The main map: ports, ships, canal locks and storms, with their popups, and the Routes switch,
 ## Tutorial switch (in saves with the tutorial) and price picker in one panel in
 ## the top right (the fleet's route lanes shown faintly; the tutorial's tips;
 ## ports colored by a commodity's price).
@@ -22,6 +22,7 @@ func _ready() -> void:
 	_map.ship_clicked.connect(open_ship_popup)
 	_map.lock_clicked.connect(_open_lock_popup)
 	_map.canal_clicked.connect(_open_convoy_popup)
+	_map.storm_clicked.connect(_open_storm_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -67,6 +68,23 @@ func _open_convoy_popup(canal_id: String) -> void:
 	popup.follow = func() -> Vector2:
 		return _map.get_global_transform() * _map.canal_screen_position(canal_id)
 	PopupHost.find(self).open(popup)
+
+
+## A storm's popup, following its center; its track shows stronger meanwhile.
+func _open_storm_popup(storm_key: String) -> void:
+	var popup := StormPopup.new()
+	popup.storm_key = storm_key
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at := _map.storm_screen_position(storm_key)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	popup.tree_exited.connect(func() -> void:
+		if _map.selected_storm == storm_key:
+			_map.selected_storm = "")
+	PopupHost.find(self).open(popup)
+	_map.selected_storm = storm_key
 
 
 ## The ship's popup, following it on the map.

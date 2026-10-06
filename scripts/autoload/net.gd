@@ -627,7 +627,7 @@ func _collect() -> Dictionary:
 		ships[ship.id] = data
 	return {
 		t = GameState.play_time, speed = GameState.time_speed,
-		weather = GameState.weather.to_dict(), market = GameState.market.to_dict(),
+		weather = GameState.weather.to_dict(false), market = GameState.market.to_dict(),
 		ports = GameState.port_sizes.to_dict(),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict()),
 		ships = ships,
@@ -660,7 +660,7 @@ func _broadcast() -> void:
 		_dirty.clear()
 		return
 	var update := {t = GameState.play_time, speed = GameState.time_speed}
-	var weather := GameState.weather.to_dict()
+	var weather := GameState.weather.to_dict(false)  # Joined games keep their own storm tracks.
 	if weather != _sent.weather:
 		update.weather = weather
 		_sent.weather = weather

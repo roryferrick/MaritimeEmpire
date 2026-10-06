@@ -3,8 +3,10 @@ extends RefCounted
 ## Storms (game_config weather): systems that form in their real basins and
 ## seasons (by the in-game calendar), drift, build up and fade. Only in saves
 ## founded with storms (GameState.storms). Each storm is
-## {name, kind, basin, lon, lat, age, life, radius_nm, speed_nm, recurve_lat,
-## veer}: age and life in seconds of play, veer a fixed turn of its track.
+## {id, name, kind, basin, lon, lat, age, life, radius_nm, speed_nm,
+## recurve_lat, veer, track, track_at}: age and life in seconds of play, veer a
+## fixed turn of its track; track is where it has been ([lon, lat] every
+## TRACK_S of play, from where it formed), track_at its age at the last point.
 ##
 ## From company level min_company_level (see active()) they act on ships: at a
 ## point, a storm's strength is its intensity (rising then falling over its
@@ -21,6 +23,9 @@ const KIND_NAMES := {hurricane = "Hurricane", typhoon = "Typhoon", cyclone = "Cy
 const CORE := 0.35
 ## Calendar days in a month, for turning a basin's storms a year into a rate.
 const DAYS_PER_MONTH := 30.44
+## How often (seconds of play) a storm's track gets a point, behind it and,
+## worked out, ahead of it (see track_ahead()).
+const TRACK_S := 10.0
 
 var storms: Array[Dictionary] = []
 var _state: Node  # GameState
@@ -62,6 +67,7 @@ func step(delta: float) -> void:
 	for storm in storms:
 		_move(storm, delta)
 		storm.age += delta
+		_record_track(storm)
 	storms = storms.filter(func(storm: Dictionary) -> bool: return storm.age < storm.life)
 	# Whether any storm is strong enough to close a port at all (at its core),
 	# so ships needn't ask about their ports when none is.
@@ -100,12 +106,17 @@ func _form(basin: Dictionary, day_s: float) -> void:
 	var index := int(_next_name.get(basin.id, randi() % names.size()))
 	_next_name[basin.id] = (index + 1) % names.size()
 	var life_days: Array = basin.get("life_days", [4, 8])
+	var lon := wrapf(randf_range(spawn[0][0], spawn[0][1]), -180.0, 180.0)
+	var lat := randf_range(spawn[1][0], spawn[1][1])
 	storms.append({
+		id = "%s/%s/%d" % [basin.id, names[index], roundi(_state.play_time * 1000.0)],
+		track = [[lon, lat]],
+		track_at = 0.0,
 		name = str(names[index]),
 		kind = str(basin.kind),
 		basin = str(basin.id),
-		lon = wrapf(randf_range(spawn[0][0], spawn[0][1]), -180.0, 180.0),
-		lat = randf_range(spawn[1][0], spawn[1][1]),
+		lon = lon,
+		lat = lat,
 		age = 0.0,
 		life = randf_range(life_days[0], life_days[1]) * day_s,
 		radius_nm = float(basin.get("radius_nm", 250)) * randf_range(0.85, 1.15),
@@ -209,13 +220,82 @@ func position_after(storm: Dictionary, seconds: float) -> Vector2:
 	return Vector2(ghost.lon, ghost.lat)
 
 
-func to_dict() -> Dictionary:
-	return {storms = storms, next_name = _next_name}
+## A storm's id, the same for it from forming to blowing out (storms from
+## saves before ids go by basin and name).
+static func key(storm: Dictionary) -> String:
+	return str(storm.get("id", "%s/%s" % [storm.basin, storm.name]))
 
 
+## Adds a point to a storm's track every TRACK_S of its age (a storm from a
+## save before tracks starts its track where it is).
+static func _record_track(storm: Dictionary) -> void:
+	if not storm.has("track"):
+		storm.track = []
+		storm.track_at = -INF
+	if float(storm.age) - float(storm.track_at) >= TRACK_S:
+		(storm.track as Array).append([storm.lon, storm.lat])
+		storm.track_at = storm.age
+
+
+## Where a storm has been, as (lon, lat) points from where it formed (or was
+## first seen) to where it is now.
+static func track_behind(storm: Dictionary) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for point: Array in storm.get("track", []):
+		out.append(Vector2(point[0], point[1]))
+	out.append(Vector2(storm.lon, storm.lat))
+	return out
+
+
+## Where a storm will go for the rest of its life if it keeps going as now
+## (storms follow fixed tracks), as (lon, lat) points every TRACK_S of play
+## from where it is now to where it blows out.
+func track_ahead(storm: Dictionary) -> PackedVector2Array:
+	var ghost := storm.duplicate()
+	var out := PackedVector2Array([Vector2(ghost.lon, ghost.lat)])
+	while float(ghost.age) < float(ghost.life):
+		var step := minf(TRACK_S, float(ghost.life) - float(ghost.age))
+		_move(ghost, step)
+		ghost.age += step
+		out.append(Vector2(ghost.lon, ghost.lat))
+	return out
+
+
+## The basin (game_config weather basins) a storm formed in, or {}.
+func basin_of(storm: Dictionary) -> Dictionary:
+	for basin: Dictionary in _settings().get("basins", []):
+		if basin.id == storm.basin:
+			return basin
+	return {}
+
+
+## The storms (each as to_dict() holds it). Without tracks (tracks = false),
+## for multiplayer updates: joined games keep their own (see from_dict()).
+func to_dict(tracks := true) -> Dictionary:
+	if tracks:
+		return {storms = storms, next_name = _next_name}
+	var bare := storms.map(func(storm: Dictionary) -> Dictionary:
+		var copy := storm.duplicate()
+		copy.erase("track")
+		copy.erase("track_at")
+		return copy)
+	return {storms = bare, next_name = _next_name}
+
+
+## Storms from a save or the host. A storm that comes without its track (a
+## multiplayer update) keeps the one this game had for it, adding a point as
+## its age passes each TRACK_S.
 func from_dict(data: Dictionary) -> void:
+	var known := {}
+	for storm in storms:
+		if storm.has("track"):
+			known[key(storm)] = [storm.track, storm.track_at]
 	clear()
 	for storm: Dictionary in data.get("storms", []):
+		if not storm.has("track") and known.has(key(storm)):
+			storm.track = known[key(storm)][0]
+			storm.track_at = known[key(storm)][1]
+		_record_track(storm)
 		storms.append(storm)
 	_next_name = data.get("next_name", {})
 	_closed.clear()
