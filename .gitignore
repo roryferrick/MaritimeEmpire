@@ -9,3 +9,6 @@
 
 # Raw map downloads (see tools/build_map_data.gd)
 /tools/source_data/
+
+# Godot's copies of GDExtension libraries (made so the editor can reload them)
+/addons/**/~*
