@@ -204,6 +204,9 @@ var base_port := ""
 ## Tug only: true for the tug that leads (drags) its job's tow; the other one
 ## pushes at the stern.
 var tug_lead := false
+## Tug only: seconds left before it leaves port on its job (the second tug
+## follows the first out). Not saved: after loading it leaves at once.
+var tug_wait := 0.0
 ## Recovery boat only: the ship it's carrying faces the other way from it (it
 ## met the ship head on); set as it lines up.
 var carry_reversed := false
@@ -1012,6 +1015,8 @@ func _tug_status_text() -> String:
 	var with := " with %s" % partners[0].name if not partners.is_empty() else ""
 	match job_phase:
 		JOB_APPROACH:
+			if is_docked():
+				return "Following %s out to tow %s" % [partners[0].name if not partners.is_empty() else "the other tug", rescuing.name]
 			return "Heading out to tow %s" % rescuing.name
 		JOB_ALIGN:
 			if align_time < ALIGN_SECONDS:

@@ -202,20 +202,6 @@ const ACTIVE_LANE_WIDTH := 1.5
 ## per degree). Ships in a canal keep to the right-hand lane.
 const CANAL_WIDTH := 0.02
 const CANAL_MIN_WIDTH := 4.0
-## Major waterways (see WaterwayArt): width in projected degrees, never less
-## than WATERWAY_MIN_PX on screen (thin zoomed out) nor more than
-## WATERWAY_MAX_PX (zoomed right in, the mouths flare wider), their bank's width either
-## side (px, drawn once the river is WATERWAY_BANK_MIN_PX wide), and their
-## water and bank colors.
-const WATERWAY_WIDTH := 0.06
-const WATERWAY_MIN_PX := 1.75
-const WATERWAY_MAX_PX := 10.0
-const WATERWAY_BANK_PX := 1.0
-const WATERWAY_BANK_MIN_PX := 3.0
-## Waterway points closer than this on screen (px) are skipped when drawing.
-const WATERWAY_MIN_STEP_PX := 1.5
-const WATERWAY_COLOR := Color("#5c9fd4")
-const WATERWAY_BANK := Color("#3a6d96")
 ## Winter sea ice (see IceArt, _update_ice()): how often (s) where the ice is
 ## gets checked, its sheet, crack, broken-ice and open-channel colors, how
 ## many cracks each frozen circle has, an icebreaker channel's width
@@ -379,7 +365,6 @@ var _art_root := Node2D.new()
 var _art_copies: Array[WorldArt] = []
 ## Every copy's river tiers, shown or hidden by zoom.
 var _river_tiers: Array[RiverTier] = []
-var _waterway_arts: Array[Node2D] = []
 ## Every copy's land and top art (see LandArt and TopArt).
 var _art_layers: Array[Node2D] = []
 ## Winter sea ice (see IceArt): the ice and lake ice sheet of every copy, the
@@ -515,77 +500,6 @@ class LakeIce:
 			draw_mesh(view._lake_ice, art.white, Transform2D.IDENTITY, ICE_SHEET)
 
 
-## The major navigable waterways (WorldMapData.waterway_segments) for one copy
-## of the world, drawn wide in fresh-water blue with a darker bank: at least
-## WATERWAY_MIN_PX across, wider zoomed in. Redrawn when the zoom changes.
-class WaterwayArt:
-	extends Node2D
-
-	var view: MapView
-	## The segments joined into continuous lines, so wide ones bend smoothly:
-	## [[points, widths], ...] (see _join_segments()).
-	var lines := []
-
-	func _draw() -> void:
-		var px := 1.0 / view._zoom
-		var width := clampf(WATERWAY_WIDTH * view._zoom, WATERWAY_MIN_PX, WATERWAY_MAX_PX) * px
-		# The bank: a crisp edge either side, once the river is wide enough for it.
-		var edge := WATERWAY_BANK_PX * px if width >= WATERWAY_BANK_MIN_PX * px else 0.0
-		var fill := view._color(&"ocean") if view.gray_mode else WATERWAY_COLOR
-		var bank := view._color(&"coast") if view.gray_mode else WATERWAY_BANK
-		# Points closer than WATERWAY_MIN_STEP_PX on screen add nothing but cost
-		# (zoomed out, most of them): each line drops them for this zoom.
-		var step := WATERWAY_MIN_STEP_PX * px
-		var shown: Array[PackedVector2Array] = []
-		for line: Array in lines:
-			var points: PackedVector2Array = line[0]
-			var kept := PackedVector2Array([points[0]])
-			for i in range(1, points.size() - 1):
-				if points[i].distance_squared_to(kept[-1]) >= step * step:
-					kept.append(points[i])
-			kept.append(points[-1])
-			shown.append(kept)
-		for pass_edge: float in ([edge, 0.0] if edge > 0.0 else [0.0]):
-			var color := bank if pass_edge > 0.0 else fill
-			for i in lines.size():
-				draw_polyline(shown[i], color, width + pass_edge * 2.0)
-				_draw_mouths(lines[i][0], lines[i][1], width, pass_edge, color)
-
-	## The flared stretches of a line, where it widens to meet a river mouth or
-	## lake (its widths over the usual width): each segment as a tapering quad
-	## with round joints.
-	func _draw_mouths(points: PackedVector2Array, widths: PackedFloat32Array, width: float, edge: float, color: Color) -> void:
-		for k in range(1, points.size()):
-			var a := maxf(widths[k - 1], width) / 2.0 + edge
-			var b := maxf(widths[k], width) / 2.0 + edge
-			if (widths[k - 1] <= width and widths[k] <= width) or points[k].is_equal_approx(points[k - 1]):
-				continue
-			var side := (points[k] - points[k - 1]).normalized().orthogonal()
-			draw_primitive(PackedVector2Array([points[k - 1] + side * a, points[k] + side * b,
-				points[k] - side * b, points[k - 1] - side * a]), PackedColorArray([color, color, color, color]), PackedVector2Array())
-			draw_circle(points[k - 1], a, color)
-			draw_circle(points[k], b, color)
-
-
-## Joins segment pairs that run end to start into continuous lines, with each
-## point's width (from widths, one per segment end): [[points, widths], ...].
-static func _join_segments(segments: PackedVector2Array, widths: PackedFloat32Array) -> Array:
-	var lines := []
-	var line := PackedVector2Array()
-	var line_widths := PackedFloat32Array()
-	for k in range(0, segments.size() - 1, 2):
-		if line.is_empty() or line[-1] != segments[k]:
-			if line.size() >= 2:
-				lines.append([line, line_widths])
-			line = PackedVector2Array([segments[k]])
-			line_widths = PackedFloat32Array([widths[k] if k < widths.size() else 0.0])
-		line.append(segments[k + 1])
-		line_widths.append(widths[k + 1] if k + 1 < widths.size() else 0.0)
-	if line.size() >= 2:
-		lines.append([line, line_widths])
-	return lines
-
-
 ## One zoom tier of rivers for one copy of the world, shown once the view is
 ## zoomed in to its min_zoom (see _update_rivers()).
 class RiverTier:
@@ -624,7 +538,6 @@ func _ready() -> void:
 	# The land colors are drawn far below their size when zoomed out.
 	_art_root.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(_art_root)
-	var waterway_lines := _join_segments(data.waterway_segments, data.waterway_widths)
 	for copy in [-1, 0, 1]:
 		var art := WorldArt.new()
 		art.view = self
@@ -669,11 +582,6 @@ func _ready() -> void:
 			tier.min_zoom = data.river_tier_min_zoom[i]
 			art.add_child(tier)
 			_river_tiers.append(tier)
-		var waterways := WaterwayArt.new()
-		waterways.view = self
-		waterways.lines = waterway_lines
-		art.add_child(waterways)
-		_waterway_arts.append(waterways)
 
 	for layer: Control in [_decor_layer, _weather_layer, _canal_layer, _static_layer, _dock_layer, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
@@ -1148,8 +1056,6 @@ func _changed() -> void:
 	_art_root.position = size / 2.0 + Vector2(-_center.x, _center.y) * _zoom
 	_art_root.scale = Vector2(_zoom, -_zoom)
 	_update_rivers()
-	for waterways in _waterway_arts:
-		waterways.queue_redraw()  # Their width follows the zoom.
 	if not _ice_circles.is_empty():
 		for node in _ice_arts:
 			node.queue_redraw()  # So do the cracks and channels.

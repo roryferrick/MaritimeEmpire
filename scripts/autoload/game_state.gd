@@ -102,6 +102,8 @@ const STORM_FACTOR_REFRESH_S := 0.25
 ## How often (seconds of play) a docking ship is repaired and refueled (and
 ## pays for it).
 const REFILL_BILL_S := 0.25
+## Seconds between tugs leaving port on the same job, so they head out in line.
+const TUG_STAGGER_S := 1.5
 
 var money: int = 0:
 	set(value):
@@ -1868,7 +1870,7 @@ func tug_plan(lost: Ship) -> Dictionary:
 		for tug: Ship in team:
 			tow += _tow_speed(tug)
 			approach = maxf(approach, miles / maxf(tug.speed(), 0.01))
-		var seconds := approach + Ship.ALIGN_SECONDS + miles / tow
+		var seconds := approach + TUG_STAGGER_S * (team.size() - 1) + Ship.ALIGN_SECONDS + miles / tow
 		var cost := 0.0
 		for tug: Ship in team:
 			cost += tug.fuel_per_s() * seconds * market.fuel_price(port) \
@@ -1893,8 +1895,6 @@ func _send_tugs(lost: Ship, plan: Dictionary, auto: bool) -> void:
 	var team: Array = plan.tugs
 	for i in team.size():
 		var tug: Ship = team[i]
-		_leave_port(tug)
-		tug.docked_at = ""
 		tug.rescuing = lost
 		tug.tug_lead = i == 0
 		tug.tow_port = port
@@ -1902,8 +1902,9 @@ func _send_tugs(lost: Ship, plan: Dictionary, auto: bool) -> void:
 		tug.job_nm = miles * 2.0
 		tug.carry_nm = miles
 		tug.align_time = 0.0
+		# They head out one after the other (see _advance_tug_job()), in line.
+		tug.tug_wait = TUG_STAGGER_S * i
 		tug.job_phase = Ship.JOB_APPROACH
-		_start_segment(tug, [port, other, 0.0, miles])
 		ship_changed.emit(tug)
 	lost.rescuer = team[0]
 	recovery_sent.emit(lost, team[0], roundi(plan.cost), auto)
@@ -1917,6 +1918,18 @@ func _send_tugs(lost: Ship, plan: Dictionary, auto: bool) -> void:
 func _advance_tug_job(tug: Ship, delta: float) -> void:
 	match tug.job_phase:
 		Ship.JOB_APPROACH:
+			if tug.is_docked():
+				# Still in port: sets off once its turn comes, along the lost
+				# ship's lane (the way back it'll tow it, reversed).
+				tug.tug_wait -= delta
+				if tug.tug_wait > 0.0:
+					return
+				var tow: Array = tug.job_segments[0]
+				_leave_port(tug)
+				tug.docked_at = ""
+				_start_segment(tug, [tow[1], tow[0], 0.0, float(tow[3]) - float(tow[2])])
+				ship_changed.emit(tug)
+				return
 			_sail(tug, delta)
 			if tug.traveled_nm >= tug.segment_end:
 				tug.traveled_nm = tug.segment_end
