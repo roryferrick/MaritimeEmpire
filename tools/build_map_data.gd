@@ -52,6 +52,19 @@ const LABEL_GRID := 16
 const LABEL_REFINE_ROUNDS := 3
 const PORTS_PATH := "res://data/ports.json"
 const CANALS_PATH := "res://data/canals.json"
+const WATERWAYS_PATH := "res://data/waterways.json"
+## Waterway mouths (see _fit_waterway_mouths(), projected degrees): the widest
+## opening a river flares out to meet (wider is open coast), how far off the
+## shore it's measured, and how far up the river the flare narrows back (in
+## openings, and at least WATERWAY_TAPER_MIN). Shore segments are bucketed in
+## SHORE_CELL cells to cast rays against.
+const WATERWAY_MOUTH_MAX := 0.4
+const WATERWAY_MOUTH_PROBE := 0.02
+const WATERWAY_TAPER := 3.0
+const WATERWAY_TAPER_MIN := 0.15
+const SHORE_CELL := 0.5
+## Waterways are checked for water every WATERWAY_STEP (projected degrees).
+const WATERWAY_STEP := 0.02
 const MAP_OUT := "res://data/world_map.res"
 ## The land colors (see _build_land_texture()), and its size in pixels.
 const LAND_TEXTURE_OUT := "res://data/land_colors.webp"
@@ -187,6 +200,12 @@ const LAKE_NAMES := {
 const LAKE_DRY_SALT_REGION := Rect2(110.0, -40.0, 45.0, 26.0)
 const LAKE_SALT_PANS: Array[String] = ["Lake Eyre North", "Lake Eyre South", "Lake Disappointment", "Lake Mackay", "Lake Gairdner",
 	"Lake Torrens", "Lake Frome", "Lake Amadeus", "Lake Carnegie", "Chott el Djerid", "Chott Melrhir"]
+## The CHANNELS that are rivers (or canals and inland waters), drawn wide on the
+## map like the major waterways (see _add_waterways()).
+const RIVER_CHANNELS: Array[String] = ["Western Scheldt (Antwerp)", "Savannah River", "Mississippi River (New Orleans)",
+	"Columbia River (Portland, Oregon)", "St. Lawrence River (estuary to Lake Ontario)", "Welland Canal (Lake Ontario to Lake Erie)",
+	"Detroit and St. Clair rivers (Lake Erie to Lake Huron)", "St. Marys River (Lake Huron to Lake Superior)", "Yenisei River (Dudinka)",
+	"Galveston Bay (Houston)"]
 ## Rivers and straits too narrow for the grid to see. Carved as water, like
 ## the canals in data/canals.json. Each is a list of [lon, lat] points.
 const CHANNELS := {
@@ -245,6 +264,10 @@ var _piece_rep := PackedInt32Array()
 var _piece_cell := PackedInt32Array()
 ## Each canal from data/canals.json: {path (its centerline), divide}, as [lon, lat] points.
 var _canals: Array[Dictionary] = []
+## The map's land and lakes as drawn (projected): [bounds, outline, holes]
+## each, to tell where a waterway is on water (see _fit_waterway_mouths()).
+var _land_shapes := []
+var _lake_shapes := []
 
 
 func _init() -> void:
@@ -333,15 +356,19 @@ func _build_map(land_polygons: Array) -> void:
 			continue
 		_add_coast(map, outline)
 		_triangulate_tiled(outline, map.land_triangles, map.water_triangles)
+		var holes := []
+		_land_shapes.append([_bounds(outline), outline, holes])
 		for hole: PackedVector2Array in polygon.holes:
 			var hole_points := _simplify(_project_all(hole))
 			if hole_points.size() >= 3:
+				holes.append(hole_points)
 				_add_coast(map, hole_points)
 				_triangulate_tiled(hole_points, map.water_triangles, map.land_triangles)
 	print("Map: %d land triangles, %d coast segments" % [map.land_triangles.size() / 3, map.coast_segments.size() / 2])
 
 	_add_lakes(map)
 	_add_rivers(map)
+	_add_waterways(map)
 	_add_countries(map)
 	_add_depths(map)
 	_add_feature_labels(map)
@@ -921,9 +948,12 @@ func _add_lakes(map: WorldMapData) -> void:
 			_triangulate_tiled(outline, triangles, PackedVector2Array())
 			map.lake_triangles[groups.find(group)] = triangles  # Packed arrays copy: store it back.
 			count += 1
+			var islands := []
+			_lake_shapes.append([_bounds(outline), outline, islands])
 			for i in range(1, polygon.size()):
 				var island := _simplify(_project_all(_to_points(polygon[i])))
 				if island.size() >= 3:
+					islands.append(island)
 					_add_coast(map, island)
 					_triangulate_tiled(island, map.lake_island_triangles, PackedVector2Array())
 	print("Lakes: %d" % count)
@@ -936,6 +966,223 @@ func _first_point(feature: Dictionary) -> Vector2:
 		return Vector2.INF
 	var point: Array = polygons[0][0][0]
 	return Vector2(point[0], point[1])
+
+
+## The major waterways (WATERWAYS_PATH) as wide line segments for the map: each
+## one's Natural Earth rivers by name, kept only in its keep boxes and outside
+## its skip boxes (its navigable stretch), and its hand-traced paths; plus the
+## rivers the sea lanes are carved up (CHANNELS named in RIVER_CHANNELS).
+func _add_waterways(map: WorldMapData) -> void:
+	var waterways: Array = JSON.parse_string(FileAccess.get_file_as_string(WATERWAYS_PATH)).waterways
+	var by_name := {}  # River name -> the waterways that take it.
+	for waterway: Dictionary in waterways:
+		for river: String in waterway.get("rivers", []):
+			by_name.get_or_add(river, []).append(waterway)
+		for path: Array in waterway.get("paths", []):
+			_add_waterway_line(map, _to_points(path), {})
+	for feature: Dictionary in _read_geojson(RIVERS_PATH):
+		var name = feature.properties.get("name")
+		if name == null or not by_name.has(str(name)) or feature.geometry == null:
+			continue
+		var lines: Array = [feature.geometry.coordinates] if feature.geometry.type == "LineString" else feature.geometry.coordinates
+		for waterway: Dictionary in by_name[str(name)]:
+			for line: Array in lines:
+				_add_waterway_line(map, _to_points(line), waterway)
+	for channel: String in CHANNELS:
+		if channel in RIVER_CHANNELS:
+			_add_waterway_line(map, _to_points(CHANNELS[channel]), {})
+	_fit_waterway_mouths(map)
+	print("Waterways: %d segments" % (map.waterway_segments.size() / 2))
+
+
+## Fits the waterways to the water they meet: drops their stretches over sea or
+## lakes (already drawn as water), cutting each at the shore, and flares each
+## river out where it leaves the water to as wide as the opening there (the
+## water's width across the river, up to WATERWAY_MOUTH_MAX), narrowing back to
+## the usual width over WATERWAY_TAPER times that (map.waterway_widths).
+func _fit_waterway_mouths(map: WorldMapData) -> void:
+	var shore := {}  # Cell -> coast segment start indices, to cast rays against.
+	for k in range(0, map.coast_segments.size(), 2):
+		for cell in _cells_along(map.coast_segments[k], map.coast_segments[k + 1]):
+			shore.get_or_add(cell, []).append(k)
+	var segments := map.waterway_segments
+	var out := PackedVector2Array()
+	var widths := PackedFloat32Array()
+	var mouths := 0
+	var start := 0
+	while start < segments.size():
+		# One continuous line of segments.
+		var line := PackedVector2Array([segments[start]])
+		var k := start
+		while k < segments.size() and segments[k] == line[-1]:
+			line.append(segments[k + 1])
+			k += 2
+		start = k
+		# In short steps, so a long hand-traced segment can't cut across water.
+		var dense := PackedVector2Array([line[0]])
+		for i in range(1, line.size()):
+			var steps := ceili(line[i - 1].distance_to(line[i]) / WATERWAY_STEP)
+			for s in range(1, steps + 1):
+				dense.append(line[i - 1].lerp(line[i], float(s) / steps))
+		line = dense
+		var water := []
+		for p in line:
+			water.append(_on_water(p))
+		# Its runs on land, each end that comes off the water cut at the shore.
+		var run := PackedVector2Array()
+		var run_mouths := []  # [point index in run, opening width]
+		for i in line.size():
+			if water[i]:
+				if not run.is_empty():
+					var cut := _shore_cut(map, shore, line[i - 1], line[i])
+					run.append(cut[0])
+					run_mouths.append([run.size() - 1, cut[1]])
+					mouths += _add_waterway_run(out, widths, run, run_mouths)
+					run = PackedVector2Array()
+					run_mouths = []
+				continue
+			if run.is_empty() and i > 0:
+				var cut := _shore_cut(map, shore, line[i], line[i - 1])
+				run.append(cut[0])
+				run_mouths.append([0, cut[1]])
+			run.append(line[i])
+		mouths += _add_waterway_run(out, widths, run, run_mouths)
+	map.waterway_segments = out
+	map.waterway_widths = widths
+	print("Waterway mouths flared: %d" % mouths)
+
+
+## Adds a run of waterway points as segments, flared at its mouths ([index,
+## opening width]); returns how many mouths it flared.
+func _add_waterway_run(out: PackedVector2Array, widths: PackedFloat32Array, run: PackedVector2Array, run_mouths: Array) -> int:
+	if run.size() < 2:
+		return 0
+	# A sliver of land between two stretches of water (a spit or an island the
+	# river line crosses) isn't a river.
+	if run_mouths.size() == 2:
+		var length := 0.0
+		for i in range(1, run.size()):
+			length += run[i - 1].distance_to(run[i])
+		if length < WATERWAY_TAPER_MIN:
+			return 0
+	var flare := PackedFloat32Array()
+	flare.resize(run.size())
+	var flared := 0
+	for mouth: Array in run_mouths:
+		var opening: float = mouth[1]
+		if opening <= 0.0:
+			continue
+		flared += 1
+		var taper := maxf(opening * WATERWAY_TAPER, WATERWAY_TAPER_MIN)
+		for direction in [-1, 1]:
+			var i: int = mouth[0]
+			var along := 0.0
+			while i >= 0 and i < run.size() and along < taper:
+				flare[i] = maxf(flare[i], opening * (1.0 - along / taper))
+				var next: int = i + direction
+				if next >= 0 and next < run.size():
+					along += run[i].distance_to(run[next])
+				i = next
+	for i in range(1, run.size()):
+		out.append(run[i - 1])
+		out.append(run[i])
+		widths.append(flare[i - 1])
+		widths.append(flare[i])
+	return flared
+
+
+## Where a waterway segment from a point on land (from) to one on water (to)
+## crosses the shore, and the opening's width there: the water's width across
+## the river just off the shore (0 if it's wider than WATERWAY_MOUTH_MAX, an
+## open coast that needs no flare). [point, width].
+func _shore_cut(map: WorldMapData, shore: Dictionary, from: Vector2, to: Vector2) -> Array:
+	var cut := to
+	var best := INF
+	for cell in _cells_along(from, to):
+		for k: int in shore.get(cell, []):
+			var hit = Geometry2D.segment_intersects_segment(from, to, map.coast_segments[k], map.coast_segments[k + 1])
+			if hit != null and from.distance_to(hit) < best:
+				best = from.distance_to(hit)
+				cut = hit
+	# Measured just off the shore, and checked a little further out: an open
+	# coast runs out of shore to hit there.
+	var ahead := (to - from).normalized()
+	var across := ahead.orthogonal()
+	var width := 0.0
+	for probe in [WATERWAY_MOUTH_PROBE * 3.0, WATERWAY_MOUTH_PROBE]:
+		width = 0.0
+		for side in [-1.0, 1.0]:
+			var reach := _ray_to_shore(map, shore, cut + ahead * probe, across * side)
+			if reach == INF:
+				return [cut, 0.0]
+			width += reach
+	return [cut, width if width <= WATERWAY_MOUTH_MAX else 0.0]
+
+
+## How far along a ray (up to WATERWAY_MOUTH_MAX) the nearest shore is, or INF.
+func _ray_to_shore(map: WorldMapData, shore: Dictionary, from: Vector2, direction: Vector2) -> float:
+	var to := from + direction * WATERWAY_MOUTH_MAX
+	var best := INF
+	for cell in _cells_along(from, to):
+		for k: int in shore.get(cell, []):
+			var hit = Geometry2D.segment_intersects_segment(from, to, map.coast_segments[k], map.coast_segments[k + 1])
+			if hit != null:
+				best = minf(best, from.distance_to(hit))
+	return best
+
+
+## The SHORE_CELL cells a segment's bounding box covers.
+static func _cells_along(a: Vector2, b: Vector2) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for y in range(floori(minf(a.y, b.y) / SHORE_CELL), floori(maxf(a.y, b.y) / SHORE_CELL) + 1):
+		for x in range(floori(minf(a.x, b.x) / SHORE_CELL), floori(maxf(a.x, b.x) / SHORE_CELL) + 1):
+			cells.append(Vector2i(x, y))
+	return cells
+
+
+## True if a projected point is on water as drawn: in a lake (not on its
+## islands), or off the land (or in a hole in it).
+func _on_water(p: Vector2) -> bool:
+	if _in_shape(_lake_shapes, p):
+		return true
+	return not _in_shape(_land_shapes, p)
+
+
+## True if a point is inside one of [bounds, outline, holes] shapes and not
+## in its holes.
+static func _in_shape(shapes: Array, p: Vector2) -> bool:
+	for shape: Array in shapes:
+		if not (shape[0] as Rect2).has_point(p) or not Geometry2D.is_point_in_polygon(p, shape[1]):
+			continue
+		var in_hole := false
+		for hole: PackedVector2Array in shape[2]:
+			if Geometry2D.is_point_in_polygon(p, hole):
+				in_hole = true
+				break
+		if not in_hole:
+			return true
+	return false
+
+
+## Adds a (lon, lat) line's segments to the waterways, keeping only those with
+## both ends inside one of the waterway's keep boxes (all, if it has none) and
+## outside its skip boxes.
+func _add_waterway_line(map: WorldMapData, line: PackedVector2Array, waterway: Dictionary) -> void:
+	var inside := func(p: Vector2) -> bool:
+		for box: Array in waterway.get("skip", []):
+			if Rect2(box[0], box[1], box[2] - box[0], box[3] - box[1]).has_point(p):
+				return false
+		var keep: Array = waterway.get("keep", [])
+		if keep.is_empty():
+			return true
+		for box: Array in keep:
+			if Rect2(box[0], box[1], box[2] - box[0], box[3] - box[1]).has_point(p):
+				return true
+		return false
+	for k in range(1, line.size()):
+		if inside.call(line[k - 1]) and inside.call(line[k]):
+			map.waterway_segments.append(Geo.project(line[k - 1]))
+			map.waterway_segments.append(Geo.project(line[k]))
 
 
 ## Rivers as line segments, in tiers by the web-map zoom they show from (the

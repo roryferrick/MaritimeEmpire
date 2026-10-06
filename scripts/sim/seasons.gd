@@ -159,6 +159,31 @@ func factors(lon_lat: Vector2) -> Array:
 	return [1.0, 1.0]
 
 
+## Where the sea is frozen now, for the map: [lon, lat, radius nm] circles of
+## every closure in season (its ice circles, its own stretch of sea, or its
+## icebreaker area's) and every ice zone in season. [] when closures aren't active.
+func ice_circles() -> Array:
+	if not active():
+		return []
+	var now: int = _state.calendar_time()
+	var out := []
+	for closure: Dictionary in closures():
+		if not in_season(closure, now):
+			continue
+		if closure.has("ice"):
+			out.append_array(closure.ice)
+		elif closure.has("circles"):
+			out.append_array(closure.circles)
+		else:
+			for item: Dictionary in _state.icebreaking.areas():
+				if item.get("closure", "") == closure.id:
+					out.append_array(_state.icebreaking.circles(item))
+	for zone: Dictionary in ice_zones():
+		if in_season(zone, now):
+			out.append([zone.center[0], zone.center[1], zone.radius_nm])
+	return out
+
+
 ## A closure's name to start a sentence: "The St. Lawrence Seaway".
 static func subject(closure: Dictionary) -> String:
 	var text: String = closure.name

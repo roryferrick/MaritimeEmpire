@@ -58,3 +58,11 @@ extends Resource
 ## tools/build_map_data.gd LAKE_GROUPS): a triangle list per group, and its color.
 @export var lake_triangles: Array[PackedVector2Array] = []
 @export var lake_colors := PackedColorArray()
+
+## Major navigable waterways (data/waterways.json) and the rivers the sea lanes
+## use, drawn wide over the land: line segments (pairs of points).
+@export var waterway_segments := PackedVector2Array()
+## Each waterway segment end's width in projected degrees where it flares out
+## to meet a river mouth or lake as wide as the opening (0 elsewhere: the
+## map's usual width).
+@export var waterway_widths := PackedFloat32Array()

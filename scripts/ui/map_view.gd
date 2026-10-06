@@ -54,11 +54,10 @@ const LIGHTNING_LIT := 0.45
 const LIGHTNING_CELLS := 4
 const LIGHTNING_CHANCE := 0.3
 const LIGHTNING_MIN_RADIUS := 18.0
-## Seasonal ice (see _draw_ice()): its color, an ice zone's haze as [share of
-## the radius, opacity] rings, a closed canal's frosted line width, and how far
-## outside a closed port's dot its ice ring is.
+## Seasonal ice on ports and canals (see _draw_ice()): its color, a closed
+## canal's frosted line width, and how far outside a closed port's dot its ice
+## ring is.
 const ICE_COLOR := Color(0.86, 0.95, 1.0)
-const ICE_HAZE := [[1.0, 0.1], [0.8, 0.1], [0.6, 0.12], [0.4, 0.14]]
 const ICE_CANAL_WIDTH := 5.0
 const ICE_RING_GAP := 5.0
 ## Land drawings (see _draw_decor()): where their art is, the bucket size
@@ -186,8 +185,40 @@ const ACTIVE_LANE_WIDTH := 1.5
 ## least CANAL_MIN_WIDTH px), and each lock chamber's length and the width of
 ## each of its two lanes (one per direction), drawn from LOCK_MIN_ZOOM (pixels
 ## per degree). Ships in a canal keep to the right-hand lane.
-const CANAL_WIDTH := 0.012
-const CANAL_MIN_WIDTH := 1.5
+const CANAL_WIDTH := 0.02
+const CANAL_MIN_WIDTH := 4.0
+## Major waterways (see WaterwayArt): width in projected degrees, never less
+## than WATERWAY_MIN_PX on screen (thin zoomed out) nor more than
+## WATERWAY_MAX_PX (zoomed right in, the mouths flare wider), their bank's width either
+## side (px, drawn once the river is WATERWAY_BANK_MIN_PX wide), and their
+## water and bank colors.
+const WATERWAY_WIDTH := 0.06
+const WATERWAY_MIN_PX := 1.75
+const WATERWAY_MAX_PX := 10.0
+const WATERWAY_BANK_PX := 1.0
+const WATERWAY_BANK_MIN_PX := 3.0
+const WATERWAY_COLOR := Color("#5c9fd4")
+const WATERWAY_BANK := Color("#3a6d96")
+## Winter sea ice (see IceArt, _update_ice()): how often (s) where the ice is
+## gets checked, its sheet, crack, broken-ice and open-channel colors, how
+## many cracks each frozen circle has, an icebreaker channel's width
+## (projected degrees, and at least ICE_CHANNEL_PX on screen), how far apart
+## (projected degrees) its points are noted, and how long (s of play) a channel
+## takes to freeze over again.
+const ICE_REFRESH_S := 0.5
+const ICE_SHEET := Color(0.9, 0.95, 0.98, 0.96)
+const ICE_CRACK := Color(0.62, 0.74, 0.84, 0.8)
+const ICE_BROKEN := Color(0.78, 0.86, 0.92)
+const ICE_CHANNEL := Color(0.1, 0.24, 0.42)
+const ICE_CRACKS := 7
+const ICE_CHANNEL_WIDTH := 0.08
+const ICE_CHANNEL_PX := 6.0
+const ICE_TRACK_STEP := 0.02
+const ICE_REFREEZE_S := 60.0
+## The Northern Sea Route and Northwest Passage labels (see _draw_route_labels()):
+## their size, and the web-map zoom they show from.
+const ROUTE_LABEL_FONT_SIZE := 16
+const ROUTE_LABEL_WEB_ZOOM := 1.5
 const CHAMBER_LENGTH := 0.021
 const CHAMBER_LANE_WIDTH := 0.009
 const LOCK_MIN_ZOOM := 120.0
@@ -322,6 +353,19 @@ var _art_root := Node2D.new()
 var _art_copies: Array[WorldArt] = []
 ## Every copy's river tiers, shown or hidden by zoom.
 var _river_tiers: Array[RiverTier] = []
+var _waterway_arts: Array[Node2D] = []
+## Winter sea ice (see IceArt): the ice and its lake ice and top nodes (every
+## copy), the frozen circles ([projected center, projected radius, seed]),
+## the coast and border segments near them (drawn back over the ice), what
+## the circles were last worked out from, and the channels icebreakers have
+## broken (ship -> [[projected point, play time], ...]).
+var _ice_arts: Array[Node2D] = []
+var _ice_circles := []
+var _ice_coast := PackedVector2Array()
+var _ice_borders := PackedVector2Array()
+var _ice_key := []
+var _ice_clock := 0.0
+var _ice_tracks := {}
 ## Drawn in screen space in three layers, bottom to top: canals (every frame,
 ## for locks and convoys), the rest that only changes with the view, routes,
 ## hubs or prices (ports, labels, route lanes; see STATIC_REFRESH_S), and ships
@@ -383,6 +427,123 @@ class WorldArt:
 		draw_line(Vector2(-Geo.WORLD_WIDTH / 2.0, 0.0), Vector2(Geo.WORLD_WIDTH / 2.0, 0.0), view._color(&"equator"), -1.0)
 
 
+## Winter sea ice for one copy of the world (see MapView._ice_circles and
+## _ice_tracks): a solid sheet of white-blue ice with a soft edge and faint
+## cracks over each frozen stretch of sea, cut by the channels icebreakers
+## break through it (open water, edged with broken ice, slowly freezing over
+## again). The land is then drawn again on top, so the ice stops at the coast;
+## lakes inside frozen areas freeze too (LakeIce), and the islands, coast and
+## borders there go back on top (IceTop).
+class IceArt:
+	extends Node2D
+
+	var view: MapView
+	var art: WorldArt
+
+	func _draw() -> void:
+		view._draw_ice_sheet(self, true)
+		draw_mesh(art.land_mesh, art.land_colors if not view.gray_mode else art.white, Transform2D.IDENTITY,
+			view._color(&"land") if view.gray_mode else Color.WHITE)
+		for i in art.lake_meshes.size():
+			if art.lake_meshes[i] != null:
+				draw_mesh(art.lake_meshes[i], art.white, Transform2D.IDENTITY, view._color(&"ocean") if view.gray_mode else art.lake_colors[i])
+
+
+## The lakes, as a mask: its child (LakeIceSheet) draws the ice only on them.
+class LakeIce:
+	extends Node2D
+
+	var art: WorldArt
+
+	func _draw() -> void:
+		for mesh in art.lake_meshes:
+			if mesh != null:
+				draw_mesh(mesh, art.white)
+
+
+class LakeIceSheet:
+	extends Node2D
+
+	var view: MapView
+
+	func _draw() -> void:
+		view._draw_ice_sheet(self, false)
+
+
+## Lake islands, and the coast and borders near the ice, back over the ice.
+class IceTop:
+	extends Node2D
+
+	var view: MapView
+	var art: WorldArt
+
+	func _draw() -> void:
+		draw_mesh(art.lake_island_mesh, art.land_colors if not view.gray_mode else art.white, Transform2D.IDENTITY,
+			view._color(&"land") if view.gray_mode else Color.WHITE)
+		draw_multiline(view._ice_borders, view._color(&"border"), -1.0)
+		draw_multiline(view._ice_coast, view._color(&"coast"), -1.0)
+
+
+## The major navigable waterways (WorldMapData.waterway_segments) for one copy
+## of the world, drawn wide in fresh-water blue with a darker bank: at least
+## WATERWAY_MIN_PX across, wider zoomed in. Redrawn when the zoom changes.
+class WaterwayArt:
+	extends Node2D
+
+	var view: MapView
+	## The segments joined into continuous lines, so wide ones bend smoothly:
+	## [[points, widths], ...] (see _join_segments()).
+	var lines := []
+
+	func _draw() -> void:
+		var px := 1.0 / view._zoom
+		var width := clampf(WATERWAY_WIDTH * view._zoom, WATERWAY_MIN_PX, WATERWAY_MAX_PX) * px
+		# The bank: a crisp edge either side, once the river is wide enough for it.
+		var edge := WATERWAY_BANK_PX * px if width >= WATERWAY_BANK_MIN_PX * px else 0.0
+		var fill := view._color(&"ocean") if view.gray_mode else WATERWAY_COLOR
+		var bank := view._color(&"coast") if view.gray_mode else WATERWAY_BANK
+		for pass_edge: float in ([edge, 0.0] if edge > 0.0 else [0.0]):
+			var color := bank if pass_edge > 0.0 else fill
+			for line: Array in lines:
+				var points: PackedVector2Array = line[0]
+				draw_polyline(points, color, width + pass_edge * 2.0)
+				_draw_mouths(points, line[1], width, pass_edge, color)
+
+	## The flared stretches of a line, where it widens to meet a river mouth or
+	## lake (its widths over the usual width): each segment as a tapering quad
+	## with round joints.
+	func _draw_mouths(points: PackedVector2Array, widths: PackedFloat32Array, width: float, edge: float, color: Color) -> void:
+		for k in range(1, points.size()):
+			var a := maxf(widths[k - 1], width) / 2.0 + edge
+			var b := maxf(widths[k], width) / 2.0 + edge
+			if (widths[k - 1] <= width and widths[k] <= width) or points[k].is_equal_approx(points[k - 1]):
+				continue
+			var side := (points[k] - points[k - 1]).normalized().orthogonal()
+			draw_primitive(PackedVector2Array([points[k - 1] + side * a, points[k] + side * b,
+				points[k] - side * b, points[k - 1] - side * a]), PackedColorArray([color, color, color, color]), PackedVector2Array())
+			draw_circle(points[k - 1], a, color)
+			draw_circle(points[k], b, color)
+
+
+## Joins segment pairs that run end to start into continuous lines, with each
+## point's width (from widths, one per segment end): [[points, widths], ...].
+static func _join_segments(segments: PackedVector2Array, widths: PackedFloat32Array) -> Array:
+	var lines := []
+	var line := PackedVector2Array()
+	var line_widths := PackedFloat32Array()
+	for k in range(0, segments.size() - 1, 2):
+		if line.is_empty() or line[-1] != segments[k]:
+			if line.size() >= 2:
+				lines.append([line, line_widths])
+			line = PackedVector2Array([segments[k]])
+			line_widths = PackedFloat32Array([widths[k] if k < widths.size() else 0.0])
+		line.append(segments[k + 1])
+		line_widths.append(widths[k + 1] if k + 1 < widths.size() else 0.0)
+	if line.size() >= 2:
+		lines.append([line, line_widths])
+	return lines
+
+
 ## One zoom tier of rivers for one copy of the world, shown once the view is
 ## zoomed in to its min_zoom (see _update_rivers()).
 class RiverTier:
@@ -421,6 +582,7 @@ func _ready() -> void:
 	# The land colors are drawn far below their size when zoomed out.
 	_art_root.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(_art_root)
+	var waterway_lines := _join_segments(data.waterway_segments, data.waterway_widths)
 	for copy in [-1, 0, 1]:
 		var art := WorldArt.new()
 		art.view = self
@@ -436,6 +598,23 @@ func _ready() -> void:
 		art.position.x = copy * Geo.WORLD_WIDTH
 		_art_root.add_child(art)
 		_art_copies.append(art)
+		var ice := IceArt.new()
+		ice.view = self
+		ice.art = art
+		ice.visible = false
+		art.add_child(ice)
+		var lake_ice := LakeIce.new()
+		lake_ice.art = art
+		lake_ice.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
+		ice.add_child(lake_ice)
+		var lake_sheet := LakeIceSheet.new()
+		lake_sheet.view = self
+		lake_ice.add_child(lake_sheet)
+		var ice_top := IceTop.new()
+		ice_top.view = self
+		ice_top.art = art
+		ice.add_child(ice_top)
+		_ice_arts.append_array([ice, lake_sheet, ice_top])
 		for i in data.river_tiers.size():
 			var tier := RiverTier.new()
 			tier.view = self
@@ -443,6 +622,11 @@ func _ready() -> void:
 			tier.min_zoom = data.river_tier_min_zoom[i]
 			art.add_child(tier)
 			_river_tiers.append(tier)
+		var waterways := WaterwayArt.new()
+		waterways.view = self
+		waterways.lines = waterway_lines
+		art.add_child(waterways)
+		_waterway_arts.append(waterways)
 
 	for layer: Control in [_decor_layer, _weather_layer, _canal_layer, _static_layer, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
@@ -465,6 +649,13 @@ func _process(delta: float) -> void:
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_overlay.queue_redraw()
+	_ice_clock += delta
+	if _ice_clock >= ICE_REFRESH_S:
+		_ice_clock = 0.0
+		_update_ice()
+	if _track_icebreakers():
+		for node in _ice_arts:
+			node.queue_redraw()
 	# Route lanes follow the ships' legs, hub rings the hubs and port colors the
 	# drifting prices: a few times a second is plenty.
 	_static_clock += delta
@@ -840,6 +1031,11 @@ func _changed() -> void:
 	_art_root.position = size / 2.0 + Vector2(-_center.x, _center.y) * _zoom
 	_art_root.scale = Vector2(_zoom, -_zoom)
 	_update_rivers()
+	for waterways in _waterway_arts:
+		waterways.queue_redraw()  # Their width follows the zoom.
+	if not _ice_circles.is_empty():
+		for node in _ice_arts:
+			node.queue_redraw()  # So do the cracks and channels.
 	queue_redraw()
 	_redraw_layers()
 	view_changed.emit()
@@ -876,6 +1072,7 @@ func _draw_weather_layer() -> void:
 	_canvas = _weather_layer
 	if show_ships:
 		_draw_ice()
+		_draw_route_labels()
 		_draw_storms()
 
 
@@ -1632,34 +1829,17 @@ func _draw_lightning(storm: Dictionary, center: Vector2, radius: float, strength
 
 # --- Seasonal ice --------------------------------------------------------
 
-## The seasonal closures in force (GameState.seasonal, while active): each ice
-## zone in season as a frosty patch, fading out to its edge, and each
-## closed port ringed in ice (closed canals: _draw_ice_canals()).
+## The seasonal closures in force (GameState.seasonal, while active): each
+## closed port ringed in ice (the frozen sea itself: IceArt; closed canals:
+## _draw_ice_canals()).
 func _draw_ice() -> void:
 	var seasonal: Seasons = GameState.seasonal
 	if not seasonal.active():
 		return
 	var now := GameState.calendar_time()
-	for zone: Dictionary in seasonal.ice_zones():
-		if not Seasons.in_season(zone, now):
-			continue
-		var lat: float = zone.center[1]
-		var center := world_to_screen(Geo.project(Vector2(zone.center[0], lat)))
-		var radius: float = float(zone.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
-		for ring: Array in ICE_HAZE:
-			_canvas.draw_circle(center, radius * float(ring[0]), Color(ICE_COLOR, float(ring[1])))
 	for closure: Dictionary in seasonal.closures():
 		if not Seasons.in_season(closure, now):
 			continue
-		# A stretch of sea shut by ice (the Arctic routes): frosted over, circle
-		# by circle.
-		for circle: Array in closure.get("circles", []):
-			var lat: float = circle[1]
-			var center := world_to_screen(Geo.project(Vector2(circle[0], lat)))
-			var radius: float = float(circle[2]) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
-			if Rect2(Vector2.ZERO, size).grow(radius).has_point(center):
-				for ring: Array in ICE_HAZE:
-					_canvas.draw_circle(center, radius * float(ring[0]), Color(ICE_COLOR, float(ring[1])))
 		for port_id: String in closure.get("ports", []):
 			var at := port_screen_position(port_id)
 			if Rect2(Vector2.ZERO, size).grow(20.0).has_point(at):
@@ -1754,3 +1934,148 @@ func _draw_decor() -> void:
 		var kind_name := data.decor_kind_names[item[1]]
 		var side: float = (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if DECOR_ANIMALS.has(kind_name) else DECOR_SIZE_PX.x)) * scale
 		_canvas.draw_texture_rect(texture, Rect2(item[0] - Vector2(side / 2.0, side * 0.92), Vector2(side, side)), false)
+
+
+# --- Winter sea ice ----------------------------------------------------------
+
+## Works out where the sea is frozen now (Seasons.ice_circles()); when that
+## changes, the circles (projected), the coast and borders near them, and
+## shows or hides the ice.
+func _update_ice() -> void:
+	var circles: Array = GameState.seasonal.ice_circles() if not gray_mode else []
+	if circles == _ice_key:
+		return
+	_ice_key = circles
+	_ice_circles.clear()
+	var bounds := []  # Projected rects around the circles, for the coast and borders.
+	for i in circles.size():
+		var circle: Array = circles[i]
+		var center := Geo.project(Vector2(circle[0], circle[1]))
+		var radius: float = float(circle[2]) / (60.0 * maxf(cos(deg_to_rad(circle[1])), 0.1))
+		_ice_circles.append([center, radius, i * 7919 + 17])
+		bounds.append(Rect2(center - Vector2.ONE * radius * 1.2, Vector2.ONE * radius * 2.4))
+	_ice_coast = _segments_near(GameData.world_map.coast_segments, bounds)
+	_ice_borders = _segments_near(GameData.world_map.border_segments, bounds)
+	for node in _ice_arts:
+		node.queue_redraw()
+	for k in range(0, _ice_arts.size(), 3):
+		_ice_arts[k].visible = not _ice_circles.is_empty()
+
+
+static func _segments_near(segments: PackedVector2Array, bounds: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if bounds.is_empty():
+		return out
+	var all: Rect2 = bounds[0]
+	for rect: Rect2 in bounds:
+		all = all.merge(rect)
+	for k in range(0, segments.size() - 1, 2):
+		var a := segments[k]
+		if not all.has_point(a):
+			continue
+		for rect: Rect2 in bounds:
+			if rect.has_point(a):
+				out.append(a)
+				out.append(segments[k + 1])
+				break
+	return out
+
+
+## Notes where each icebreaker in the ice has been (the channel it breaks) and
+## forgets stretches older than ICE_REFREEZE_S (frozen over again). True while
+## any channel shows (the ice needs redrawing each frame then).
+func _track_icebreakers() -> bool:
+	if _ice_circles.is_empty():
+		if not _ice_tracks.is_empty():
+			_ice_tracks.clear()
+			return true
+		return false
+	var now := GameState.play_time
+	for ship in GameState.ships:
+		if not ship.is_icebreaker() or ship.is_docked() or ship.from_port.is_empty():
+			continue
+		var at := ship.world_position()
+		if not _in_ice(at):
+			continue
+		var track: Array = _ice_tracks.get_or_add(ship, [])
+		if track.is_empty() or (track[-1][0] as Vector2).distance_to(at) > ICE_TRACK_STEP:
+			track.append([at, now])
+	for ship: Ship in _ice_tracks.keys():
+		var track: Array = _ice_tracks[ship]
+		while not track.is_empty() and now - float(track[0][1]) > ICE_REFREEZE_S:
+			track.pop_front()
+		if track.is_empty() or not GameState.ships.has(ship):
+			_ice_tracks.erase(ship)
+	return not _ice_tracks.is_empty()
+
+
+func _in_ice(at: Vector2) -> bool:
+	for circle: Array in _ice_circles:
+		if (circle[0] as Vector2).distance_to(at) <= circle[1]:
+			return true
+	return false
+
+
+## Draws the ice onto one of the ice nodes (in projected coordinates): with
+## soft edges first (the sea ice; not on the lakes, which are cut out anyway),
+## then the solid sheet, its cracks, and the channels icebreakers have broken
+## (open water edged with broken ice, fading as it freezes over again).
+func _draw_ice_sheet(canvas: CanvasItem, soft_edges: bool) -> void:
+	if soft_edges:
+		for circle: Array in _ice_circles:
+			canvas.draw_circle(circle[0], circle[1] * 1.12, Color(ICE_SHEET, 0.18))
+			canvas.draw_circle(circle[0], circle[1] * 1.05, Color(ICE_SHEET, 0.45))
+	for circle: Array in _ice_circles:
+		canvas.draw_circle(circle[0], circle[1], ICE_SHEET)
+	var rng := RandomNumberGenerator.new()
+	var hairline := 1.0 / _zoom
+	for circle: Array in _ice_circles:
+		rng.seed = circle[2]
+		var center: Vector2 = circle[0]
+		var radius: float = circle[1]
+		for crack in ICE_CRACKS:
+			var point := center + Vector2.from_angle(rng.randf() * TAU) * radius * rng.randf_range(0.0, 0.8)
+			var heading := rng.randf() * TAU
+			var line := PackedVector2Array([point])
+			for step in 4:
+				heading += rng.randf_range(-0.8, 0.8)
+				point += Vector2.from_angle(heading) * radius * rng.randf_range(0.05, 0.14)
+				line.append(point)
+			canvas.draw_polyline(line, ICE_CRACK, hairline * 1.2, true)
+	var now := GameState.play_time
+	var width := maxf(ICE_CHANNEL_PX / _zoom, ICE_CHANNEL_WIDTH)
+	for track: Array in _ice_tracks.values():
+		for k in range(1, track.size()):
+			var a: Vector2 = track[k - 1][0]
+			var b: Vector2 = track[k][0]
+			if a.distance_to(b) > ICE_TRACK_STEP * 20.0:
+				continue  # A jump (a new leg), not a channel.
+			var open := 1.0 - clampf((now - float(track[k][1])) / ICE_REFREEZE_S, 0.0, 1.0)
+			canvas.draw_line(a, b, Color(ICE_BROKEN, open), width * 1.8, true)
+			canvas.draw_line(a, b, Color(ICE_CHANNEL, open), width, true)
+
+
+## The named sea routes (seasonal closures with a label: the Northern Sea Route
+## and the Northwest Passage), labeled all year at the middle of their stretch
+## of sea, like the map's sea names (slanted, pale, with a dark edge), from
+## ROUTE_LABEL_WEB_ZOOM in.
+func _draw_route_labels() -> void:
+	if gray_mode or _web_zoom() < ROUTE_LABEL_WEB_ZOOM:
+		return
+	var font := _feature_font(FeatureKind.SEA)
+	for closure: Dictionary in GameState.seasonal.closures():
+		var text := str(closure.get("label", ""))
+		var circles: Array = closure.get("circles", [])
+		if text.is_empty() or circles.is_empty():
+			continue
+		var middle := Vector2.ZERO
+		for circle: Array in circles:
+			middle += Geo.project(Vector2(circle[0], circle[1]))
+		var at := world_to_screen(middle / circles.size())
+		var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, ROUTE_LABEL_FONT_SIZE)
+		if not Rect2(Vector2.ZERO, size).grow(text_size.x).has_point(at):
+			continue
+		var baseline := at + Vector2(-text_size.x / 2.0, font.get_ascent(ROUTE_LABEL_FONT_SIZE) / 2.0)
+		_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, ROUTE_LABEL_FONT_SIZE, SEA_LABEL_OUTLINE + 1,
+			_color(&"sea_label_outline"))
+		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, ROUTE_LABEL_FONT_SIZE, _color(&"sea_label"))
