@@ -70,7 +70,7 @@ func _add_speed_buttons() -> void:
 		button.focus_mode = Control.FOCUS_NONE
 		button.custom_minimum_size = Vector2(SPEED_BUTTON_WIDTH, 0)
 		button.text = "Pause" if speed == 0 else "%dx" % speed
-		button.tooltip_text = ("Pause the game" if speed == 0 else "Run the game at %dx speed" % speed) + " (F steps through the speeds)."
+		button.tooltip_text = ("Pause the game" if speed == 0 else "Run the game at %dx speed" % speed) + " (F steps through the speeds; Space pauses and carries on)."
 		button.pressed.connect(func() -> void: GameState.time_speed = speed)
 		%SpeedButtons.add_child(button)
 

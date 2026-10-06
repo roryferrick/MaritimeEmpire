@@ -184,8 +184,12 @@ var time_speed := 1:
 	set(value):
 		if Net.is_client() and not Net.syncing:
 			return  # Only the host sets the speed; it comes with its updates.
+		if value == 0 and time_speed > 0:
+			_resume_speed = time_speed  # What Space (toggle_pause()) carries on at.
 		time_speed = mini(value, max_time_speed)
 		time_speed_changed.emit(time_speed)
+## The speed the game was paused from (see toggle_pause()).
+var _resume_speed := 1
 
 ## The fastest game speed this save allows (one of TIME_SPEEDS, chosen when
 ## the company is founded; saves from before the choice allow the fastest).
@@ -308,6 +312,13 @@ func cycle_time_speed() -> void:
 		return  # Only the host sets the speed.
 	var speeds := allowed_time_speeds()
 	time_speed = speeds[(speeds.find(time_speed) + 1) % speeds.size()]
+
+
+## Space: pauses, or carries on at the speed it was paused from (1x if none).
+func toggle_pause() -> void:
+	if Net.is_client():
+		return  # Only the host sets the speed.
+	time_speed = clampi(_resume_speed, 1, max_time_speed) if time_speed == 0 else 0
 
 
 # --- Ships ---------------------------------------------------------------

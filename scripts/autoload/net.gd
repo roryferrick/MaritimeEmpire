@@ -34,6 +34,8 @@ signal left(reason: String)
 signal players_changed
 ## Games found on Steam or the local network changed (see games).
 signal games_changed
+## A chat message arrived (or was said here): one of chat_log.
+signal chat_added(entry: Dictionary)
 
 enum Role { OFFLINE, HOST, CLIENT }
 
@@ -67,8 +69,9 @@ const FULL_SYNC_S := 3.0
 const HOT_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "align_time", "dock_time", "lock_time"]
 ## A found game not heard from for this long is dropped from the list.
 const GAME_TIMEOUT_S := 4.0
-## The longest chat message.
+## The longest chat message, and how many messages the Chat tab keeps.
 const CHAT_MAX_LENGTH := 200
+const CHAT_KEPT := 200
 ## Keys of a ship's dictionary that change every step while it moves: a change
 ## to only these doesn't need the screens to look at the ship again.
 const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "sea_time", "align_time", "dock_time",
@@ -117,6 +120,8 @@ var acting_for: Company = null
 var host_error := ""
 ## Set while a joined game applies the host's update (so the game speed can change).
 var syncing := false
+## The game's chat so far, oldest first: {time (play time), speaker, color, text}.
+var chat_log: Array[Dictionary] = []
 
 var _peer: MultiplayerPeer = null
 var _announcer: PacketPeerUDP = null
@@ -336,6 +341,7 @@ func leave() -> void:
 	lobby_id = 0
 	_joining_lobby = 0
 	_start_bytes = PackedByteArray()
+	chat_log.clear()
 	role = Role.OFFLINE
 	players = {}
 	_sent = {}
@@ -1198,8 +1204,8 @@ func _apply_hot(hot: Dictionary, now_msec: int) -> void:
 
 # --- Chat --------------------------------------------------------------------------
 
-## Says something to everyone in the game: it shows in every player's activity
-## log, "Name: text", in the speaker's company color.
+## Says something to everyone in the game: it shows in every player's Chat tab
+## ("Name: text", in the speaker's company color; see chat_log).
 func say(text: String) -> void:
 	text = text.strip_edges().left(CHAT_MAX_LENGTH)
 	if text.is_empty():
@@ -1231,6 +1237,11 @@ func _chat_all(from: int, text: String) -> void:
 	_chat_line(speaker, color, text)
 
 
+## A chat message for everyone's Chat tab (see chat_log).
 @rpc("authority", "reliable")
 func _chat_line(speaker: String, color: String, text: String) -> void:
-	ActivityLog.add("%s: %s" % [speaker, text], ActivityLog.Kind.INFO, GameState.company_color_value(color))
+	var entry := {time = GameState.play_time, speaker = speaker, color = GameState.company_color_value(color), text = text}
+	chat_log.append(entry)
+	if chat_log.size() > CHAT_KEPT:
+		chat_log.pop_front()
+	chat_added.emit(entry)

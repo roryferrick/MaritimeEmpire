@@ -1,7 +1,8 @@
 class_name GameRoot
 extends Control
 ## Root of an active game: top bar, activity log, the six main screens, the
-## bottom nav, and the full-screen Route Assignment screen.
+## bottom nav, the full-screen Route Assignment screen, and the Esc menu;
+## Space pauses and T opens the chat.
 
 enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP }
 
@@ -38,6 +39,8 @@ var _shop_alert := AlertDot.new()
 ## On the Hubs tab while a hub has upgrade points to spend or can be founded.
 var _hubs_alert := AlertDot.new()
 var _alert_clock := 0.0
+## The Esc menu while it's open.
+var _escape_menu: EscapeMenu = null
 
 
 static func find(from: Node) -> GameRoot:
@@ -304,6 +307,36 @@ func _on_mega_upgraded(model_id: String) -> void:
 func _on_port_band_changed(port_id: String, band: String, grew: bool) -> void:
 	ActivityLog.add("%s %s to %s" % [GameData.port_name(port_id), "grew" if grew else "shrank", band.capitalize()],
 		ActivityLog.Kind.GOOD if grew else ActivityLog.Kind.INFO)
+
+
+## Space pauses or carries on (see GameState.toggle_pause()) and T opens the
+## chat (multiplayer), unless the player is typing or the Esc menu is open.
+## Taken before the controls see them, so a focused button doesn't take Space.
+func _input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if not key or not key.pressed or key.echo or is_instance_valid(_escape_menu):
+		return
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return
+	match key.keycode:
+		KEY_SPACE:
+			GameState.toggle_pause()
+			get_viewport().set_input_as_handled()
+		KEY_T:
+			if Net.is_online():
+				%ActivityLogPanel.open_chat()
+				get_viewport().set_input_as_handled()
+
+
+## Esc opens the menu (see EscapeMenu), once nothing else wanted it: an open
+## popup or the Route Assignment screen close first.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"ui_cancel") and not is_instance_valid(_escape_menu):
+		get_viewport().set_input_as_handled()
+		_popup_host.close()
+		_escape_menu = EscapeMenu.new()
+		add_child(_escape_menu)
 
 
 ## Multiplayer: the host left (or the connection dropped): back to the title
