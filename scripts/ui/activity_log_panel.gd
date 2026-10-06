@@ -5,6 +5,7 @@ extends PanelContainer
 ## takes the ship's color (lightened if too dark to read); good and bad news
 ## get a green or red highlight behind it. The « button folds it away to a thin
 ## strip (» opens it again), remembered with the game (GameState.activity_collapsed).
+## In multiplayer a chat line sits under it.
 
 ## Colors darker than this are lightened toward white so they read on the panel.
 const MIN_TEXT_LUMINANCE := 0.55
@@ -15,6 +16,8 @@ const OPEN_WIDTH := 272.0
 const FOLDED_WIDTH := 44.0
 
 @onready var _list: VBoxContainer = %LogList
+## Multiplayer: a line to chat to everyone in the game (see Net.say()).
+var _chat := LineEdit.new()
 
 
 func _ready() -> void:
@@ -23,6 +26,13 @@ func _ready() -> void:
 	%CollapseButton.pressed.connect(_toggle)
 	for entry in ActivityLog.entries:
 		_add_row(entry)
+	if Net.is_online():
+		_chat.placeholder_text = "Chat to everyone (Enter)"
+		_chat.max_length = Net.CHAT_MAX_LENGTH
+		_chat.text_submitted.connect(func(text: String) -> void:
+			Net.say(text)
+			_chat.clear())
+		%LogScroll.add_sibling(_chat)
 	_show_folded(GameState.activity_collapsed)
 
 
@@ -68,6 +78,7 @@ func _show_folded(folded: bool) -> void:
 	custom_minimum_size.x = FOLDED_WIDTH if folded else OPEN_WIDTH
 	%LogTitle.visible = not folded
 	%LogScroll.visible = not folded
+	_chat.visible = not folded and Net.is_online()
 	%EmptyLabel.visible = not folded and _list.get_child_count() == 0
 	%CollapseButton.text = "»" if folded else "«"
 	%CollapseButton.tooltip_text = "Show the activity log" if folded else "Fold the activity log away"

@@ -146,25 +146,25 @@ func _tips_list() -> Array[Dictionary]:
 			show = func() -> bool: return seen.call("seasons") and GameState.company_level() >= _first_icebreaker_level(),
 			text = func() -> String: return "Icebreakers are in the Shop now. You only need one if your ships trade where winter ice closes ports: the Great Lakes, the Sea of Okhotsk, the White Sea, or the Gulf of Finland, where the ice just slows ships. A nuclear one can keep the Arctic routes open all winter.\n\nBuy one, then pick its Station in its popup. While the ice is in, it leads your ships through in small convoys (or keeps the Gulf of Finland's fairways open). The rest of the year it just waits."},
 		{id = "lost", title = "Lost at sea",
-			show = func() -> bool: return GameState.ships.any(func(ship: Ship) -> bool: return ship.is_lost()),
+			show = func() -> bool: return GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_lost()),
 			text = func() -> String: return "A ship is lost at sea. A recovery boat can carry it to the nearer end of its leg: press Send Recovery in the lost ship's popup. With its Rescue switch on (it is by default), one is sent automatically.\n\nNo recovery boat yet? Buy one in the Shop when it unlocks."},
 	]
 
 
 func _cargo_ships() -> Array[Ship]:
 	var out: Array[Ship] = []
-	for ship in GameState.ships:
+	for ship in GameState.fleet():
 		if not ship.is_service():
 			out.append(ship)
 	return out
 
 
 func _any_route_assigned() -> bool:
-	return GameState.ships.any(func(ship: Ship) -> bool: return ship.has_route() or not ship.pending_route.is_empty())
+	return GameState.fleet().any(func(ship: Ship) -> bool: return ship.has_route() or not ship.pending_route.is_empty())
 
 
 func _has_sold() -> bool:
-	return GameState.ships.any(func(ship: Ship) -> bool: return float(ship.ledger.get("income", 0.0)) > 0.0)
+	return GameState.fleet().any(func(ship: Ship) -> bool: return float(ship.ledger.get("income", 0.0)) > 0.0)
 
 
 func _route_screen_open() -> bool:

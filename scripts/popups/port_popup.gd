@@ -222,7 +222,7 @@ func _refresh_ships() -> void:
 		%ShipList.remove_child(child)
 		child.queue_free()
 	var count := 0
-	for ship in GameState.ships:
+	for ship in GameState.fleet():
 		if ship.docked_at != port_id:
 			continue
 		var row := HBoxContainer.new()

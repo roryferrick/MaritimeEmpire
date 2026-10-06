@@ -53,6 +53,9 @@ const CANAL_TOLL := CanalTraffic.TOLL
 const CANAL_ANCHORED := CanalTraffic.ANCHORED
 const CANAL_CONVOY := CanalTraffic.CONVOY
 
+## A number no other ship in the game has (see GameState.next_ship_id); how
+## multiplayer games refer to it.
+var id := 0
 var name := ""
 ## The company that owns it (see GameState.owner_of()); saved by its place in
 ## GameState.companies.
@@ -1097,6 +1100,7 @@ func _convoy_text() -> String:
 
 func to_dict() -> Dictionary:
 	return {
+		"id": id,
 		"name": name,
 		"model_id": model_id,
 		"route": route,
@@ -1163,6 +1167,7 @@ func to_dict() -> Dictionary:
 ## maintenance and both toggles on. Call link_rescues() once every ship is loaded.
 static func from_dict(data: Dictionary) -> Ship:
 	var ship := Ship.new(data.get("name", ""), data.get("model_id", ""), data.get("docked_at", ""))
+	ship.id = int(data.get("id", 0))
 	ship.route.assign(data.get("route", []))
 	ship.pending_route.assign(data.get("pending_route", []))
 	ship.route_index = int(data.get("route_index", -1))
@@ -1242,3 +1247,24 @@ static func link_rescues(all: Array[Ship]) -> void:
 					ship.rescuer = mammoth
 		if mammoth.rescuing == null:
 			mammoth.job_phase = JOB_NONE
+
+
+## Applies an update from the host in a multiplayer game: any of to_dict()'s
+## keys (values as the host has them). "rescuing" is left to the caller, which
+## knows the other ships.
+func apply_update(data: Dictionary) -> void:
+	for key: String in data:
+		var value: Variant = data[key]
+		match key:
+			"rescuing", "company":
+				pass
+			"ledger", "skills":
+				var target: Dictionary = get(key)
+				for part: String in value:
+					target[part] = value[part]
+				if key == "skills":
+					invalidate_stats()
+			"route", "pending_route", "canals_entered", "delivery_canals":
+				(get(key) as Array).assign(value)
+			_:
+				set(key, value)

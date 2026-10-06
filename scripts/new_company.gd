@@ -166,4 +166,6 @@ func _start() -> void:
 		storms = _storms,
 		seasons = %SeasonsToggle.button_pressed,
 	})
+	if GameState.multiplayer_save:
+		Net.host_error = Net.host(MainMenu.host_settings)  # Friends can join it; the game says if it couldn't.
 	get_tree().change_scene_to_file(GAME_SCENE)

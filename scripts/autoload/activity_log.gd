@@ -18,6 +18,8 @@ var entries: Array[Dictionary] = []
 
 ## color: the text color, usually the ship's map color (see ship_color()).
 func add(text: String, kind := Kind.INFO, color := Color.TRANSPARENT) -> void:
+	if Net.redirect_log(text, kind, color):
+		return  # From a joined player's command: theirs, not this player's (see Net).
 	var entry := {text = text, kind = kind, color = color, time = GameState.play_time}
 	entries.append(entry)
 	if entries.size() > MAX_ENTRIES:

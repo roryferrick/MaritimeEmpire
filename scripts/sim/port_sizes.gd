@@ -206,3 +206,13 @@ func from_dict(data: Dictionary) -> bool:
 
 func _settings() -> Dictionary:
 	return GameData.config.get("port_sizes", {})
+
+
+## Applies an update from the host in a multiplayer game: some ports' entries
+## as to_dict() has them.
+func apply_update(data: Dictionary) -> void:
+	for port_id: String in data:
+		if _sizes.has(port_id):
+			var entry: Array = data[port_id]
+			_sizes[port_id] = float(entry[0])
+			_pending[port_id] = float(entry[1])

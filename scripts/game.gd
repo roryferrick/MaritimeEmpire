@@ -73,6 +73,10 @@ func _ready() -> void:
 	GameState.mega_upgraded.connect(_on_mega_upgraded)
 	GameState.port_band_changed.connect(_on_port_band_changed)
 	_update_alerts()
+	Net.left.connect(_on_left_game)
+	if not Net.host_error.is_empty():
+		_tell(Net.host_error, "Couldn't host this game")
+		Net.host_error = ""
 	if GameState.tutorials:
 		# Over the screens (and the Route Assignment map) but under the popups.
 		var tutorial := TutorialCard.new()
@@ -106,7 +110,7 @@ func _update_alerts() -> void:
 	_shop_alert.visible = not buyable.is_empty()
 	%ShopButton.tooltip_text = "You can buy: %s" % ", ".join(buyable) if not buyable.is_empty() else ""
 	var reasons := {}  # reason -> names of the ships it applies to
-	for ship in GameState.ships:
+	for ship in GameState.fleet():
 		var reason := ship.attention_reason()
 		if not reason.is_empty():
 			if not reasons.has(reason):
@@ -173,6 +177,8 @@ func _close_route_screen() -> void:
 ## the trade's profit after the canal tolls on the way; a loss is shown in red.
 ## A muted model's profitable sales are left out.
 func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity: int, cost: int, sale: int, tolls: int) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	var profit := sale - cost - tolls
 	if profit >= 0 and GameState.muted_models.has(ship.model_id):
 		return
@@ -184,6 +190,8 @@ func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity
 
 ## "Sea Otter loaded 10 containers of Toys for Rotterdam ($1,200)".
 func _on_cargo_loaded(ship: Ship, _port_id: String, commodity_id: String, quantity: int, cost: int, to_port: String) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	if GameState.muted_models.has(ship.model_id):
 		return
 	var commodity := GameData.commodity(commodity_id)
@@ -194,6 +202,8 @@ func _on_cargo_loaded(ship: Ship, _port_id: String, commodity_id: String, quanti
 ## "Ever Bright entered the Panama Canal: toll $4,200 (+50% XP on this delivery)";
 ## a convoy canal says the ship joined its convoy.
 func _on_canal_entered(ship: Ship, canal: Dictionary, toll: int) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	if GameState.muted_models.has(ship.model_id):
 		return
 	var what := "joined the %s convoy" % canal.name if canal.get("type", "") == "convoy" else "entered the %s" % canal.name
@@ -210,18 +220,26 @@ func _on_canal_entered(ship: Ship, canal: Dictionary, toll: int) -> void:
 
 
 func _on_ship_held(ship: Ship, reason: String) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	ActivityLog.add("%s is held at %s: %s" % [ship.name, GameData.port_name(ship.docked_at), reason], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_broke_down(ship: Ship) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	ActivityLog.add("%s broke down at sea! Maintenance now %d%%" % [ship.name, floori(ship.maintenance * 100.0)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_lost(ship: Ship) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	ActivityLog.add("%s is lost at sea (%s)." % [ship.name, ship.lost_reason], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	var outcome := "" if to_destination else " (back where it came from, so no pay)"
 	if mammoth.is_tug():
 		ActivityLog.add("%s towed %s in to %s%s" % [mammoth.tug_crew_text(), ship.name, GameData.port_name(port_id), outcome], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
@@ -230,6 +248,8 @@ func _on_ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destinati
 
 
 func _on_recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	if auto:
 		var sent := "%s sent" % boat.name
 		if boat.is_tug():
@@ -238,10 +258,14 @@ func _on_recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool) -> void:
 
 
 func _on_ship_at_risk(ship: Ship) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	ActivityLog.add("%s won't make it to %s at this rate!" % [ship.name, GameData.port_name(ship.to_port)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_sold(ship: Ship, price: int) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	ActivityLog.add("Sold %s for %s" % [ship.name, Fmt.money(price)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
@@ -253,18 +277,26 @@ func _on_company_leveled(level: int, unlocks: Array[String]) -> void:
 
 
 func _on_ship_leveled(ship: Ship, level: int) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
 	ActivityLog.add("%s reached level %d: an upgrade to spend" % [ship.name, level], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
 
 
 func _on_hub_leveled(hub: Hub, level: int) -> void:
+	if not GameState.hubs.has(hub):
+		return  # Another player's.
 	ActivityLog.add("%s reached level %d: an upgrade to spend" % [hub.title(), level], ActivityLog.Kind.GOOD)
 
 
 func _on_hub_built(hub: Hub) -> void:
+	if not GameState.hubs.has(hub):
+		return  # Another player's.
 	ActivityLog.add("Founded a hub at %s" % GameData.port_name(hub.port_id), ActivityLog.Kind.GOOD)
 
 
 func _on_mega_upgraded(model_id: String) -> void:
+	if Net.acting_peer != 0:
+		return  # A joined player's upgrade: theirs to hear about.
 	var model_name: String = GameData.get_ship_model(model_id).get("name", model_id)
 	ActivityLog.add("Mega upgrade: every %s now has %s" % [model_name, GameState.mega_effect(model_id)], ActivityLog.Kind.GOOD)
 
@@ -272,3 +304,21 @@ func _on_mega_upgraded(model_id: String) -> void:
 func _on_port_band_changed(port_id: String, band: String, grew: bool) -> void:
 	ActivityLog.add("%s %s to %s" % [GameData.port_name(port_id), "grew" if grew else "shrank", band.capitalize()],
 		ActivityLog.Kind.GOOD if grew else ActivityLog.Kind.INFO)
+
+
+## Multiplayer: the host left (or the connection dropped): back to the title
+## screen, saying why.
+func _on_left_game(reason: String) -> void:
+	_tell(reason, "Left the game", func() -> void: get_tree().change_scene_to_file("res://scenes/main_menu.tscn"))
+
+
+## A message box over the game; then() runs once it's closed.
+func _tell(text: String, title: String, then := Callable()) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = title
+	dialog.dialog_text = text
+	add_child(dialog)
+	if then.is_valid():
+		dialog.confirmed.connect(then)
+		dialog.canceled.connect(then)
+	dialog.popup_centered()

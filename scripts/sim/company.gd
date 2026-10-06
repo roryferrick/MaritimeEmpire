@@ -145,3 +145,40 @@ static func from_dict(data: Dictionary) -> Company:
 	company.muted_models.assign(data.get("muted_models", []))
 	company.activity_collapsed = bool(data.get("activity_collapsed", false))
 	return company
+
+
+## This player's own map and log settings: kept by each player's game, never
+## overwritten by the host's copy (see apply_update()).
+const PREF_KEYS: Array[String] = ["show_active_routes", "muted_models", "activity_collapsed", "tutorials_on", "tutorial_done"]
+
+
+## Applies an update from the host in a multiplayer game: any of to_dict()'s
+## keys. Hubs are updated in place (matched by port), so anything holding one
+## keeps a live hub. keep_prefs leaves PREF_KEYS alone (this player's company).
+func apply_update(data: Dictionary, keep_prefs := false) -> void:
+	for key: String in data:
+		if keep_prefs and key in PREF_KEYS:
+			continue
+		var value: Variant = data[key]
+		match key:
+			"company_name":
+				name = value
+			"company_color":
+				color = value
+			"company_xp":
+				xp = value
+			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models":
+				(get(key) as Array).assign(value)
+			"hubs":
+				var kept: Array[Hub] = []
+				for hub_data: Dictionary in value:
+					var hub := hub_at(str(hub_data.port_id))
+					if hub == null:
+						hub = Hub.from_dict(hub_data)
+					else:
+						for field: String in hub_data:
+							hub.set(field, hub_data[field])
+					kept.append(hub)
+				hubs = kept
+			_:
+				set(key, value)

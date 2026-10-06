@@ -8,6 +8,9 @@ extends PanelContainer
 
 const SPEED_BUTTON_WIDTH := 64.0
 
+## Multiplayer: who's playing (see _update_players()).
+var _players := Label.new()
+
 
 func _ready() -> void:
 	%CompanyLabel.text = GameState.company_name
@@ -29,6 +32,15 @@ func _ready() -> void:
 	_add_speed_buttons()
 	GameState.time_speed_changed.connect(_on_time_speed_changed)
 	_on_time_speed_changed(GameState.time_speed)
+	# Multiplayer: who's playing, beside the speeds (which only the host sets).
+	_players.theme_type_variation = &"DimLabel"
+	_players.mouse_filter = Control.MOUSE_FILTER_STOP
+	%SpeedButtons.add_sibling(_players)
+	%SpeedButtons.get_parent().move_child(_players, %SpeedButtons.get_index())
+	Net.players_changed.connect(_update_players)
+	_update_players()
+	_players.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_players.gui_input.connect(_on_players_input)
 
 
 ## F cycles the game speed (not while typing: text fields take the key first).
@@ -61,6 +73,24 @@ func _add_speed_buttons() -> void:
 		button.tooltip_text = ("Pause the game" if speed == 0 else "Run the game at %dx speed" % speed) + " (F steps through the speeds)."
 		button.pressed.connect(func() -> void: GameState.time_speed = speed)
 		%SpeedButtons.add_child(button)
+
+
+## "Hosting · 3 players" or "In Host Co's game · 3 players" (the tooltip names
+## them); hidden in single player. A joined player's speed buttons only show
+## the host's speed.
+func _update_players() -> void:
+	_players.visible = Net.is_online()
+	var names := PackedStringArray()
+	for id: int in Net.players:
+		var who: Dictionary = Net.players[id]
+		names.append("%s%s" % [who.name, " (host)" if id == 1 else ""])
+	var count := "%d player%s" % [Net.players.size(), "" if Net.players.size() == 1 else "s"]
+	_players.text = ("Hosting · %s" if Net.is_host() else "Joined · %s") % count
+	_players.tooltip_text = "Playing: %s" % ", ".join(names)
+	for button: Button in %SpeedButtons.get_children():
+		button.disabled = Net.is_client()
+		if Net.is_client():
+			button.tooltip_text = "Only the host sets the game speed."
 
 
 func _on_time_speed_changed(speed: int) -> void:
@@ -108,3 +138,32 @@ func _on_company_input(event: InputEvent) -> void:
 	var popup := GemPopup.new()
 	popup.follow = func() -> Vector2: return %CompanyLabel.get_global_rect().get_center() + Vector2(0, 30)
 	host.open(popup)
+
+
+## Clicking the players opens who's playing (each company, the host marked)
+## and Leave Game: the host saves and stops hosting; a joined player leaves
+## (their company carries on in the host's game). Both go back to the title.
+func _on_players_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var lines := PackedStringArray()
+	for id: int in Net.players:
+		var who: Dictionary = Net.players[id]
+		lines.append("%s%s" % [who.name, "  (host)" if id == 1 else ""])
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Players"
+	dialog.dialog_text = "\n".join(lines) + ("\n\nLeaving saves the game and ends it for everyone." if Net.is_host() else "\n\nYour company carries on in the host's game; join again to take it back.")
+	dialog.ok_button_text = "Leave Game"
+	dialog.cancel_button_text = "Close"
+	dialog.confirmed.connect(func() -> void:
+		if Net.is_host():
+			GameState.save_game()
+		Net.leave()
+		GameState.in_session = false
+		get_tree().change_scene_to_file("res://scenes/main_menu.tscn"))
+	dialog.visibility_changed.connect(func() -> void:
+		if not dialog.visible:
+			dialog.queue_free())
+	add_child(dialog)
+	dialog.popup_centered()

@@ -136,6 +136,8 @@ const TOW_LINE_PX := 5.0
 const TOW_LINE_COLOR := Color(0.92, 0.9, 0.82)
 ## Ships further than this (px, scaled up zoomed in) off screen aren't drawn.
 const SHIP_CULL_MARGIN := 40.0
+## How see-through other players' ships are drawn (multiplayer).
+const OTHER_SHIP_ALPHA := 0.6
 const BALLAST_DECK := Vector2(4.0, 104.0)
 const BALLAST_WATER_ALPHA := 0.75
 const BALLAST_RIPPLE := Color(0.85, 0.93, 1.0, 0.7)
@@ -1301,16 +1303,24 @@ func _draw_ports(labels: Array) -> void:
 		var radius := _port_radius(port_id)
 		_canvas.draw_circle(pos, radius, dimmed if dimmed_ports.has(port_id) else port_fill)
 		_canvas.draw_arc(pos, radius, 0.0, TAU, 24, outline, 1.5, true)
+	# Every company's HQ and hubs (other players' too, in multiplayer).
+	var hub_ports := {}  # Port id -> [[hub, its company's ring color], ...]
+	for each in GameState.all_companies():
+		var each_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value(each.color)
+		for hub in each.hubs:
+			(hub_ports.get_or_add(hub.port_id, []) as Array).append([hub, each_color])
 	for port: Dictionary in GameData.ports:
-		if not GameState.hub_at(port.id):
+		if not hub_ports.has(port.id):
 			draw_port.call(port.id)
-	# The HQ and hubs go on top of the other ports, each with a ring in the
-	# company's color (heavier for the HQ).
-	var ring_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value()
-	for hub in GameState.hubs:
-		draw_port.call(hub.port_id)
-		var width := HQ_RING_WIDTH if hub.is_hq else HUB_RING_WIDTH
-		_canvas.draw_arc(port_screen_position(hub.port_id), _port_radius(hub.port_id) + 1.0 + width / 2.0, 0.0, TAU, 32, ring_color, width, true)
+	# The HQ and hubs go on top of the other ports, each with a ring in its
+	# company's color (heavier for an HQ); companies sharing a port ring it in turn.
+	for port_id: String in hub_ports:
+		draw_port.call(port_id)
+		var radius := _port_radius(port_id) + 1.0
+		for entry: Array in hub_ports[port_id]:
+			var width := HQ_RING_WIDTH if entry[0].is_hq else HUB_RING_WIDTH
+			_canvas.draw_arc(port_screen_position(port_id), radius + width / 2.0, 0.0, TAU, 32, entry[1], width, true)
+			radius += width
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
 		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
@@ -1351,7 +1361,7 @@ func _draw_route() -> void:
 ## drawn once, in the first one's color (see ORE_LANE_WHITEN).
 func _draw_active_lanes() -> void:
 	var lanes := {}  # "A-B" (sorted) -> [from, to, color]
-	for ship in GameState.ships:
+	for ship in GameState.fleet():
 		if ship.is_service():
 			continue
 		var color := Color.from_string(ship.model().get("map_color", "#ffffff"), Color.WHITE)
@@ -1634,8 +1644,8 @@ func _draw_ships() -> void:
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 	_draw_tow_lines()
 	for ship in GameState.ships:
-		if ship.is_towed():
-			continue  # On its way in: nothing more to do.
+		if ship.is_towed() or not GameState.is_mine(ship):
+			continue  # On its way in, or another player's: no marker.
 		if ship.is_lost() and not ship.is_carried():
 			_draw_marker(ship_screen_position(ship), _color(&"lost_marker"))
 		elif ship.at_risk:
@@ -1684,6 +1694,11 @@ func _ships_biggest_first() -> Array[Ship]:
 func _draw_ship(ship: Ship, outline: Color) -> void:
 	var look := _model_look(ship.model_id)
 	var color: Color = look[0]
+	# Another player's ship (multiplayer): a little faded, with a flag in its
+	# company's color at the stern.
+	var fade := Color.WHITE if GameState.is_mine(ship) else Color(1, 1, 1, OTHER_SHIP_ALPHA)
+	color *= fade
+	outline *= fade
 	if ship.is_docked():
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		if ship.is_tug():
@@ -1715,7 +1730,10 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	_canvas.draw_set_transform(at, angle, Vector2.ONE * _ship_scale())
 	var art: Dictionary = look[6]
 	if not art.is_empty():
-		_draw_ship_art(ship, art, look[7], color)
+		_draw_ship_art(ship, art, look[7], color, fade)
+		if fade.a < 1.0:
+			var rect: Rect2 = look[7]
+			_canvas.draw_circle(Vector2(rect.position.x + rect.size.y * 0.5, 0.0), rect.size.y * 0.42, GameState.company_color_value(GameState.owner_of(ship).color))
 		if ship.is_recovery():
 			_draw_ballast(ship, look[7])
 		return
@@ -1729,7 +1747,7 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 
 ## The hull in the model's color, the cargo (cut off behind how full the hold
 ## is, in CARGO_STEPS steps, any cargo showing at least one) and the details.
-func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color) -> void:
+func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade := Color.WHITE) -> void:
 	_canvas.draw_texture_rect(art.hull, rect, false, color)
 	var level := ship.cargo_level()
 	if art.has("cargo") and level > 0.0:
@@ -1738,8 +1756,8 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color) -> v
 		var share := (zone.x + fill * (zone.y - zone.x)) / SHIP_ART_WIDTH
 		var texture: Texture2D = art.cargo
 		_canvas.draw_texture_rect_region(texture, Rect2(rect.position, Vector2(rect.size.x * share, rect.size.y)),
-			Rect2(Vector2.ZERO, Vector2(texture.get_width() * share, texture.get_height())))
-	_canvas.draw_texture_rect(art.details, rect, false)
+			Rect2(Vector2.ZERO, Vector2(texture.get_width() * share, texture.get_height())), fade)
+	_canvas.draw_texture_rect(art.details, rect, false, fade)
 
 
 ## How many times its map_size a ship at sea is drawn at this zoom.
