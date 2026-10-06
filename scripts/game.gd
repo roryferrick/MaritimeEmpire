@@ -223,12 +223,18 @@ func _on_ship_lost(ship: Ship) -> void:
 
 func _on_ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool) -> void:
 	var outcome := "" if to_destination else " (back where it came from, so no pay)"
+	if mammoth.is_tug():
+		ActivityLog.add("%s towed %s in to %s%s" % [mammoth.tug_crew_text(), ship.name, GameData.port_name(port_id), outcome], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
+		return
 	ActivityLog.add("%s carried %s to %s%s" % [mammoth.name, ship.name, GameData.port_name(port_id), outcome], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
 
 
 func _on_recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool) -> void:
 	if auto:
-		ActivityLog.add("Auto-recovery: %s sent for %s (about %s)" % [boat.name, ship.name, Fmt.money(cost)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+		var sent := "%s sent" % boat.name
+		if boat.is_tug():
+			sent = "%s sent out from %s" % [boat.tug_crew_text(), GameData.port_name(boat.tow_port)]
+		ActivityLog.add("Auto-recovery: %s for %s (about %s)" % [sent, ship.name, Fmt.money(cost)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 func _on_ship_at_risk(ship: Ship) -> void:

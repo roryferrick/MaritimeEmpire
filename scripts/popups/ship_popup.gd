@@ -14,6 +14,7 @@ const SKILLS := [
 	["speed", "Speed", "+%d%%"],
 	["efficiency", "Efficiency", "-%d%% fuel"],
 	["durability", "Durability", "-%d%% wear"],
+	["range", "Range", "+%d%% reach"],
 ]
 
 ## Set before adding to the tree.
@@ -41,6 +42,10 @@ func _ready() -> void:
 		$Content/Stats/CapacityName.text = "Needed"
 		%RangeValue.text = "Leads convoys through seasonal ice"
 		%CapacityValue.text = "Only needed in winter ice"
+	elif ship.is_tug():
+		$Content/Stats/RangeName.text = "Reach"
+		$Content/Stats/CapacityName.text = "Job"
+		%CapacityValue.text = "Tows in ships lost near its port"
 	else:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 		%CapacityValue.text = GameData.cargo_text(model)
@@ -90,6 +95,8 @@ func _update_live() -> void:
 	%StatusLabel.text = ship.status_text()
 	_update_skill_buttons()
 	%SpeedValue.text = "%s nm/s (top %s)" % [Fmt.decimal(ship.speed(), 2), Fmt.decimal(ship.top_speed(), 2)]
+	if ship.is_tug():
+		%RangeValue.text = "%d nm from %s" % [roundi(ship.reach_nm()), GameData.port_name(ship.base_port)]
 	var fuel := roundi(ship.stop_fuel_cost)
 	var repair := roundi(ship.stop_repair_cost)
 	var toll := ship.stop_toll
@@ -166,6 +173,10 @@ func _update_recovery() -> void:
 		%RecoveryLabel.text = plan.error
 		return
 	%RecoveryButton.text = "Send Recovery (about %s)" % Fmt.money(roundi(plan.cost))
+	if plan.has("tugs"):
+		var names: Array = plan.tugs.map(func(tug: Ship) -> String: return tug.name)
+		%RecoveryLabel.text = "%s → %s, about %s" % [" and ".join(names), GameData.port_name(plan.tow_port), Fmt.duration(plan.seconds)]
+		return
 	var mammoth: Ship = plan.mammoth
 	%RecoveryLabel.text = "%s → %s, about %s" % [
 		mammoth.name, GameData.port_name(plan.tow_port), Fmt.duration(plan.seconds)]
@@ -196,7 +207,7 @@ func _refresh_level() -> void:
 	for child in %SkillsBox.get_children():
 		%SkillsBox.remove_child(child)
 		child.queue_free()
-	for skill: Array in SKILLS:
+	for skill: Array in SKILLS.filter(func(entry: Array) -> bool: return ship.skill_names().has(entry[0])):
 		var level := int(ship.skills[skill[0]])
 		var name_label := Label.new()
 		name_label.text = skill[1]

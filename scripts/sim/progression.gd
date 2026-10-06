@@ -52,8 +52,8 @@ static func company_level(total_xp: float) -> Dictionary:
 ## unlocks, then ship_slots' start, one more every few levels, up to max_owned.
 static func model_slots(model: Dictionary, level: int) -> int:
 	var unlock := unlock_level(model)
-	if level < unlock:
-		return 0
+	if level < unlock or model.get("tug", false):
+		return 0  # Tugs come with the ports on the routes instead (GameState.tug_slots()).
 	var growth := _slot_growth(model)
 	return mini(int(growth[0]) + floori(float(level - unlock) / int(growth[1])), int(model.get("max_owned", 10)))
 
@@ -62,7 +62,7 @@ static func model_slots(model: Dictionary, level: int) -> int:
 static func next_slot_level(model: Dictionary, level: int) -> int:
 	if level < unlock_level(model):
 		return unlock_level(model)
-	if model_slots(model, level) >= int(model.get("max_owned", 10)):
+	if model.get("tug", false) or model_slots(model, level) >= int(model.get("max_owned", 10)):
 		return -1
 	var growth := _slot_growth(model)
 	var every := int(growth[1])

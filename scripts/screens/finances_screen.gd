@@ -26,7 +26,7 @@ const TOTAL_ROWS := [
 ]
 ## Ship table groups, in shop order: [title, ship_models.json category].
 const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Icebreakers", "icebreaker"]]
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"]]
 ## Money columns summed in each group's total row.
 const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "profit", "recent"]
 ## The Delivered card's heading for each markets.json unit.

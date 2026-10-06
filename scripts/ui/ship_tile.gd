@@ -90,6 +90,8 @@ func _update_info() -> void:
 		cargo = "Recovery"
 	elif ship.is_icebreaker():
 		cargo = "Icebreaker"
+	elif ship.is_tug():
+		cargo = "Tug at %s" % GameData.port_name(ship.base_port)
 	var points := ship.skill_points()
 	_info.text = "%s · Lv %d%s" % [cargo, ship.level(), " +%d" % points if points > 0 else ""]
 	_info.theme_type_variation = &"GainLabel" if points > 0 else &"DimLabel"

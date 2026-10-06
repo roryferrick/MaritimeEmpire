@@ -20,6 +20,16 @@ func _ready() -> void:
 	%RandomButton.pressed.connect(_suggest)
 	%CancelButton.pressed.connect(queue_free)
 	%BuyButton.pressed.connect(_confirm)
+	# A tug goes to the route port that needs one most (see GameState.buy_ship()).
+	if model.get("tug", false):
+		var port := GameState.tug_port_for_new()
+		if not port.is_empty():
+			%PortOption.add_item(GameData.port_name(port))
+			%PortOption.set_item_metadata(0, port)
+		%PortOption.disabled = true
+		%PortOption.tooltip_text = "Tugs are based two to a port across the ports on your routes, fewest first."
+		_suggest()
+		return
 	# Only ports that fit the ship: big enough, and not on the Great Lakes for
 	# ships too big for the St. Lawrence Seaway.
 	for hub in GameState.hubs:

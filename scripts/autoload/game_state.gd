@@ -73,8 +73,6 @@ const WINDOW_SECONDS := 600.0
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
 const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs", "upgrades", "mega"]
-## Order "Upgrade all" levels skills in, and breaks ties in.
-const AUTO_UPGRADE_ORDER: Array[String] = ["speed", "efficiency", "durability"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The hidden gem (click the company name): money it gives, once per company.
@@ -277,7 +275,10 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	if port_id.is_empty():
 		port_id = home_port
 	var model := GameData.get_ship_model(model_id)
-	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty() or not can_launch_at(model_id, port_id):
+	var tug: bool = model.get("tug", false)
+	if tug:
+		port_id = tug_port_for_new()  # Tugs go straight to the route port that needs one most.
+	if not buy_error(model_id).is_empty() or not ship_name_error(ship_name).is_empty() or (not tug and not can_launch_at(model_id, port_id)):
 		return null
 	var price := ship_price(model_id)
 	if price < int(model.get("price", 0)):
@@ -316,6 +317,12 @@ func buy_error(model_id: String) -> String:
 	var level := company_level()
 	if level < Progression.unlock_level(model):
 		return "Unlocks at company level %d." % Progression.unlock_level(model)
+	if model.get("tug", false):
+		if tug_ports().is_empty():
+			return "Tugs are based at the ports on your ships' routes: give a ship a route first."
+		if owned_count(model_id) >= tug_slots():
+			return "Each port on your routes takes %d tugs, and all %d tug slots are full. Routes to more ports give more." % [tugs_per_port(), tug_slots()]
+		return "You can't afford this ship." if money < ship_price(model_id) else ""
 	var slots := Progression.model_slots(model, level)
 	if owned_count(model_id) >= slots:
 		var next := Progression.next_slot_level(model, level)
@@ -445,6 +452,8 @@ func _skill_price(model: Dictionary, level: int) -> int:
 
 ## Why a ship can't take the next level of a skill now, or "".
 func skill_error(ship: Ship, skill: String) -> String:
+	if not ship.skill_names().has(skill):
+		return "Not an upgrade for this ship."
 	if int(ship.skills.get(skill, 0)) >= Progression.skill_max_level():
 		return "Maxed out."
 	if ship.skill_points() <= 0:
@@ -473,7 +482,7 @@ func _buy_skill(ship: Ship, skill: String) -> void:
 
 ## Every unspent skill point in the fleet as [cost, ship, skill], cheapest
 ## first. Each ship's points go round-robin to its lowest skill (ties broken in
-## AUTO_UPGRADE_ORDER: speed 1, efficiency 1, durability 1, speed 2...), which is
+## Ship.skill_names() order: speed 1, efficiency 1, durability 1, speed 2...), which is
 ## also its cheapest, so buying in this order keeps every ship's order.
 func _upgrade_plan() -> Array:
 	var plan := []
@@ -481,7 +490,7 @@ func _upgrade_plan() -> Array:
 		var levels := ship.skills.duplicate()
 		for point in ship.skill_points():
 			var best := ""
-			for skill in AUTO_UPGRADE_ORDER:
+			for skill in ship.skill_names():
 				if int(levels[skill]) < Progression.skill_max_level() and (best.is_empty() or int(levels[skill]) < int(levels[best])):
 					best = skill
 			if best.is_empty():
@@ -792,6 +801,7 @@ func assign_route(ship: Ship, route: Array[String]) -> void:
 		ship.route_index = ship.route.find(ship.docked_at)
 	else:
 		ship.pending_route = route.duplicate()
+	_rebalance_tugs()
 	ship_changed.emit(ship)
 
 
@@ -848,6 +858,7 @@ func sell_ship(ship: Ship) -> String:
 		_release_convoy(ship)
 	if ship.is_recovery():
 		_rebalance_recovery_boats()
+	_rebalance_tugs()
 	money += price
 	_record(null, "sold", price)
 	ship_sold.emit(ship, price)
@@ -862,6 +873,8 @@ func _advance(ship: Ship, delta: float) -> void:
 		return
 	if ship.is_icebreaker():
 		_advance_icebreaker(ship, delta)
+	elif ship.is_tug() and ship.is_on_job():
+		_advance_tug_job(ship, delta)
 	elif ship.is_on_job():
 		_advance_job(ship, delta)
 	elif ship.is_docked():
@@ -1674,6 +1687,241 @@ func _burn(ship: Ship, miles: float, speed: float) -> void:
 		ship.sea_time += seconds
 
 
+# --- Tugs ------------------------------------------------------------------
+
+## The ports on the company's cargo ships' routes (and routes they'll take up
+## after this leg), sorted: each takes tugs_per_port() tugs.
+func tug_ports() -> Array[String]:
+	var ports := {}
+	for ship in ships:
+		if ship.is_service():
+			continue
+		for port_id in ship.route:
+			ports[port_id] = true
+		for port_id in ship.pending_route:
+			ports[port_id] = true
+	var out: Array[String] = []
+	out.assign(ports.keys())
+	out.sort()
+	return out
+
+
+## How many tugs each port on the routes takes (game_config tugs per_port).
+func tugs_per_port() -> int:
+	return int(GameData.config.get("tugs", {}).get("per_port", 2))
+
+
+## How many tugs the company can own: tugs_per_port() for each port on its routes.
+func tug_slots() -> int:
+	return tug_ports().size() * tugs_per_port()
+
+
+## Tugs based at a port.
+func tugs_at(port_id: String) -> Array:
+	return ships.filter(func(ship: Ship) -> bool: return ship.is_tug() and ship.base_port == port_id)
+
+
+## Where a new tug is based: the route port with the fewest tugs, the busiest
+## first (on the most ships' routes), so they spread evenly. "" if there's none.
+func tug_port_for_new() -> String:
+	var ports := tug_ports()
+	var count := _tug_counts(ports)
+	var busy := {}
+	for ship in ships:
+		for port_id in ship.route:
+			busy[port_id] = int(busy.get(port_id, 0)) + 1
+	ports.sort_custom(func(a: String, b: String) -> bool:
+		if count[a] != count[b]:
+			return count[a] < count[b]
+		return int(busy.get(a, 0)) > int(busy.get(b, 0)))
+	return ports[0] if not ports.is_empty() else ""
+
+
+func _tug_counts(ports: Array[String]) -> Dictionary:
+	var count := {}
+	for port_id in ports:
+		count[port_id] = 0
+	for ship in ships:
+		if ship.is_tug() and count.has(ship.base_port):
+			count[ship.base_port] += 1
+	return count
+
+
+## Keeps tugs on the routes: a tug based at a port no longer on any route (or
+## one over its port's share) is re-based to the nearest route port still
+## short of tugs that a full tank can reach, and sails there once it's free.
+## One with nowhere to go stays put.
+func _rebalance_tugs() -> void:
+	var ports := tug_ports()
+	var count := _tug_counts(ports)
+	var kept := {}
+	var surplus := []
+	for ship in ships:
+		if not ship.is_tug():
+			continue
+		if count.has(ship.base_port) and int(kept.get(ship.base_port, 0)) < tugs_per_port():
+			kept[ship.base_port] = int(kept.get(ship.base_port, 0)) + 1
+		else:
+			surplus.append(ship)
+	for tug: Ship in surplus:
+		var here: String = tug.docked_at if tug.is_docked() else (tug.tow_port if tug.is_on_job() else tug.to_port)
+		var best := ""
+		for port_id in ports:
+			if int(kept.get(port_id, 0)) >= tugs_per_port() or not (port_id == here or tug.can_reach(here, port_id)):
+				continue
+			if best.is_empty() or GameData.distance_nm(here, port_id) < GameData.distance_nm(here, best):
+				best = port_id
+		if best.is_empty():
+			continue
+		kept[best] = int(kept.get(best, 0)) + 1
+		if tug.base_port != best:
+			tug.base_port = best
+			ship_changed.emit(tug)
+
+
+## Each tug's share of towing: game_config tugs tow_factor x its speed.
+func _tow_speed(tug: Ship) -> float:
+	var speed := maxf(tug.speed(), tug.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
+	return speed * float(GameData.config.get("tugs", {}).get("tow_factor", 0.5))
+
+
+## The tugs that would fetch a lost ship: the free ones (docked at their base,
+## with the reach and fuel) based at the nearer end of its leg they can reach
+## it from, up to tugs_per_port(). {tugs (lead first), tow_port, miles (from
+## the tugs' port), seconds, cost}, or {} if none can.
+func tug_plan(lost: Ship) -> Dictionary:
+	if not lost.is_lost() or lost.rescuer != null or lost.from_port.is_empty():
+		return {}
+	var ends := [[lost.from_port, lost.traveled_nm], [lost.to_port, lost.leg_length() - lost.traveled_nm]]
+	ends.sort_custom(func(a: Array, b: Array) -> bool: return float(a[1]) < float(b[1]))
+	for end: Array in ends:
+		var port: String = end[0]
+		var miles: float = maxf(float(end[1]), 0.0)
+		var team: Array = ships.filter(func(tug: Ship) -> bool:
+			return tug.is_tug() and tug.base_port == port and tug.docked_at == port and not tug.is_docking() \
+				and not tug.is_on_job() and tug.reach_nm() >= miles and tug.fuel >= _tug_fuel(tug, miles))
+		if team.is_empty():
+			continue
+		team = team.slice(0, tugs_per_port())
+		var tow := 0.0
+		var approach := 0.0
+		for tug: Ship in team:
+			tow += _tow_speed(tug)
+			approach = maxf(approach, miles / maxf(tug.speed(), 0.01))
+		var seconds := approach + Ship.ALIGN_SECONDS + miles / tow
+		var cost := 0.0
+		for tug: Ship in team:
+			cost += tug.fuel_per_s() * seconds * market.fuel_price(port) \
+				+ minf(tug.wear_per_s() * seconds, 1.0) * tug.full_repair_cost() * port_sizes.cost_factor(port)
+		return {tugs = team, tow_port = port, miles = miles, seconds = seconds, cost = cost}
+	return {}
+
+
+## Fuel a tug needs to fetch a ship `miles` out: out there, and back towing it
+## on its own (the slow case), plus a little spare.
+func _tug_fuel(tug: Ship, miles: float) -> float:
+	var seconds := miles / maxf(tug.speed(), 0.01) + Ship.ALIGN_SECONDS + miles / maxf(_tow_speed(tug), 0.01)
+	return tug.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S)
+
+
+## Sends a tug_plan()'s tugs out along the lost ship's lane from their port.
+func _send_tugs(lost: Ship, plan: Dictionary, auto: bool) -> void:
+	var port: String = plan.tow_port
+	var other := lost.to_port if port == lost.from_port else lost.from_port
+	var miles: float = plan.miles
+	var back := GameData.distance_nm(other, port)
+	var team: Array = plan.tugs
+	for i in team.size():
+		var tug: Ship = team[i]
+		_leave_port(tug)
+		tug.docked_at = ""
+		tug.rescuing = lost
+		tug.tug_lead = i == 0
+		tug.tow_port = port
+		tug.job_segments = [[other, port, back - miles, back]]
+		tug.job_nm = miles * 2.0
+		tug.carry_nm = miles
+		tug.align_time = 0.0
+		tug.job_phase = Ship.JOB_APPROACH
+		_start_segment(tug, [port, other, 0.0, miles])
+		ship_changed.emit(tug)
+	lost.rescuer = team[0]
+	recovery_sent.emit(lost, team[0], roundi(plan.cost), auto)
+	ship_changed.emit(lost)
+
+
+## A tug on a job: it sails out to the lost ship and turns round there; once
+## every tug on the job has, the lead one tows it in at all their tow speeds
+## added up (the other pushing at its stern), each burning fuel and wearing as
+## it goes, and hands it over at their port.
+func _advance_tug_job(tug: Ship, delta: float) -> void:
+	match tug.job_phase:
+		Ship.JOB_APPROACH:
+			_sail(tug, delta)
+			if tug.traveled_nm >= tug.segment_end:
+				tug.traveled_nm = tug.segment_end
+				canal_traffic.leave(tug)
+				tug.job_phase = Ship.JOB_ALIGN
+				tug.align_time = 0.0
+				ship_changed.emit(tug)
+		Ship.JOB_ALIGN:
+			tug.align_time += delta
+			if not tug.tug_lead:
+				return
+			var team := tug.tug_team()
+			if not team.all(func(each: Ship) -> bool: return each.tug_ready()):
+				return
+			for each in team:
+				each.job_phase = Ship.JOB_TOW
+				_start_segment(each, each.job_segments[0])
+				canal_traffic.leave(each)  # Towing near port: no lock queues.
+				ship_changed.emit(each)
+			ship_changed.emit(tug.rescuing)
+		Ship.JOB_TOW:
+			if not tug.tug_lead:
+				return  # Its lead moves the pair (see below).
+			var team := tug.tug_team()
+			var speed := 0.0
+			for each in team:
+				speed += _tow_speed(each)
+			var target := minf(tug.traveled_nm + speed * delta, tug.segment_end)
+			for each in team:
+				each.traveled_nm = target
+				each.fuel = maxf(each.fuel - each.fuel_per_s() * delta, 0.0)
+				each.maintenance = maxf(each.maintenance - each.wear_per_s() * delta, 0.01)
+			if target >= tug.segment_end:
+				_deliver_tugs(tug, team)
+
+
+## Hands the towed ship over at the tugs' port (paid as usual if that's where
+## it was going), docks the tugs there, and gives each its XP.
+func _deliver_tugs(lead: Ship, team: Array[Ship]) -> void:
+	var lost := lead.rescuing
+	var port := lead.tow_port
+	var to_destination := port == lost.to_port
+	ship_recovered.emit(lost, lead, port, to_destination)  # While the team's still together, for its names.
+	var settings: Dictionary = GameData.config.get("recovery_xp", {})
+	var cargo: Array = lost.model().get("cargo", [])
+	for tug in team:
+		var boat := tug.job_nm * float(settings.get("per_nm", 1.0))
+		var company := 0.0
+		if tug == lead and not cargo.is_empty():
+			company = Progression.xp_for_cargo(lost.capacity(), cargo[0], tug.carry_nm) * float(settings.get("company_share", 1.0))
+		tug.rescuing = null
+		tug.job_phase = Ship.JOB_NONE
+		tug.job_segments.clear()
+		tug.tow_port = ""
+		tug.tug_lead = false
+		tug.job_nm = 0.0
+		tug.carry_nm = 0.0
+		_arrive(tug, port, false)
+		if boat > 0.0:
+			_gain_xp(tug, boat, 1.0, company / boat)
+	lost.rescuer = null
+	lost.lost_reason = ""
+	_arrive(lost, port, to_destination)
+
+
 # --- Canals ----------------------------------------------------------------
 
 ## Extra money on a profitable trade from a leg's bonuses: the profit x (the
@@ -1734,13 +1982,19 @@ func record_toll(ship: Ship, canal: Dictionary, toll: int) -> void:
 func recovery_plan(lost: Ship) -> Dictionary:
 	if not lost.is_lost() or lost.rescuer != null:
 		return {error = "This ship doesn't need recovering."}
+	# Free tugs near enough come first: closer, quicker and cheaper.
+	var tugs := tug_plan(lost)
+	if not tugs.is_empty():
+		return tugs
 	var capable := ships.filter(func(ship: Ship) -> bool:
 		return ship.can_carry(lost) and ship.fits_lane(lost.from_port, lost.to_port))
 	if capable.is_empty():
 		var model_name: String = lost.model().get("name", lost.model_id)
 		if ships.any(func(ship: Ship) -> bool: return ship.is_recovery()):
 			return {error = "Only a Mammoth can carry a %s. Buy one in the Shop." % model_name}
-		return {error = "Buy a Mammoth or Buffalo in the Shop to recover lost ships."}
+		if ships.any(func(ship: Ship) -> bool: return ship.is_tug()):
+			return {error = "No free tug is based near enough. Buy a Mammoth or Buffalo in the Shop to recover ships further out."}
+		return {error = "Buy a Mammoth or Buffalo in the Shop to recover lost ships (or tugs, for ships lost near your ports)."}
 	var best := {}
 	var reason := "Every recovery boat that can carry it is busy."
 	for boat: Ship in capable:
@@ -1777,6 +2031,9 @@ func _send_recovery(lost: Ship, auto: bool) -> String:
 	var plan := recovery_plan(lost)
 	if plan.has("error"):
 		return plan.error
+	if plan.has("tugs"):
+		_send_tugs(lost, plan, auto)
+		return ""
 	var mammoth: Ship = plan.mammoth
 	_leave_port(mammoth)
 	mammoth.docked_at = ""
@@ -2154,6 +2411,7 @@ func continue_game(slot: int) -> String:
 	if not had_port_sizes:
 		_fit_ports_to_routes()
 	_rebalance_recovery_boats()
+	_rebalance_tugs()
 	_begin_session()
 	return ""
 

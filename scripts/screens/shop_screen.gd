@@ -1,7 +1,7 @@
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
 ## category: container ships, ore, grain and livestock carriers, tankers,
-## vehicle carriers, then recovery boats. Each section
+## vehicle carriers, then recovery boats, tugs and icebreakers. Each section
 ## title runs through its models' map colors, smallest ship first, and each
 ## card's name is in its model's map color, above a picture of the ship as it
 ## looks on the map (see ShipPicture). Each card shows how many of the
@@ -12,7 +12,8 @@ extends Control
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Icebreakers (only needed in seasonal ice)", "icebreaker"]]
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs (two for each port on your routes)", "tug"],
+	["Icebreakers (only needed in seasonal ice)", "icebreaker"]]
 ## Cards per row, fewer if they don't fit. Five fit beside the activity log
 ## at the default window size.
 const MAX_COLUMNS := 5
@@ -197,6 +198,10 @@ func _make_card(model: Dictionary) -> Control:
 		rows[1] = ["Carries", GameData.carries_text(model)]
 		rows[2] = ["Job", "Recovers lost ships"]
 		rows.remove_at(3)
+	elif model.get("tug", false):
+		rows[1] = ["Job", "Pushes or drags your lost ships back into port"]
+		rows[2] = ["Reach", "%d nm out from its port; two together tow twice as fast" % int(model.get("reach_nm", 0))]
+		rows[3] = ["Based", "Two at each port on your routes, spread evenly"]
 	elif not str(model.get("icebreaker", "")).is_empty():
 		var areas: Array = GameState.icebreaking.areas().filter(func(item: Dictionary) -> bool:
 			return (model.get("seaway", false) or item.id != "great_lakes") and (item.get("needs", "") != "nuclear" or model.icebreaker == "nuclear")).map(
@@ -244,7 +249,7 @@ func _update_cards() -> void:
 	var level := GameState.company_level()
 	for model_id: String in _buy_buttons:
 		var model := GameData.get_ship_model(model_id)
-		var slots := Progression.model_slots(model, level)
+		var slots := _slots(model)
 		var max_owned := int(model.get("max_owned", 0))
 		var owned := GameState.owned_count(model_id)
 		var next := Progression.next_slot_level(model, level)
@@ -253,7 +258,9 @@ func _update_cards() -> void:
 		if price < int(model.get("price", 0)):
 			_price_labels[model_id].text += " for your first, then %s" % Fmt.money(int(model.price))
 		_owned_labels[model_id].text = "%d / %d" % [owned, slots]
-		if slots < max_owned and level >= Progression.unlock_level(model):
+		if model.get("tug", false):
+			_owned_labels[model_id].text += " (2 per route port)"
+		elif slots < max_owned and level >= Progression.unlock_level(model):
 			_owned_labels[model_id].text += " (max %d)" % max_owned
 		var button: Button = _buy_buttons[model_id]
 		if level < Progression.unlock_level(model):
@@ -261,7 +268,7 @@ func _update_cards() -> void:
 		elif owned < slots:
 			button.text = "Buy"
 		else:
-			button.text = "Limit reached" if next < 0 else "Next slot at level %d" % next
+			button.text = "Route to more ports for more" if model.get("tug", false) else ("Limit reached" if next < 0 else "Next slot at level %d" % next)
 		var error := GameState.buy_error(model_id)
 		button.disabled = not error.is_empty()
 		_buy_alerts[model_id].visible = error.is_empty()
@@ -279,7 +286,7 @@ func _on_buy_pressed(model_id: String) -> void:
 ## stopping it (it's affordable, locked or out of slots).
 func _short_of_money(model_id: String) -> int:
 	var model := GameData.get_ship_model(model_id)
-	var slots := Progression.model_slots(model, GameState.company_level())
+	var slots := _slots(model)
 	if GameState.owned_count(model_id) >= slots:
 		return 0
 	return maxi(GameState.ship_price(model_id) - GameState.money, 0)
@@ -309,3 +316,11 @@ func _process(_delta: float) -> void:
 		_update_cards()
 	elif _hint.visible:
 		_update_hint()  # Follows the button if the list scrolls.
+
+
+## How many of a model the company can own now: its level's slots, or for
+## tugs two for each port on its routes.
+func _slots(model: Dictionary) -> int:
+	if model.get("tug", false):
+		return GameState.tug_slots() if GameState.company_level() >= Progression.unlock_level(model) else 0
+	return Progression.model_slots(model, GameState.company_level())

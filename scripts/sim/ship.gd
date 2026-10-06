@@ -159,7 +159,7 @@ var ledger := {"income": 0.0, "cargo": 0.0, "fuel": 0.0, "repair": 0.0, "tolls":
 ## Total XP from deliveries (cargo ships only), and skill levels bought with
 ## the points its levels give: "speed", "durability", "efficiency".
 var xp := 0.0
-var skills := {"speed": 0, "durability": 0, "efficiency": 0}
+var skills := {"speed": 0, "durability": 0, "efficiency": 0, "range": 0}
 ## The Mammoth sent to recover this ship, if any.
 var rescuer: Ship = null
 
@@ -180,6 +180,9 @@ var carry_nm := 0.0
 ## Recovery boat only: the HQ or hub port it's based at, returns to after a
 ## job, and sails to when the boats are rebalanced across hubs.
 var base_port := ""
+## Tug only: true for the tug that leads (drags) its job's tow; the other one
+## pushes at the stern.
+var tug_lead := false
 ## Icebreaker only: the ice area (game_config icebreaking) it's stationed at,
 ## or ""; base_port is then the port there it waits at.
 var station := ""
@@ -224,10 +227,30 @@ func is_icebreaker() -> bool:
 	return not str(model().get("icebreaker", "")).is_empty()
 
 
-## A service ship (a recovery boat or an icebreaker): no route or cargo, pays
-## its own fuel and repairs, and is never lost at sea.
+## A tug: based at a port on the company's routes, it pushes or drags ships
+## lost near there back in (see GameState.tug_plan()).
+func is_tug() -> bool:
+	return bool(model().get("tug", false))
+
+
+## A service ship (a recovery boat, an icebreaker or a tug): no route or
+## cargo, pays its own fuel and repairs, and is never lost at sea.
 func is_service() -> bool:
-	return is_recovery() or is_icebreaker()
+	return is_recovery() or is_icebreaker() or is_tug()
+
+
+## The skill paths its upgrade points go on: a tug's range in place of
+## durability (it never breaks down).
+func skill_names() -> Array[String]:
+	if is_tug():
+		return ["speed", "range", "efficiency"]
+	return ["speed", "efficiency", "durability"]
+
+
+## Tug only: how far along a lane from its port it fetches lost ships, more
+## with the range skill.
+func reach_nm() -> float:
+	return float(model().get("reach_nm", 0)) * (1.0 + _skill_bonus("range"))
 
 
 ## Whether a full tank at full maintenance gets this ship from one port to
@@ -365,7 +388,7 @@ func level() -> int:
 
 
 func skill_points() -> int:
-	return level() - int(skills.speed) - int(skills.durability) - int(skills.efficiency)
+	return level() - int(skills.speed) - int(skills.durability) - int(skills.efficiency) - int(skills.range)
 
 
 func _skill_bonus(skill: String) -> float:
@@ -504,9 +527,21 @@ func is_carried() -> bool:
 	return rescuer != null and rescuer.is_carrying()
 
 
+## Being pushed or dragged into port by tugs (rescuer is the lead tug).
+func is_towed() -> bool:
+	return rescuer != null and rescuer.is_tug() and rescuer.job_phase == JOB_TOW
+
+
+## Tug on a job: done turning round, and waiting for the other tug (or about to tow).
+func tug_ready() -> bool:
+	return is_tug() and job_phase == JOB_ALIGN and align_time >= ALIGN_SECONDS
+
+
 ## Recovery boat only: has the lost ship aboard or alongside (from when it's floated onto
 ## the deck until it's handed over at port).
 func is_carrying() -> bool:
+	if is_tug():
+		return false
 	if job_phase == JOB_TOW:
 		return true
 	if job_phase == JOB_UNLOAD:
@@ -520,6 +555,8 @@ func is_carrying() -> bool:
 ## the water), the ship floats over the deck, and it deballasts and rises; a
 ## third of LOAD_SECONDS each.
 func load_time() -> float:
+	if is_tug():
+		return -1.0
 	if job_phase == JOB_UNLOAD:
 		return align_time
 	if job_phase == JOB_ALIGN and align_time >= ALIGN_SECONDS and align_time <= ALIGN_SECONDS + LOAD_SECONDS:
@@ -583,7 +620,7 @@ func attention_reason() -> String:
 func is_active() -> bool:
 	if is_icebreaker():
 		return not ice_phase.is_empty() or not is_docked()
-	if is_recovery():
+	if is_recovery() or is_tug():
 		return is_on_job() or not is_docked()
 	return is_running() and not is_held() and not is_lost()
 
@@ -691,7 +728,7 @@ func leg_progress() -> float:
 
 ## Position in projected map coordinates.
 func world_position() -> Vector2:
-	if is_carried():
+	if is_carried() or is_towed():
 		return rescuer.world_position()
 	if is_docked():
 		return GameData.port_position(docked_at)
@@ -703,10 +740,14 @@ func world_position() -> Vector2:
 
 ## Direction of travel in projected map coordinates (zero when docked).
 func heading() -> Vector2:
-	if is_carried():
+	if is_carried() or is_towed():
 		return rescuer.heading()
 	if is_docked():
 		return Vector2.ZERO
+	if job_phase == JOB_ALIGN and is_tug():
+		# Sailed out from its port: turns round to take the ship back there.
+		var arrive := _lane_heading(from_port, to_port, traveled_nm).angle()
+		return Vector2.from_angle(arrive + PI * clampf(align_time / ALIGN_SECONDS, 0.0, 1.0))
 	if job_phase == JOB_ALIGN:
 		return _align_heading()
 	return _lane_heading(from_port, to_port, traveled_nm)
@@ -746,14 +787,19 @@ func status_text() -> String:
 	if is_recovery():
 		var job := _recovery_status_text()
 		return job if canal.is_empty() else "%s — %s" % [job, canal]
+	if is_tug():
+		var job := _tug_status_text()
+		return job if canal.is_empty() else "%s — %s" % [job, canal]
 	if is_lost():
 		if rescuer == null:
 			if auto_recover:
-				return "Lost at sea (%s), waiting for a free recovery boat" % lost_reason
+				return "Lost at sea (%s), waiting for a free recovery boat or tug" % lost_reason
 			return "Lost at sea (%s)" % lost_reason
 		if is_carried():
 			return "Being carried to %s by %s" % [GameData.port_name(rescuer.tow_port), rescuer.name]
-		return "Lost at sea (%s), %s on the way" % [lost_reason, rescuer.name]
+		if is_towed():
+			return "Being towed to %s by %s" % [GameData.port_name(rescuer.tow_port), rescuer.tug_crew_text()]
+		return "Lost at sea (%s), %s on the way" % [lost_reason, rescuer.tug_crew_text() if rescuer.is_tug() else rescuer.name]
 	if is_docked():
 		var port := GameData.port_name(docked_at)
 		if is_docking():
@@ -894,6 +940,53 @@ func _recovery_status_text() -> String:
 	return "Heading to base at %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
 
 
+## A tug's job: "Heading out to tow Hauler", "Turning round to take Hauler in
+## tow", "Waiting for Nudge to take Hauler in tow", "Towing Hauler to Vanino
+## with Nudge", "Pushing Hauler to Vanino with Tugger".
+func _tug_status_text() -> String:
+	var partners := tug_team().filter(func(tug: Ship) -> bool: return tug != self)
+	var with := " with %s" % partners[0].name if not partners.is_empty() else ""
+	match job_phase:
+		JOB_APPROACH:
+			return "Heading out to tow %s" % rescuing.name
+		JOB_ALIGN:
+			if align_time < ALIGN_SECONDS:
+				return "Turning round to take %s in tow" % rescuing.name
+			return "Waiting for %s to take %s in tow" % [partners[0].name if not partners.is_empty() else "the other tug", rescuing.name]
+		JOB_TOW:
+			return "%s %s to %s%s" % ["Towing" if tug_lead else "Pushing", rescuing.name, GameData.port_name(tow_port), with]
+	if is_docked():
+		var port := GameData.port_name(docked_at)
+		if is_docking():
+			return "Refueling at %s" % port
+		if is_held():
+			return "Docked at %s — %s" % [port, hold_reason]
+		if docked_at != base_port and not base_port.is_empty():
+			return "At %s, heading to its base at %s" % [port, GameData.port_name(base_port)]
+		return "Standing by at %s" % port
+	return "Sailing to its base at %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
+
+
+## Tug only: the tugs on its job (itself included, the lead first), or [].
+func tug_team() -> Array[Ship]:
+	var team: Array[Ship] = []
+	if rescuing == null:
+		return team
+	for tug in GameState.ships:
+		if tug.is_tug() and tug.rescuing == rescuing:
+			if tug.tug_lead:
+				team.push_front(tug)
+			else:
+				team.append(tug)
+	return team
+
+
+## Tug only: "Nudge" or "Nudge and Tugger".
+func tug_crew_text() -> String:
+	var names := tug_team().map(func(tug: Ship) -> String: return tug.name)
+	return " and ".join(names) if not names.is_empty() else name
+
+
 ## "Leading 3 ships to Vanino", "Standing by at Helsinki for the Gulf of
 ## Finland", "Not stationed (only needed in seasonal ice)".
 func _icebreaker_status_text() -> String:
@@ -982,6 +1075,7 @@ func to_dict() -> Dictionary:
 		"carry_nm": carry_nm,
 		"base_port": base_port,
 		"station": station,
+		"tug_lead": tug_lead,
 		"auto_recover": auto_recover,
 		"full_loads": full_loads,
 		"lost_order": lost_order,
@@ -1045,6 +1139,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.carry_nm = float(data.get("carry_nm", 0.0))
 	ship.base_port = data.get("base_port", "")
 	ship.station = data.get("station", "")
+	ship.tug_lead = bool(data.get("tug_lead", false))
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.full_loads = bool(data.get("full_loads", true))
 	ship.lost_order = int(data.get("lost_order", 0))
@@ -1068,6 +1163,7 @@ static func link_rescues(all: Array[Ship]) -> void:
 		for ship in all:
 			if not target.is_empty() and ship.name == target:
 				mammoth.rescuing = ship
-				ship.rescuer = mammoth
+				if not mammoth.is_tug() or mammoth.tug_lead:  # A pair of tugs: the lead one.
+					ship.rescuer = mammoth
 		if mammoth.rescuing == null:
 			mammoth.job_phase = JOB_NONE

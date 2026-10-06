@@ -35,7 +35,7 @@ func _process(_delta: float) -> void:
 	var steps := maxf(size.x, 1.0)
 	var key := [roundi(ship.maintenance * steps), roundi(ship.fuel_level() * steps), roundi(ship.cargo_level() * steps),
 		ship.cargo_id, ship.is_docking() and ship.dock_time < ship.dock_seconds() / 2.0, ship.is_docking(),
-		ship.is_carrying() if ship.is_recovery() else false]
+		ship.is_carrying() if ship.is_recovery() else ship.job_phase == Ship.JOB_TOW]
 	if key != _drawn:
 		_drawn = key
 		queue_redraw()
@@ -46,8 +46,8 @@ func _draw() -> void:
 	if ship.is_docking():
 		cargo_text = "Unloading" if ship.dock_time < ship.dock_seconds() / 2.0 else "Loading"
 	var load_bar := ["Cargo", ship.cargo_level(), &"cargo", cargo_text]
-	if ship.is_recovery():  # A Mammoth's load is the ship it's carrying.
-		var carrying := ship.is_carrying()
+	if ship.is_recovery() or ship.is_tug():  # A recovery boat's or tug's load is the ship it's carrying or towing.
+		var carrying := ship.is_carrying() or (ship.is_tug() and ship.job_phase == Ship.JOB_TOW)
 		load_bar = ["Tow", 1.0 if carrying else 0.0, &"cargo", ship.rescuing.name if carrying else "Empty"]
 	var bars := [
 		["Maintenance", ship.maintenance, &"maintenance", "%d%%" % floori(ship.maintenance * 100.0)],

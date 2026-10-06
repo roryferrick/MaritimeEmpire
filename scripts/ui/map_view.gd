@@ -82,6 +82,12 @@ const DOCK_RING_GAP := 6.0
 const DOCK_DOT_SPACING := 6.5
 ## Half the size of the docked-dot images: the dot plus room for its outline.
 const DOCK_DOT_IMAGE_RADIUS := DOCK_DOT_RADIUS + 1.5
+## Docked tugs aren't dots but small upright ticks across the top of their
+## port's outline, side by side TUG_TICK_GAP px apart, each reaching
+## TUG_TICK_REACH px inside and out of it, TUG_TICK_WIDTH wide.
+const TUG_TICK_REACH := 2.5
+const TUG_TICK_WIDTH := 1.6
+const TUG_TICK_GAP := 3.0
 ## How often (seconds) the static map layer (ports, labels, route lanes) is
 ## redrawn while ships are shown, besides whenever the view or settings change.
 const STATIC_REFRESH_S := 0.25
@@ -121,6 +127,10 @@ const RECOVERY_SLIDE := 0.55
 ## How wide a turning circle recovery boats and icebreakers sail round (in
 ## their own lengths), so they never pivot on the spot.
 const TURN_RADIUS_LENGTHS := 0.9
+## Tugs on a tow: how long the lead's tow line is on screen (px, before
+## scaling up zoomed in), and its color.
+const TOW_LINE_PX := 5.0
+const TOW_LINE_COLOR := Color(0.92, 0.9, 0.82)
 const BALLAST_DECK := Vector2(4.0, 104.0)
 const BALLAST_WATER_ALPHA := 0.75
 const BALLAST_RIPPLE := Color(0.85, 0.93, 1.0, 0.7)
@@ -324,6 +334,9 @@ var _center := Vector2.ZERO  # Map point shown at the middle of the view.
 ## the draw order (redone when the fleet changes) and each model's look.
 var _dock_slots := {}
 var _dock_slots_frame := -1
+## Docked tugs: each one's place among the tugs at its port, and how many are there.
+var _tug_slots := {}
+var _tug_counts := {}
 var _draw_order: Array[Ship] = []
 var _draw_order_dirty := true
 var _model_looks := {}
@@ -722,7 +735,12 @@ func ship_screen_position(ship: Ship) -> Vector2:
 		var pose := _turning_pose(ship)
 		if not pose.is_empty():
 			return pose[0]
+		if ship.is_tug() and ship.job_phase == Ship.JOB_TOW and ship.rescuing != null:
+			return world_to_screen(ship.world_position()) + Vector2.from_angle(_heading_angle(ship.heading())) * _tug_offset(ship)
 		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
+	if ship.is_tug():
+		var tick := _tug_tick(ship)
+		return (tick[0] + tick[1]) / 2.0
 	var slot := _dock_slot(ship)
 	var radius := _port_radius(ship.docked_at) + DOCK_FIRST_RING_GAP
 	var per_ring := floori(TAU * radius / DOCK_DOT_SPACING)
@@ -782,12 +800,20 @@ static func _lane_angle(from_port: String, to_port: String, mile: float) -> floa
 ## to lead its convoy or turning back from the ice edge - and a recovery boat
 ## loading a ship slides under it (_recovery_offset()).
 func _turning_pose(ship: Ship) -> Array:
-	if ship.is_docked() or ship.from_port.is_empty() or not (ship.is_recovery() or ship.is_icebreaker()):
+	if ship.is_docked() or ship.from_port.is_empty() or not (ship.is_recovery() or ship.is_icebreaker() or ship.is_tug()):
 		return []
 	var base := world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
 	var look_rect: Rect2 = _model_look(ship.model_id)[7]
 	var radius := look_rect.size.x * TURN_RADIUS_LENGTHS * _ship_scale()
 	var lane_angle := _lane_angle(ship.from_port, ship.to_port, ship.traveled_nm)
+	if ship.is_tug():
+		# Out at the lost ship, it turns round to face home and takes its place
+		# for the tow: ahead of the ship (the lead, on the tow line) or at its stern.
+		if ship.job_phase != Ship.JOB_ALIGN or ship.rescuing == null:
+			return []
+		var home := lane_angle + PI
+		return _turn_pose(base, lane_angle, base + Vector2.from_angle(home) * _tug_offset(ship), home, radius,
+			clampf(ship.align_time / Ship.ALIGN_SECONDS, 0.0, 1.0))
 	if ship.is_icebreaker():
 		var t := clampf(ship.align_time / Ship.ALIGN_SECONDS, 0.0, 1.0)
 		if ship.ice_phase == "turn_in":
@@ -809,6 +835,16 @@ func _turning_pose(ship: Ship) -> Array:
 		return [base + Vector2.from_angle(ship_angle) * _recovery_offset(ship) * _ship_scale(), ship_angle]
 	var t := (ship.align_time - Ship.ALIGN_SECONDS - Ship.LOAD_SECONDS) / Ship.ALIGN_SECONDS
 	return _turn_pose(base, ship_angle, base, ship_angle + PI, radius, clampf(t, 0.0, 1.0))
+
+
+## Where a tug on a tow sits (screen px along the way it's towing, from the
+## towed ship's middle): the lead ahead of the ship's bow on its tow line
+## (TOW_LINE_PX), the other pushing at its stern.
+func _tug_offset(tug: Ship) -> float:
+	var tug_rect: Rect2 = _model_look(tug.model_id)[7]
+	var ship_rect: Rect2 = _model_look(tug.rescuing.model_id)[7]
+	var gap := (tug_rect.size.x + ship_rect.size.x) / 2.0
+	return (gap + TOW_LINE_PX if tug.tug_lead else -gap) * _ship_scale()
 
 
 ## A point t (0 to 1) along a smooth turn from one screen pose (a, facing
@@ -894,13 +930,30 @@ func _dock_slot(ship: Ship) -> int:
 	if frame != _dock_slots_frame:
 		_dock_slots_frame = frame
 		_dock_slots.clear()
+		_tug_slots.clear()
+		_tug_counts.clear()
 		var counts := {}
 		for other in GameState.ships:
-			if other.is_docked():
+			if other.is_docked() and other.is_tug():
+				_tug_slots[other] = _tug_counts.get(other.docked_at, 0)
+				_tug_counts[other.docked_at] = int(_tug_slots[other]) + 1
+			elif other.is_docked():
 				var count: int = counts.get(other.docked_at, 0)
 				_dock_slots[other] = count
 				counts[other.docked_at] = count + 1
 	return _dock_slots.get(ship, 0)
+
+
+## A docked tug's tick across the top of its port's outline: [lower end,
+## upper end] on screen. Tugs at a port stand upright side by side,
+## TUG_TICK_GAP apart, each crossing the outline where it is.
+func _tug_tick(ship: Ship) -> PackedVector2Array:
+	_dock_slot(ship)  # Brings the tug places up to date for this frame.
+	var count := int(_tug_counts.get(ship.docked_at, 1))
+	var radius := _port_radius(ship.docked_at)
+	var across := clampf((int(_tug_slots.get(ship, 0)) - (count - 1) / 2.0) * TUG_TICK_GAP, -radius, radius)
+	var at := port_screen_position(ship.docked_at) + Vector2(across, -sqrt(radius * radius - across * across))
+	return PackedVector2Array([at + Vector2(0.0, TUG_TICK_REACH), at - Vector2(0.0, TUG_TICK_REACH)])
 
 ## Centers the view on a port, keeping the zoom.
 func focus_port(port_id: String) -> void:
@@ -1597,11 +1650,27 @@ func _draw_ships() -> void:
 		if ship.is_carried():
 			_draw_ship(ship, outline)
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+	_draw_tow_lines()
 	for ship in GameState.ships:
+		if ship.is_towed():
+			continue  # On its way in: nothing more to do.
 		if ship.is_lost() and not ship.is_carried():
 			_draw_marker(ship_screen_position(ship), _color(&"lost_marker"))
 		elif ship.at_risk:
 			_draw_marker(ship_screen_position(ship), _color(&"at_risk_marker"))
+
+
+## The tow line from each lead tug's stern to the bow of the ship it's towing.
+func _draw_tow_lines() -> void:
+	for tug in GameState.ships:
+		if not tug.is_tug() or not tug.tug_lead or tug.job_phase != Ship.JOB_TOW or tug.rescuing == null:
+			continue
+		var along := Vector2.from_angle(_heading_angle(tug.heading()))
+		var tug_rect: Rect2 = _model_look(tug.model_id)[7]
+		var ship_rect: Rect2 = _model_look(tug.rescuing.model_id)[7]
+		var stern := ship_screen_position(tug) - along * tug_rect.size.x / 2.0 * _ship_scale()
+		var bow := ship_screen_position(tug.rescuing) + along * ship_rect.size.x / 2.0 * _ship_scale()
+		_canvas.draw_line(stern, bow, TOW_LINE_COLOR, 1.0, true)
 
 
 ## Ships top-drawn first, so a click on overlapping ships picks the one on top.
@@ -1635,6 +1704,10 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	var color: Color = look[0]
 	if ship.is_docked():
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+		if ship.is_tug():
+			var tick := _tug_tick(ship)
+			_canvas.draw_line(tick[0], tick[1], color, TUG_TICK_WIDTH, true)
+			return
 		var at := ship_screen_position(ship)
 		# Stamped from two small images made once (antialiased circles are costly
 		# to build each frame): the dot in the model's color, then its outline.

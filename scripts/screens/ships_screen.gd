@@ -25,7 +25,7 @@ const SORT_NAMES := {Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", 
 const FILTER_NAMES := {
 	Filter.ALL: "All ships", Filter.ATTENTION: "Needs attention",
 	Filter.ACTIVE: "Running (green)", Filter.STOPPED: "Stopped (red)",
-	Filter.LOST: "Lost at sea", Filter.RECOVERY: "Recovery boats",
+	Filter.LOST: "Lost at sea", Filter.RECOVERY: "Recovery boats and tugs",
 }
 
 ## Model id -> [group box, tile grid].
@@ -275,7 +275,7 @@ static func _matches(ship: Ship, filter: int) -> bool:
 		Filter.LOST:
 			return ship.is_lost()
 		Filter.RECOVERY:
-			return ship.is_recovery()
+			return ship.is_recovery() or ship.is_tug()
 	return true
 
 
