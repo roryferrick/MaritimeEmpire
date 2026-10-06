@@ -35,6 +35,14 @@ const JOB_UNLOAD := "unload"
 ## onto the deck, deballast and rise) and, at port, to float it off again.
 const LOAD_SECONDS := 4.5
 
+## A cargo ship in port (berth_phase; see Docks): moored at its berth (or, with
+## no berth, lying at the anchorage), queuing at the anchorage for a berth,
+## coming alongside, or pulling out.
+const BERTH_NONE := ""
+const BERTH_WAIT := "wait"
+const BERTH_IN := "in"
+const BERTH_OUT := "out"
+
 ## A ship sells for this fraction of its price, times its maintenance.
 const SELL_FRACTION := 0.5
 ## attention_reason() for skill points to spend: the one reason that isn't a
@@ -82,6 +90,16 @@ var auto_refuel := true
 var auto_repair := true
 ## Seconds since the ship docked at the end of a leg; -1 when not unloading/loading.
 var dock_time := -1.0
+## In port (cargo ships; see Docks): its berth (-1 at the anchorage), what
+## it's doing about it (BERTH_*: moored or at anchor, queuing, coming
+## alongside, pulling out), seconds into coming alongside or pulling out, when
+## it joined the queue (play time), and the port it's pulling out to sail to
+## ("" if it's going to the anchorage).
+var berth := -1
+var berth_phase := BERTH_NONE
+var berth_time := 0.0
+var berth_since := 0.0
+var depart_to := ""
 ## How far into its stop (dock_time) its repairs and fuel have been done and
 ## paid for. Not saved: a stop carries on from where it was loaded.
 var refill_billed := 0.0
@@ -873,6 +891,14 @@ func status_text() -> String:
 		return "Lost at sea (%s), %s on the way" % [lost_reason, rescuer.tug_crew_text() if rescuer.is_tug() else rescuer.name]
 	if is_docked():
 		var port := GameData.port_name(docked_at)
+		match berth_phase:
+			BERTH_WAIT:
+				var place := GameState.docks.queue_position(self)
+				return "Waiting at anchor for a berth at %s%s" % [port, " (%s in line)" % Fmt.ordinal(place) if place > 0 else ""]
+			BERTH_IN:
+				return "Coming alongside at %s" % port
+			BERTH_OUT:
+				return "Pulling out of %s%s" % [port, " for %s" % GameData.port_name(depart_to) if not depart_to.is_empty() else " to anchor"]
 		if is_docking():
 			return ("Unloading at %s" if dock_time < dock_seconds() / 2.0 else "Loading at %s") % port
 		var text := "Docked at %s" % port
@@ -1115,6 +1141,11 @@ func to_dict() -> Dictionary:
 		"auto_refuel": auto_refuel,
 		"auto_repair": auto_repair,
 		"dock_time": dock_time,
+		"berth": berth,
+		"berth_phase": berth_phase,
+		"berth_time": berth_time,
+		"berth_since": berth_since,
+		"depart_to": depart_to,
 		"cargo_id": cargo_id,
 		"cargo_from": cargo_from,
 		"cargo_qty": cargo_qty,
@@ -1180,6 +1211,13 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.auto_repair = bool(data.get("auto_repair", true))
 	ship.dock_time = float(data.get("dock_time", -1.0))
 	ship.refill_billed = maxf(ship.dock_time, 0.0)
+	ship.berth = int(data.get("berth", -1))
+	ship.berth_time = float(data.get("berth_time", 0.0))
+	ship.berth_since = float(data.get("berth_since", 0.0))
+	ship.depart_to = str(data.get("depart_to", ""))
+	# A cargo ship from a save before berths that was mid-stop queues for a berth to finish it.
+	var mid_stop := ship.dock_time >= 0.0 and not ship.is_service() and not str(data.get("docked_at", "")).is_empty()
+	ship.berth_phase = str(data.get("berth_phase", BERTH_WAIT if mid_stop else BERTH_NONE))
 	ship.cargo_id = str(data.get("cargo_id", ""))
 	ship.cargo_from = str(data.get("cargo_from", ""))
 	ship.cargo_qty = int(data.get("cargo_qty", 0))

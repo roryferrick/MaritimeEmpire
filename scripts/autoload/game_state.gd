@@ -233,6 +233,8 @@ var seasonal := Seasons.new(self)
 var icebreaking := Icebreaking.new(self)
 ## Port sizes: how they grow and shrink, and what they change.
 var port_sizes := PortSizes.new(self)
+## Every port's berths and queue (see Docks).
+var docks := Docks.new(self)
 
 
 func _ready() -> void:
@@ -984,6 +986,7 @@ func sell_ship(ship: Ship) -> String:
 	if Net.command(&"sell_ship", [ship]):
 		return ""
 	var price := ship.sell_price()
+	docks.release(ship)
 	ships.erase(ship)
 	if ship.is_icebreaker():
 		_release_convoy(ship)
@@ -1001,7 +1004,8 @@ func sell_ship(ship: Ship) -> String:
 
 func _advance(ship: Ship, delta: float) -> void:
 	# A ship waiting in port for a full load, not due another look: nothing to do.
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need and ship.is_docked():
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need and ship.is_docked() \
+			and ship.berth_phase == Ship.BERTH_NONE:
 		return
 	# A recovery boat or tug standing by at its base (most of them, most of the
 	# time): nothing to do until it's sent out.
@@ -1334,6 +1338,12 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.from_port = ""
 	ship.to_port = ""
 	ship.traveled_nm = 0.0
+	if not ship.is_service():
+		# Its stop waits for a berth: it anchors and queues (see _advance_docked()).
+		ship.berth = -1
+		ship.berth_phase = Ship.BERTH_WAIT
+		ship.berth_since = play_time
+		docks.join_queue(ship)
 	if not ship.pending_route.is_empty():
 		ship.route = ship.pending_route.duplicate()
 		ship.pending_route.clear()
@@ -1350,11 +1360,17 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship_changed.emit(ship)
 
 
-## Docking runs on a fixed clock: repair for one refill phase, then refuel for
-## one, with unloading (and payment) over the first half of the dock time and
-## loading over the second. Afterwards a running ship leaves as soon as it has
-## the fuel for its next leg, and a Mammoth away from home sails back.
+## A cargo ship's stop needs a berth (see Docks): it waits at anchor for one,
+## first come first served, comes alongside (docks in_s), and only then does
+## its stop; when it's done it pulls out (docks out_s), to sail or, if it
+## can't go yet, to lie at the anchorage. The stop runs on a fixed clock:
+## repair for one refill phase, then refuel for one, with unloading (and
+## payment) over the first half of the dock time and loading over the second.
+## Afterwards a running ship leaves as soon as it has the fuel for its next
+## leg, and a Mammoth away from home sails back.
 func _advance_docked(ship: Ship, delta: float) -> void:
+	if not _advance_berth(ship, delta):
+		return
 	if ship.is_docking():
 		var end := ship.dock_time + delta
 		var dock_s := ship.dock_seconds()
@@ -1381,6 +1397,50 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
 	else:
 		_set_hold(ship, "")
+	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
+		_pull_out(ship, "")  # Done, but not going yet: off to the anchorage to wait.
+
+
+## A cargo ship's berth: queuing for one, coming alongside, pulling out. True
+## once it's moored (or never needed one), when its stop can go on.
+func _advance_berth(ship: Ship, delta: float) -> bool:
+	var settings := Docks.settings()
+	match ship.berth_phase:
+		Ship.BERTH_WAIT:
+			if not docks.claim(ship):
+				return false
+			ship.berth_phase = Ship.BERTH_IN
+			ship.berth_time = 0.0
+			ship_changed.emit(ship)
+			return false
+		Ship.BERTH_IN:
+			ship.berth_time += delta
+			if ship.berth_time < float(settings.get("in_s", 2.5)):
+				return false
+			ship.berth_phase = Ship.BERTH_NONE
+			ship_changed.emit(ship)
+		Ship.BERTH_OUT:
+			ship.berth_time += delta
+			if ship.berth_time < float(settings.get("out_s", 2.0)):
+				return false
+			docks.release(ship)
+			ship.berth_phase = Ship.BERTH_NONE
+			var to := ship.depart_to
+			ship.depart_to = ""
+			if not to.is_empty():
+				_set_off(ship, to)
+			else:
+				ship_changed.emit(ship)
+			return false
+	return true
+
+
+## Starts pulling out of its berth, then sails for `to` ("" to anchor).
+func _pull_out(ship: Ship, to: String) -> void:
+	ship.berth_phase = Ship.BERTH_OUT
+	ship.berth_time = 0.0
+	ship.depart_to = to
+	ship_changed.emit(ship)
 
 
 ## Halfway through a stop: sells the cargo it brought (if any), then loads its
@@ -1602,7 +1662,19 @@ func _set_hold(ship: Ship, reason: String) -> void:
 	ship_changed.emit(ship)
 
 
+## Sails for `to`: a ship at a berth pulls out first (see _pull_out()); one
+## at the anchorage sets off straight away.
 func _depart(ship: Ship, to: String) -> void:
+	if ship.berth >= 0:
+		if ship.berth_phase != Ship.BERTH_OUT:
+			_pull_out(ship, to)
+		return
+	_set_off(ship, to)
+
+
+func _set_off(ship: Ship, to: String) -> void:
+	docks.release(ship)  # It might have been queuing (a convoy leaving an iced port).
+	ship.berth_phase = Ship.BERTH_NONE
 	if not ship.is_service():
 		ship.route_index = ship.next_route_index()
 		_load_cargo(ship, to)  # If it didn't load when unloading (a new ship, or a new route).
@@ -2544,6 +2616,8 @@ func begin_client_session() -> void:
 func _client_frame(delta: float) -> void:
 	play_time += delta * time_speed
 	for ship in ships:
+		if ship.berth_phase == Ship.BERTH_IN or ship.berth_phase == Ship.BERTH_OUT:
+			ship.berth_time += delta * time_speed  # Coming alongside or pulling out, smoothly between updates.
 		if ship.is_docked() or ship.from_port.is_empty():
 			continue
 		var rate := Net.ship_rate(ship)
@@ -2675,6 +2749,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	for ship in ships:
 		ship.invalidate_stats()  # Skills and mega upgrades are all loaded now.
 	canal_traffic.rebuild(ships)
+	docks.rebuild(ships)
 	for ship in ships:
 		if ship.is_recovery() and ship.base_port.is_empty():  # Saves from before bases.
 			ship.base_port = owner_of(ship).home_port

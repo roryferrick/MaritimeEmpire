@@ -56,7 +56,7 @@ const LOBBY_ENTER_SUCCESS := 1
 ## (Steam won't send a message over 512 KB).
 const START_PART_BYTES := 256 * 1024
 ## Bumped whenever games of different versions couldn't play together.
-const PROTOCOL := 2
+const PROTOCOL := 3
 const MAX_PLAYERS := 8
 ## How often the host sends what changed, and announces itself.
 const SYNC_S := 0.15
@@ -66,7 +66,7 @@ const ANNOUNCE_S := 1.0
 const FULL_SYNC_S := 3.0
 ## The ship keys sent every update for ships under way or in port stops (see
 ## _broadcast()), in this order.
-const HOT_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "align_time", "dock_time", "lock_time"]
+const HOT_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "align_time", "dock_time", "lock_time", "berth_time"]
 ## A found game not heard from for this long is dropped from the list.
 const GAME_TIMEOUT_S := 4.0
 ## The longest chat message, and how many messages the Chat tab keeps.
@@ -74,7 +74,7 @@ const CHAT_MAX_LENGTH := 200
 const CHAT_KEPT := 200
 ## Keys of a ship's dictionary that change every step while it moves: a change
 ## to only these doesn't need the screens to look at the ship again.
-const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "sea_time", "align_time", "dock_time",
+const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "sea_time", "align_time", "dock_time", "berth_time",
 	"lock_time", "bill", "stop_fuel_cost", "stop_repair_cost", "canal_queue_since", "ledger", "xp", "job_nm", "carry_nm"]
 ## GameState signals whose first argument is a ship: sent to that ship's
 ## company's player. port_band_changed goes to everyone.
@@ -726,8 +726,8 @@ func _broadcast() -> void:
 			if not changed.is_empty():
 				ships[ship.id] = changed
 			_sent.ships[ship.id] = data
-		elif not ship.is_docked() or ship.dock_time >= 0.0:
-			var values := [ship.traveled_nm, ship.fuel, ship.maintenance, ship.align_time, ship.dock_time, ship.lock_time]
+		elif not ship.is_docked() or ship.dock_time >= 0.0 or ship.berth_phase != Ship.BERTH_NONE:
+			var values := [ship.traveled_nm, ship.fuel, ship.maintenance, ship.align_time, ship.dock_time, ship.lock_time, ship.berth_time]
 			hot[ship.id] = values
 			var kept: Dictionary = _sent.ships[ship.id]
 			for k in HOT_KEYS.size():
@@ -863,6 +863,8 @@ func _apply_ships(changes: Dictionary, gone: Array, now_msec: int) -> void:
 			GameState.ship_changed.emit(ship)
 	if relink:
 		_relink_rescues()
+	if not changes.is_empty() or not gone.is_empty():
+		GameState.docks.rebuild(GameState.ships)  # Who's at which berth and in line (for statuses).
 	if fleet_changed:
 		GameState.ships_changed.emit()
 
@@ -1199,6 +1201,7 @@ func _apply_hot(hot: Dictionary, now_msec: int) -> void:
 		ship.align_time = values[3]
 		ship.dock_time = values[4]
 		ship.lock_time = values[5]
+		ship.berth_time = values[6]
 		_ship_marks[ship] = [ship.traveled_nm, now_msec]
 
 
