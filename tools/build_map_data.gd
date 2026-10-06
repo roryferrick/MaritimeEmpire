@@ -99,6 +99,19 @@ const ANIMALS := [
 	["orangutan", 114.0, 1.0, 2], ["orangutan", 98.0, 3.5, 3],
 	["kiwi", 175.5, -39.0, 2], ["kiwi", 170.0, -44.0, 3],
 	["lemur", 46.5, -20.0, 2],
+	# Birds, drawn soaring (the quetzal perched): resplendent quetzals in the
+	# cloud forests of Guatemala and Costa Rica; red-tailed hawks across North
+	# America; bald eagles on its coasts, rivers and lakes; ospreys by water on
+	# every continent but Antarctica.
+	["quetzal", -90.4, 15.4, 2], ["quetzal", -84.8, 10.3, 2],
+	["red_tailed_hawk", -98.0, 38.5, 2], ["red_tailed_hawk", -112.0, 36.0, 2], ["red_tailed_hawk", -86.0, 40.0, 3],
+	["red_tailed_hawk", -120.5, 44.5, 3], ["red_tailed_hawk", -106.0, 51.0, 3], ["red_tailed_hawk", -101.5, 24.5, 3],
+	["red_tailed_hawk", -80.5, 35.5, 3], ["red_tailed_hawk", -93.5, 45.0, 3],
+	["bald_eagle", -134.5, 58.3, 2], ["bald_eagle", -123.8, 50.2, 2], ["bald_eagle", -89.5, 46.5, 2], ["bald_eagle", -152.0, 60.5, 3],
+	["bald_eagle", -81.3, 28.3, 3], ["bald_eagle", -76.8, 38.9, 3], ["bald_eagle", -66.5, 46.0, 3], ["bald_eagle", -122.6, 45.6, 3],
+	["osprey", -69.5, 44.5, 2], ["osprey", 15.5, 61.5, 2], ["osprey", 135.0, -33.5, 2], ["osprey", -81.6, 26.8, 3],
+	["osprey", -4.2, 57.2, 3], ["osprey", 12.5, 53.3, 3], ["osprey", 9.1, 42.2, 3], ["osprey", 152.5, -26.5, 3],
+	["osprey", 140.5, 39.0, 3], ["osprey", -116.0, 44.0, 3],
 ]
 const LANES_OUT := "res://data/sea_lanes.res"
 
@@ -355,6 +368,7 @@ func _build_map(land_polygons: Array) -> void:
 	var biomes := _build_biomes()
 	_build_land_texture(biomes)
 	_add_decor(map, biomes)
+	_add_sea_mask(map, biomes)
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 
@@ -784,6 +798,21 @@ static func _in_any(polygons: Array, lon_lat: Vector2) -> bool:
 
 
 ## The biome at a (lon, lat), or BIOME_SEA.
+## Where the sea is, for the sea animals (SeaLife): the biome grid's sea
+## cells, a bit each (row by row from the north, west to east).
+func _add_sea_mask(map: WorldMapData, biomes: PackedByteArray) -> void:
+	var bits := PackedByteArray()
+	bits.resize(ceili(BIOME_COLS * BIOME_ROWS / 8.0))
+	var count := 0
+	for i in BIOME_COLS * BIOME_ROWS:
+		if biomes[i] == BIOME_SEA:
+			bits[i >> 3] |= 1 << (i & 7)
+			count += 1
+	map.sea_mask = bits
+	map.sea_mask_size = Vector2i(BIOME_COLS, BIOME_ROWS)
+	print("Sea mask: %d of %d cells are sea" % [count, BIOME_COLS * BIOME_ROWS])
+
+
 static func _biome_at(biomes: PackedByteArray, lon_lat: Vector2) -> int:
 	var col := posmod(floori((lon_lat.x + 180.0) / 360.0 * BIOME_COLS), BIOME_COLS)
 	var row := clampi(floori((90.0 - lon_lat.y) / 180.0 * BIOME_ROWS), 0, BIOME_ROWS - 1)

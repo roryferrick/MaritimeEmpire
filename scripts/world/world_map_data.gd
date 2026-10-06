@@ -43,6 +43,12 @@ extends Resource
 @export var feature_label_kinds := PackedByteArray()
 @export var feature_label_min_zoom := PackedFloat32Array()
 
+## Where the sea is (tools/build_map_data.gd _add_sea_mask()), for the sea
+## animals: a bit per cell of a sea_mask_size grid over longitude -180 to 180
+## and latitude 90 down to -90, row by row from the north (1 = sea).
+@export var sea_mask := PackedByteArray()
+@export var sea_mask_size := Vector2i.ZERO
+
 ## Little drawings on the land (tools/build_map_data.gd _add_decor()): each
 ## one's spot (projected), kind (an index into decor_kind_names, the art in
 ## art/decor) and tier. Tier t is spaced about decor_tier_spacing[t] projected

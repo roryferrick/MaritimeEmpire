@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<path d="M32,31 Q22,22 14,26 Q8,22 2,27 Q8,29 7,32 Q14,30 16,33 Q23,31 32,36 Z M32,31 Q42,22 50,26 Q56,22 62,27 Q56,29 57,32 Q50,30 48,33 Q41,31 32,36 Z" fill="#5a4632" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round"/>
+<circle cx="14" cy="27.5" r="2" fill="#3f3022"/><circle cx="50" cy="27.5" r="2" fill="#3f3022"/>
+<path d="M29,40 L27,51 Q32,54 37,51 L35,40 Z" fill="#7a6450" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M28,45 L36,45 M28,48.5 L36,48.5" stroke="#d8cdbd" stroke-width="1.4"/>
+<ellipse cx="32" cy="35" rx="5" ry="8.5" fill="#5f4a35" stroke="#3a3128" stroke-width="2.5"/>
+<circle cx="32" cy="24" r="5" fill="#f6f4ee" stroke="#3a3128" stroke-width="2.5"/>
+<path d="M27.5,23 L36.5,23" stroke="#4a3a2a" stroke-width="1.8" stroke-linecap="round"/>
+<circle cx="29.8" cy="23" r="1.2" fill="#f2c33a"/><circle cx="34.2" cy="23" r="1.2" fill="#f2c33a"/>
+<path d="M31,26 L33,26 L32,28.5 Z" fill="#2a2420"/>
+</svg>

@@ -14,6 +14,8 @@ signal canal_clicked(canal_id: String)
 signal empty_clicked
 ## A storm was clicked (by its Weather.key()).
 signal storm_clicked(storm_key: String)
+## A pod of sea animals was clicked (its index in SeaLife.pods).
+signal pod_clicked(pod_index: int)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 
@@ -84,7 +86,8 @@ const DECOR_SIZE_PX := Vector3(20.0, 34.0, 28.0)
 const DECOR_ZOOM_REFERENCE := 30.0
 const DECOR_SCALE_RANGE := Vector2(0.9, 1.5)
 const DECOR_ANIMALS: Array[String] = ["penguin", "polar_bear", "camel", "elephant", "giraffe", "lion", "zebra", "kangaroo", "koala",
-	"panda", "tiger", "bison", "moose", "brown_bear", "reindeer", "llama", "toucan", "gorilla", "orangutan", "kiwi", "lemur"]
+	"panda", "tiger", "bison", "moose", "brown_bear", "reindeer", "llama", "toucan", "gorilla", "orangutan", "kiwi", "lemur",
+	"quetzal", "red_tailed_hawk", "bald_eagle", "osprey"]
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
 ## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
@@ -412,6 +415,16 @@ var _weather_layer := Control.new()
 ## The storm whose popup is open, and the one under the mouse (Weather.key()s; "" for none).
 var selected_storm := ""
 var _hovered_storm := ""
+## The sea animals' pod whose popup is open, and the one under the mouse (-1 for none).
+var selected_pod := -1
+var _hovered_pod := -1
+## The sea animals' art by name, each pod's facing on screen (eased round as
+## it turns), and where each pod was last drawn: [pod index, center, radius].
+var _sea_art := {}
+var _pod_angles := {}
+var _pod_hits: Array = []
+## Until the sea animals' migration paths are all found (see SeaLife.start_warm_up()).
+var _sea_warming := true
 ## Land drawings: a texture per kind (WorldMapData.decor_kind_names), and the
 ## drawings by DECOR_BUCKET-degree cell, so only those near the view are looked at.
 var _decor_textures: Array[Texture2D] = []
@@ -632,6 +645,9 @@ func _process(delta: float) -> void:
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_overlay.queue_redraw()
+	if _sea_warming:
+		SeaLife.shared().start_warm_up()  # Their paths are found off the main thread.
+		_sea_warming = not SeaLife.shared().is_ready()
 	_ice_clock += delta
 	if _ice_clock >= ICE_REFRESH_S:
 		_ice_clock = 0.0
@@ -1003,21 +1019,21 @@ func _gui_input(event: InputEvent) -> void:
 			_changed()
 		accept_event()
 	elif motion:
-		_hover_storm(_storm_at(motion.position) if show_ships else "")
+		var pod := _pod_at(motion.position) if show_ships else -1
+		_hover(pod, _storm_at(motion.position) if show_ships and pod < 0 else "")
 
 
-## The storm under the mouse: its track and edges show stronger, and the
-## pointer shows it can be clicked.
-func _hover_storm(storm_key: String) -> void:
-	if storm_key == _hovered_storm:
-		return
+## The sea animals' pod or storm under the mouse: a pod's route shows, a
+## storm's track and edges show stronger, and the pointer shows either can be clicked.
+func _hover(pod: int, storm_key: String) -> void:
+	_hovered_pod = pod
 	_hovered_storm = storm_key
-	mouse_default_cursor_shape = CURSOR_POINTING_HAND if not storm_key.is_empty() else CURSOR_ARROW
+	mouse_default_cursor_shape = CURSOR_POINTING_HAND if pod >= 0 or not storm_key.is_empty() else CURSOR_ARROW
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_MOUSE_EXIT:
-		_hover_storm("")
+		_hover(-1, "")
 
 
 ## Picks whichever port or ship is closest to the click, within its hit radius,
@@ -1046,6 +1062,8 @@ func _click(screen_pos: Vector2) -> void:
 		lock_clicked.emit(lock[0], lock[1])
 	elif not _convoy_canal_at(screen_pos).is_empty():
 		canal_clicked.emit(_convoy_canal_at(screen_pos))
+	elif show_ships and _pod_at(screen_pos) >= 0:
+		pod_clicked.emit(_pod_at(screen_pos))
 	elif show_ships and not _storm_at(screen_pos).is_empty():
 		storm_clicked.emit(_storm_at(screen_pos))
 	else:
@@ -1119,6 +1137,7 @@ func _redraw_layers() -> void:
 func _draw_weather_layer() -> void:
 	_canvas = _weather_layer
 	if show_ships:
+		_draw_sea_life()  # Under the ice and storms: they swim beneath both.
 		_draw_ice()
 		_draw_route_labels()
 		_draw_storms()
@@ -2178,6 +2197,213 @@ func _draw_decor() -> void:
 		var big := DECOR_ANIMALS.has(kind_name) or kind_name == "waves"
 		var side: float = (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if big else DECOR_SIZE_PX.x)) * scale
 		_canvas.draw_texture_rect(texture, Rect2(item[0] - Vector2(side / 2.0, side * 0.92), Vector2(side, side)), false)
+
+
+# --- Sea animals -------------------------------------------------------------------
+
+## Sea animals (SeaLife) show from this zoom in (px per degree), and their art
+## is in SEA_ART_DIR (drawn head to the right, SEA_ART_ASPECT long for its
+## width). Under water an animal is a pale blue-grey shape (SEA_SHADOW, as one looks through the sea); now and
+## then a whale or orca comes up to breathe (SEA_SURFACE_S, with a blow) or
+## breaches (SEA_BREACH_S, with a splash), and dolphins leap (SEA_LEAP_S).
+## The selected or hovered pod's year of routes shows dashed (SEA_ROUTE_COLOR).
+const SEA_LIFE_MIN_ZOOM := 10.0
+const SEA_ART_DIR := "res://art/sea/"
+const SEA_ART_ASPECT := 128.0 / 48.0
+const SEA_SHADOW := Color(0.62, 0.78, 0.9, 0.5)
+const SEA_SURFACE_S := 3.0
+const SEA_BREACH_S := 2.4
+const SEA_LEAP_S := 1.0
+const SEA_SPLASH := Color(0.94, 0.98, 1.0)
+const SEA_ROUTE_COLOR := Color(0.75, 0.95, 1.0, 0.45)
+const SEA_HIT_MIN_PX := 12.0
+
+
+## Every pod of sea animals in view (from the opening zoom in): a loose group
+## swimming the way it's heading, each animal a shadow under the water unless
+## it's up at the surface, breaching or leaping.
+func _draw_sea_life() -> void:
+	_pod_hits.clear()
+	if gray_mode or _zoom < SEA_LIFE_MIN_ZOOM or _sea_warming:  # (They show once their paths are found.)
+		return
+	var sea := SeaLife.shared()
+	var now := float(GameState.calendar_time())
+	var view := Rect2(Vector2.ZERO, size).grow(80.0)
+	var scale := _ship_scale()
+	for highlight in [selected_pod, _hovered_pod]:
+		if highlight >= 0 and highlight < sea.pods.size():
+			_draw_pod_routes(sea, highlight)
+	for i in sea.pods.size():
+		var pod: Dictionary = sea.pods[i]
+		var kind: Dictionary = sea.species[pod.species]
+		var state := sea.state(i, now)
+		var center := world_to_screen(Geo.project(state.pos))
+		if not view.has_point(center):
+			continue
+		var heading: Vector2 = state.heading
+		var target: float = Vector2(heading.x, -heading.y).angle() if heading != Vector2.ZERO else float(_pod_angles.get(i, 0.0))
+		var angle := lerp_angle(float(_pod_angles.get(i, target)), target, 0.08)
+		_pod_angles[i] = angle
+		var shown := mini(int(pod.size), int(kind.shown))
+		var spacing := float(kind.spacing_px) * scale
+		var reach := spacing * sqrt(float(shown)) + float(kind.length_px) * scale * 0.5
+		_pod_hits.append([i, center, maxf(reach, SEA_HIT_MIN_PX)])
+		for j in shown:
+			_draw_sea_animal(i, j, kind, center, angle, spacing, scale)
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## One animal of a pod: its place in the group (spread round the middle,
+## drifting a little), then its shadow and whatever it's doing at the surface.
+func _draw_sea_animal(pod: int, j: int, kind: Dictionary, center: Vector2, angle: float, spacing: float, scale: float) -> void:
+	var t := GameState.play_time
+	var spot := Vector2.from_angle(j * 2.39996) * spacing * sqrt(float(j)) * 0.9
+	spot += Vector2(sin(t * 0.7 + j * 1.3), cos(t * 0.5 + j * 0.9)) * spacing * 0.15
+	var at := center + spot.rotated(angle)
+	var facing := angle + sin(t * 1.4 + j * 2.1) * 0.12
+	var length := float(kind.length_px) * scale
+	var texture := _sea_texture(str(kind.art))
+	if texture == null:
+		return
+	_draw_sea_sprite(_sea_silhouette(str(kind.art)), at, facing, length, 1.0, SEA_SHADOW)
+	var dolphin: bool = kind.kind == "dolphin"
+	var breach: Array = kind.get("breach", [])
+	if not breach.is_empty():
+		var up := _sea_event(pod, j, "breach", float(breach[0]), float(breach[1]), SEA_LEAP_S if dolphin else SEA_BREACH_S)
+		if up >= 0.0:
+			if dolphin:
+				_draw_leap(texture, at, facing, length, up)
+			else:
+				_draw_breach(texture, at, facing, length, up)
+			return
+	var surface: Array = kind.get("surface", [])
+	if not surface.is_empty():
+		var up := _sea_event(pod, j, "surface", float(surface[0]), float(surface[1]), SEA_SURFACE_S)
+		if up >= 0.0:
+			_draw_sea_sprite(texture, at, facing, length, 1.0, Color(1, 1, 1, sin(PI * up) * 0.95))
+			if up > 0.15 and up < 0.75:
+				_draw_blow(at + Vector2.from_angle(facing) * length * 0.32, length, (up - 0.15) / 0.6)
+
+
+## How far (0..1) an animal is through an event lasting `seconds`, or -1 if
+## it isn't having one now. Play time is cut into `every`-second slots; in
+## each, by the pod, animal and slot, it has the event with this chance, at a
+## random moment.
+static func _sea_event(pod: int, j: int, what: String, every: float, chance: float, seconds: float) -> float:
+	var t := GameState.play_time
+	var slot := floorf(t / every)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([pod, j, what, int(slot)])
+	if rng.randf() >= chance:
+		return -1.0
+	var start := slot * every + rng.randf() * maxf(every - seconds, 0.0)
+	var into := (t - start) / seconds
+	return into if into >= 0.0 and into < 1.0 else -1.0
+
+
+func _draw_sea_sprite(texture: Texture2D, at: Vector2, facing: float, length: float, grow: float, tint: Color) -> void:
+	var size_px := Vector2(length, length / SEA_ART_ASPECT) * grow
+	_canvas.draw_set_transform(at, facing, Vector2.ONE)
+	_canvas.draw_texture_rect(texture, Rect2(-size_px / 2.0, size_px), false, tint)
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## A whale or orca breaching: it rises clear (bigger, lifted a little up the
+## screen), then crashes back in a ring of splash and spray.
+func _draw_breach(texture: Texture2D, at: Vector2, facing: float, length: float, up: float) -> void:
+	var rise := sin(PI * minf(up / 0.7, 1.0))
+	if up < 0.7:
+		_draw_sea_sprite(texture, at - Vector2(0.0, rise * length * 0.25), facing, length, 1.0 + 0.6 * rise, Color.WHITE)
+	if up > 0.55:
+		_draw_splash(at, length * 0.9, (up - 0.55) / 0.45)
+
+
+## A dolphin leaping: an arc ahead of its shadow, a small splash where it lands.
+func _draw_leap(texture: Texture2D, at: Vector2, facing: float, length: float, up: float) -> void:
+	var arc := minf(up / 0.8, 1.0)
+	if up < 0.8:
+		var ahead := Vector2.from_angle(facing) * (arc - 0.5) * length * 1.4
+		_draw_sea_sprite(texture, at + ahead - Vector2(0.0, sin(PI * arc) * length * 0.7), facing - (arc - 0.5) * 0.5, length, 1.0 + 0.25 * sin(PI * arc), Color.WHITE)
+	if up > 0.7:
+		_draw_splash(at + Vector2.from_angle(facing) * length * 0.7, length * 0.6, (up - 0.7) / 0.3)
+
+
+## A splash spreading out and fading (0..1): two white rings and a few drops.
+func _draw_splash(at: Vector2, reach: float, t: float) -> void:
+	var fade := 1.0 - t
+	for ring in [1.0, 0.6]:
+		_canvas.draw_arc(at, reach * (0.3 + t * 0.7) * ring, 0.0, TAU, 20, Color(SEA_SPLASH, 0.8 * fade), maxf(reach * 0.08, 1.0), true)
+	for k in 6:
+		var drop := at + Vector2.from_angle(k * TAU / 6.0 + 0.4) * reach * (0.4 + t * 0.9) - Vector2(0.0, sin(PI * t) * reach * 0.5)
+		_canvas.draw_circle(drop, maxf(reach * 0.06, 0.8), Color(SEA_SPLASH, 0.9 * fade))
+
+
+## A whale's blow: a puff of spray rising from its blowhole and fading (0..1).
+func _draw_blow(at: Vector2, length: float, t: float) -> void:
+	var fade := sin(PI * t)
+	for k in 3:
+		var puff := at - Vector2((k - 1) * length * 0.07, length * (0.1 + t * 0.35 + k * 0.05))
+		_canvas.draw_circle(puff, length * (0.07 + t * 0.06), Color(SEA_SPLASH, 0.75 * fade))
+
+
+func _sea_texture(art: String) -> Texture2D:
+	if not _sea_art.has(art):
+		var path := SEA_ART_DIR + art + ".svg"
+		_sea_art[art] = load(path) if ResourceLoader.exists(path) else null
+	return _sea_art[art]
+
+
+## An animal's outline filled in one flat white (tinted SEA_SHADOW when drawn),
+## for its shape under the water.
+func _sea_silhouette(art: String) -> Texture2D:
+	var key := art + "/silhouette"
+	if not _sea_art.has(key):
+		var texture := _sea_texture(art)
+		if texture == null:
+			_sea_art[key] = null
+		else:
+			var image := texture.get_image()
+			image.decompress()
+			image.convert(Image.FORMAT_RGBA8)
+			image.clear_mipmaps()
+			for y in image.get_height():
+				for x in image.get_width():
+					image.set_pixel(x, y, Color(1, 1, 1, image.get_pixel(x, y).a))
+			image.generate_mipmaps()
+			_sea_art[key] = ImageTexture.create_from_image(image)
+	return _sea_art[key]
+
+
+## A pod's year: its migration paths and the areas it stays in, dashed.
+func _draw_pod_routes(sea: SeaLife, pod: int) -> void:
+	for points in sea.pod_paths(pod):
+		_draw_dashed_path(_storm_path_on_screen(points, 0), SEA_ROUTE_COLOR, 2.0)
+	for stay: Dictionary in sea.pods[pod].stays:
+		var area: Dictionary = sea.areas[stay.area]
+		var lat := float(area.lat)
+		var radius := float(area.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
+		_draw_dashed_path(_circle_points(world_to_screen(Geo.project(Vector2(area.lon, lat))), radius), SEA_ROUTE_COLOR, 2.0)
+
+
+## The pod under a screen point (as last drawn), the nearest if several, or -1.
+func _pod_at(screen_pos: Vector2) -> int:
+	var best := -1
+	var best_share := INF
+	for hit: Array in _pod_hits:
+		var share := (hit[1] as Vector2).distance_to(screen_pos) / float(hit[2])
+		if share <= 1.0 and share < best_share:
+			best_share = share
+			best = hit[0]
+	return best
+
+
+## Where a pod's middle is on screen (local to this control), as last drawn,
+## or Vector2.INF if it isn't in view.
+func pod_screen_position(pod: int) -> Vector2:
+	for hit: Array in _pod_hits:
+		if hit[0] == pod:
+			return hit[1]
+	return Vector2.INF
 
 
 # --- Winter sea ice ----------------------------------------------------------

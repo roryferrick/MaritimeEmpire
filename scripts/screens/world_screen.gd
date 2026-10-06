@@ -1,5 +1,5 @@
 extends Control
-## The main map: ports, ships, canal locks and storms, with their popups, and the Routes switch,
+## The main map: ports, ships, canal locks, storms and sea animals, with their popups, and the Routes switch,
 ## Tutorial switch (in saves with the tutorial) and price picker in one panel in
 ## the top right (the fleet's route lanes shown faintly; the tutorial's tips;
 ## ports colored by a commodity's price).
@@ -23,6 +23,7 @@ func _ready() -> void:
 	_map.lock_clicked.connect(_open_lock_popup)
 	_map.canal_clicked.connect(_open_convoy_popup)
 	_map.storm_clicked.connect(_open_storm_popup)
+	_map.pod_clicked.connect(_open_pod_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -85,6 +86,23 @@ func _open_storm_popup(storm_key: String) -> void:
 			_map.selected_storm = "")
 	PopupHost.find(self).open(popup)
 	_map.selected_storm = storm_key
+
+
+## A pod of sea animals' popup, following it; its routes show meanwhile.
+func _open_pod_popup(pod_index: int) -> void:
+	var popup := SeaLifePopup.new()
+	popup.pod_index = pod_index
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at := _map.pod_screen_position(pod_index)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	popup.tree_exited.connect(func() -> void:
+		if _map.selected_pod == pod_index:
+			_map.selected_pod = -1)
+	PopupHost.find(self).open(popup)
+	_map.selected_pod = pod_index
 
 
 ## The ship's popup, following it on the map.
