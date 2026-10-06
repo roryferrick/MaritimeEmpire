@@ -166,7 +166,7 @@ func _host_settings() -> GridContainer:
 	grid.add_theme_constant_override(&"h_separation", 10)
 	var name_edit := LineEdit.new()
 	name_edit.custom_minimum_size.x = 300
-	name_edit.placeholder_text = "Your company's name"
+	name_edit.placeholder_text = "Name your game"
 	name_edit.text = host_settings.name
 	name_edit.max_length = 40
 	name_edit.text_changed.connect(func(text: String) -> void: host_settings.name = text)
