@@ -18,10 +18,12 @@ extends RefCounted
 ## segments) to the lost ship, turns to line up with it, carries it to port,
 ## then sails home.
 
-## How long a recovery boat (or an icebreaker) takes to turn: to line up with a
-## lost ship, and to turn the pair around if it's taking it back the way it came.
-## Ships don't pivot: the map sails them round a turning circle meanwhile.
+## How long a recovery boat takes to pull up in line clear ahead of a lost
+## ship, and an icebreaker or tug to turn (round a turning circle on the map).
 const ALIGN_SECONDS := 3.0
+## How long a recovery boat with a ship aboard takes to spin round on the spot
+## when the port it's taking it to is back the way it came.
+const SPIN_SECONDS := 2.0
 
 ## Job phases for a Mammoth.
 const JOB_NONE := ""
@@ -216,10 +218,6 @@ var tug_wait := 0.0
 ## Recovery boat only: the ship it's carrying faces the other way from it (it
 ## met the ship head on); set as it lines up.
 var carry_reversed := false
-## Recovery boat only: it turned round with the ship aboard before setting
-## off with it (the map eases it back onto the lane from its turning circle).
-## Not saved.
-var turned_round := false
 ## Icebreaker only: the ice area (game_config icebreaking) it's stationed at,
 ## or ""; base_port is then the port there it waits at.
 var station := ""
@@ -653,10 +651,10 @@ func carry_flipped() -> bool:
 	return rescuing != null and carry_reversed
 
 
-## Recovery boat only: total seconds spent lining up, taking the ship aboard
-## and (if needed) turning around.
+## Recovery boat only: total seconds spent pulling up ahead, taking the ship
+## aboard and (if needed) spinning round.
 func align_seconds() -> float:
-	return ALIGN_SECONDS * (2.0 if tow_turns_around() else 1.0) + LOAD_SECONDS
+	return ALIGN_SECONDS + LOAD_SECONDS + (SPIN_SECONDS if tow_turns_around() else 0.0)
 
 
 ## What the player needs to do for this ship to run at its best, or "".
@@ -835,11 +833,11 @@ func heading() -> Vector2:
 
 ## Keeps the heading it arrived on (it pulls ahead past the ship and backs
 ## under it), then, if the port it's carrying the ship to is back the way it
-## came, turns round.
+## came, spins round on the spot.
 func _align_heading() -> Vector2:
 	var arrive := lane_heading().angle()
-	var t := (align_time - ALIGN_SECONDS - LOAD_SECONDS) / ALIGN_SECONDS if tow_turns_around() else 0.0
-	return Vector2.from_angle(arrive + PI * clampf(t, 0.0, 1.0))
+	var t := (align_time - ALIGN_SECONDS - LOAD_SECONDS) / SPIN_SECONDS if tow_turns_around() else 0.0
+	return Vector2.from_angle(arrive + PI * smoothstep(0.0, 1.0, t))
 
 
 ## Index of the route stop to sail to next from the port the ship is docked at.
@@ -998,7 +996,7 @@ func _recovery_status_text() -> String:
 				return "Floating %s onto its deck" % rescuing.name
 			if t >= 0.0:
 				return "Rising with %s aboard" % rescuing.name
-			return "Turning round with %s aboard" % rescuing.name
+			return "Spinning round with %s aboard" % rescuing.name
 		JOB_TOW:
 			return "Carrying %s to %s" % [rescuing.name, GameData.port_name(tow_port)]
 		JOB_UNLOAD:

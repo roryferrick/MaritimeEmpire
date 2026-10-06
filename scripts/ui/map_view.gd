@@ -124,12 +124,13 @@ const CARRY_DECK_X := 58.0
 ## ship slides over its stern, its work deck's stretch [from, to] in art units,
 ## and the sea over the deck when it's ballasted down, with its ripples.
 const RECOVERY_SLIDE := 0.55
-## How wide a turning circle recovery boats and icebreakers sail round (in
-## their own lengths), so they never pivot on the spot.
+## How wide a turning circle icebreakers and tugs sail round (in their own
+## lengths), so they never pivot on the spot. (Recovery boats spin on the spot
+## with a ship aboard, see _turning_pose().)
 const TURN_RADIUS_LENGTHS := 0.7
-## How many of its lengths a recovery boat that turned round with a ship aboard
-## takes to ease back onto the lane from its turning circle.
-const RECOVERY_REJOIN_LENGTHS := 3.0
+## How far clear ahead of a lost ship a recovery boat stops, stern to the
+## ship's bow (in art units), before backing under it.
+const RECOVERY_AHEAD_GAP := 6.0
 ## Tugs on a tow: how long the lead's tow line is on screen (px, before
 ## scaling up zoomed in), and its color.
 const TOW_LINE_PX := 5.0
@@ -776,38 +777,17 @@ func _turning_pose(ship: Ship) -> Array:
 		if ship.ice_phase == "turn_back":
 			return _turn_pose(base, lane_angle, base, lane_angle + PI, radius, t)
 		return []
-	if ship.job_phase == Ship.JOB_TOW and ship.turned_round:
-		return _rejoin_pose(ship, base, radius, lane_angle)
 	if ship.job_phase != Ship.JOB_ALIGN or ship.rescuing == null:
 		return []
-	# A recovery boat keeps the heading it came in on: it eases on past the
-	# lost ship and stops clear ahead of it, backs under it, rises, and only
-	# then (if it's carrying it back the way it came) turns round, on a half
-	# circle to starboard.
+	# A recovery boat keeps the heading it came in on: it drives on past the
+	# lost ship and stops in line clear ahead of it, ballasts down, backs under
+	# it and rises, settling with the ship centered on it (see
+	# _recovery_offset()). Then, if the port it's taking it to is back the way
+	# it came, it spins round on the spot (heading() says which way it faces)
+	# and sets off from there along the lane.
 	if ship.align_time < Ship.ALIGN_SECONDS + Ship.LOAD_SECONDS:
 		return [base + Vector2.from_angle(lane_angle) * _recovery_offset(ship) * _ship_scale(), lane_angle]
-	var t := smoothstep(0.0, 1.0, (ship.align_time - Ship.ALIGN_SECONDS - Ship.LOAD_SECONDS) / Ship.ALIGN_SECONDS)
-	var center := base + Vector2.from_angle(lane_angle + PI / 2.0) * radius
-	return [center + Vector2.from_angle(lane_angle - PI / 2.0 + PI * t) * radius, lane_angle + PI * t]
-
-
-## A recovery boat that turned round with a ship aboard finishes its half
-## circle a turning circle across from the lane: it eases back onto it over
-## its first RECOVERY_REJOIN_LENGTHS lengths of the way home, angled in a
-## little as it goes. [] once it's back on (or if it didn't turn).
-func _rejoin_pose(ship: Ship, base: Vector2, radius: float, lane_angle: float) -> Array:
-	var lane = GameData.lane(ship.from_port, ship.to_port)
-	if lane == null:
-		return []
-	var start: Vector2 = lane.sample(ship.segment_end - ship.carry_nm)[0]
-	var rect: Rect2 = _model_look(ship.model_id)[7]
-	var span := rect.size.x * _ship_scale() * RECOVERY_REJOIN_LENGTHS
-	var x := (base - world_to_screen(start)).length() / span
-	if x >= 1.0:
-		return []
-	var off := 2.0 * radius * (1.0 - smoothstep(0.0, 1.0, x))
-	var yaw := atan(2.0 * radius * 6.0 * x * (1.0 - x) / span)
-	return [base + Vector2.from_angle(lane_angle - PI / 2.0) * off, lane_angle + yaw]
+	return [base, _heading_angle(ship.heading())]
 
 
 ## Where a tug on a tow sits (screen px along the way it's towing, from the
@@ -855,24 +835,27 @@ static func _bezier(points: Array, u: float) -> Vector2:
 	return p0 * v * v * v + p1 * 3.0 * v * v * u + p2 * 3.0 * v * u * u + p3 * u * u * u
 
 
-## How far ahead of the lost ship (in its art's units, along its heading) a
+## How far ahead of the lost ship (in art units, along the boat's heading) a
 ## recovery boat is drawn while it takes the ship aboard, like a real
-## semi-submersible heavy-lift ship: it pulls ahead of the ship as it lines up,
-## ballasts down there, backs under the ship (which floats in over its open
-## stern) until the ship is over its deck, then rises and sets off. 0 otherwise.
+## semi-submersible heavy-lift ship: it drives on past the ship and stops in
+## line clear ahead of it (its stern RECOVERY_AHEAD_GAP past the ship's bow or
+## stern, whichever way the ship faces), ballasts down there, backs under the
+## ship (which floats in over its open stern) until the ship is over its deck,
+## then rises, settling with the ship centered on it. 0 otherwise.
 func _recovery_offset(boat: Ship) -> float:
 	if boat.job_phase != Ship.JOB_ALIGN:
 		return 0.0
 	var rect: Rect2 = _model_look(boat.model_id)[7]
+	var ship_rect: Rect2 = _model_look(boat.rescuing.model_id)[7]
 	var under := -_deck_along(rect)  # The deck right under the ship.
-	var ahead := under + rect.size.x * RECOVERY_SLIDE  # Clear ahead of it, stern to its bow.
+	var ahead := (rect.size.x + ship_rect.size.x) / 2.0 + RECOVERY_AHEAD_GAP
 	var t := boat.load_time()
 	if t < 0.0 and boat.align_time < Ship.ALIGN_SECONDS:
-		# Easing on past the ship from where it reached it, slowing to a stop.
+		# Driving on past the ship from where it reached it, slowing to a stop.
 		var x := boat.align_time / Ship.ALIGN_SECONDS
 		return ahead * (1.0 - (1.0 - x) * (1.0 - x))
 	if t < 0.0:
-		return 0.0  # Turning round after.
+		return 0.0  # Spinning round after.
 	var third := Ship.LOAD_SECONDS / 3.0
 	if t < third:
 		return ahead

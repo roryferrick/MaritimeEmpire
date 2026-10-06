@@ -2279,7 +2279,7 @@ func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
 		segments = segments,
 		tow_port = tow_port,
 		approach_nm = approach_nm,
-		seconds = seconds + Ship.ALIGN_SECONDS * (2.0 if (tow_port == a) == (via_a <= via_b) else 1.0) + Ship.LOAD_SECONDS * 2.0,
+		seconds = seconds + Ship.ALIGN_SECONDS + Ship.LOAD_SECONDS * 2.0 + (Ship.SPIN_SECONDS if (tow_port == a) == (via_a <= via_b) else 0.0),
 		fuel = mammoth.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S),
 		cost = mammoth.fuel_per_s() * running * market.fuel_price(mammoth.docked_at)
 			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost() * port_sizes.cost_factor(mammoth.docked_at),
@@ -2306,7 +2306,6 @@ func _advance_job(mammoth: Ship, delta: float) -> void:
 	if mammoth.job_phase == Ship.JOB_ALIGN:
 		mammoth.align_time += delta
 		if mammoth.align_time >= mammoth.align_seconds():
-			mammoth.turned_round = mammoth.tow_turns_around()
 			mammoth.job_phase = Ship.JOB_TOW
 			_start_segment(mammoth, mammoth.job_segments.pop_front())
 			ship_changed.emit(mammoth)
