@@ -160,12 +160,17 @@ const HUB_RING_WIDTH := 2.0
 const HUB_ALERT_RADIUS := 4.5
 const HUB_ALERT_OFFSET := Vector2(15, -15)
 ## The faint route lanes drawn with show_active_lanes.
-const ACTIVE_LANE_ALPHA := 0.3
+const ACTIVE_LANE_ALPHA := 0.45
+## Multiplayer: other players' lanes, all in their company's color (lifted to
+## at least OTHER_LANE_MIN_LUMINANCE so black and brown show on the sea), a
+## little fainter than this player's own.
+const OTHER_LANE_ALPHA := 0.25
+const OTHER_LANE_MIN_LUMINANCE := 0.5
 ## Ore carriers' lanes are their gray map colors taken this far towards white,
 ## and drawn this opaque, so they show on the dark deep sea (the ships keep
 ## their gray).
 const ORE_LANE_WHITEN := 0.65
-const ORE_LANE_ALPHA := 0.55
+const ORE_LANE_ALPHA := 0.7
 ## Kinds of named geography (WorldMapData.feature_label_kinds).
 enum FeatureKind { OCEAN, SEA, STRAIT, RANGE, DESERT, LAKE, RIVER }
 ## How each kind is labeled: [font size, color name, slanted, extra letter
@@ -1358,17 +1363,29 @@ func _draw_route() -> void:
 
 ## Every lane the fleet sails: each cargo ship's route loop, any route waiting
 ## to replace it, and the leg it's on now. A lane shared by several ships is
-## drawn once, in the first one's color (see ORE_LANE_WHITEN).
+## drawn once, in the first one's color (see ORE_LANE_WHITEN). In multiplayer,
+## other players' lanes go underneath, each company's once in its own color
+## (see OTHER_LANE_ALPHA).
 func _draw_active_lanes() -> void:
+	var others := {}  # "A-B" (sorted) and company -> [from, to, color]
 	var lanes := {}  # "A-B" (sorted) -> [from, to, color]
-	for ship in GameState.fleet():
+	for ship in GameState.ships:
 		if ship.is_service():
 			continue
-		var color := Color.from_string(ship.model().get("map_color", "#ffffff"), Color.WHITE)
-		color.a = ACTIVE_LANE_ALPHA
-		if ship.model().get("category", "") == "ore":
-			color = color.lerp(Color.WHITE, ORE_LANE_WHITEN)
-			color.a = ORE_LANE_ALPHA
+		var mine := GameState.is_mine(ship)
+		var color: Color
+		if mine:
+			color = Color.from_string(ship.model().get("map_color", "#ffffff"), Color.WHITE)
+			color.a = ACTIVE_LANE_ALPHA
+			if ship.model().get("category", "") == "ore":
+				color = color.lerp(Color.WHITE, ORE_LANE_WHITEN)
+				color.a = ORE_LANE_ALPHA
+		else:
+			color = GameState.company_color_value(GameState.owner_of(ship).color)
+			var luminance := color.get_luminance()
+			if luminance < OTHER_LANE_MIN_LUMINANCE:
+				color = color.lerp(Color.WHITE, (OTHER_LANE_MIN_LUMINANCE - luminance) / (1.0 - luminance))
+			color.a = OTHER_LANE_ALPHA
 		var legs: Array = []
 		for stops: Array[String] in [ship.route, ship.pending_route]:
 			for i in stops.size():
@@ -1378,9 +1395,12 @@ func _draw_active_lanes() -> void:
 			legs.append([ship.from_port, ship.to_port])
 		for leg: Array in legs:
 			var key := "%s-%s" % ([leg[0], leg[1]] if leg[0] < leg[1] else [leg[1], leg[0]])
-			if not lanes.has(key):
-				lanes[key] = [leg[0], leg[1], color]
-	for lane: Array in lanes.values():
+			if not mine:
+				key += " " + GameState.owner_of(ship).name
+			var into := lanes if mine else others
+			if not into.has(key):
+				into[key] = [leg[0], leg[1], color]
+	for lane: Array in others.values() + lanes.values():
 		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH)
 
 
