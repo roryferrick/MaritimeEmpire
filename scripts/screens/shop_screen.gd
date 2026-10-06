@@ -14,16 +14,17 @@ extends Control
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs (two for each port on your routes)", "tug"],
 	["Icebreakers (only needed in seasonal ice)", "icebreaker"]]
-## Cards per row, fewer if they don't fit. Five fit beside the activity log
-## at the default window size.
+## Cards per row, fewer if they don't fit. Five fit beside the open activity
+## log at the default window size: cards are CARD_WIDTH wide (plus padding),
+## and long ship names and Buy button texts wrap to fit.
 const MAX_COLUMNS := 5
 const CARD_GAP := 12
-const CARD_WIDTH := 176.0
+const CARD_WIDTH := 166.0
 const CARD_LABEL_WIDTH := 44.0
 ## Each card shows the model's map art under its name, in a strip this tall;
 ## see _picture_length() for how long each is.
 const SHIP_PICTURE_HEIGHT := 44.0
-const SHIP_PICTURE_MAX_LENGTH := 150.0
+const SHIP_PICTURE_MAX_LENGTH := 140.0
 const SHIP_PICTURE_SIZE_POWER := 0.5
 ## Ship names and section titles use the models' map colors, brightened to at
 ## least this luminance.
@@ -178,6 +179,7 @@ func _make_card(model: Dictionary) -> Control:
 	title.theme_type_variation = &"ShopCardTitle"
 	title.text = model.get("name", model.id)
 	title.add_theme_color_override(&"font_color", _map_color(model))
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(title)
 	var picture := ShipPicture.new(model, _picture_length(model))
 	picture.custom_minimum_size.y = SHIP_PICTURE_HEIGHT
@@ -232,6 +234,7 @@ func _make_card(model: Dictionary) -> Control:
 	var buy := Button.new()
 	buy.theme_type_variation = &"ShopCardButton"
 	buy.custom_minimum_size = Vector2(0, 34)
+	buy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	buy.size_flags_vertical = Control.SIZE_SHRINK_END | Control.SIZE_EXPAND
 	buy.pressed.connect(_on_buy_pressed.bind(model.id))
 	buy.mouse_entered.connect(_on_buy_hovered.bind(model.id))
