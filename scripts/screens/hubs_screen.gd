@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## The HQ and every hub, one card each: level and XP bar, the upgrade tree,
 ## the bonuses it gives ships docking there, and its traffic. Then a card for

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Market
 extends RefCounted
 ## Live commodity prices (see data/markets.json). A port's sell price for a

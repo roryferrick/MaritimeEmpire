@@ -1,5 +1,7 @@
 # Maritime Empire — Beta Spec
 
+## Copyright: © 2026 Rory Ferrick, all rights reserved (COPYRIGHT.md, which also credits Godot, GodotSteam and Natural Earth). A "# Copyright (c) 2026 Rory Ferrick" line heads every script and a comment every SVG; the title screen shows the notice and credits along its bottom, the Esc menu a short one, and the Windows and macOS exports carry it in their file details.
+
 ## Tech
 - Engine: Godot 4 (standard build, GDScript). Target: Windows / Steam, mouse input, landscape only.
 - Version control: Git. Keep game data (ports, ship models) in data files, not hard-coded.

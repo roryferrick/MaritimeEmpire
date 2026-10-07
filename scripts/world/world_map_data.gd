@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name WorldMapData
 extends Resource
 ## Pre-built world map art in projected map coordinates (see Geo).

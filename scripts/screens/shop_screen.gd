@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
 ## category, laid out in rows (ROWS) with the sections of a row side by side,

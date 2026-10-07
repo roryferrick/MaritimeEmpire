@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name ShipBars
 extends Control
 ## Live maintenance, fuel and cargo bars for one ship, top to bottom. Cargo is

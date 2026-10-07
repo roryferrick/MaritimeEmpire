@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name GameRoot
 extends Control
 ## Root of an active game: top bar, activity log, the six main screens, the

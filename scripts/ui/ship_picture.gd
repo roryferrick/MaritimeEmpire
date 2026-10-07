@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name ShipPicture
 extends Control
 ## A model's map art (see MapView.load_ship_art()), bow to the right: its hull

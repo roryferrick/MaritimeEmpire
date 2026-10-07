@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name SeaLifePopup
 extends AnchoredPopup
 ## Opened by clicking a pod of sea animals on the map (see SeaLife): the

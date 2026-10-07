@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## The main map: ports, ships, canal locks, storms and sea animals, with their popups, and the Routes switch,
 ## Tutorial switch (in saves with the tutorial) and price picker in one panel in

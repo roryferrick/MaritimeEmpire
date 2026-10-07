@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name CanalTraffic
 extends RefCounted
 ## Moves ships through canals (data/canals.json, see GameData.canal_crossings()):

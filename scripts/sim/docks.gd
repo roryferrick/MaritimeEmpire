@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Docks
 extends RefCounted
 ## Each port's berths: a cargo ship arriving queues for one (first come, first

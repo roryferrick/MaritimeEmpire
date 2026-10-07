@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name PopupHost
 extends Control
 ## Holds the single open popup. Opening a new popup closes the old one.

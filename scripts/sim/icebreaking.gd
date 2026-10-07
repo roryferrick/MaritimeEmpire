@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Icebreaking
 extends RefCounted
 ## Icebreakers and the ice areas they work (game_config icebreaking).

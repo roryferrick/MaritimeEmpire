@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name AnchoredPopup
 extends PanelContainer
 ## A popup placed just above a point, or below it if there's no room above.

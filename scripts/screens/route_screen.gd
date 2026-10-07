@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## Full-screen gray map for building a looping route by clicking ports in order.
 ## Ports the ship can't reach from the current stop, or that are too small for

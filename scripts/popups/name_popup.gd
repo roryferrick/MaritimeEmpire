@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name NamePopup
 extends PanelContainer
 ## Names and buys a new ship and picks where it launches: the HQ (the default)

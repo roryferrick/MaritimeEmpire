@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Node
 ## Static game data (tuning, ports, sea lanes, ship models, map art) loaded
 ## from res://data.

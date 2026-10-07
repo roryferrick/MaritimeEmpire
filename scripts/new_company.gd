@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
 ## to (recommended great and harder starts first, from data/starts.json, then

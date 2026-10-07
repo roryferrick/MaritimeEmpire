@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name ConvoyPopup
 extends AnchoredPopup
 ## Opened by clicking a convoy canal (or one of its anchorages) on the map: the

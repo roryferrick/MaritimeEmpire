@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name AlertDot
 extends Control
 ## A small red dot pinned to the top-right corner of its parent, e.g. a nav

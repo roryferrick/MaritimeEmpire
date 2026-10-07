@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name ShipTile
 extends Button
 ## One compact tile on the Ships screen: status dot, ship name, what it's

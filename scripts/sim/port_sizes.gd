@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name PortSizes
 extends RefCounted
 ## Every port's size, 1 to 100 (see game_config port_sizes): Small, Medium,

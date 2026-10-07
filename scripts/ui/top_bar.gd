@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends PanelContainer
 ## Above the main screens: the level (with an XP bar) and money on the left;
 ## the company name (in the company's color) over the calendar date and time

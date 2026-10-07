@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name EscapeMenu
 extends Control
 ## Esc during a game: Continue, Save, Exit to Menu and Exit to Desktop, over
@@ -53,6 +54,12 @@ func _ready() -> void:
 		_status.text = "Leaving keeps your company going in the host's game; join again to take it back."
 	_status.visible = not _status.text.is_empty()
 	box.add_child(_status)
+	var copyright := Label.new()
+	copyright.text = "© 2026 Rory Ferrick. All rights reserved."
+	copyright.theme_type_variation = &"DimLabel"
+	copyright.add_theme_font_size_override(&"font_size", 12)
+	copyright.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(copyright)
 	if not Net.is_online() and GameState.time_speed > 0:
 		_paused_from = GameState.time_speed
 		GameState.time_speed = 0

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Node
 ## Messages about what's happening in the game (deliveries, breakdowns,
 ## level-ups...), shown newest first in the activity log panel on the left of

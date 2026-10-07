@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name PortPopup
 extends AnchoredPopup
 ## Shows a port's name and size (how far through its band it is, which way

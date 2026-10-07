@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name SeaLife
 extends RefCounted
 ## Sea animals (data/sea_life.json), just for looking at: pods of dolphins,

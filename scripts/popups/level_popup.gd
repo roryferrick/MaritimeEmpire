@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name LevelPopup
 extends AnchoredPopup
 ## Opened by clicking the level in the top bar: XP toward the next level, the

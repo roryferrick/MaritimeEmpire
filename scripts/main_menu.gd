@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name MainMenu
 extends Control
 ## Title screen: Single Player or Multiplayer, then that mode's save slots (a
@@ -13,6 +14,8 @@ const MODE_BUTTON_SIZE := Vector2(420, 64)
 const MODES := {false: "Single Player", true: "Multiplayer"}
 const MULTIPLAYER_NOTE := "Host one of your multiplayer games for friends to join, or join a friend's."
 const JOIN_SCENE := "res://scenes/join_game.tscn"
+## Shown on the title screen and in the Esc menu.
+const COPYRIGHT := "© 2026 Rory Ferrick. All rights reserved. Map data: Natural Earth (public domain). Steam integration: GodotSteam (MIT). Made with Godot Engine (MIT)."
 
 ## The page shown when the menu opens: "" for the mode choice, or "single" or
 ## "multi" for that mode's slots (so Back from New Company returns to them).
@@ -28,6 +31,7 @@ var _deleting := 0
 
 func _ready() -> void:
 	%QuitButton.pressed.connect(get_tree().quit)
+	_add_copyright()
 	%DeleteDialog.confirmed.connect(_delete)
 	Net.leave()  # Back at the title screen: no longer hosting or joined.
 	if Net.invited_lobby != 0:  # A Steam invite accepted while playing: join it now.
@@ -213,3 +217,16 @@ func _ask_host(go: Callable) -> void:
 			dialog.queue_free())
 	add_child(dialog)
 	dialog.popup_centered()
+
+
+## The copyright line along the bottom of the title screen.
+func _add_copyright() -> void:
+	var label := Label.new()
+	label.text = COPYRIGHT
+	label.theme_type_variation = &"DimLabel"
+	label.add_theme_font_size_override(&"font_size", 13)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	label.offset_top = -30.0
+	label.offset_bottom = -8.0
+	add_child(label)

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## Prices for one commodity at a time (picked at the top): the cheapest ports to
 ## buy it, the most expensive to sell it, and the best trades between two ports,

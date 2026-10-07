@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name HubTree
 extends GridContainer
 ## An HQ's or hub's upgrade tree: one row per path with its name, point pips,

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Node
 ## Works out which way each port's docks face (data/port_facing.json) from the
 ## map's coastline (WorldMapData.coast_segments, which always runs with the

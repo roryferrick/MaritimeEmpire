@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name ActivityLogPanel
 extends PanelContainer
 ## The activity log down the left of the game screen: ActivityLog's messages,

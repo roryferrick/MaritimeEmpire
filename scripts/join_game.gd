@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## Joining a friend's multiplayer game: the games hosted on Steam and on this
 ## network (each with its host's company, players and a lock if it has a

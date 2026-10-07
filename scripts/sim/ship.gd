@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Ship
 extends RefCounted
 ## A player-owned ship. Holds state only; GameState moves it.

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name ShipPopup
 extends AnchoredPopup
 ## A ship's stats, live status, bars and route, with the repair, refuel, rescue

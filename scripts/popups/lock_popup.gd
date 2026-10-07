@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name LockPopup
 extends AnchoredPopup
 ## Opened by clicking a canal lock on the map. A lock with a lane each way shows

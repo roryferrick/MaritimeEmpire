@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Company
 extends RefCounted
 ## A player's company: its money, HQ and hubs, XP, finances, upgrades and

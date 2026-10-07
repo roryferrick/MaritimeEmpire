@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name StormPopup
 extends AnchoredPopup
 ## Opened by clicking a storm on the map, a row each: its strength at the

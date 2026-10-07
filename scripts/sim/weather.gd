@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Weather
 extends RefCounted
 ## Storms (game_config weather): systems that form in their real basins and

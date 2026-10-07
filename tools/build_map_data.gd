@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends SceneTree
 ## Builds the game's map data from Natural Earth downloads:
 ##   data/world_map.res  land, coastline, borders and country labels, for drawing

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name SeaLaneData
 extends Resource
 ## Pre-computed sea lanes between every pair of ports.

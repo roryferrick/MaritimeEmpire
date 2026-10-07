@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## The player's ships, grouped by model (in shop order), each group on a faint
 ## tint of its ship line's color under a title in that color, eight tiles wide,

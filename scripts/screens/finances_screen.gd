@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## Two pages (tabs at the top): Compare companies (every company in the game
 ## side by side), and Your company: the "Keep in the bank" setting (money cargo purchases leave alone), company

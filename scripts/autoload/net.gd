@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Node
 ## Multiplayer, CK3 style: one player hosts and their game runs the world;
 ## friends join it, each running their own company in the same world (the

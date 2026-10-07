@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Node
 ## State of the running game session: money, ships and their movement, plus
 ## saving and loading.

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Hub
 extends RefCounted
 ## The company's headquarters (at its home port, from the start) or a hub (one

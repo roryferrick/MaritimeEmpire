@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name GemPopup
 extends AnchoredPopup
 ## The hidden gem: opened by clicking the company name in the top bar (once per
