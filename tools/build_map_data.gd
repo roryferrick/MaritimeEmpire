@@ -369,6 +369,8 @@ func _build_map(land_polygons: Array) -> void:
 	_build_land_texture(biomes)
 	_add_decor(map, biomes)
 	_add_sea_mask(map, biomes)
+	_add_biome_polygons(map, biomes)
+	_add_decor_clearance(map)
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 
@@ -543,6 +545,15 @@ const BIOME_ROWS := 720
 ## How many times finer than the biome grid its edges are smoothed (see
 ## _build_land_texture()).
 const BIOME_EDGE_UPSCALE := 3
+## The biome polygons (_add_biome_polygons()): how far (projected degrees)
+## their outlines may stray from the cell edges when straightened, and the
+## smallest patch kept (projected square degrees).
+const BIOME_SIMPLIFY := 0.45
+const BIOME_MIN_AREA := 0.12
+## Drawings' distance to the shore is looked for this far (projected degrees), in
+## buckets this size.
+const DECOR_CLEARANCE_MAX := 3.0
+const CLEARANCE_BUCKET := 0.5
 
 
 ## The land as biomes (BIOME_*, BIOME_SEA for sea), a BIOME_COLS x BIOME_ROWS
@@ -798,6 +809,56 @@ static func _in_any(polygons: Array, lon_lat: Vector2) -> bool:
 
 
 ## The biome at a (lon, lat), or BIOME_SEA.
+## How far each drawing (decor) is from the nearest shore (the coast, and the
+## lakes' shores), in projected degrees, up to DECOR_CLEARANCE_MAX: the map
+## shows a drawing only while all of it fits that side of the water at the
+## zoom (land drawings on land, waves on the sea).
+func _add_decor_clearance(map: WorldMapData) -> void:
+	var shores := map.coast_segments.duplicate()
+	for triangles in map.lake_triangles:
+		shores.append_array(_outline_edges(triangles))
+	var buckets := {}
+	for i in range(0, shores.size(), 2):
+		var cell := Vector2i(floori(shores[i].x / CLEARANCE_BUCKET), floori(shores[i].y / CLEARANCE_BUCKET))
+		var list: PackedInt32Array = buckets.get(cell, PackedInt32Array())
+		list.append(i)
+		buckets[cell] = list
+	var reach := ceili(DECOR_CLEARANCE_MAX / CLEARANCE_BUCKET)
+	map.decor_clearance.resize(map.decor_positions.size())
+	for d in map.decor_positions.size():
+		var p := map.decor_positions[d]
+		var cell := Vector2i(floori(p.x / CLEARANCE_BUCKET), floori(p.y / CLEARANCE_BUCKET))
+		var best := DECOR_CLEARANCE_MAX
+		for ring in reach + 1:
+			if best < (ring - 1) * CLEARANCE_BUCKET:
+				break  # Nothing further out can be nearer.
+			for dx in range(-ring, ring + 1):
+				for dy in range(-ring, ring + 1):
+					if maxi(absi(dx), absi(dy)) != ring:
+						continue
+					for i: int in buckets.get(cell + Vector2i(dx, dy), PackedInt32Array()):
+						best = minf(best, Geometry2D.get_closest_point_to_segment(p, shores[i], shores[i + 1]).distance_to(p))
+		map.decor_clearance[d] = best
+	print("Decor clearance: %d drawings" % map.decor_clearance.size())
+
+
+## A triangle list's outline: the edges only one triangle has, as segment pairs.
+static func _outline_edges(triangles: PackedVector2Array) -> PackedVector2Array:
+	var count := {}
+	for t in range(0, triangles.size(), 3):
+		for k in 3:
+			var a := triangles[t + k]
+			var b := triangles[t + (k + 1) % 3]
+			var key := [a, b] if a < b else [b, a]
+			count[key] = int(count.get(key, 0)) + 1
+	var out := PackedVector2Array()
+	for key: Array in count:
+		if count[key] == 1:
+			out.append(key[0])
+			out.append(key[1])
+	return out
+
+
 ## Where the sea is, for the sea animals (SeaLife): the biome grid's sea
 ## cells, a bit each (row by row from the north, west to east).
 func _add_sea_mask(map: WorldMapData, biomes: PackedByteArray) -> void:
@@ -811,6 +872,149 @@ func _add_sea_mask(map: WorldMapData, biomes: PackedByteArray) -> void:
 	map.sea_mask = bits
 	map.sea_mask_size = Vector2i(BIOME_COLS, BIOME_ROWS)
 	print("Sea mask: %d of %d cells are sea" % [count, BIOME_COLS * BIOME_ROWS])
+
+
+## The biomes as flat-colored, straight-edged polygons (the map draws them
+## clipped to the land, so their edges stay sharp at any zoom): the sea's cells
+## take their nearest land biome (so the polygons run past the coast, which
+## clips them), each biome's patches are traced round their cell edges, the
+## outlines simplified to straight runs (BIOME_SIMPLIFY projected degrees) and
+## triangulated. Patches inside others are drawn after them (largest first),
+## so holes need no cutting.
+func _add_biome_polygons(map: WorldMapData, biomes: PackedByteArray) -> void:
+	var cols := BIOME_COLS
+	var rows := BIOME_ROWS
+	var grid := biomes.duplicate()
+	# The sea takes its nearest land biome, a ring at a time.
+	var frontier := PackedInt32Array()
+	for i in grid.size():
+		if grid[i] != BIOME_SEA:
+			frontier.append(i)
+	while not frontier.is_empty():
+		var next := PackedInt32Array()
+		for i in frontier:
+			var col := i % cols
+			for n: int in [i - 1 if col > 0 else -1, i + 1 if col < cols - 1 else -1, i - cols, i + cols]:
+				if n >= 0 and n < grid.size() and grid[n] == BIOME_SEA:
+					grid[n] = grid[i]
+					next.append(n)
+		frontier = next
+	# Each cell's edges against a different biome (or the grid's edge), running
+	# with the cell's biome on the left: per biome, vertex -> the vertices its edges go to.
+	var vertex_cols := cols + 1
+	var edges := {}  # biome -> {from vertex: PackedInt32Array of to vertices}
+	for r in rows:
+		for c in cols:
+			var b := grid[r * cols + c]
+			var out: Dictionary = edges.get_or_add(b, {})
+			var top_left := r * vertex_cols + c
+			var top_right := top_left + 1
+			var bottom_left := top_left + vertex_cols
+			var bottom_right := bottom_left + 1
+			if r == 0 or grid[(r - 1) * cols + c] != b:
+				_add_edge(out, top_right, top_left)  # Westward along the top.
+			if r == rows - 1 or grid[(r + 1) * cols + c] != b:
+				_add_edge(out, bottom_left, bottom_right)  # Eastward along the bottom.
+			if c == 0 or grid[r * cols + c - 1] != b:
+				_add_edge(out, top_left, bottom_left)  # Down the west side.
+			if c == cols - 1 or grid[r * cols + c + 1] != b:
+				_add_edge(out, bottom_right, top_right)  # Up the east side.
+	# Trace each biome's outlines; keep the outer ones (anticlockwise, the patch
+	# on the left), simplified, with their area for the drawing order.
+	var shapes := []  # [area, biome, outline]
+	for b: int in edges:
+		var out: Dictionary = edges[b]
+		while not out.is_empty():
+			var start: int = out.keys()[0]
+			var ring := PackedVector2Array()
+			var at := start
+			var guard := 0
+			while guard < 4000000:
+				guard += 1
+				var ends: PackedInt32Array = out[at]
+				var to := ends[ends.size() - 1]
+				ends.resize(ends.size() - 1)
+				if ends.is_empty():
+					out.erase(at)
+				else:
+					out[at] = ends
+				ring.append(Geo.project(Vector2(-180.0 + (at % vertex_cols) * 360.0 / cols, 90.0 - floori(at / float(vertex_cols)) * 180.0 / rows)))
+				at = to
+				if at == start or not out.has(at):
+					break
+			if ring.size() < 4:
+				continue
+			var area := _signed_area(ring)
+			if area <= BIOME_MIN_AREA:
+				continue  # A hole (its inside is another patch, drawn over it), or a speck.
+			var simple := _simplify_ring(ring, BIOME_SIMPLIFY)
+			if simple.size() >= 3:
+				shapes.append([area, b, simple, ring])
+	shapes.sort_custom(func(x: Array, y: Array) -> bool: return x[0] > y[0])
+	for shape: Array in shapes:
+		var color := BIOME_COLORS[shape[1]]
+		var points: PackedVector2Array = shape[2]
+		var indices := Geometry2D.triangulate_polygon(points)
+		if indices.is_empty():  # Simplifying made it cross itself: the traced outline instead.
+			points = shape[3]
+			indices = Geometry2D.triangulate_polygon(points)
+		for i in indices:
+			map.biome_triangles.append(points[i])
+			map.biome_colors.append(color)
+	print("Biome polygons: %d patches, %d triangles" % [shapes.size(), map.biome_triangles.size() / 3])
+
+
+static func _add_edge(out: Dictionary, from: int, to: int) -> void:
+	var ends: PackedInt32Array = out.get(from, PackedInt32Array())
+	ends.append(to)
+	out[from] = ends  # (Packed arrays are copied, so put it back.)
+
+
+## A closed outline simplified (Douglas-Peucker, between its two farthest-apart
+## points) so the cell edges' staircases become straight runs.
+static func _simplify_ring(ring: PackedVector2Array, tolerance: float) -> PackedVector2Array:
+	var far := 0
+	var far_d := 0.0
+	for i in ring.size():
+		var d := ring[i].distance_squared_to(ring[0])
+		if d > far_d:
+			far_d = d
+			far = i
+	var first := _simplify_line(ring.slice(0, far + 1), tolerance)
+	var second_part := ring.slice(far)
+	second_part.append(ring[0])
+	var second := _simplify_line(second_part, tolerance)
+	var out := first.slice(0, first.size() - 1)
+	out.append_array(second.slice(0, second.size() - 1))
+	return out
+
+
+static func _simplify_line(points: PackedVector2Array, tolerance: float) -> PackedVector2Array:
+	if points.size() < 3:
+		return points
+	var keep := PackedByteArray()
+	keep.resize(points.size())
+	keep[0] = 1
+	keep[points.size() - 1] = 1
+	var stack: Array[Vector2i] = [Vector2i(0, points.size() - 1)]
+	while not stack.is_empty():
+		var span: Vector2i = stack.pop_back()
+		var worst := -1
+		var worst_d := tolerance
+		for i in range(span.x + 1, span.y):
+			var d := Geometry2D.get_closest_point_to_segment(points[i], points[span.x], points[span.y]).distance_to(points[i])
+			if d > worst_d:
+				worst_d = d
+				worst = i
+		if worst >= 0:
+			keep[worst] = 1
+			stack.append(Vector2i(span.x, worst))
+			stack.append(Vector2i(worst, span.y))
+	var out := PackedVector2Array()
+	for i in points.size():
+		if keep[i]:
+			out.append(points[i])
+	return out
 
 
 static func _biome_at(biomes: PackedByteArray, lon_lat: Vector2) -> int:

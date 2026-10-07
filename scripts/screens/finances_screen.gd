@@ -1,5 +1,6 @@
 extends Control
-## The "Keep in the bank" setting (money cargo purchases leave alone), company
+## Two pages (tabs at the top): Compare companies (every company in the game
+## side by side), and Your company: the "Keep in the bank" setting (money cargo purchases leave alone), company
 ## totals (last 10 minutes and all time), everything the fleet has delivered
 ## (by unit and commodity), a card for the canals the fleet has used
 ## (crossings, tolls and bonus XP), and a sortable table of each ship's
@@ -34,6 +35,8 @@ const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head o
 ## Each group's rows sit on a faint band of its ship line's color.
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0
+## The Compare companies table's columns.
+const COMPARE_COLUMNS: Array[String] = ["Company", "Level", "Money", "Ships", "Hubs", "Profit, last 10 min", "Profit, all time", "Delivered"]
 ## Choices for "Keep in the bank" (0 = spend everything on cargo).
 const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000]
 
@@ -45,6 +48,10 @@ var _delivered_grid := GridContainer.new()
 var _canal_card := PanelContainer.new()
 var _canal_label := Label.new()
 var _bank_picker := OptionButton.new()
+## The Compare companies page (see _add_tabs()), and whether it's showing.
+var _compare_card := PanelContainer.new()
+var _compare_grid := GridContainer.new()
+var _comparing := false
 ## Per ship line in the table: [its total row's first label, its last ship's
 ## first label, the line's color], for the tinted band drawn behind its rows.
 var _bands: Array = []
@@ -70,6 +77,7 @@ func _ready() -> void:
 	row.add_child(_delivered_card)
 	row.add_sibling(_canal_card)
 	_add_bank_row()
+	_add_tabs()
 	%ShipTable.draw.connect(_draw_bands)
 	visibility_changed.connect(_refresh)
 	GameState.ships_changed.connect(_refresh)
@@ -87,6 +95,9 @@ func _process(delta: float) -> void:
 
 func _refresh() -> void:
 	if not is_visible_in_tree():
+		return
+	if _comparing:
+		_fill_comparison()
 		return
 	_show_bank_reserve()
 	var recent := GameState.recent_finances()
@@ -303,6 +314,78 @@ static func _clear(parent: Node) -> void:
 	for child in parent.get_children():
 		parent.remove_child(child)
 		child.queue_free()
+
+
+## Two pages, picked by tabs at the top: Your company (everything below) and
+## Compare companies (a table of every company in the game).
+func _add_tabs() -> void:
+	var content: Control = $Scroll/Margin/Content
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override(&"separation", 6)
+	var group := ButtonGroup.new()
+	for page: Array in [["Your company", false], ["Compare companies", true]]:
+		var tab := Button.new()
+		tab.text = page[0]
+		tab.toggle_mode = true
+		tab.button_group = group
+		tab.button_pressed = not page[1]
+		tab.focus_mode = Control.FOCUS_NONE
+		tab.pressed.connect(_show_page.bind(page[1]))
+		tabs.add_child(tab)
+	content.add_child(tabs)
+	content.move_child(tabs, 0)
+	_compare_card.theme_type_variation = &"CardPanel"
+	_compare_card.visible = false
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 10)
+	_compare_card.add_child(box)
+	var title := Label.new()
+	title.theme_type_variation = &"HeaderLabel"
+	title.text = "Companies"
+	box.add_child(title)
+	var hint := Label.new()
+	hint.theme_type_variation = &"DimLabel"
+	hint.text = "Every company in this game. Operating profit is cargo sales less cargo, fuel, repairs and tolls."
+	box.add_child(hint)
+	_compare_grid.columns = COMPARE_COLUMNS.size()
+	_compare_grid.add_theme_constant_override(&"h_separation", 20)
+	_compare_grid.add_theme_constant_override(&"v_separation", 4)
+	box.add_child(_compare_grid)
+	content.add_child(_compare_card)
+
+
+func _show_page(compare: bool) -> void:
+	_comparing = compare
+	for child: Control in $Scroll/Margin/Content.get_children():
+		if child != _compare_card and child.get_index() > 0:
+			child.visible = not compare
+	_compare_card.visible = compare
+	_refresh()
+
+
+## A row per company, richest first: its name (in its color; this player's
+## marked), level, money, ships, hubs, operating profit over the last 10
+## minutes and all time, and units delivered.
+func _fill_comparison() -> void:
+	_clear(_compare_grid)
+	for column: String in COMPARE_COLUMNS:
+		_add_label(_compare_grid, column, &"DimLabel")
+	var companies := GameState.all_companies().duplicate()
+	companies.sort_custom(func(a: Company, b: Company) -> bool: return a.money > b.money)
+	for each: Company in companies:
+		var name := _add_label(_compare_grid, each.name + ("  (you)" if each == GameState.company else ""))
+		name.add_theme_color_override(&"font_color", GameState.company_color_value(each.color))
+		_add_label(_compare_grid, str(each.level()))
+		_add_label(_compare_grid, Fmt.money(each.money))
+		_add_label(_compare_grid, str(GameState.fleet(each).size()))
+		_add_label(_compare_grid, str(maxi(each.hubs.size() - 1, 0)))
+		for source: Dictionary in [GameState.recent_finances(each).fleet, each.totals]:
+			var profit := _operating_profit(source)
+			_add_label(_compare_grid, Fmt.money(roundi(profit)), &"GainLabel" if profit >= 0.0 else &"ErrorLabel")
+		var units := 0
+		for commodity: String in each.delivered:
+			units += int(each.delivered[commodity])
+		_add_label(_compare_grid, Fmt.short(units + each.earlier_containers))
 
 
 ## "Keep in the bank: [amount]" above the totals, with a note on what it does.

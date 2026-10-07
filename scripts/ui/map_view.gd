@@ -456,6 +456,7 @@ class WorldArt:
 
 	var view: MapView
 	var land_mesh: ArrayMesh
+	var biome_mesh: ArrayMesh
 	var water_mesh: ArrayMesh
 	var lake_island_mesh: ArrayMesh
 	## The lakes by color group (WorldMapData.lake_triangles), and each group's color.
@@ -484,9 +485,9 @@ class WorldArt:
 		return view._color(&"land") if view.gray_mode else Color.WHITE
 
 
-## The land in its biome colors (see MapView.LAND_COLORS) or flat gray, and the
-## lakes in their simplified real colors (plain water on the gray map), over
-## the sea and its ice.
+## The land in its biome colors (see MapView.LAND_COLORS) or flat gray, over
+## the sea and its ice. On the full-color map it clips its child, the biomes
+## (BiomeArt), to the land.
 class LandArt:
 	extends Node2D
 
@@ -495,6 +496,31 @@ class LandArt:
 
 	func _draw() -> void:
 		draw_mesh(art.land_mesh, art.land_texture(), Transform2D.IDENTITY, art.land_tint())
+
+
+## The biomes as flat-colored, straight-edged patches (WorldMapData
+## biome_triangles), clipped to the land by their parent (LandArt), so the
+## edges between them stay sharp at any zoom. Not on the gray map.
+class BiomeArt:
+	extends Node2D
+
+	var view: MapView
+	var art: WorldArt
+
+	func _draw() -> void:
+		if not view.gray_mode:
+			draw_mesh(art.biome_mesh, art.white)
+
+
+## Over the land: inland seas, and the lakes in their simplified real colors
+## (plain water on the gray map).
+class WaterArt:
+	extends Node2D
+
+	var view: MapView
+	var art: WorldArt
+
+	func _draw() -> void:
 		draw_mesh(art.water_mesh, art.white, Transform2D.IDENTITY, view._color(&"ocean"))
 		for i in art.lake_meshes.size():
 			if art.lake_meshes[i] != null:
@@ -566,6 +592,7 @@ func _ready() -> void:
 
 	var data := GameData.world_map
 	var land_mesh := _triangle_mesh(data.land_triangles)
+	var biome_mesh := _triangle_mesh(data.biome_triangles, data.biome_colors)
 	var water_mesh := _triangle_mesh(data.water_triangles)
 	var lake_island_mesh := _triangle_mesh(data.lake_island_triangles)
 	var lake_meshes: Array[ArrayMesh] = []
@@ -587,6 +614,7 @@ func _ready() -> void:
 		var art := WorldArt.new()
 		art.view = self
 		art.land_mesh = land_mesh
+		art.biome_mesh = biome_mesh
 		art.water_mesh = water_mesh
 		art.lake_island_mesh = lake_island_mesh
 		art.lake_meshes = lake_meshes
@@ -608,7 +636,17 @@ func _ready() -> void:
 		var land := LandArt.new()
 		land.view = self
 		land.art = art
+		# The biomes, straight-edged, drawn over the land and clipped to it.
+		land.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW if not gray_mode else CanvasItem.CLIP_CHILDREN_DISABLED
 		art.add_child(land)
+		var biomes := BiomeArt.new()
+		biomes.view = self
+		biomes.art = art
+		land.add_child(biomes)
+		var water := WaterArt.new()
+		water.view = self
+		water.art = art
+		art.add_child(water)
 		var lake_ice := LakeIce.new()
 		lake_ice.view = self
 		lake_ice.art = art
@@ -674,7 +712,7 @@ func _process(delta: float) -> void:
 
 ## A mesh of map triangles, with each point's place on LAND_COLORS as its UV
 ## (the texture spans x -180 to 180 and y Geo.MAX_LAT down to -Geo.MAX_LAT).
-func _triangle_mesh(triangles: PackedVector2Array) -> ArrayMesh:
+func _triangle_mesh(triangles: PackedVector2Array, colors := PackedColorArray()) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	if triangles.is_empty():
 		return mesh
@@ -688,6 +726,8 @@ func _triangle_mesh(triangles: PackedVector2Array) -> ArrayMesh:
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = triangles
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	if not colors.is_empty():
+		arrays[Mesh.ARRAY_COLOR] = colors
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
@@ -2751,17 +2791,27 @@ func _draw_decor() -> void:
 				if data.decor_tiers[i] > max_tier:
 					continue
 				var at := world_to_screen(data.decor_positions[i])
-				if screen.has_point(at):
-					shown.append([at, data.decor_kinds[i]])
+				if not screen.has_point(at):
+					continue
+				# Only while all of it fits clear of the water (land drawings on land, waves
+				# on the sea): its corners reach about its size from its spot.
+				if i < data.decor_clearance.size() and data.decor_clearance[i] * _zoom < _decor_side(data.decor_kind_names[data.decor_kinds[i]], scale) * 1.05:
+					continue
+				shown.append([at, data.decor_kinds[i]])
 	shown.sort_custom(func(p: Array, q: Array) -> bool: return p[0].y < q[0].y)
 	for item: Array in shown:
 		var texture := _decor_textures[item[1]]
 		if texture == null:
 			continue
-		var kind_name := data.decor_kind_names[item[1]]
-		var big := DECOR_ANIMALS.has(kind_name) or kind_name == "waves"
-		var side: float = (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if big else DECOR_SIZE_PX.x)) * scale
+		var side := _decor_side(data.decor_kind_names[item[1]], scale)
 		_canvas.draw_texture_rect(texture, Rect2(item[0] - Vector2(side / 2.0, side * 0.92), Vector2(side, side)), false)
+
+
+## How big a kind of drawing is on screen (px): mountains biggest, then
+## animals (and waves), then plants and rocks.
+static func _decor_side(kind_name: String, scale: float) -> float:
+	var big := DECOR_ANIMALS.has(kind_name) or kind_name == "waves"
+	return (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if big else DECOR_SIZE_PX.x)) * scale
 
 
 # --- Sea animals -------------------------------------------------------------------
@@ -2828,14 +2878,17 @@ func _draw_sea_animal(pod: int, j: int, kind: Dictionary, center: Vector2, angle
 	var facing := angle + sin(t * 1.4 + j * 2.1) * 0.12
 	var length := float(kind.length_px) * scale
 	var texture := _sea_texture(str(kind.art))
-	if texture == null:
-		return
+	if texture == null or not _on_water(at, facing, length):
+		return  # Never drawn over land, even partly.
 	_draw_sea_sprite(_sea_silhouette(str(kind.art)), at, facing, length, 1.0, SEA_SHADOW)
 	var dolphin: bool = kind.kind == "dolphin"
 	var breach: Array = kind.get("breach", [])
 	if not breach.is_empty():
 		var up := _sea_event(pod, j, "breach", float(breach[0]), float(breach[1]), SEA_LEAP_S if dolphin else SEA_BREACH_S)
-		if up >= 0.0:
+		# A leap or breach reaches out ahead and up the screen (and splashes round
+		# it): only where all that is water too.
+		var reach := at + Vector2.from_angle(facing) * length * (0.7 if dolphin else 0.0) - Vector2(0.0, length * (0.7 if dolphin else 0.25))
+		if up >= 0.0 and _on_water(reach, facing, length * 1.6):
 			if dolphin:
 				_draw_leap(texture, at, facing, length, up)
 			else:
@@ -2848,6 +2901,20 @@ func _draw_sea_animal(pod: int, j: int, kind: Dictionary, center: Vector2, angle
 			_draw_sea_sprite(texture, at, facing, length, 1.0, Color(1, 1, 1, sin(PI * up) * 0.95))
 			if up > 0.15 and up < 0.75:
 				_draw_blow(at + Vector2.from_angle(facing) * length * 0.32, length, (up - 0.15) / 0.6)
+
+
+## True if a sea animal `length` long (screen px) at a screen point, facing
+## that way, lies wholly over water: its middle, nose, tail and both sides, by
+## the sea mask (which counts the cells along the coast as land, so this errs
+## towards keeping them out to sea).
+func _on_water(at: Vector2, facing: float, length: float) -> bool:
+	var along := Vector2.from_angle(facing) * length * 0.55
+	var across := along.orthogonal() * (1.0 / SEA_ART_ASPECT)
+	var sea := SeaLife.shared()
+	for point: Vector2 in [at, at + along, at - along, at + across, at - across]:
+		if not sea.is_sea(Geo.unproject(screen_to_world(point))):
+			return false
+	return true
 
 
 ## How far (0..1) an animal is through an event lasting `seconds`, or -1 if

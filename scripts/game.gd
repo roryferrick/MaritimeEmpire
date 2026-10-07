@@ -63,6 +63,7 @@ func _ready() -> void:
 	GameState.ship_broke_down.connect(_on_ship_broke_down)
 	GameState.ship_lost.connect(_on_ship_lost)
 	GameState.ship_recovered.connect(_on_ship_recovered)
+	GameState.tugs_handed.connect(_on_tugs_handed)
 	GameState.recovery_sent.connect(_on_recovery_sent)
 	GameState.ship_at_risk.connect(_on_ship_at_risk)
 	GameState.ship_sold.connect(_on_ship_sold)
@@ -248,6 +249,12 @@ func _on_ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destinati
 		ActivityLog.add("%s towed %s in to %s%s" % [mammoth.tug_crew_text(), ship.name, GameData.port_name(port_id), outcome], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
 		return
 	ActivityLog.add("%s carried %s to %s%s" % [mammoth.name, ship.name, GameData.port_name(port_id), outcome], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
+
+
+func _on_tugs_handed(ship: Ship, boat: Ship, port_id: String) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
+	ActivityLog.add("%s brought %s within reach of %s's tugs" % [boat.name, ship.name, GameData.port_name(port_id)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
 func _on_recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool) -> void:

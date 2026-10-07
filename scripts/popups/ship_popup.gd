@@ -178,8 +178,9 @@ func _update_recovery() -> void:
 		%RecoveryLabel.text = "%s → %s, about %s" % [" and ".join(names), GameData.port_name(plan.tow_port), Fmt.duration(plan.seconds)]
 		return
 	var mammoth: Ship = plan.mammoth
-	%RecoveryLabel.text = "%s → %s, about %s" % [
-		mammoth.name, GameData.port_name(plan.tow_port), Fmt.duration(plan.seconds)]
+	%RecoveryLabel.text = "%s → %s, about %s" % [mammoth.name,
+		("%d nm off %s for its tugs" % [roundi(plan.handoff_nm), GameData.port_name(plan.tow_port)]) if float(plan.get("handoff_nm", 0.0)) > 0.0 else GameData.port_name(plan.tow_port),
+		Fmt.duration(plan.seconds)]
 
 
 ## Swaps the bars, toggles and stop summary for the upgrades (skills) panel.

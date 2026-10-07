@@ -43,6 +43,12 @@ extends Resource
 @export var feature_label_kinds := PackedByteArray()
 @export var feature_label_min_zoom := PackedFloat32Array()
 
+## The land's biomes as flat-colored, straight-edged triangles (three points
+## and three colors each), in drawing order (bigger patches first); the map
+## draws them clipped to the land (tools/build_map_data.gd _add_biome_polygons()).
+@export var biome_triangles := PackedVector2Array()
+@export var biome_colors := PackedColorArray()
+
 ## Where the sea is (tools/build_map_data.gd _add_sea_mask()), for the sea
 ## animals: a bit per cell of a sea_mask_size grid over longitude -180 to 180
 ## and latitude 90 down to -90, row by row from the north (1 = sea).
@@ -59,6 +65,9 @@ extends Resource
 @export var decor_positions := PackedVector2Array()
 @export var decor_kinds := PackedByteArray()
 @export var decor_tiers := PackedByteArray()
+## Each drawing's distance to the nearest shore (coast or lake), in projected
+## degrees: it shows only while all of it fits that side of the water.
+@export var decor_clearance := PackedFloat32Array()
 
 ## Lakes, drawn over the land each in its group's simplified real color (see
 ## tools/build_map_data.gd LAKE_GROUPS): a triangle list per group, and its color.

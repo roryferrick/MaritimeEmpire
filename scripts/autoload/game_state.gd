@@ -29,6 +29,8 @@ signal ship_broke_down(ship: Ship)
 signal ship_lost(ship: Ship)
 ## A Mammoth dropped a lost ship at a port (its destination, or back where it came from).
 signal ship_recovered(ship: Ship, mammoth: Ship, port_id: String, to_destination: bool)
+## A recovery boat left a ship within its port's tugs' reach for them to tow in.
+signal tugs_handed(ship: Ship, boat: Ship, port_id: String)
 ## A recovery boat was sent to a lost ship (automatically, if auto is true).
 signal recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool)
 ## A ship at sea no longer has the fuel or maintenance to reach port.
@@ -104,6 +106,8 @@ const STORM_FACTOR_REFRESH_S := 0.25
 const REFILL_BILL_S := 0.25
 ## Seconds between tugs leaving port on the same job, so they head out in line.
 const TUG_STAGGER_S := 1.5
+## A recovery boat leaves a ship this share of its port's tugs' reach out (see _tug_handoff_nm()).
+const TUG_HANDOFF_SHARE := 0.9
 
 ## Every company in the game (one in single player; see Company), and the one
 ## this player controls. The money, hubs, company_xp... below are its: the
@@ -2347,23 +2351,30 @@ func _plan_for(mammoth: Ship, lost: Ship) -> Dictionary:
 			segments.append([start, b, 0.0, GameData.distance_nm(start, b)])
 		segments.append([b, a, 0.0, left])
 	var tow_port := a if done <= left else b
+	# With tugs based there, it only carries the ship within their reach (a
+	# little inside it) and floats it off at sea for them to tow in.
+	var handoff := _tug_handoff_nm(tow_port, owner_of(lost))
+	var carry := minf(done, left)
+	var short := handoff if handoff > 0.0 and carry > handoff else 0.0
 	if tow_port == a:
-		segments.append([b, a, left, left + done])
+		segments.append([b, a, left, left + done - short])
 	else:
-		segments.append([a, b, done, done + left])
+		segments.append([a, b, done, done + left - short])
 	var approach_nm := minf(via_a, via_b)
-	var seconds := mammoth.sailing_seconds(approach_nm + minf(done, left), mammoth.maintenance)
+	var seconds := mammoth.sailing_seconds(approach_nm + carry - short, mammoth.maintenance)
 	var home_seconds := 0.0
 	if tow_port != mammoth.base_port:
 		home_seconds = mammoth.sailing_seconds(GameData.distance_nm(tow_port, mammoth.base_port), 1.0)
-	var running := seconds + home_seconds
+	var into_port := mammoth.sailing_seconds(short, mammoth.maintenance) if short > 0.0 else 0.0  # After handing it to the tugs.
+	var running := seconds + into_port + home_seconds
 	return {
 		mammoth = mammoth,
 		segments = segments,
 		tow_port = tow_port,
 		approach_nm = approach_nm,
+		handoff_nm = short,
 		seconds = seconds + Ship.ALIGN_SECONDS + Ship.LOAD_SECONDS * 2.0 + (Ship.SPIN_SECONDS if (tow_port == a) == (via_a <= via_b) else 0.0),
-		fuel = mammoth.fuel_per_s() * (seconds + DEPARTURE_MARGIN_S),
+		fuel = mammoth.fuel_per_s() * (seconds + into_port + DEPARTURE_MARGIN_S),
 		cost = mammoth.fuel_per_s() * running * market.fuel_price(mammoth.docked_at)
 			+ minf(mammoth.wear_per_s() * running, 1.0) * mammoth.full_repair_cost() * port_sizes.cost_factor(mammoth.docked_at),
 	}
@@ -2419,6 +2430,10 @@ func _deliver(mammoth: Ship) -> void:
 	var lost := mammoth.rescuing
 	var port := mammoth.tow_port
 	var to_destination := port == lost.to_port
+	var lane_end := GameData.distance_nm(mammoth.from_port, mammoth.to_port)
+	if mammoth.traveled_nm < lane_end - 0.01:
+		_hand_to_tugs(mammoth, lost)
+		return
 	mammoth.rescuing = null
 	mammoth.job_phase = Ship.JOB_NONE
 	mammoth.job_segments.clear()
@@ -2429,6 +2444,36 @@ func _deliver(mammoth: Ship) -> void:
 	_arrive(lost, port, to_destination)
 	ship_recovered.emit(lost, mammoth, port, to_destination)
 	_gain_recovery_xp(mammoth, lost)
+
+
+## How far out (nm) a recovery boat leaves a ship for the tugs based at a port
+## to tow in: a little inside the longest reach of the company's tugs there,
+## or 0 if it has none (the boat takes the ship all the way in).
+func _tug_handoff_nm(port_id: String, of: Company) -> float:
+	var reach := 0.0
+	for tug: Ship in tugs_at(port_id, of):
+		reach = maxf(reach, tug.reach_nm())
+	return reach * TUG_HANDOFF_SHARE
+
+
+## A recovery boat that's carried a ship within its port's tugs' reach floats
+## it off there and sails on into port itself; the ship, lost again at that
+## spot on its own leg, is fetched by the tugs (now, or once they're free).
+func _hand_to_tugs(mammoth: Ship, lost: Ship) -> void:
+	var port := mammoth.tow_port
+	lost.traveled_nm = mammoth.traveled_nm if mammoth.from_port == lost.from_port else lost.leg_length() - mammoth.traveled_nm
+	lost.rescuer = null
+	mammoth.rescuing = null
+	mammoth.job_phase = Ship.JOB_NONE
+	mammoth.job_segments.clear()
+	mammoth.tow_port = ""
+	mammoth.align_time = 0.0
+	mammoth.segment_end = 0.0
+	_gain_recovery_xp(mammoth, lost)
+	tugs_handed.emit(lost, mammoth, port)
+	ship_changed.emit(mammoth)
+	ship_changed.emit(lost)
+	_send_recovery(lost, true)  # Its port's tugs, if they're free.
 
 
 ## A finished recovery: the boat earns game_config recovery_xp.per_nm for every
@@ -2532,12 +2577,12 @@ func recent_xp_per_minute() -> float:
 	return float(recent_finances().fleet.get("xp", 0.0)) / minutes if minutes > 0.0 else 0.0
 
 
-## Money over the last WINDOW_SECONDS: {fleet: {kind: amount}, ships: {ship
+## A company's money (this player's by default) over the last WINDOW_SECONDS: {fleet: {kind: amount}, ships: {ship
 ## name: profit}}.
-func recent_finances() -> Dictionary:
+func recent_finances(of: Company = null) -> Dictionary:
 	var fleet := {}
 	var ship_profit := {}
-	for bucket: Dictionary in company.finance_window:
+	for bucket: Dictionary in (of if of != null else company).finance_window:
 		if bucket.start < play_time - WINDOW_SECONDS:
 			continue
 		for kind: String in bucket.fleet:

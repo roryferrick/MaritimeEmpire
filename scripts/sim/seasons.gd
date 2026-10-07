@@ -48,6 +48,8 @@ func active() -> bool:
 ## calendar (Unix) time.
 static func in_season(item: Dictionary, unix_time: int) -> bool:
 	var today := _month_day(unix_time)
+	if item.get("not_first_year", false) and _md_year == _first_year():
+		return false  # Spared in the game's first calendar year (the Great Lakes ice).
 	var from := int(item.from[0]) * 100 + int(item.from[1])
 	var to := int(item.to[0]) * 100 + int(item.to[1])
 	return today >= from and today <= to if from <= to else today >= from or today <= to
@@ -57,13 +59,23 @@ static func in_season(item: Dictionary, unix_time: int) -> bool:
 ## (every ship asks about the same time each step).
 static var _md_time := -1
 static var _md := 0
+static var _md_year := 0
+static var _start_year := -1
 
 static func _month_day(unix_time: int) -> int:
 	if unix_time != _md_time:
 		var date := Time.get_datetime_dict_from_unix_time(unix_time)
 		_md_time = unix_time
 		_md = int(date.month) * 100 + int(date.day)
+		_md_year = int(date.year)
 	return _md
+
+
+## The calendar year every game starts in (game_config calendar start).
+static func _first_year() -> int:
+	if _start_year < 0:
+		_start_year = int(str(GameData.config.get("calendar", {}).get("start", "2000-01-01")).left(4))
+	return _start_year
 
 
 ## "22 Mar" for a [month, day].

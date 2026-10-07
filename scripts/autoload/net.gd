@@ -79,7 +79,7 @@ const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "s
 ## GameState signals whose first argument is a ship: sent to that ship's
 ## company's player. port_band_changed goes to everyone.
 const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_held", &"ship_departed", &"canal_entered",
-	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled"]
+	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled"]
 ## Commands a joined player's game sends, done by the host for their company
 ## (each is the GameState function of that name).
 const COMMANDS: Array[StringName] = [&"buy_ship", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel",
@@ -630,12 +630,12 @@ func _collect() -> Dictionary:
 	for ship in GameState.ships:
 		var data := ship.to_dict()
 		data["company"] = maxi(all.find(GameState.owner_of(ship)), 0)
-		ships[ship.id] = data
+		ships[ship.id] = data.duplicate(true)  # A copy: the ship's own tables (skills, ledger) change in place.
 	return {
 		t = GameState.play_time, speed = GameState.time_speed,
 		weather = GameState.weather.to_dict(false), market = GameState.market.to_dict(),
 		ports = GameState.port_sizes.to_dict(),
-		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict()),
+		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
 		ships = ships,
 	}
 
@@ -669,11 +669,11 @@ func _broadcast() -> void:
 	var weather := GameState.weather.to_dict(false)  # Joined games keep their own storm tracks.
 	if weather != _sent.weather:
 		update.weather = weather
-		_sent.weather = weather
+		_sent.weather = weather.duplicate(true)
 	var market := GameState.market.to_dict()
 	if market != _sent.market:
 		update.market = market
-		_sent.market = market
+		_sent.market = market.duplicate(true)
 	_full_clock += SYNC_S
 	var full_round := _full_clock >= FULL_SYNC_S
 	if full_round:
@@ -682,7 +682,7 @@ func _broadcast() -> void:
 		var changed_ports := _diff(_sent.ports, ports)
 		if not changed_ports.is_empty():
 			update.ports = changed_ports
-			_sent.ports = ports
+			_sent.ports = ports.duplicate(true)
 	# Companies: money and XP every time, the rest (finances, hubs...) each full round.
 	var all := GameState.all_companies()
 	var companies := {}
@@ -694,9 +694,9 @@ func _broadcast() -> void:
 			if not changed.is_empty():
 				companies[i] = changed
 			if known:
-				_sent.companies[i] = now
+				_sent.companies[i] = now.duplicate(true)
 			else:
-				_sent.companies.append(now)
+				_sent.companies.append(now.duplicate(true))
 		else:
 			var kept: Dictionary = _sent.companies[i]
 			var changed := {}
@@ -725,7 +725,7 @@ func _broadcast() -> void:
 			var changed := _diff(_sent.ships.get(ship.id, {}), data)
 			if not changed.is_empty():
 				ships[ship.id] = changed
-			_sent.ships[ship.id] = data
+			_sent.ships[ship.id] = data.duplicate(true)  # Kept as sent: tables in it change in place (see _collect()).
 		elif not ship.is_docked() or ship.dock_time >= 0.0 or ship.berth_phase != Ship.BERTH_NONE:
 			var values := [ship.traveled_nm, ship.fuel, ship.maintenance, ship.align_time, ship.dock_time, ship.lock_time, ship.berth_time]
 			hot[ship.id] = values
