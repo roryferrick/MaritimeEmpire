@@ -770,7 +770,8 @@ func ship_screen_position(ship: Ship) -> Vector2:
 		if not pose.is_empty():
 			return pose[0]
 		if ship.is_tug() and ship.job_phase == Ship.JOB_TOW and ship.rescuing != null:
-			return world_to_screen(ship.world_position()) + Vector2.from_angle(_heading_angle(ship.heading())) * _tug_offset(ship)
+			# At the ship it's towing, as that's drawn (eased into its harbour near port).
+			return ship_screen_position(ship.rescuing) + Vector2.from_angle(_heading_angle(ship.heading())) * _tug_offset(ship)
 		return _harbour_blend(ship, world_to_screen(ship.world_position()) + _canal_lane_offset(ship))
 	if docks_shown():
 		return _docked_pose(ship)[0]
@@ -850,7 +851,8 @@ func _turning_pose(ship: Ship) -> Array:
 		if ship.job_phase != Ship.JOB_ALIGN or ship.rescuing == null:
 			return []
 		var home := lane_angle + PI
-		return _turn_pose(base, lane_angle, base + Vector2.from_angle(home) * _tug_offset(ship), home, radius,
+		var at := ship_screen_position(ship.rescuing)  # Turning round by the lost ship, where it's drawn.
+		return _turn_pose(at, lane_angle, at + Vector2.from_angle(home) * _tug_offset(ship), home, radius,
 			clampf(ship.align_time / Ship.ALIGN_SECONDS, 0.0, 1.0))
 	if ship.is_icebreaker():
 		var t := clampf(ship.align_time / Ship.ALIGN_SECONDS, 0.0, 1.0)

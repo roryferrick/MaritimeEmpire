@@ -565,7 +565,7 @@
 			"category": "tug",
 			"unlock_level": 3,
 			"tug": true,
-			"price": 10000,
+			"price": 50000,
 			"xp_first_level": 120,
 			"speed_nm_per_s": 4.0,
 			"capacity": 0,

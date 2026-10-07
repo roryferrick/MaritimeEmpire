@@ -3,8 +3,8 @@ extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
 ## category, laid out in rows (ROWS) with the sections of a row side by side,
 ## each as wide as its models (up to 6 cards a row): container ships; ore and
-## grain carriers; livestock carriers and tankers; vehicle carriers, recovery
-## boats and tugs; icebreakers. A row too wide for the screen stacks its
+## grain carriers; livestock carriers and tankers; vehicle carriers and recovery
+## boats; icebreakers and tugs. A row too wide for the screen stacks its
 ## sections. Each section title runs through its models' map colors, smallest
 ## ship first, and each card's name is in its model's map color, above a
 ## picture of the ship as it looks on the map (see ShipPicture). Each card
@@ -16,10 +16,10 @@ extends Control
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs", "tug"],
-	["Icebreakers (only needed in seasonal ice)", "icebreaker"]]
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs (two per route port)", "tug"],
+	["Icebreakers (for seasonal ice)", "icebreaker"]]
 ## The sections side by side on each row (by category).
-const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery", "tug"], ["icebreaker"]]
+const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery"], ["icebreaker", "tug"]]
 ## Cards a section shows across, fewer if they don't fit. Six fit across a row
 ## beside the open activity log at the default window size: cards are
 ## CARD_WIDTH wide (plus padding), and long ship names and Buy button texts wrap.
@@ -27,6 +27,7 @@ const MAX_COLUMNS := 5
 const CARD_GAP := 12
 const SECTION_GAP := 12
 const CARD_WIDTH := 128.0
+const CARD_MAX_WIDTH := 175.0
 const CARD_LABEL_WIDTH := 40.0
 ## Each card shows the model's map art under its name, in a strip this tall;
 ## see _picture_length() for how long each is.
@@ -72,7 +73,7 @@ func _ready() -> void:
 		var row_grids: Array[GridContainer] = []
 		for category: String in row_categories:
 			var box := _section_box(category, row)
-			var header: BoxContainer = VBoxContainer.new() if category == "tug" else HBoxContainer.new()  # (The tugs' button goes under their title: their section is one card wide.)
+			var header := HBoxContainer.new()
 			header.add_theme_constant_override(&"separation", 10)
 			header.add_child(_section_title(titles[category], category))
 			if category == "tug":
@@ -115,21 +116,30 @@ func _ready() -> void:
 ## another; each section as many cards across as it has (up to MAX_COLUMNS),
 ## fewer if even it alone doesn't fit.
 func _fit_columns() -> void:
-	var card_width := 0.0
-	for grid in _grids:
-		for card: Control in grid.get_children():
-			card_width = maxf(card_width, card.get_combined_minimum_size().x)
 	var room := size.x - 60.0  # Page margins and the scrollbar.
 	for entry: Array in _rows:
 		var row: GridContainer = entry[0]
 		var grids: Array = entry[1]
+		# Cards widen (up to CARD_MAX_WIDTH) to share out a row with fewer ships.
+		var cards := 0
+		var fixed := SECTION_GAP * (grids.size() - 1)
 		for grid: GridContainer in grids:
-			var fits := floori((room - 2 * SECTION_PADDING + CARD_GAP) / (card_width + CARD_GAP))
+			var count := mini(grid.get_child_count(), MAX_COLUMNS)
+			cards += count
+			fixed += 2 * SECTION_PADDING + (count - 1) * CARD_GAP
+		var width := clampf((room - fixed) / maxf(cards, 1.0), CARD_WIDTH, CARD_MAX_WIDTH)
+		for grid: GridContainer in grids:
+			var fits := floori((room - 2 * SECTION_PADDING + CARD_GAP) / (CARD_WIDTH + CARD_GAP))
 			grid.columns = clampi(mini(grid.get_child_count(), fits), 1, MAX_COLUMNS)
-		# Side by side if the row (as laid out) fits across, else stacked.
+			for card: Control in grid.get_children():
+				card.custom_minimum_size.x = width
+		# Side by side if the row (as laid out) fits across, else stacked (narrow cards again).
 		row.columns = grids.size()
 		if row.get_combined_minimum_size().x > room:
 			row.columns = 1
+			for grid: GridContainer in grids:
+				for card: Control in grid.get_children():
+					card.custom_minimum_size.x = CARD_WIDTH
 
 
 ## A section's panel, on a faint tint of its ship line's color (see
