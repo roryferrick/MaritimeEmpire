@@ -2437,7 +2437,7 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 		var zone: Vector2 = art.zone
 		var fill := ceilf(level * CARGO_STEPS) / CARGO_STEPS
 		var share := (zone.x + fill * (zone.y - zone.x)) / SHIP_ART_WIDTH
-		var texture: Texture2D = art.cargo
+		var texture: Texture2D = (art.get("skins", {}) as Dictionary).get(ship.cargo_id, art.cargo)  # What it carries, shown.
 		_canvas.draw_texture_rect_region(texture, Rect2(rect.position, Vector2(rect.size.x * share, rect.size.y)),
 			Rect2(Vector2.ZERO, Vector2(texture.get_width() * share, texture.get_height())), fade)
 	_canvas.draw_texture_rect(art.details, rect, false, fade)
@@ -2466,6 +2466,15 @@ static func load_ship_art(category: String) -> Dictionary:
 	if CARGO_ZONES.has(category) and ResourceLoader.exists(path % "cargo"):
 		art.cargo = load(path % "cargo")
 		art.zone = CARGO_ZONES[category]
+		# A skin per commodity where there is one (livestock and vehicle carriers:
+		# tools/make_cargo_skins.gd), so a ship shows which of its goods it carries.
+		art.skins = {}
+		for model: Dictionary in GameData.ship_models:
+			if model.get("category", "") == category:
+				for commodity: String in model.get("cargo", []):
+					var skin := SHIP_ART_DIR + "%s_cargo_%s.svg" % [category, commodity]
+					if ResourceLoader.exists(skin):
+						art.skins[commodity] = load(skin)
 	return art
 
 

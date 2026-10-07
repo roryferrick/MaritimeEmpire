@@ -124,7 +124,8 @@ static func from_dict(data: Dictionary) -> Company:
 	company.money = int(data.get("money", 0))
 	company.xp = float(data.get("company_xp", 0.0))
 	for commodity_id: String in data.get("delivered", {}):
-		company.delivered[commodity_id] = int(data.delivered[commodity_id])
+		var now := GameData.current_commodity(commodity_id)
+		company.delivered[now] = int(company.delivered.get(now, 0)) + int(data.delivered[commodity_id])
 	company.earlier_containers = int(data.get("earlier_containers", 0))
 	if not data.has("delivered"):  # Saves from before per-commodity counts: their container total.
 		company.earlier_containers = int(data.get("containers_delivered", 0))

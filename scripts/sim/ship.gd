@@ -1219,7 +1219,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	# A cargo ship from a save before berths that was mid-stop queues for a berth to finish it.
 	var mid_stop := ship.dock_time >= 0.0 and not ship.is_service() and not str(data.get("docked_at", "")).is_empty()
 	ship.berth_phase = str(data.get("berth_phase", BERTH_WAIT if mid_stop else BERTH_NONE))
-	ship.cargo_id = str(data.get("cargo_id", ""))
+	ship.cargo_id = GameData.current_commodity(str(data.get("cargo_id", "")))
 	ship.cargo_from = str(data.get("cargo_from", ""))
 	ship.cargo_qty = int(data.get("cargo_qty", 0))
 	ship.cargo_cost = int(data.get("cargo_cost", 0))

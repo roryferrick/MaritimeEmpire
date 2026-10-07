@@ -542,6 +542,12 @@ func cargo_names(model: Dictionary) -> String:
 
 # --- Markets -----------------------------------------------------------------
 
+## A commodity id as it is now: saves from before grain, livestock and
+## vehicles were split up keep them as wheat, cattle and cars.
+static func current_commodity(id: String) -> String:
+	return {"grain": "wheat", "livestock": "cows", "vehicles": "cars"}.get(id, id)
+
+
 func commodity(id: String) -> Dictionary:
 	return _commodities_by_id.get(id, {})
 
