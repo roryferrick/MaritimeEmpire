@@ -90,10 +90,13 @@ const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"sell_ship",
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its
-## password ("" for none) and how many players it takes (the host too).
+## password ("" for none), how many players it takes (the host too), and
+## whether it blanks inappropriate words out of ship names and chat (see
+## WordFilter: the host cleans every name and chat line, so it holds for all).
 var game_name := ""
 var password := ""
 var max_players := 4
+var filter_words := false
 ## Players in the game, by peer id (the host is 1): {name, company (index in
 ## GameState.companies, -1 while choosing)}. Joined games get the host's list.
 var players := {}
@@ -254,6 +257,9 @@ func host(settings := {}) -> String:
 		game_name = GameState.company_name
 	password = str(settings.get("password", ""))
 	max_players = clampi(int(settings.get("max_players", 4)), 2, MAX_PLAYERS)
+	filter_words = settings.get("filter", true)
+	if filter_words:
+		game_name = WordFilter.clean(game_name)
 	var on_steam: bool = steam != null and settings.get("steam", true)
 	var port := int(settings.get("port", PORT))
 	var error := OK
@@ -270,6 +276,9 @@ func host(settings := {}) -> String:
 		return "Couldn't host on port %d (%s). Is another game already hosting?" % [port, error_string(error)]
 	multiplayer.multiplayer_peer = _peer
 	role = Role.HOST
+	if filter_words:
+		for ship in GameState.ships:  # Names from before: cleaned too.
+			GameState.set_ship_name(ship, WordFilter.clean(ship.name))
 	players = {1: {name = GameState.company_name, company = GameState.companies.find(GameState.company)}}
 	_sent = {}
 	_events = {}
@@ -283,6 +292,12 @@ func host(settings := {}) -> String:
 	_announce()
 	players_changed.emit()
 	return ""
+
+
+## Text with inappropriate words blanked out, if this game hosts with the
+## filter on (see filter_words); else as it was.
+func clean_text(text: String) -> String:
+	return WordFilter.clean(text) if is_host() and filter_words else text
 
 
 ## Whether this game is hosted or joined over Steam.
@@ -318,6 +333,7 @@ func _update_lobby() -> void:
 	steam.setLobbyData(lobby_id, "players", str(players.size()))
 	steam.setLobbyData(lobby_id, "max_players", str(max_players))
 	steam.setLobbyData(lobby_id, "locked", "1" if not password.is_empty() else "0")
+	steam.setLobbyData(lobby_id, "filtered", "1" if filter_words else "0")
 
 
 ## Host on Steam: opens Steam's overlay to invite friends. Returns why it
@@ -343,6 +359,7 @@ func leave() -> void:
 	_joining_lobby = 0
 	_start_bytes = PackedByteArray()
 	chat_log.clear()
+	filter_words = false
 	role = Role.OFFLINE
 	players = {}
 	_sent = {}
@@ -362,7 +379,7 @@ func _announce() -> void:
 		return
 	var enet := _peer as ENetMultiplayerPeer
 	var info := {proto = PROTOCOL, name = game_name, company = GameState.company_name,
-		players = players.size(), max_players = max_players, locked = not password.is_empty(),
+		players = players.size(), max_players = max_players, locked = not password.is_empty(), filtered = filter_words,
 		port = enet.get_host().get_local_port() if enet and enet.get_host() else PORT}
 	_announcer.put_packet(JSON.stringify(info).to_utf8_buffer())
 
@@ -1131,7 +1148,7 @@ func _on_lobby_list(lobbies: Array) -> void:
 			continue
 		games["steam:%d" % id] = {lobby = id, name = steam.getLobbyData(id, "name"), company = steam.getLobbyData(id, "company"),
 			players = int(steam.getLobbyData(id, "players")), max_players = int(steam.getLobbyData(id, "max_players")),
-			locked = steam.getLobbyData(id, "locked") == "1"}
+			locked = steam.getLobbyData(id, "locked") == "1", filtered = steam.getLobbyData(id, "filtered") == "1"}
 	games_changed.emit()
 
 
@@ -1229,6 +1246,7 @@ func _chat(text: String) -> void:
 func _chat_all(from: int, text: String) -> void:
 	if not players.has(from):
 		return
+	text = clean_text(text)
 	var index := int(players[from].company)
 	var speaker: String = players[from].name
 	var color := "purple"

@@ -22,8 +22,9 @@ const COPYRIGHT := "© 2026 Rory Ferrick. All rights reserved. Map data: Natural
 static var page := ""
 ## The Multiplayer page's hosting settings: {name ("" for the company's), password
 ## ("" for none), max_players, steam (over Steam if it's running, or the local
-## network and by address)}, used when a multiplayer game opens (see Net.host()).
-static var host_settings := {name = "", password = "", max_players = 4, steam = true}
+## network and by address), filter (blank inappropriate words out of ship
+## names and chat)}, used when a multiplayer game opens (see Net.host()).
+static var host_settings := {name = "", password = "", max_players = 4, steam = true, filter = true}
 
 ## The slot DeleteDialog is asking about.
 var _deleting := 0
@@ -162,7 +163,8 @@ func _delete() -> void:
 
 
 ## The Multiplayer page's hosting settings: the game's name in friends' lists
-## (the company's by default), an optional password, and how many can play.
+## (the company's by default), an optional password, how many can play, and
+## whether to filter bad words out of ship names and chat.
 func _host_settings() -> GridContainer:
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -195,7 +197,11 @@ func _host_settings() -> GridContainer:
 	else:
 		connection.select(0 if host_settings.steam else 1)
 	connection.item_selected.connect(func(index: int) -> void: host_settings.steam = index == 0)
-	for row: Array in [["Game name", name_edit], ["Password", password_edit], ["Up to", players], ["Over", connection]]:
+	var filter := CheckBox.new()
+	filter.text = "Filter bad words from ship names and chat"
+	filter.button_pressed = host_settings.filter
+	filter.toggled.connect(func(on: bool) -> void: host_settings.filter = on)
+	for row: Array in [["Game name", name_edit], ["Password", password_edit], ["Up to", players], ["Over", connection], ["Filter", filter]]:
 		var label := Label.new()
 		label.text = row[0]
 		label.theme_type_variation = &"DimLabel"

@@ -1257,7 +1257,7 @@ const HEADING_PROBE_NM := 1.5
 const SEA_ANGLE_LANES := 24
 const SEA_ANGLE_MILES := 12.0
 const PIER_WIDTH := 2.0
-const BERTH_GAP := 0.5
+const BERTH_GAP := 0.3
 const PIER_COLOR := Color(0.66, 0.6, 0.5)
 const PIER_EDGE := Color(0.22, 0.2, 0.17)
 ## The docks are built half the ships' size (PIER_WIDTH, BERTH_GAP...): piers
@@ -1270,8 +1270,8 @@ const BOLLARD_INSET := 0.35
 const BOLLARD_RADIUS := 0.25
 const BOLLARD_COLOR := Color(0.16, 0.15, 0.14)
 const ROPE_COLOR := Color(0.95, 0.9, 0.74)
-## Tugs tie up alongside the wharf this far apart (dock units, about a tug and a half).
-const TUG_STEP := 7.0
+## Tugs tie up alongside the wharf this far apart (dock units, a little more than a tug).
+const TUG_STEP := 5.75
 ## Stone blocks join the dock pieces where they meet: this wide, dressed grey stone.
 const STONE_BLOCK := 3.25
 const STONE_COLOR := Color(0.6, 0.6, 0.62)
@@ -1377,7 +1377,7 @@ static func _lon_lat_offset(at: Vector2, degrees: Vector2) -> Vector2:
 
 
 ## The longest ship (dock units, bow included) that can dock at ports of a band,
-## and the widest of any cargo ship (only cargo ships moor at berths).
+## and the widest that can dock there (only cargo ships moor at berths).
 static func _band_ship_length(band: String) -> float:
 	var longest := 0.0
 	for model: Dictionary in GameData.ship_models:
@@ -1391,11 +1391,14 @@ static func _band_ship_length(band: String) -> float:
 	return longest
 
 
-static func _widest_ship() -> float:
+static func _widest_ship(band: String) -> float:
 	var widest := 0.0
 	for model: Dictionary in GameData.ship_models:
-		if not (model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty()):
-			widest = maxf(widest, float(model.get("map_size", [14, 6])[1]) * SHIP_SIZE)  # Cargo ships: only they moor.
+		if model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty():
+			continue  # Cargo ships: only they moor.
+		if int(BAND_RANK.get(str(model.get("min_port", "small")), 0)) > int(BAND_RANK.get(band, 0)):
+			continue
+		widest = maxf(widest, float(model.get("map_size", [14, 6])[1]) * SHIP_SIZE)
 	return widest
 
 
@@ -1409,10 +1412,10 @@ func _dock_layout(band: String, berths: int) -> Dictionary:
 	if _dock_layouts.has(key):
 		return _dock_layouts[key]
 	var length := _band_ship_length(band)
-	var width := _widest_ship()
+	var width := _widest_ship(band)
 	var base_length := length * 0.5 + 1.5  # Half the longest ship: they overhang it.
 	var piers := int(PIERS_BY_BAND.get(band, 1))
-	var spacing := 2.0 * (width + BERTH_GAP) + PIER_WIDTH + 1.0  # Just room for a ship each side.
+	var spacing := 2.0 * (width + BERTH_GAP) + PIER_WIDTH + 0.4  # Just room for a ship each side.
 	var layout := {piers = [], quay = [], berths = [], length = length, width = width}
 	# The band's berths: a pair on each pier, and Medium's one along a quay by the
 	# pier's root. A hub's extra berths lengthen the piers, a pair further out at a

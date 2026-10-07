@@ -168,8 +168,8 @@ func _show_games() -> void:
 		var row := HBoxContainer.new()
 		var label := Label.new()
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.text = "%s  ·  %s  ·  %d/%d players%s  ·  %s" % [game.name, game.company, int(game.players), int(game.max_players),
-			"  ·  Password" if game.locked else "", "Steam" if game.has("lobby") else "Network"]
+		label.text = "%s  ·  %s  ·  %d/%d players%s%s  ·  %s" % [game.name, game.company, int(game.players), int(game.max_players),
+			"  ·  Password" if game.locked else "", "  ·  Filtered" if game.get("filtered", false) else "", "Steam" if game.has("lobby") else "Network"]
 		row.add_child(label)
 		var join := Button.new()
 		join.text = "Join"

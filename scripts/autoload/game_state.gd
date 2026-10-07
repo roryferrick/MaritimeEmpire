@@ -376,6 +376,7 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 		return null
 	if Net.command(&"buy_ship", [model_id, ship_name, port_id]):
 		return null  # The host buys it (see Net).
+	ship_name = Net.clean_text(ship_name)
 	var price := ship_price(model_id)
 	if price < int(model.get("price", 0)):
 		first_prices_used.append(model_id)
@@ -865,14 +866,21 @@ func rename_ship(ship: Ship, new_name: String) -> String:
 		return error
 	if Net.command(&"rename_ship", [ship, new_name]):
 		return ""
+	set_ship_name(ship, Net.clean_text(new_name))
+	save_game()
+	return ""
+
+
+## Gives a ship a new name, carrying its recent finances over to it.
+func set_ship_name(ship: Ship, new_name: String) -> void:
+	if new_name == ship.name:
+		return
 	for bucket: Dictionary in owner_of(ship).finance_window:
 		if bucket.ships.has(ship.name):
 			bucket.ships[new_name] = bucket.ships[ship.name]
 			bucket.ships.erase(ship.name)
 	ship.name = new_name
 	ship_changed.emit(ship)
-	save_game()
-	return ""
 
 
 func suggest_ship_name() -> String:
