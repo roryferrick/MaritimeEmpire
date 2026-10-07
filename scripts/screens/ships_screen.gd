@@ -39,6 +39,8 @@ var _groups := {}
 var _upgrade_all := Button.new()
 ## The red dot on "Upgrade all" while any ship has points to spend.
 var _upgrade_all_alert := AlertDot.new(4.0, Vector2(5, 5))
+## Each model's own "Upgrade" button beside its Mute: model id -> [button, red dot].
+var _model_upgrades := {}
 ## Model id -> [its "Mega upgrade" button, that button's red dot, its "★ Mega" badge].
 var _megas := {}
 ## Ship -> its tile.
@@ -89,6 +91,7 @@ func _process(_delta: float) -> void:
 				_tiles[ship].refresh()
 		_apply_filter()
 		_update_upgrade_all()
+		_update_model_upgrades()
 		_update_megas()
 	_changed_ships.clear()
 	_dirty = false
@@ -125,6 +128,7 @@ func _rebuild() -> void:
 	_size_tiles()
 	_update_megas()
 	_update_upgrade_all()
+	_update_model_upgrades()
 
 
 ## "Upgrade all (12): $4.2M" (what every unspent point would cost); greyed out
@@ -139,6 +143,25 @@ func _update_upgrade_all() -> void:
 	if points > 0 and not affordable:
 		_upgrade_all.tooltip_text = "The cheapest upgrade costs %s." % Fmt.money(cheapest)
 	_upgrade_all_alert.visible = affordable
+
+
+## Each model's "Upgrade 3: $1.2M" beside its Mute (its ships' unspent
+## points, cheapest first, as far as the money goes); hidden while it has
+## none, greyed out while even the cheapest would dip into the bank reserve.
+func _update_model_upgrades() -> void:
+	for model_id: String in _model_upgrades:
+		var button: Button = _model_upgrades[model_id][0]
+		var points := GameState.unspent_skill_points(model_id)
+		button.visible = points > 0
+		if points == 0:
+			continue
+		var cheapest := GameState.cheapest_upgrade_cost(model_id)
+		var affordable := GameState.money - cheapest >= GameState.bank_reserve
+		button.text = "Upgrade %d: $%s" % [points, Fmt.short(GameState.upgrade_all_cost(model_id))]
+		button.disabled = not affordable
+		button.tooltip_text = "Buy these ships' upgrades, cheapest first, as far as the money goes (keeping the bank reserve)." if affordable \
+			else "The cheapest upgrade costs %s." % Fmt.money(cheapest)
+		(_model_upgrades[model_id][1] as Control).visible = affordable
 
 
 ## Shows each model's "Mega upgrade" button once it qualifies (all its ships
@@ -206,6 +229,13 @@ func _add_group(model: Dictionary) -> GridContainer:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(spacer)
+	var upgrade := Button.new()  # This model's upgrades (see _update_model_upgrades()).
+	upgrade.add_theme_font_size_override(&"font_size", MEGA_FONT_SIZE)
+	upgrade.pressed.connect(GameState.upgrade_all.bind(model.id))
+	var upgrade_alert := AlertDot.new(4.0, Vector2(5, 5))
+	upgrade.add_child(upgrade_alert)
+	title_row.add_child(upgrade)
+	_model_upgrades[model.id] = [upgrade, upgrade_alert]
 	title_row.add_child(_mute_button(model.id))
 	var grid := GridContainer.new()
 	grid.columns = COLUMNS

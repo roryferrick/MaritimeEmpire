@@ -1284,6 +1284,42 @@
 		"JAV": {
 			"bearing": 269,
 			"quay": "right"
+		},
+		"LIV": {
+			"bearing": 268,
+			"quay": "right"
+		},
+		"IMM": {
+			"bearing": 111,
+			"quay": "right"
+		},
+		"LPA": {
+			"bearing": 52,
+			"quay": "right"
+		},
+		"BIO": {
+			"bearing": 353,
+			"quay": "left"
+		},
+		"TEE": {
+			"bearing": 38,
+			"quay": "right"
+		},
+		"MLH": {
+			"bearing": 226,
+			"quay": "right"
+		},
+		"GRG": {
+			"bearing": 91,
+			"quay": "right"
+		},
+		"GRK": {
+			"bearing": 18,
+			"quay": "left"
+		},
+		"THN": {
+			"bearing": 125,
+			"quay": "left"
 		}
 	}
 }

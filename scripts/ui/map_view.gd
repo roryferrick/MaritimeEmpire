@@ -89,7 +89,7 @@ const DECOR_ZOOM_REFERENCE := 30.0
 const DECOR_SCALE_RANGE := Vector2(0.9, 1.5)
 const DECOR_ANIMALS: Array[String] = ["penguin", "polar_bear", "camel", "elephant", "giraffe", "lion", "zebra", "kangaroo", "koala",
 	"panda", "tiger", "bison", "moose", "brown_bear", "reindeer", "llama", "toucan", "gorilla", "orangutan", "kiwi", "lemur",
-	"quetzal", "red_tailed_hawk", "bald_eagle", "osprey"]
+	"quetzal", "red_tailed_hawk", "bald_eagle", "osprey", "water_buffalo", "pizza"]
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
 ## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
@@ -134,12 +134,10 @@ const CARGO_ZONES := {container = Vector2(34.0, 138.0), vehicles = Vector2(12.0,
 const CARGO_STEPS := 4
 ## Ships and docks have a fixed size in the world: map_size (times SHIP_SIZE)
 ## pixels at SHIP_WORLD_ZOOM px a degree, so they grow and shrink with the map
-## like the coast does (tiny zoomed right out). Sea animals keep their
-## map_size until the zoom passes SHIP_GROW_FROM_ZOOM, then
-## grow with the square root of the zoom, up to SHIP_MAX_SCALE times.
-const SHIP_WORLD_ZOOM := 75.0
-const SHIP_GROW_FROM_ZOOM := 60.0
-const SHIP_MAX_SCALE := 3.0
+## like the coast does (tiny zoomed right out). Sea animals are sized in the
+## world too, their length_px at ANIMAL_WORLD_ZOOM px a degree.
+const SHIP_WORLD_ZOOM := 37.5
+const ANIMAL_WORLD_ZOOM := 220.0
 ## Where a ship being carried sits on its recovery boat: the middle of the
 ## open work deck aft (x from the stern, in art units), clear of the wheelhouse.
 const CARRY_DECK_X := 58.0
@@ -1246,7 +1244,7 @@ func _draw_dock_layer() -> void:
 ## sea and sized like the ships, in the world (_ship_scale()).
 ## Ships glide this long (seconds of play) from the harbour mouth to their spot
 ## at the anchorage or wharf; the anchorage is ANCHOR_COLUMNS spots across.
-const ANCHOR_GLIDE_S := 2.0
+const ANCHOR_GLIDE_S := 5.0
 const ANCHOR_COLUMNS := 4
 ## A port's docks smaller than this on screen (px, out to the mouth) aren't drawn.
 const DOCK_MIN_PX := 3.0
@@ -1636,11 +1634,11 @@ func _docked_local(ship: Ship, layout: Dictionary) -> Array:
 		var berth: Array = layout.berths[ship.berth]
 		match ship.berth_phase:
 			Ship.BERTH_IN:
-				var t := clampf(ship.berth_time / float(Docks.settings().get("in_s", 2.5)), 0.0, 1.0)
+				var t := clampf(ship.berth_time / float(Docks.settings().get("in_s", 6.0)), 0.0, 1.0)
 				var start := _lying_local(ship, layout, GameState.play_time - ship.berth_time)
 				return _turn_pose(start[0], start[1], berth[0], berth[1], turn, t)
 			Ship.BERTH_OUT:
-				var t := clampf(ship.berth_time / float(Docks.settings().get("out_s", 2.0)), 0.0, 1.0)
+				var t := clampf(ship.berth_time / float(Docks.settings().get("out_s", 5.0)), 0.0, 1.0)
 				var clear: Vector2 = berth[0] - Vector2.from_angle(berth[1]) * float(layout.length) * 0.9
 				if t < 0.4:
 					return [berth[0].lerp(clear, smoothstep(0.0, 1.0, t / 0.4)), berth[1]]  # Backing off.
@@ -2419,11 +2417,11 @@ func _ship_scale() -> float:
 	return _zoom / SHIP_WORLD_ZOOM
 
 
-## How many times its length_px a sea animal is drawn: its size on screen until
-## SHIP_GROW_FROM_ZOOM, growing a little closer in (they're too small to see
-## at their real size).
+## How many times its length_px a sea animal is drawn: sized in the world like
+## the ships (smaller zoomed out, bigger zoomed in), length_px at
+## ANIMAL_WORLD_ZOOM px a degree.
 func _animal_scale() -> float:
-	return clampf(sqrt(_zoom / SHIP_GROW_FROM_ZOOM), 1.0, SHIP_MAX_SCALE)
+	return _zoom / ANIMAL_WORLD_ZOOM
 
 
 ## A model category's art ({hull, details} plus {cargo, zone} if its cargo

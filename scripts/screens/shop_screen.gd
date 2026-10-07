@@ -1,30 +1,36 @@
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in sections by
-## category: container ships, ore, grain and livestock carriers, tankers,
-## vehicle carriers, then recovery boats, tugs and icebreakers. Each section
-## title runs through its models' map colors, smallest ship first, and each
-## card's name is in its model's map color, above a picture of the ship as it
-## looks on the map (see ShipPicture). Each card shows how many of the
-## model the company's level allows, and the level that unlocks the model or its
-## next slot. Each section sits on a faint tint of its ship line's color. A red
-## dot marks every Buy button that can be used right now;
-## hovering one the company can't afford shows a small note saying so.
+## category, laid out in rows (ROWS) with the sections of a row side by side,
+## each as wide as its models (up to 6 cards a row): container ships; ore and
+## grain carriers; livestock carriers and tankers; vehicle carriers, recovery
+## boats and tugs; icebreakers. A row too wide for the screen stacks its
+## sections. Each section title runs through its models' map colors, smallest
+## ship first, and each card's name is in its model's map color, above a
+## picture of the ship as it looks on the map (see ShipPicture). Each card
+## shows how many of the model the company's level allows, and the level that
+## unlocks the model or its next slot. Each section sits on a faint tint of its
+## ship line's color. A red dot marks every Buy button that can be used right
+## now; hovering one the company can't afford shows a small note saying so.
+## The Tugs section has Buy All Tugs (filling every free slot money allows).
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs (two for each port on your routes)", "tug"],
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs", "tug"],
 	["Icebreakers (only needed in seasonal ice)", "icebreaker"]]
-## Cards per row, fewer if they don't fit. Five fit beside the open activity
-## log at the default window size: cards are CARD_WIDTH wide (plus padding),
-## and long ship names and Buy button texts wrap to fit.
+## The sections side by side on each row (by category).
+const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery", "tug"], ["icebreaker"]]
+## Cards a section shows across, fewer if they don't fit. Six fit across a row
+## beside the open activity log at the default window size: cards are
+## CARD_WIDTH wide (plus padding), and long ship names and Buy button texts wrap.
 const MAX_COLUMNS := 5
 const CARD_GAP := 12
-const CARD_WIDTH := 166.0
-const CARD_LABEL_WIDTH := 44.0
+const SECTION_GAP := 12
+const CARD_WIDTH := 128.0
+const CARD_LABEL_WIDTH := 40.0
 ## Each card shows the model's map art under its name, in a strip this tall;
 ## see _picture_length() for how long each is.
-const SHIP_PICTURE_HEIGHT := 44.0
-const SHIP_PICTURE_MAX_LENGTH := 140.0
+const SHIP_PICTURE_HEIGHT := 40.0
+const SHIP_PICTURE_MAX_LENGTH := 118.0
 const SHIP_PICTURE_SIZE_POWER := 0.5
 ## Ship names and section titles use the models' map colors, brightened to at
 ## least this luminance.
@@ -32,7 +38,7 @@ const MIN_TEXT_LUMINANCE := 0.5
 ## Each section sits on a faint tint of its ship line's color, with this much
 ## padding inside.
 const SECTION_TINT := 0.08
-const SECTION_PADDING := 12
+const SECTION_PADDING := 10
 
 const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
@@ -41,6 +47,9 @@ var _owned_labels: Dictionary = {}  # model id -> Label
 var _price_labels: Dictionary = {}  # model id -> Label
 var _buy_alerts: Dictionary = {}  # model id -> AlertDot, shown while it can be bought
 var _grids: Array[GridContainer] = []
+## Each row of sections ([its grid, its sections' card grids]), and the Buy All Tugs button.
+var _rows: Array = []
+var _buy_all_tugs := Button.new()
 ## The "can't afford" note shown above a hovered Buy button, and that model's id ("" when none is hovered).
 var _hint := PanelContainer.new()
 var _hint_label := Label.new()
@@ -50,24 +59,46 @@ var _dirty := false
 
 
 func _ready() -> void:
+	var titles := {}
 	for section: Array in SECTIONS:
-		var box := _section_box(section[1])
-		box.add_child(_section_title(section[0], section[1]))
-		var grid := GridContainer.new()
-		grid.columns = MAX_COLUMNS
-		grid.add_theme_constant_override(&"h_separation", CARD_GAP)
-		grid.add_theme_constant_override(&"v_separation", CARD_GAP)
-		_grids.append(grid)
-		box.add_child(grid)
-		for model: Dictionary in GameData.ship_models:
-			if model.get("category", "container") == section[1]:
-				grid.add_child(_make_card(model))
+		titles[section[1]] = section[0]
+	for row_categories: Array in ROWS:
+		var row := GridContainer.new()
+		row.columns = row_categories.size()
+		row.add_theme_constant_override(&"h_separation", SECTION_GAP)
+		row.add_theme_constant_override(&"v_separation", SECTION_GAP)
+		%Items.add_child(row)
+		var row_grids: Array[GridContainer] = []
+		for category: String in row_categories:
+			var box := _section_box(category, row)
+			var header: BoxContainer = VBoxContainer.new() if category == "tug" else HBoxContainer.new()  # (The tugs' button goes under their title: their section is one card wide.)
+			header.add_theme_constant_override(&"separation", 10)
+			header.add_child(_section_title(titles[category], category))
+			if category == "tug":
+				_buy_all_tugs.theme_type_variation = &"ShopCardButton"
+				_buy_all_tugs.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				_buy_all_tugs.pressed.connect(GameState.buy_all_tugs)
+				header.add_child(_buy_all_tugs)
+			box.add_child(header)
+			var grid := GridContainer.new()
+			grid.add_theme_constant_override(&"h_separation", CARD_GAP)
+			grid.add_theme_constant_override(&"v_separation", CARD_GAP)
+			_grids.append(grid)
+			row_grids.append(grid)
+			box.add_child(grid)
+			for model: Dictionary in GameData.ship_models:
+				if model.get("category", "container") == category:
+					grid.add_child(_make_card(model))
+			grid.columns = clampi(grid.get_child_count(), 1, MAX_COLUMNS)
+		_rows.append([row, row_grids])
 	# Money changes many times a second while ships refuel; the cards catch up
 	# once a frame, and only while the Shop is open.
 	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
 	GameState.ships_changed.connect(func() -> void: _dirty = true)
 	GameState.company_leveled.connect(func(_level: int, _unlocks: Array[String]) -> void: _dirty = true)
-	visibility_changed.connect(func() -> void: _dirty = true)
+	visibility_changed.connect(func() -> void:
+		_dirty = true
+		_fit_columns.call_deferred())
 	resized.connect(_fit_columns)
 	_hint.theme_type_variation = &"MapPopup"
 	_hint.top_level = true
@@ -79,33 +110,42 @@ func _ready() -> void:
 	_update_cards()
 
 
-## As many columns (up to MAX_COLUMNS) as the widest card allows.
+## Each row's sections side by side if they fit across, else one under
+## another; each section as many cards across as it has (up to MAX_COLUMNS),
+## fewer if even it alone doesn't fit.
 func _fit_columns() -> void:
 	var card_width := 0.0
 	for grid in _grids:
 		for card: Control in grid.get_children():
 			card_width = maxf(card_width, card.get_combined_minimum_size().x)
-	var margins := 60.0 + 2.0 * SECTION_PADDING  # Page margins, the scrollbar and the section tint's padding.
-	var columns := clampi(floori((size.x - margins + CARD_GAP) / (card_width + CARD_GAP)), 1, MAX_COLUMNS)
-	for grid in _grids:
-		grid.columns = columns
+	var room := size.x - 60.0  # Page margins and the scrollbar.
+	for entry: Array in _rows:
+		var row: GridContainer = entry[0]
+		var grids: Array = entry[1]
+		for grid: GridContainer in grids:
+			var fits := floori((room - 2 * SECTION_PADDING + CARD_GAP) / (card_width + CARD_GAP))
+			grid.columns = clampi(mini(grid.get_child_count(), fits), 1, MAX_COLUMNS)
+		# Side by side if the row (as laid out) fits across, else stacked.
+		row.columns = grids.size()
+		if row.get_combined_minimum_size().x > room:
+			row.columns = 1
 
 
 ## A section's panel, on a faint tint of its ship line's color (see
-## GameData.category_color()), added to the page; returns the box inside it.
-func _section_box(category: String) -> VBoxContainer:
+## GameData.category_color()), added to its row; returns the box inside it.
+func _section_box(category: String, row: Control) -> VBoxContainer:
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(GameData.category_color(category), SECTION_TINT)
 	style.set_corner_radius_all(8)
 	style.set_content_margin_all(SECTION_PADDING)
 	panel.add_theme_stylebox_override(&"panel", style)
+	panel.size_flags_vertical = Control.SIZE_FILL
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 8)
 	panel.add_child(box)
-	%Items.add_child(panel)
+	row.add_child(panel)
 	return box
-
 
 ## A section title shaded letter by letter through the map colors of the
 ## category's models, from the smallest ship's (first letter) to the biggest's
@@ -257,9 +297,9 @@ func _update_cards() -> void:
 		var owned := GameState.owned_count(model_id)
 		var next := Progression.next_slot_level(model, level)
 		var price := GameState.ship_price(model_id)
-		_price_labels[model_id].text = Fmt.money(price)
+		_price_labels[model_id].text = _price_text(price)
 		if price < int(model.get("price", 0)):
-			_price_labels[model_id].text += " for your first, then %s" % Fmt.money(int(model.price))
+			_price_labels[model_id].text += " for your first, then %s" % _price_text(int(model.price))
 		_owned_labels[model_id].text = "%d / %d" % [owned, slots]
 		if model.get("tug", false):
 			_owned_labels[model_id].text += " (2 per route port)"
@@ -276,6 +316,11 @@ func _update_cards() -> void:
 		button.disabled = not error.is_empty()
 		_buy_alerts[model_id].visible = error.is_empty()
 		button.tooltip_text = "" if _short_of_money(model_id) > 0 else error
+	var tugs := GameState.tugs_to_buy()
+	_buy_all_tugs.text = "Buy all tugs (%d)" % tugs if tugs > 0 else "Buy all tugs"
+	_buy_all_tugs.disabled = tugs == 0
+	var tug := GameState.tug_model_id()
+	_buy_all_tugs.tooltip_text = "Fills every free tug slot your money allows, each named for you and based where it's needed." if tugs > 0 else (GameState.buy_error(tug) if not tug.is_empty() and not GameState.buy_error(tug).is_empty() else "Every tug slot is full.")
 	_update_hint()
 
 
@@ -327,3 +372,8 @@ func _slots(model: Dictionary) -> int:
 	if model.get("tug", false):
 		return GameState.tug_slots() if GameState.company_level() >= Progression.unlock_level(model) else 0
 	return Progression.model_slots(model, GameState.company_level())
+
+
+## A price short enough for a card: "$250,000", "$15M", "$1.5M".
+static func _price_text(price: int) -> String:
+	return Fmt.money(price) if price < 1000000 else "$" + Fmt.short(price)

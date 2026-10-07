@@ -317,6 +317,15 @@
 		{ "id": "SCC", "name": "Prudhoe Bay", "country": "United States", "lat": 70.30, "lon": -148.40, "rank": 314, "size": 15, "arctic": true },
 		{ "id": "LYR", "name": "Longyearbyen", "country": "Svalbard", "lat": 78.23, "lon": 15.60, "rank": 315, "size": 8, "arctic": true },
 		{ "id": "JHS", "name": "Sisimiut", "country": "Greenland", "lat": 66.94, "lon": -53.67, "rank": 316, "size": 8, "arctic": true },
-		{ "id": "JAV", "name": "Ilulissat", "country": "Greenland", "lat": 69.22, "lon": -51.10, "rank": 317, "size": 6, "arctic": true }
+		{ "id": "JAV", "name": "Ilulissat", "country": "Greenland", "lat": 69.22, "lon": -51.10, "rank": 317, "size": 6, "arctic": true },
+		{ "id": "LIV", "name": "Liverpool", "country": "United Kingdom", "lat": 53.45, "lon": -3.03, "rank": 318, "size": 42 },
+		{ "id": "IMM", "name": "Immingham", "country": "United Kingdom", "lat": 53.63, "lon": -0.18, "rank": 319, "size": 36 },
+		{ "id": "LPA", "name": "Las Palmas", "country": "Spain", "lat": 28.14, "lon": -15.40, "rank": 320, "size": 38 },
+		{ "id": "BIO", "name": "Bilbao", "country": "Spain", "lat": 43.36, "lon": -3.07, "rank": 321, "size": 32 },
+		{ "id": "TEE", "name": "Teesport", "country": "United Kingdom", "lat": 54.61, "lon": -1.15, "rank": 322, "size": 26 },
+		{ "id": "MLH", "name": "Milford Haven", "country": "United Kingdom", "lat": 51.70, "lon": -5.06, "rank": 323, "size": 28 },
+		{ "id": "GRG", "name": "Grangemouth", "country": "United Kingdom", "lat": 56.03, "lon": -3.69, "rank": 324, "size": 22 },
+		{ "id": "GRK", "name": "Greenock (Glasgow)", "country": "United Kingdom", "lat": 55.95, "lon": -4.74, "rank": 325, "size": 18 },
+		{ "id": "THN", "name": "Tórshavn", "country": "Faroe Islands", "lat": 62.00, "lon": -6.76, "rank": 326, "size": 10 }
 	]
 }

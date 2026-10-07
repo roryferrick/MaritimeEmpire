@@ -99,6 +99,9 @@ const ANIMALS := [
 	["orangutan", 114.0, 1.0, 2], ["orangutan", 98.0, 3.5, 3],
 	["kiwi", 175.5, -39.0, 2], ["kiwi", 170.0, -44.0, 3],
 	["lemur", 46.5, -20.0, 2],
+	# Water buffalo on the floodplains of Australia's Top End, and a pizza on Albuquerque.
+	["water_buffalo", 132.5, -12.6, 2], ["water_buffalo", 131.0, -13.4, 3],
+	["pizza", -106.65, 35.08, 2],
 	# Birds, drawn soaring (the quetzal perched): resplendent quetzals in the
 	# cloud forests of Guatemala and Costa Rica; red-tailed hawks across North
 	# America; bald eagles on its coasts, rivers and lakes; ospreys by water on
@@ -781,6 +784,8 @@ static func _decor_for_biome(biome: int, lon_lat: Vector2, rng: RandomNumberGene
 		BIOME_TUNDRA:
 			return "shrub" if roll < 0.3 else ""
 		BIOME_DESERT:
+			if lon_lat.x < -30.0 and absf(lon_lat.y) > 45.0:
+				return ""  # A cold desert (Greenland, Patagonia's south): no cacti.
 			if lon_lat.x < -30.0:
 				return "cactus" if roll < 0.5 else ""
 			if lon_lat.x > 110.0 and lon_lat.y < -10.0:

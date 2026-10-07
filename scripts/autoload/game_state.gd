@@ -331,6 +331,38 @@ func toggle_pause() -> void:
 
 ## Buys a ship and launches it docked at port_id, which must be the HQ or a hub
 ## it can launch at (see can_launch_at(); the HQ if empty).
+## The tug model's id ("" if there's none).
+func tug_model_id() -> String:
+	for model: Dictionary in GameData.ship_models:
+		if model.get("tug", false):
+			return str(model.id)
+	return ""
+
+
+## How many tugs Buy All Tugs would buy now (as many free slots as the money covers).
+func tugs_to_buy() -> int:
+	var tug := tug_model_id()
+	if tug.is_empty() or not buy_error(tug).is_empty():
+		return 0
+	var free := tug_slots() - owned_count(tug)
+	var price := maxi(int(GameData.get_ship_model(tug).get("price", 1)), 1)
+	return clampi(1 + (money - ship_price(tug)) / price, 0, free)
+
+
+## Fills every free tug slot (as money allows), each tug with a suggested name
+## and based at the route port that needs one most. Returns how many it bought.
+func buy_all_tugs() -> int:
+	if Net.command(&"buy_all_tugs"):
+		return 0
+	var tug := tug_model_id()
+	var bought := 0
+	while not tug.is_empty() and buy_error(tug).is_empty():
+		if buy_ship(tug, suggest_ship_name()) == null:
+			break
+		bought += 1
+	return bought
+
+
 func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	ship_name = ship_name.strip_edges()
 	if port_id.is_empty():
@@ -589,9 +621,11 @@ func _buy_skill(ship: Ship, skill: String) -> void:
 ## first. Each ship's points go round-robin to its lowest skill (ties broken in
 ## Ship.skill_names() order: speed 1, efficiency 1, durability 1, speed 2...), which is
 ## also its cheapest, so buying in this order keeps every ship's order.
-func _upgrade_plan() -> Array:
+func _upgrade_plan(model_id := "") -> Array:
 	var plan := []
 	for ship in fleet():
+		if not model_id.is_empty() and ship.model_id != model_id:
+			continue
 		var levels := ship.skills.duplicate()
 		for point in ship.skill_points():
 			var best := ""
@@ -607,28 +641,28 @@ func _upgrade_plan() -> Array:
 
 
 ## What spending every unspent skill point would cost.
-func upgrade_all_cost() -> int:
+func upgrade_all_cost(model_id := "") -> int:
 	var total := 0
-	for entry: Array in _upgrade_plan():
+	for entry: Array in _upgrade_plan(model_id):
 		total += int(entry[0])
 	return total
 
 
 ## The cheapest unspent upgrade in the fleet, or 0 if there's none.
-func cheapest_upgrade_cost() -> int:
-	var plan := _upgrade_plan()
+func cheapest_upgrade_cost(model_id := "") -> int:
+	var plan := _upgrade_plan(model_id)
 	return int(plan[0][0]) if not plan.is_empty() else 0
 
 
-## Buys the fleet's unspent upgrades, cheapest first (see _upgrade_plan()), for
+## Buys the fleet's unspent upgrades (or one model's), cheapest first (see _upgrade_plan()), for
 ## as long as the money lasts without dipping into the bank_reserve. Returns
 ## how many were bought.
-func upgrade_all() -> int:
-	if Net.command(&"upgrade_all"):
+func upgrade_all(model_id := "") -> int:
+	if Net.command(&"upgrade_all", [model_id]):
 		return 0
 	var bought := 0
 	var changed := {}
-	for entry: Array in _upgrade_plan():
+	for entry: Array in _upgrade_plan(model_id):
 		if money - int(entry[0]) < bank_reserve:
 			break
 		_buy_skill(entry[1], entry[2])
@@ -640,10 +674,11 @@ func upgrade_all() -> int:
 
 
 ## Unspent skill points across the fleet.
-func unspent_skill_points() -> int:
+func unspent_skill_points(model_id := "") -> int:
 	var points := 0
 	for ship in fleet():
-		points += maxi(ship.skill_points(), 0)
+		if model_id.is_empty() or ship.model_id == model_id:
+			points += maxi(ship.skill_points(), 0)
 	return points
 
 
@@ -1419,13 +1454,13 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 			return false
 		Ship.BERTH_IN:
 			ship.berth_time += delta
-			if ship.berth_time < float(settings.get("in_s", 2.5)):
+			if ship.berth_time < float(settings.get("in_s", 6.0)):
 				return false
 			ship.berth_phase = Ship.BERTH_NONE
 			ship_changed.emit(ship)
 		Ship.BERTH_OUT:
 			ship.berth_time += delta
-			if ship.berth_time < float(settings.get("out_s", 2.0)):
+			if ship.berth_time < float(settings.get("out_s", 5.0)):
 				return false
 			docks.release(ship)
 			ship.berth_phase = Ship.BERTH_NONE

@@ -82,7 +82,7 @@ const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_
 	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled"]
 ## Commands a joined player's game sends, done by the host for their company
 ## (each is the GameState function of that name).
-const COMMANDS: Array[StringName] = [&"buy_ship", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel",
+const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel",
 	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve", &"level_skill", &"upgrade_all",
 	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
 	&"rename_ship", &"set_prefs"]

@@ -63,6 +63,22 @@ func _add_waypoint(port_id: String) -> void:
 	_refresh()
 
 
+## The X beside a stop: takes it out of the route (and, if that leaves the same
+## port twice in a row, one of them too).
+func _remove_waypoint(index: int) -> void:
+	if index < 0 or index >= _waypoints.size():
+		return
+	_waypoints.remove_at(index)
+	var i := 1
+	while i < _waypoints.size():
+		if _waypoints[i] == _waypoints[i - 1]:
+			_waypoints.remove_at(i)
+		else:
+			i += 1
+	_message = ""
+	_refresh()
+
+
 func _undo() -> void:
 	if not _waypoints.is_empty():
 		_waypoints.pop_back()
@@ -110,9 +126,19 @@ func _rebuild_list() -> void:
 	var total_lock_s := 0.0
 	var total_sailing_s := 0.0
 	for i in n:
+		var stop_row := HBoxContainer.new()
 		var stop := Label.new()
 		stop.text = "%d. %s (%s)" % [i + 1, GameData.port_name(_waypoints[i]), GameState.port_size_text(_waypoints[i])]
-		%WaypointList.add_child(stop)
+		stop.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stop_row.add_child(stop)
+		var cut := Button.new()  # Takes this stop out of the route.
+		cut.text = "X"
+		cut.flat = true
+		cut.focus_mode = Control.FOCUS_NONE
+		cut.tooltip_text = "Take %s out of the route" % GameData.port_name(_waypoints[i])
+		cut.pressed.connect(_remove_waypoint.bind(i))
+		stop_row.add_child(cut)
+		%WaypointList.add_child(stop_row)
 		if n < 2:
 			continue
 		var next := _waypoints[(i + 1) % n]
