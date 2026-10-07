@@ -1270,8 +1270,9 @@ const BOLLARD_INSET := 0.35
 const BOLLARD_RADIUS := 0.25
 const BOLLARD_COLOR := Color(0.16, 0.15, 0.14)
 const ROPE_COLOR := Color(0.95, 0.9, 0.74)
-## Tugs tie up alongside the wharf this far apart (dock units, a little more than a tug).
-const TUG_STEP := 5.75
+## Tugs tie up alongside the wharf this far apart (dock units: a tug, 6.4, and a
+## clear bollard's worth of wharf between each).
+const TUG_STEP := 7.5
 ## Stone blocks join the dock pieces where they meet: this wide, dressed grey stone.
 const STONE_BLOCK := 3.25
 const STONE_COLOR := Color(0.6, 0.6, 0.62)
