@@ -375,6 +375,8 @@ func _build_map(land_polygons: Array) -> void:
 	_add_sea_mask(map, biomes)
 	_add_biome_polygons(map, biomes)
 	_add_decor_clearance(map)
+	# Split small enough to curve round the globe (the map is drawn on one).
+	Geo.tessellate_map(map)
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 

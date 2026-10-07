@@ -96,6 +96,8 @@ static func unlocks_at(level: int) -> Array[String]:
 		unlocked.append("+1 slot: %s" % ", ".join(more_slots))
 	if hub_slots(level) > hub_slots(level - 1):
 		unlocked.append("a new hub")
+	if region_slots(level) > region_slots(level - 1) and region_slots(level) <= GameData.markets.get("regions", []).size():
+		unlocked.append("a new region to unlock")
 	return unlocked
 
 
@@ -173,6 +175,12 @@ static func _round_to_2_figures(value: float) -> int:
 static func hub_slots(level: int) -> int:
 	var settings: Dictionary = GameData.config.get("hubs", {})
 	return 1 + mini(floori(float(level) / int(settings.get("every_company_levels", 15))), int(settings.get("max_hubs", 6)))
+
+
+## How many market regions the company can have unlocked at a level: its home
+## port's, plus one every regions.every_company_levels levels.
+static func region_slots(level: int) -> int:
+	return 1 + floori(float(level) / int(GameData.config.get("regions", {}).get("every_company_levels", 5)))
 
 
 ## XP a hub needs to go from `level` to the next, at the company's current

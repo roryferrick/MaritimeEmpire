@@ -76,6 +76,8 @@ func _refresh() -> void:
 	var buys := {}
 	var sells := {}
 	for port: Dictionary in GameData.ports:
+		if not GameState.is_port_unlocked(port.id):
+			continue  # Its region is locked: not listed.
 		buys[port.id] = market.buy_price(port.id, commodity_id)
 		sells[port.id] = market.sell_price(port.id, commodity_id)
 	var cheapest: Array = buys.keys()

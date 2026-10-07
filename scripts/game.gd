@@ -39,6 +39,8 @@ var _ships_alert := AlertDot.new()
 var _shop_alert := AlertDot.new()
 ## On the Hubs tab while a hub has upgrade points to spend or can be founded.
 var _hubs_alert := AlertDot.new()
+## On the World tab while a market region can be unlocked (on the map).
+var _world_alert := AlertDot.new()
 var _alert_clock := 0.0
 ## The Esc menu while it's open.
 var _escape_menu: EscapeMenu = null
@@ -73,6 +75,7 @@ func _ready() -> void:
 	%ShipsButton.add_child(_ships_alert)
 	%ShopButton.add_child(_shop_alert)
 	%HubsButton.add_child(_hubs_alert)
+	%WorldButton.add_child(_world_alert)
 	GameState.hub_leveled.connect(_on_hub_leveled)
 	GameState.hub_built.connect(_on_hub_built)
 	GameState.mega_upgraded.connect(_on_mega_upgraded)
@@ -107,6 +110,8 @@ func _update_alerts() -> void:
 	if GameState.hubs_available() > 0:
 		hub_notes.append("a new hub can be founded (click a port)")
 	_hubs_alert.visible = not hub_notes.is_empty()
+	_world_alert.visible = GameState.regions_available() > 0
+	%WorldButton.tooltip_text = "A new region can be unlocked: Unlock a region, on the map" if _world_alert.visible else ""
 	%HubsButton.tooltip_text = "; ".join(hub_notes)
 	var buyable := PackedStringArray()
 	for model: Dictionary in GameData.ship_models:
@@ -313,6 +318,8 @@ func _on_mega_upgraded(model_id: String) -> void:
 
 
 func _on_port_band_changed(port_id: String, band: String, grew: bool) -> void:
+	if not GameState.is_port_unlocked(port_id):
+		return  # Its region is locked: its name isn't known yet.
 	ActivityLog.add("%s %s to %s" % [GameData.port_name(port_id), "grew" if grew else "shrank", band.capitalize()],
 		ActivityLog.Kind.GOOD if grew else ActivityLog.Kind.INFO)
 

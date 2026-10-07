@@ -86,7 +86,7 @@ const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_
 const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel",
 	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve", &"level_skill", &"upgrade_all",
 	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
-	&"rename_ship", &"set_prefs"]
+	&"rename_ship", &"set_prefs", &"unlock_region"]
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its

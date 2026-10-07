@@ -50,6 +50,8 @@ signal hubs_changed
 signal hub_leveled(hub: Hub, level: int)
 ## A new hub was founded at a port.
 signal hub_built(hub: Hub)
+## A market region was unlocked (this player's, or a company's in multiplayer).
+signal regions_changed
 ## A model got its mega upgrade.
 signal mega_upgraded(model_id: String)
 ## A port grew or shrank into a new size band (see PortSizes).
@@ -165,6 +167,8 @@ var tutorial_done: Array[String]:
 var bank_reserve: int:
 	get: return company.bank_reserve
 	set(value): company.bank_reserve = value
+var regions: Array[String]:
+	get: return company.regions
 var hubs: Array[Hub]:
 	get: return company.hubs
 var totals: Dictionary:
@@ -709,8 +713,88 @@ func hubs_available() -> int:
 	return maxi(Progression.hub_slots(company_level()) - hubs.size(), 0)
 
 
+## True if a port's market region is unlocked (for this player's company).
+func is_port_unlocked(port_id: String) -> bool:
+	return is_region_unlocked(str(GameData.port_region(port_id).get("id", "")))
+
+
+func is_region_unlocked(region_id: String) -> bool:
+	return region_id.is_empty() or regions.has(region_id)
+
+
+## Regions the company can still unlock (one every few company levels: see
+## Progression.region_slots()).
+func regions_available() -> int:
+	var locked: int = GameData.markets.get("regions", []).size() - regions.size()
+	return clampi(Progression.region_slots(company_level()) - regions.size(), 0, maxi(locked, 0))
+
+
+## "Shanghai is in East Asia, which you haven't unlocked yet." if it is, or "".
+func locked_port_error(port_id: String) -> String:
+	if is_port_unlocked(port_id):
+		return ""
+	return "%s is in %s, which you haven't unlocked yet." % [GameData.port_name(port_id), GameData.port_region(port_id).get("name", "a region")]
+
+
+## Why a region can't be unlocked now, or "".
+func unlock_region_error(region_id: String) -> String:
+	if is_region_unlocked(region_id):
+		return "It's already unlocked."
+	if not GameData.markets.get("regions", []).any(func(region: Dictionary) -> bool: return region.id == region_id):
+		return "There's no such region."
+	if regions_available() <= 0:
+		var every := int(GameData.config.get("regions", {}).get("every_company_levels", 5))
+		return "A new region unlocks every %d company levels." % every
+	return ""
+
+
+## Unlocks a market region, for good: its ports can be seen, clicked, routed
+## to and built on. Returns why it couldn't, or "".
+func unlock_region(region_id: String) -> String:
+	var error := unlock_region_error(region_id)
+	if not error.is_empty():
+		return error
+	if Net.command(&"unlock_region", [region_id]):
+		return ""
+	regions.append(region_id)
+	ActivityLog.add("Unlocked %s: its ports are open to your ships." % _region_name(region_id), ActivityLog.Kind.GOOD)
+	regions_changed.emit()
+	save_game()
+	return ""
+
+
+func _region_name(region_id: String) -> String:
+	for region: Dictionary in GameData.markets.get("regions", []):
+		if region.id == region_id:
+			return str(region.name)
+	return region_id
+
+
+## Saves from before regions: each company gets its home port's region and
+## every region its hubs and ships use (a ship's route, the port it's at or
+## sailing between), so nothing it has is cut off.
+func _fit_regions_to_fleet() -> void:
+	for each in all_companies():
+		if not each.regions.is_empty():
+			continue
+		var ports: Array[String] = [each.home_port]
+		for hub in each.hubs:
+			ports.append(hub.port_id)
+		for ship in ships:
+			if owner_of(ship) == each:
+				ports.append_array(ship.route)
+				ports.append_array(ship.pending_route)
+				ports.append_array([ship.docked_at, ship.from_port, ship.to_port, ship.base_port])
+		for port_id in ports:
+			var region_id := str(GameData.port_region(port_id).get("id", ""))
+			if not region_id.is_empty() and not each.regions.has(region_id):
+				each.regions.append(region_id)
+
+
 ## Why a hub can't be built at a port, or "".
 func build_hub_error(port_id: String) -> String:
+	if not is_port_unlocked(port_id):
+		return locked_port_error(port_id)
 	if hub_at(port_id):
 		return "There's already a hub here."
 	if hubs_available() <= 0:
@@ -909,6 +993,9 @@ func route_error(route: Array[String], ship: Ship) -> String:
 			return "A ship can't visit the same port twice in a row."
 	if route[-1] == route[0]:
 		return "The route loops back to %s, so it can't also end there." % GameData.port_name(route[0])
+	for port_id in route:
+		if not is_port_unlocked(port_id):
+			return locked_port_error(port_id)
 	for i in route.size():
 		var from := route[i]
 		var to := route[(i + 1) % route.size()]
@@ -2776,6 +2863,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company.money = int(GameData.config.get("starting_money", 10000))
 	company.tutorials = bool(options.get("tutorials", false))
 	company.hubs.assign([Hub.new(new_home_port, true)])
+	company.regions.assign([str(GameData.port_region(new_home_port).get("id", ""))])
 	companies.assign([company])
 	_clear_ships()
 	next_ship_id = 1
@@ -2844,6 +2932,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 			ship.base_port = owner_of(ship).home_port
 	if not had_port_sizes:
 		_fit_ports_to_routes()
+	_fit_regions_to_fleet()
 	_rebalance_recovery_boats()
 	_rebalance_tugs()
 	money_changed.emit(money)

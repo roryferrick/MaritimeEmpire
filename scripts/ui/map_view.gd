@@ -19,6 +19,9 @@ signal storm_clicked(storm_key: String)
 signal pod_clicked(pod_index: int)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
+## While choosing a region to unlock (choosing_region): a locked region's
+## area was clicked (its markets.json id).
+signal region_clicked(region_id: String)
 
 const THEME_TYPE := &"MapView"
 ## A port's dot radius grows with its size (see PortSizes): PORT_RADIUS_MIN at
@@ -91,6 +94,9 @@ const DECOR_SCALE_RANGE := Vector2(0.9, 1.5)
 const DECOR_ANIMALS: Array[String] = ["penguin", "polar_bear", "camel", "elephant", "giraffe", "lion", "zebra", "kangaroo", "koala",
 	"panda", "tiger", "bison", "moose", "brown_bear", "reindeer", "llama", "toucan", "gorilla", "orangutan", "kiwi", "lemur",
 	"quetzal", "red_tailed_hawk", "bald_eagle", "osprey", "water_buffalo", "pizza"]
+## Kinds of drawing hidden until the map is zoomed in this far (px per projected
+## degree), whatever their tier: the pizza on Albuquerque is a close-up secret.
+const DECOR_MIN_ZOOM := {pizza = 250.0}
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
 ## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
@@ -112,10 +118,34 @@ const TUG_TICK_GAP := 3.0
 const STATIC_REFRESH_S := 0.25
 const DRAG_THRESHOLD := 5.0
 const ZOOM_STEP := 1.15
-## Closest zoom, in pixels per projected degree.
+## Closest zoom, in pixels per degree of the globe's surface.
 const MAX_ZOOM := 800.0
-## Panning stops with the view centered at this latitude.
-const MAX_VIEW_LAT := 80.0
+## Furthest out, the whole globe fits the view, this share of its height across.
+const GLOBE_FIT := 0.9
+## The view's middle can turn right over the poles, but stops just short of
+## them so north stays up.
+const MAX_VIEW_LAT := 89.5
+## Where a map point on the far side of the globe is "on screen": far off it,
+## so whatever is drawn or hit-tested there is left out (see world_to_screen()).
+const HIDDEN := Vector2(-1.0e5, -1.0e5)
+## Wheel zoom eases to its goal at this rate (per second), and a flung globe
+## keeps turning, slowing by this much per second (Google Earth style).
+const ZOOM_EASE := 14.0
+const FLING_DECAY := 4.0
+## A flung globe's speed is the drag's over about its last this long (s); a
+## drag that had stopped by then doesn't fling it. It's capped at this fast
+## (px a second on screen).
+const FLING_WINDOW_S := 0.1
+const MAX_FLING_PX := 3000.0
+const SPACE := Color(0.02, 0.03, 0.07)
+const ATMOSPHERE := Color(0.45, 0.7, 1.0)
+const GLOBE_SHADER := preload("res://scripts/ui/globe.gdshader")
+## The polar caps beyond the map data (Geo.MAX_LAT) are made in cells this
+## many degrees across; the Arctic one is sea at least this deep (m).
+const BAND_STEP := 2.0
+const ARCTIC_DEPTH := 3000
+const ANTARCTIC_ICE := Color(0.93, 0.95, 0.97)
+const NEVER_CULLED := Rect2(-1.0e6, -1.0e6, 2.0e6, 2.0e6)
 const PORT_FONT_SIZE := 15
 const COUNTRY_FONT_SIZE := 13
 const LABEL_PADDING := 3.0
@@ -316,14 +346,20 @@ const FALLBACK_COLORS := {
 	&"river_gray": Color(0.34, 0.35, 0.38),
 	&"route": Color(1.0, 0.6, 0.15),
 	&"lock_gate": Color(0.12, 0.1, 0.08),
+	&"port_locked": Color(0.75, 0.78, 0.85, 0.45),
+	&"space": SPACE,
+	&"space_gray": Color(0.12, 0.12, 0.13),
+	&"atmosphere": ATMOSPHERE,
+	&"atmosphere_gray": Color(0.6, 0.6, 0.62),
 }
 
 ## Draw with the muted palette used by the Route Assignment screen.
 @export var gray_mode := false:
 	set(value):
 		gray_mode = value
-		for art in _art_copies:
-			art.queue_redraw()
+		_land_mask.render_target_update_mode = SubViewport.UPDATE_DISABLED if gray_mode else SubViewport.UPDATE_ALWAYS
+		if _art != null:
+			_art.queue_redraw()
 		for layer in _art_layers:
 			layer.queue_redraw()
 		for tier in _river_tiers:
@@ -359,7 +395,52 @@ var dimmed_ports: Dictionary = {}:
 		dimmed_ports = value
 		_static_layer.queue_redraw()
 
-var _center := Vector2.ZERO  # Map point shown at the middle of the view.
+## Choosing a region to unlock: every region is outlined, the locked one under
+## the mouse (or hovered_region) lights up, and clicks pick regions
+## (region_clicked) instead of ports and ships.
+var choosing_region := false:
+	set(value):
+		choosing_region = value
+		hovered_region = ""
+		mouse_default_cursor_shape = CURSOR_ARROW
+## The locked region lit up while choosing (its id), or "" (shown on the next frame).
+var hovered_region := ""
+## The market regions' overlay (locked ones shaded: see RegionShade), and what
+## it was last set for ([image ready, unlocked regions, choosing, hovered]).
+var _globe_regions := ShaderMaterial.new()
+var _regions_key := []
+## Each land drawing's region (index + 1; 0 until the region map is ready), so
+## those in locked regions are left out.
+var _decor_regions := PackedByteArray()
+
+## The globe: the (lon, lat) at the middle of the view, that map point
+## (projected), and the view's axes on the unit sphere (see _orient()): right
+## and up on screen, and out of it towards the viewer.
+var _view_lon := 0.0
+var _view_lat := 0.0
+var _center := Vector2.ZERO
+var _right := Vector3(0, 1, 0)
+var _up := Vector3(0, 0, 1)
+var _toward := Vector3(1, 0, 0)
+## Wraps the map art round the globe (scripts/ui/globe.gdshader); the biomes'
+## also cuts them to the land, drawn off screen into _land_mask at the map's
+## size in real pixels (_land_mask_art, scaled up from the map's own).
+var _globe := ShaderMaterial.new()
+var _globe_masked := ShaderMaterial.new()
+var _land_mask := SubViewport.new()
+var _land_mask_art := LandMask.new()
+## The wheel's zoom goal and the screen point it zooms about; the globe's spin
+## after a fling ((lon, lat) degrees a second), and how far the drag has turned
+## it, with where it had got to at each recent move ([msec, turned]).
+var _zoom_goal := 1.0
+var _zoom_about := Vector2.ZERO
+var _fling := Vector2.ZERO
+var _drag_turned := Vector2.ZERO
+var _drag_samples: Array = []
+## Each sea lane's points on the unit sphere, worked out once (see _draw_lane()).
+var _lane_units := {}
+## Port id -> its docks' turn on screen for the current view (see _dock_point()).
+var _port_turns := {}
 ## Ship drawing caches: each docked ship's ring slot (and the frame it was for),
 ## the draw order (redone when the fleet changes) and each model's look.
 var _dock_slots := {}
@@ -384,21 +465,21 @@ var _feature_labels := []
 var _feature_order := PackedInt32Array()
 var _feature_fonts := {}
 var _labels_key := []
-var _zoom := 1.0  # Screen pixels per projected degree.
+var _zoom := 1.0  # Screen pixels per degree of the globe's surface.
 var _has_fit := false
 var _pressed_button: MouseButton = MOUSE_BUTTON_NONE
 var _press_pos := Vector2.ZERO
 var _dragging := false
 
-## Holds the land art; its transform does the panning and zooming.
+## Holds the land art, drawn in projected map coordinates and wrapped round
+## the globe by its material (_globe), which its children all share.
 var _art_root := Node2D.new()
-## One copy of the world art per wrap-around: west, center and east.
-var _art_copies: Array[WorldArt] = []
-## Every copy's river tiers, shown or hidden by zoom.
+var _art: WorldArt = null
+## The river tiers, shown or hidden by zoom.
 var _river_tiers: Array[RiverTier] = []
-## Every copy's land and top art (see LandArt and TopArt).
+## The land and top art (see LandArt and TopArt).
 var _art_layers: Array[Node2D] = []
-## Winter sea ice (see IceArt): the ice and lake ice sheet of every copy, the
+## Winter sea ice (see IceArt): the ice and lake ice sheet, the
 ## frozen circles ([projected center, projected radius, seed]), what the
 ## circles were last worked out from, and the channels icebreakers have broken
 ## (ship -> [[projected point, play time], ...]).
@@ -448,13 +529,18 @@ var _static_clock := 0.0
 var _ports_by_rank: Array = []  # Label priority order, sorted on first draw.
 
 
-## Land, coastline, borders and the equator for one copy of the world. Drawn
-## once and cached; panning and zooming only move its parent.
+## Land, coastline, borders and the equator, in projected map coordinates.
+## Drawn once and cached; turning and zooming the globe only changes the
+## shader (MapView._globe) that wraps it round the sphere.
 class WorldArt:
 	extends Node2D
 
 	var view: MapView
+	## The whole sphere's sea, poles and all, in the shallowest sea's color.
+	var sea_mesh: ArrayMesh
 	var land_mesh: ArrayMesh
+	## Antarctica from the map data's edge to the pole, in ANTARCTIC_ICE.
+	var south_cap_mesh: ArrayMesh
 	var biome_mesh: ArrayMesh
 	var water_mesh: ArrayMesh
 	var lake_island_mesh: ArrayMesh
@@ -467,11 +553,14 @@ class WorldArt:
 	var depth_hole_meshes: Array[ArrayMesh] = []
 	var white: Texture2D
 	var land_colors: Texture2D
+	## The equator, a point a degree, so it curves round the globe.
+	var equator := PackedVector2Array()
 
-	## The sea, darkening band by band with depth (the view's own background is
-	## the shallowest); the gray route map keeps one flat sea. Its children draw
-	## the rest over it (see MapView._ready()).
+	## The sea, darkening band by band with depth from the shallowest; the gray
+	## route map keeps one flat sea. Its children draw the rest over it (see
+	## MapView._ready()).
 	func _draw() -> void:
+		draw_mesh(sea_mesh, white, Transform2D.IDENTITY, view._color(&"ocean"))
 		if not view.gray_mode:
 			for band in depth_meshes.size():
 				draw_mesh(depth_meshes[band], white, Transform2D.IDENTITY, view._depth_color(band + 1))
@@ -485,8 +574,8 @@ class WorldArt:
 
 
 ## The land in its biome colors (see MapView.LAND_COLORS) or flat gray, over
-## the sea and its ice. On the full-color map it clips its child, the biomes
-## (BiomeArt), to the land.
+## the sea and its ice. On the full-color map its child, the biomes
+## (BiomeArt), are drawn over it, cut to the land.
 class LandArt:
 	extends Node2D
 
@@ -495,11 +584,36 @@ class LandArt:
 
 	func _draw() -> void:
 		draw_mesh(art.land_mesh, art.land_texture(), Transform2D.IDENTITY, art.land_tint())
+		draw_mesh(art.south_cap_mesh, art.white, Transform2D.IDENTITY, view._color(&"land") if view.gray_mode else ANTARCTIC_ICE)
+
+
+## The whole globe again, over the rest of the art, drawn by the regions'
+## overlay (MapView._globe_regions): locked regions shaded, and while choosing
+## one, the regions outlined and the hovered one lit up.
+class RegionShade:
+	extends Node2D
+
+	var art: WorldArt
+
+	func _draw() -> void:
+		draw_mesh(art.sea_mesh, art.white)
+
+
+## The land in plain white, into the land mask (MapView._land_mask) the
+## biomes are cut to.
+class LandMask:
+	extends Node2D
+
+	var art: WorldArt
+
+	func _draw() -> void:
+		draw_mesh(art.land_mesh, art.white)
 
 
 ## The biomes as flat-colored, straight-edged patches (WorldMapData
-## biome_triangles), clipped to the land by their parent (LandArt), so the
-## edges between them stay sharp at any zoom. Not on the gray map.
+## biome_triangles), cut to the land by the land mask (MapView._land_mask:
+## CanvasItem clip_children can't follow the globe's shader), so the edges
+## between them stay sharp at any zoom. Not on the gray map.
 class BiomeArt:
 	extends Node2D
 
@@ -527,7 +641,7 @@ class WaterArt:
 
 
 ## Over the land, lakes and lake ice: the lakes' islands, the borders, the
-## coast, and the equator (y = 0 in the projection), faint.
+## coast, and the equator, faint.
 class TopArt:
 	extends Node2D
 
@@ -539,10 +653,10 @@ class TopArt:
 		draw_mesh(art.lake_island_mesh, art.land_texture(), Transform2D.IDENTITY, art.land_tint())
 		draw_multiline(data.border_segments, view._color(&"border"), -1.0)
 		draw_multiline(data.coast_segments, view._color(&"coast"), -1.0)
-		draw_line(Vector2(-Geo.WORLD_WIDTH / 2.0, 0.0), Vector2(Geo.WORLD_WIDTH / 2.0, 0.0), view._color(&"equator"), -1.0)
+		draw_polyline(art.equator, view._color(&"equator"), -1.0)
 
 
-## Winter sea ice for one copy of the world (see MapView._ice_circles and
+## Winter sea ice (see MapView._ice_circles and
 ## _ice_tracks): a solid sheet of white-blue ice with a soft edge and faint
 ## cracks over each frozen stretch of sea, cut by the channels icebreakers
 ## break through it (open water, edged with broken ice, slowly freezing over
@@ -570,7 +684,7 @@ class LakeIce:
 			draw_mesh(view._lake_ice, art.white, Transform2D.IDENTITY, ICE_SHEET)
 
 
-## One zoom tier of rivers for one copy of the world, shown once the view is
+## One zoom tier of rivers, shown once the view is
 ## zoomed in to its min_zoom (see _update_rivers()).
 class RiverTier:
 	extends Node2D
@@ -590,6 +704,11 @@ func _ready() -> void:
 	GameState.ships_changed.connect(func() -> void: _draw_order_dirty = true)
 
 	var data := GameData.world_map
+	# The map data stops at Geo.MAX_LAT: the globe's caps round the poles are
+	# Antarctica's ice (flat ANTARCTIC_ICE: the land colors' last row, stretched
+	# to the pole, streaks) and the deep Arctic Ocean.
+	var south_cap := _triangle_mesh(_lat_band(-90.0, -Geo.MAX_LAT))
+	var north_cap := _lat_band(Geo.MAX_LAT, 90.0)
 	var land_mesh := _triangle_mesh(data.land_triangles)
 	var biome_mesh := _triangle_mesh(data.biome_triangles, data.biome_colors)
 	var water_mesh := _triangle_mesh(data.water_triangles)
@@ -600,7 +719,8 @@ func _ready() -> void:
 	var depth_meshes: Array[ArrayMesh] = []
 	var depth_hole_meshes: Array[ArrayMesh] = []
 	for band in data.depth_levels.size():
-		depth_meshes.append(_triangle_mesh(data.depth_triangles[band]))
+		var cap := north_cap if data.depth_levels[band] <= ARCTIC_DEPTH else PackedVector2Array()
+		depth_meshes.append(_triangle_mesh(data.depth_triangles[band] + cap))
 		depth_hole_meshes.append(_triangle_mesh(data.depth_hole_triangles[band]))
 	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
 	image.fill(Color.WHITE)
@@ -608,62 +728,95 @@ func _ready() -> void:
 	var land_colors: Texture2D = load(LAND_COLORS) if ResourceLoader.exists(LAND_COLORS) else white
 	# The land colors are drawn far below their size when zoomed out.
 	_art_root.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_globe.shader = GLOBE_SHADER
+	_art_root.material = _globe
 	add_child(_art_root)
-	for copy in [-1, 0, 1]:
-		var art := WorldArt.new()
-		art.view = self
-		art.land_mesh = land_mesh
-		art.biome_mesh = biome_mesh
-		art.water_mesh = water_mesh
-		art.lake_island_mesh = lake_island_mesh
-		art.lake_meshes = lake_meshes
-		art.lake_colors = data.lake_colors
-		art.depth_meshes = depth_meshes
-		art.depth_hole_meshes = depth_hole_meshes
-		art.white = white
-		art.land_colors = land_colors
-		art.position.x = copy * Geo.WORLD_WIDTH
-		_art_root.add_child(art)
-		_art_copies.append(art)
-		# Over the sea (drawn by the copy itself): the sea ice, then the land and
-		# lakes, the lake ice (masked to the lakes), and the lake islands, borders
-		# and coast on top. The ice layers are hidden while there's no ice.
-		var ice := IceArt.new()
-		ice.view = self
-		ice.visible = false
-		art.add_child(ice)
-		var land := LandArt.new()
-		land.view = self
-		land.art = art
-		# The biomes, straight-edged, drawn over the land and clipped to it.
-		land.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW if not gray_mode else CanvasItem.CLIP_CHILDREN_DISABLED
-		art.add_child(land)
-		var biomes := BiomeArt.new()
-		biomes.view = self
-		biomes.art = art
-		land.add_child(biomes)
-		var water := WaterArt.new()
-		water.view = self
-		water.art = art
-		art.add_child(water)
-		var lake_ice := LakeIce.new()
-		lake_ice.view = self
-		lake_ice.art = art
-		lake_ice.visible = false
-		art.add_child(lake_ice)
-		var top := TopArt.new()
-		top.view = self
-		top.art = art
-		art.add_child(top)
-		_art_layers.append_array([land, top])
-		_ice_arts.append_array([ice, lake_ice])
-		for i in data.river_tiers.size():
-			var tier := RiverTier.new()
-			tier.view = self
-			tier.segments = data.river_tiers[i]
-			tier.min_zoom = data.river_tier_min_zoom[i]
-			art.add_child(tier)
-			_river_tiers.append(tier)
+	var art := WorldArt.new()
+	art.view = self
+	art.sea_mesh = _triangle_mesh(_lat_band(-90.0, 90.0))
+	art.land_mesh = land_mesh
+	art.south_cap_mesh = south_cap
+	art.biome_mesh = biome_mesh
+	art.water_mesh = water_mesh
+	art.lake_island_mesh = lake_island_mesh
+	art.lake_meshes = lake_meshes
+	art.lake_colors = data.lake_colors
+	art.depth_meshes = depth_meshes
+	art.depth_hole_meshes = depth_hole_meshes
+	art.white = white
+	art.land_colors = land_colors
+	for lon in range(-180, 181):
+		art.equator.append(Vector2(lon, 0.0))
+	_art_root.add_child(art)
+	_art = art
+	# Over the sea (drawn by the art itself): the sea ice, then the land and
+	# lakes, the lake ice (masked to the lakes), and the lake islands, borders
+	# and coast on top. The ice layers are hidden while there's no ice.
+	var ice := IceArt.new()
+	ice.view = self
+	ice.visible = false
+	art.add_child(ice)
+	var land := LandArt.new()
+	land.view = self
+	land.art = art
+	art.add_child(land)
+	var biomes := BiomeArt.new()
+	biomes.view = self
+	biomes.art = art
+	land.add_child(biomes)
+	var water := WaterArt.new()
+	water.view = self
+	water.art = art
+	art.add_child(water)
+	var lake_ice := LakeIce.new()
+	lake_ice.view = self
+	lake_ice.art = art
+	lake_ice.visible = false
+	art.add_child(lake_ice)
+	var top := TopArt.new()
+	top.view = self
+	top.art = art
+	art.add_child(top)
+	_art_layers.append_array([land, top])
+	_ice_arts.append_array([ice, lake_ice])
+	for i in data.river_tiers.size():
+		var tier := RiverTier.new()
+		tier.view = self
+		tier.segments = data.river_tiers[i]
+		tier.min_zoom = data.river_tier_min_zoom[i]
+		art.add_child(tier)
+		_river_tiers.append(tier)
+	var shade := RegionShade.new()
+	shade.art = art
+	art.add_child(shade)
+	# Every piece of the art is wrapped round the globe by the same shader; the
+	# biomes are cut to the land mask too, and the regions' overlay is its own.
+	var pieces: Array[Node] = [art]
+	while not pieces.is_empty():
+		var piece: Node = pieces.pop_back()
+		(piece as CanvasItem).use_parent_material = true
+		# Its own rect (in projected degrees) says nothing about where the shader
+		# puts it: never cull it.
+		RenderingServer.canvas_item_set_custom_rect((piece as CanvasItem).get_canvas_item(), true, NEVER_CULLED)
+		pieces.append_array(piece.get_children())
+	_globe_masked.shader = GLOBE_SHADER
+	_globe_masked.set_shader_parameter(&"masked", true)
+	_globe_masked.set_shader_parameter(&"land_mask", _land_mask.get_texture())
+	biomes.use_parent_material = false
+	biomes.material = _globe_masked
+	_globe_regions.shader = GLOBE_SHADER
+	_globe_regions.set_shader_parameter(&"regions", true)
+	shade.use_parent_material = false
+	shade.material = _globe_regions
+	RegionMap.build(self)
+	_land_mask.transparent_bg = true
+	_land_mask.disable_3d = true
+	_land_mask.render_target_update_mode = SubViewport.UPDATE_DISABLED if gray_mode else SubViewport.UPDATE_ALWAYS
+	add_child(_land_mask)
+	_land_mask_art.art = art
+	_land_mask_art.material = _globe
+	RenderingServer.canvas_item_set_custom_rect(_land_mask_art.get_canvas_item(), true, NEVER_CULLED)
+	_land_mask.add_child(_land_mask_art)
 
 	for layer: Control in [_decor_layer, _weather_layer, _canal_layer, _static_layer, _dock_layer, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
@@ -685,7 +838,11 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not show_ships or not is_visible_in_tree():
+	if not is_visible_in_tree():
+		return
+	_ease_view(delta)
+	_update_regions()
+	if not show_ships:
 		return
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
@@ -709,8 +866,9 @@ func _process(delta: float) -> void:
 		_dock_layer.queue_redraw()  # Ports grow and shrink, and their rings with them.
 
 
-## A mesh of map triangles, with each point's place on LAND_COLORS as its UV
-## (the texture spans x -180 to 180 and y Geo.MAX_LAT down to -Geo.MAX_LAT).
+## A mesh of map triangles (already small enough to curve round the globe:
+## see Geo.tessellate()), with each point's place on LAND_COLORS as its UV (the
+## texture spans x -180 to 180 and y Geo.MAX_LAT down to -Geo.MAX_LAT).
 func _triangle_mesh(triangles: PackedVector2Array, colors := PackedColorArray()) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	if triangles.is_empty():
@@ -731,6 +889,30 @@ func _triangle_mesh(triangles: PackedVector2Array, colors := PackedColorArray())
 	return mesh
 
 
+## Triangles (projected) covering the globe between two latitudes, all the way
+## round, in BAND_STEP-degree cells; the poles themselves are just short of
+## them (Web Mercator can't reach them).
+static func _lat_band(from_lat: float, to_lat: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var rows := maxi(ceili((to_lat - from_lat) / BAND_STEP), 1)
+	var columns := ceili(Geo.WORLD_WIDTH / BAND_STEP)
+	for row in rows:
+		var y0 := _mercator_y(lerpf(from_lat, to_lat, float(row) / rows))
+		var y1 := _mercator_y(lerpf(from_lat, to_lat, float(row + 1) / rows))
+		for column in columns:
+			var x0 := -Geo.WORLD_WIDTH / 2.0 + column * Geo.WORLD_WIDTH / columns
+			var x1 := x0 + Geo.WORLD_WIDTH / columns
+			out.append_array([Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y0), Vector2(x1, y1), Vector2(x0, y1)])
+	return out
+
+
+## Web Mercator's northing (projected degrees) for a latitude, right up to
+## (just short of) the poles, unlike Geo.project().
+static func _mercator_y(lat: float) -> float:
+	lat = deg_to_rad(clampf(lat, -89.99, 89.99))
+	return rad_to_deg(log(tan(PI / 4.0 + lat / 2.0)))
+
+
 ## The sea's color for a depth band: 0 is the shallowest (the continental
 ## shelf, the view's background), then each of WorldMapData.depth_levels, darker
 ## by DEPTH_SHADES towards ocean_deep.
@@ -740,16 +922,69 @@ func _depth_color(band: int) -> Color:
 
 # --- View ----------------------------------------------------------------
 
-## Screen position (local to this control) of a map point, using whichever
-## east-west copy of the world is closest to the view's center.
+## Screen position (local to this control) of a map point on the globe, seen
+## straight on (an orthographic view), or HIDDEN if it's round the far side.
 func world_to_screen(world: Vector2) -> Vector2:
-	world.x = _wrap_near(world.x, _center.x)
-	return size / 2.0 + Vector2(world.x - _center.x, _center.y - world.y) * _zoom
+	return _unit_to_screen(_unit(world))
 
 
+func _unit_to_screen(p: Vector3) -> Vector2:
+	if p.dot(_toward) < 0.0:
+		return HIDDEN
+	return size / 2.0 + Vector2(p.dot(_right), -p.dot(_up)) * _radius()
+
+
+## The map point under a screen point (off the globe: the nearest point on its edge).
 func screen_to_world(screen: Vector2) -> Vector2:
-	var offset := (screen - size / 2.0) / _zoom
-	return Vector2(_center.x + offset.x, _center.y - offset.y)
+	return Geo.project(_screen_lon_lat(screen))
+
+
+## The (lon, lat) under a screen point, poles and all (off the globe: the
+## nearest point on its edge).
+func _screen_lon_lat(screen: Vector2) -> Vector2:
+	var q := (screen - size / 2.0) / _radius()
+	q.y = -q.y
+	var d := q.length_squared()
+	if d > 1.0:
+		q /= sqrt(d)
+		d = 1.0
+	var p := _right * q.x + _up * q.y + _toward * sqrt(1.0 - d)
+	return Vector2(rad_to_deg(atan2(p.y, p.x)), rad_to_deg(asin(clampf(p.z, -1.0, 1.0))))
+
+
+## A map point (projected) on the unit sphere: x through (0, 0), z the north pole.
+static func _unit(world: Vector2) -> Vector3:
+	var lon := deg_to_rad(world.x)
+	var m := deg_to_rad(world.y)
+	var c := 1.0 / cosh(m)  # Web Mercator's northing back to the latitude's cos and sin.
+	return Vector3(c * cos(lon), c * sin(lon), tanh(m))
+
+
+## The globe's radius on screen (px): _zoom is px per degree of its surface.
+func _radius() -> float:
+	return _zoom * 180.0 / PI
+
+
+## Pixels per projected degree at a map point (sizes in projected degrees, like
+## the canals' widths, are drawn this big there): fewer towards the poles, which
+## Web Mercator stretches.
+func _local_zoom(world: Vector2) -> float:
+	return _zoom / cosh(deg_to_rad(world.y))
+
+
+## True if a screen point is round the far side of the globe (see world_to_screen()).
+static func _is_hidden(screen: Vector2) -> bool:
+	return screen.x <= HIDDEN.x / 2.0
+
+
+## The view's axes on the unit sphere, from its middle's (lon, lat): right (east
+## there), up (north there) and out towards the viewer.
+func _orient() -> void:
+	var lon := deg_to_rad(_view_lon)
+	var lat := deg_to_rad(_view_lat)
+	_toward = Vector3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat))
+	_right = Vector3(-sin(lon), cos(lon), 0.0)
+	_up = Vector3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat))
 
 
 func port_screen_position(port_id: String) -> Vector2:
@@ -771,7 +1006,7 @@ func ship_screen_position(ship: Ship) -> Vector2:
 			return pose[0]
 		if ship.is_tug() and ship.job_phase == Ship.JOB_TOW and ship.rescuing != null:
 			# At the ship it's towing, as that's drawn (eased into its harbour near port).
-			return ship_screen_position(ship.rescuing) + Vector2.from_angle(_heading_angle(ship.heading())) * _tug_offset(ship)
+			return ship_screen_position(ship.rescuing) + Vector2.from_angle(_heading_angle(ship.heading(), ship.world_position())) * _tug_offset(ship)
 		return _harbour_blend(ship, world_to_screen(ship.world_position()) + _canal_lane_offset(ship))
 	if docks_shown():
 		return _docked_pose(ship)[0]
@@ -818,17 +1053,41 @@ func _screen_angle(ship: Ship) -> float:
 	var pose := _turning_pose(ship)
 	if not pose.is_empty():
 		return pose[1]
-	return _heading_angle(ship.heading())
+	return _heading_angle(ship.heading(), ship.world_position())
 
 
-static func _heading_angle(direction: Vector2) -> float:
-	return Vector2(direction.x, -direction.y).angle() if direction != Vector2.ZERO else 0.0
+## The on-screen angle of a heading (a direction in map coordinates, which keep
+## compass angles) at a map point: turned with the globe's north there, and
+## foreshortened towards its edge.
+func _heading_angle(direction: Vector2, at: Vector2) -> float:
+	if direction == Vector2.ZERO:
+		return 0.0
+	var way := _screen_way(at, direction.normalized())
+	return way.angle() if way != Vector2.ZERO else Vector2(direction.x, -direction.y).angle()
+
+
+## Which way on screen (unscaled) a direction (east, north) at a map point goes.
+func _screen_way(at: Vector2, direction: Vector2) -> Vector2:
+	var p := _unit(at)
+	var lon := deg_to_rad(at.x)
+	var east := Vector3(-sin(lon), cos(lon), 0.0)
+	var along := east * direction.x + p.cross(east) * direction.y
+	return Vector2(along.dot(_right), -along.dot(_up))
+
+
+## How much the globe turns things drawn at a map point (radians): the screen
+## angle of east there (0 at the view's middle, where north is straight up).
+func _turn_at(at: Vector2) -> float:
+	return _screen_way(at, Vector2.RIGHT).angle()
 
 
 ## The on-screen angle of a lane's heading `mile` along it.
-static func _lane_angle(from_port: String, to_port: String, mile: float) -> float:
+func _lane_angle(from_port: String, to_port: String, mile: float) -> float:
 	var lane = GameData.lane(from_port, to_port)
-	return _heading_angle(lane.sample(mile)[1]) if lane else 0.0
+	if not lane:
+		return 0.0
+	var sample: Array = lane.sample(mile)
+	return _heading_angle(sample[1], sample[0])
 
 
 ## Where a recovery boat or icebreaker is drawn, and which way it faces,
@@ -844,7 +1103,7 @@ func _turning_pose(ship: Ship) -> Array:
 	var base := world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
 	var look_rect: Rect2 = _model_look(ship.model_id)[7]
 	var radius := look_rect.size.x * TURN_RADIUS_LENGTHS * _ship_scale()
-	var lane_angle := _heading_angle(ship.lane_heading())
+	var lane_angle := _heading_angle(ship.lane_heading(), ship.world_position())
 	if ship.is_tug():
 		# Out at the lost ship, it turns round to face home and takes its place
 		# for the tow: ahead of the ship (the lead, on the tow line) or at its stern.
@@ -872,7 +1131,7 @@ func _turning_pose(ship: Ship) -> Array:
 	# and sets off from there along the lane.
 	if ship.align_time < Ship.ALIGN_SECONDS + Ship.LOAD_SECONDS:
 		return [base + Vector2.from_angle(lane_angle) * _recovery_offset(ship) * _ship_scale(), lane_angle]
-	return [base, _heading_angle(ship.heading())]
+	return [base, _heading_angle(ship.heading(), ship.world_position())]
 
 
 ## Where a tug on a tow sits (screen px along the way it's towing, from the
@@ -1002,33 +1261,45 @@ func _tug_tick(ship: Ship) -> PackedVector2Array:
 	var at := port_screen_position(ship.docked_at) + Vector2(across, -sqrt(radius * radius - across * across))
 	return PackedVector2Array([at + Vector2(0.0, TUG_TICK_REACH), at - Vector2(0.0, TUG_TICK_REACH)])
 
-## Centers the view on a port, keeping the zoom.
+## Turns the globe to center a port, keeping the zoom.
 func focus_port(port_id: String) -> void:
-	_center = GameData.port_position(port_id)
+	_look_at(GameData.port_position(port_id))
 	_changed()
 
 
 ## Brings a ship (its port while docked) into view, keeping the zoom: centered
 ## across, and raised_px above the middle (to leave room for its popup below).
 func focus_ship(ship: Ship, raised_px := 0.0) -> void:
-	_center = GameData.port_position(ship.docked_at) if ship.is_docked() else ship.world_position()
-	_center.y -= raised_px / _zoom
+	_look_at(GameData.port_position(ship.docked_at) if ship.is_docked() else ship.world_position())
+	_look_at(screen_to_world(size / 2.0 + Vector2(0.0, raised_px)))
 	_changed()
 
 
 ## Centers on a port (by default the company's home port), showing
-## game_config.json's initial_view_width_deg degrees of longitude across.
+## game_config.json's initial_view_width_deg degrees of the globe across.
 func reset_view(center_port := "") -> void:
 	if center_port.is_empty():
 		center_port = GameState.home_port
 	var width := float(GameData.config.get("initial_view_width_deg", 45.0))
-	_center = GameData.port_position(center_port) if not center_port.is_empty() else Vector2.ZERO
+	_look_at(GameData.port_position(center_port) if not center_port.is_empty() else Vector2.ZERO)
 	_zoom = clampf(size.x / width, _min_zoom(), MAX_ZOOM)
+	_zoom_goal = _zoom
 	_changed()
 
 
+## Turns the globe so a map point is in the middle of the view.
+func _look_at(world: Vector2) -> void:
+	var lon_lat := Geo.unproject(world)
+	_view_lon = lon_lat.x
+	_view_lat = lon_lat.y
+	_fling = Vector2.ZERO
+	_orient()
+
+
+## Zoomed right out, the whole globe fits the view (GLOBE_FIT of its height
+## or width across, whichever is less).
 func _min_zoom() -> float:
-	return size.x / Geo.WORLD_WIDTH
+	return minf(size.x, size.y) * GLOBE_FIT / 2.0 * PI / 180.0
 
 
 func _on_resized() -> void:
@@ -1037,27 +1308,36 @@ func _on_resized() -> void:
 		reset_view()
 	else:
 		_zoom = maxf(_zoom, _min_zoom())
+		_zoom_goal = maxf(_zoom_goal, _min_zoom())
 		_changed()
 
 
+## Drag to turn the globe (the map follows the mouse; let go while moving and
+## it keeps turning, slowing to a stop), wheel to zoom in and out about the
+## mouse (easing there: see _process()).
 func _gui_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	if button:
 		match button.button_index:
-			MOUSE_BUTTON_WHEEL_UP:
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
 				if button.pressed:
-					_zoom_at(button.position, ZOOM_STEP)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				if button.pressed:
-					_zoom_at(button.position, 1.0 / ZOOM_STEP)
+					var step := ZOOM_STEP if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / ZOOM_STEP
+					_zoom_goal = clampf(_zoom_goal * step, _min_zoom(), MAX_ZOOM)
+					_zoom_about = button.position
+					_fling = Vector2.ZERO
 			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT:
 				if button.pressed and _pressed_button == MOUSE_BUTTON_NONE:
 					_pressed_button = button.button_index
 					_press_pos = button.position
 					_dragging = false
+					_fling = Vector2.ZERO
+					_drag_turned = Vector2.ZERO
+					_drag_samples.clear()
 				elif not button.pressed and button.button_index == _pressed_button:
 					if not _dragging and button.button_index == MOUSE_BUTTON_LEFT:
 						_click(button.position)
+					elif _dragging:
+						_fling = _drag_fling()
 					_pressed_button = MOUSE_BUTTON_NONE
 					_dragging = false
 		accept_event()
@@ -1068,12 +1348,57 @@ func _gui_input(event: InputEvent) -> void:
 		if not _dragging and motion.position.distance_to(_press_pos) > DRAG_THRESHOLD:
 			_dragging = true
 		if _dragging:
-			_center += Vector2(-motion.relative.x, motion.relative.y) / _zoom
+			var turn := _drag_turn(motion.position, motion.relative)
+			_turn_by(turn)
+			_drag_turned += turn
+			var now := Time.get_ticks_msec()
+			_drag_samples.append([now, _drag_turned])
+			while now - int(_drag_samples[0][0]) > FLING_WINDOW_S * 2000.0:
+				_drag_samples.pop_front()
 			_changed()
 		accept_event()
+	elif motion and choosing_region:
+		hovered_region = _locked_region_at(motion.position)
+		mouse_default_cursor_shape = CURSOR_ARROW if hovered_region.is_empty() else CURSOR_POINTING_HAND
 	elif motion:
 		var pod := _pod_at(motion.position) if show_ships else -1
 		_hover(pod, _storm_at(motion.position) if show_ships and pod < 0 else "")
+
+
+## How far (lon, lat degrees) to turn the globe so the map under the mouse
+## follows it as it moves by `moved` to `at`: up and down by the globe's
+## radius, across by the size of the circle of latitude under the mouse
+## (round the pole, a drag across spins the globe about it).
+func _drag_turn(at: Vector2, moved: Vector2) -> Vector2:
+	var degrees := 180.0 / PI / _radius()
+	var lat := _view_lat
+	if (at - size / 2.0).length() < _radius():
+		lat = _screen_lon_lat(at).y
+	return Vector2(-moved.x * degrees / maxf(cos(deg_to_rad(lat)), 0.2), moved.y * degrees)
+
+
+## How fast to keep the globe turning as a drag lets go ((lon, lat) degrees
+## a second): as fast as the drag turned it over its last FLING_WINDOW_S, or
+## not at all if it had stopped by then.
+func _drag_fling() -> Vector2:
+	var now := Time.get_ticks_msec()
+	var window := FLING_WINDOW_S * 1000.0
+	if _drag_samples.is_empty() or now - int(_drag_samples[-1][0]) > window / 2.0:
+		return Vector2.ZERO
+	var from: Array = _drag_samples[-1]
+	for sample: Array in _drag_samples:
+		if now - int(sample[0]) <= window:
+			from = sample
+			break
+	var seconds := maxf((now - int(from[0])) / 1000.0, 1.0 / 60.0)
+	var speed: Vector2 = (_drag_turned - (from[1] as Vector2)) / seconds
+	return speed.limit_length(MAX_FLING_PX / _zoom)
+
+
+func _turn_by(turn: Vector2) -> void:
+	_view_lon = wrapf(_view_lon + turn.x, -180.0, 180.0)
+	_view_lat = clampf(_view_lat + turn.y, -MAX_VIEW_LAT, MAX_VIEW_LAT)
+	_orient()
 
 
 ## The sea animals' pod or storm under the mouse: a pod's route shows, a
@@ -1092,10 +1417,17 @@ func _notification(what: int) -> void:
 ## Picks whichever port or ship is closest to the click, within its hit radius,
 ## or else a canal lock under it, or else a storm (see _storm_at()).
 func _click(screen_pos: Vector2) -> void:
+	if choosing_region:
+		var region := _locked_region_at(screen_pos)
+		if not region.is_empty():
+			region_clicked.emit(region)
+		return
 	var nearest_port := ""
 	var nearest_ship: Ship = null
 	var nearest_dist := INF
 	for port: Dictionary in GameData.ports:
+		if _port_locked(port.id):
+			continue
 		var dist := port_screen_position(port.id).distance_to(screen_pos)
 		if dist <= PORT_HIT_RADIUS and dist < nearest_dist:
 			nearest_dist = dist
@@ -1123,11 +1455,17 @@ func _click(screen_pos: Vector2) -> void:
 		empty_clicked.emit()
 
 
+## Zooms by a factor, keeping the map point under a screen point there (if
+## it's on the globe; else about the middle).
 func _zoom_at(screen_pos: Vector2, factor: float) -> void:
-	var anchor := screen_to_world(screen_pos)
+	var on_globe := (screen_pos - size / 2.0).length() < _radius() * 0.98
+	var anchor := _screen_lon_lat(screen_pos)
 	_zoom = clampf(_zoom * factor, _min_zoom(), MAX_ZOOM)
-	# Keep the map point under the cursor fixed.
-	_center += anchor - screen_to_world(screen_pos)
+	if on_globe:
+		# Turn the globe till the anchor is back under it (a few steps settle it).
+		for i in 3:
+			var now := _screen_lon_lat(screen_pos)
+			_turn_by(Vector2(wrapf(anchor.x - now.x, -180.0, 180.0), anchor.y - now.y))
 	_changed()
 
 
@@ -1145,11 +1483,20 @@ func _web_zoom() -> float:
 
 
 func _changed() -> void:
-	_center.x = wrapf(_center.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0)
-	var max_y := Geo.project(Vector2(0, MAX_VIEW_LAT)).y
-	_center.y = clampf(_center.y, -max_y, max_y)
-	_art_root.position = size / 2.0 + Vector2(-_center.x, _center.y) * _zoom
-	_art_root.scale = Vector2(_zoom, -_zoom)
+	_view_lon = wrapf(_view_lon, -180.0, 180.0)
+	_view_lat = clampf(_view_lat, -MAX_VIEW_LAT, MAX_VIEW_LAT)
+	_orient()
+	_center = Geo.project(Vector2(_view_lon, _view_lat))
+	for material in [_globe, _globe_masked, _globe_regions]:
+		material.set_shader_parameter(&"east", _right)
+		material.set_shader_parameter(&"north", _up)
+		material.set_shader_parameter(&"toward", _toward)
+		material.set_shader_parameter(&"center", size / 2.0)
+		material.set_shader_parameter(&"radius", _radius())
+	var pixels := get_viewport().get_final_transform().get_scale().x if is_inside_tree() else 1.0
+	_land_mask.size = Vector2i((size * pixels).ceil()).max(Vector2i.ONE)
+	_land_mask_art.scale = Vector2.ONE * pixels
+	_port_turns.clear()
 	_update_rivers()
 	if not _ice_circles.is_empty():
 		for node in _ice_arts:
@@ -1159,8 +1506,78 @@ func _changed() -> void:
 	view_changed.emit()
 
 
-static func _wrap_near(x: float, near: float) -> float:
-	return x + roundf((near - x) / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
+## Eases the zoom towards the wheel's goal, and keeps a flung globe turning,
+## slowing to a stop.
+func _ease_view(delta: float) -> void:
+	if _dragging:
+		return
+	if _zooming():
+		var ratio := _zoom_goal / _zoom
+		_zoom_at(_zoom_about, ratio if absf(log(ratio)) < 0.01 else pow(ratio, clampf(delta * ZOOM_EASE, 0.0, 1.0)))
+	if _fling != Vector2.ZERO:
+		_turn_by(_fling * delta)
+		_fling *= exp(-FLING_DECAY * delta)
+		if _fling.length() * _zoom < 10.0:  # Under about 10 px a second: stopped.
+			_fling = Vector2.ZERO
+		_changed()
+
+
+## Keeps the regions' overlay in step with the unlocked regions (which a
+## joined player's game hears of from the host), and with choosing one; when
+## they change, the ports, docks and land drawings are redrawn too.
+func _update_regions() -> void:
+	var key := [RegionMap.is_ready(), GameState.regions.duplicate(), choosing_region, hovered_region]
+	if key == _regions_key:
+		return
+	_regions_key = key
+	var locked := 0
+	var regions: Array = GameData.markets.get("regions", [])
+	for i in regions.size():
+		if not GameState.is_region_unlocked(regions[i].id):
+			locked |= 1 << i
+	_globe_regions.set_shader_parameter(&"region_map", RegionMap.texture)
+	_globe_regions.set_shader_parameter(&"locked_mask", locked)
+	_globe_regions.set_shader_parameter(&"choosing", choosing_region)
+	_globe_regions.set_shader_parameter(&"hovered", RegionMap.index_of(hovered_region))
+	_labels_key = []
+	_redraw_layers()
+
+
+## True if a port's region is locked (its name, dock and clicks are hidden).
+func _port_locked(port_id: String) -> bool:
+	return not GameState.is_port_unlocked(port_id)
+
+
+## The locked region at a screen point (its id), or "" (unlocked, or off the globe).
+func _locked_region_at(screen_pos: Vector2) -> String:
+	if (screen_pos - size / 2.0).length() >= _radius():
+		return ""
+	var region := RegionMap.region_id(RegionMap.region_at(_screen_lon_lat(screen_pos)))
+	return region if not region.is_empty() and not GameState.is_region_unlocked(region) else ""
+
+
+## Where a region's unlock button goes on screen (HIDDEN round the far side,
+## or until the regions are worked out).
+func region_screen_position(region_id: String) -> Vector2:
+	var middle := RegionMap.center(RegionMap.index_of(region_id))
+	return world_to_screen(Geo.project(middle)) if middle != Vector2.INF else HIDDEN
+
+
+## True if a land drawing is in a locked region.
+func _decor_locked(index: int) -> bool:
+	if not RegionMap.is_ready():
+		return false
+	var data := GameData.world_map
+	if _decor_regions.is_empty():
+		_decor_regions.resize(data.decor_positions.size())
+		for i in data.decor_positions.size():
+			_decor_regions[i] = RegionMap.region_at(Geo.unproject(data.decor_positions[i])) + 1
+	return not GameState.is_region_unlocked(RegionMap.region_id(_decor_regions[index] - 1))
+
+
+## True while the wheel's zoom is still easing to its goal.
+func _zooming() -> bool:
+	return absf(log(_zoom_goal / _zoom)) > 0.001
 
 
 func _color(color_name: StringName) -> Color:
@@ -1174,8 +1591,20 @@ func _color(color_name: StringName) -> Color:
 
 # --- Drawing -------------------------------------------------------------
 
+## Space round the globe, with a soft glow of air at its edge (the globe
+## itself is the map art: see WorldArt). Zoomed in past the corners, all sea.
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), _color(&"ocean"))
+	var middle := size / 2.0
+	var radius := _radius()
+	if middle.length() < radius:
+		draw_rect(Rect2(Vector2.ZERO, size), _color(&"ocean"))
+		return
+	draw_rect(Rect2(Vector2.ZERO, size), _color(&"space"))
+	var glow := _color(&"atmosphere")
+	for k in 8:
+		var reach := 1.0 + 0.008 * (8 - k)
+		draw_colored_polygon(_circle_points(middle, radius * reach).slice(0, -1), Color(glow, glow.a * 0.09))
+	draw_colored_polygon(_circle_points(middle, radius).slice(0, -1), _color(&"ocean"))
 
 
 func _redraw_layers() -> void:
@@ -1250,7 +1679,7 @@ func _draw_dock_layer() -> void:
 const ANCHOR_GLIDE_S := 5.0
 const ANCHOR_COLUMNS := 4
 ## A port's docks smaller than this on screen (px, out to the mouth) aren't drawn.
-const DOCK_MIN_PX := 3.0
+const DOCK_MIN_PX := 8.0
 ## How far ahead (nm) a ship eased near a port looks to see which way it faces.
 const HEADING_PROBE_NM := 1.5
 ## A port's sea direction comes from about this many of its lanes, this far out.
@@ -1302,8 +1731,9 @@ func docks_shown() -> bool:
 	return show_ships and not gray_mode
 
 
-## Which way the sea is from a port, as an on-screen angle (and which side its
-## quay goes): from data/port_facing.json, or else the average
+## Which way the sea is from a port, as an on-screen angle with north straight
+## up (the globe turns it: _port_turn()), and which side its quay goes: from
+## data/port_facing.json, or else the average
 ## way its sea lanes head out of it.
 func _port_sea_angle(port_id: String) -> float:
 	if _sea_angles.has(port_id):
@@ -1485,8 +1915,16 @@ func _port_layout(port_id: String) -> Dictionary:
 
 ## A point of a port's docks (dock units) on screen.
 func _dock_point(port_id: String, local: Vector2) -> Vector2:
-	var angle := _port_sea_angle(port_id)  # (Works out the flip too.)
+	var angle := _port_sea_angle(port_id) + _port_turn(port_id)  # (Works out the flip too.)
 	return port_screen_position(port_id) + Vector2(local.x, local.y * float(_dock_flips.get(port_id, 1.0))).rotated(angle) * dock_scale(port_id)
+
+
+## How much the globe turns a port's docks on screen (see _turn_at()),
+## worked out once per view.
+func _port_turn(port_id: String) -> float:
+	if not _port_turns.has(port_id):
+		_port_turns[port_id] = _turn_at(GameData.port_position(port_id))
+	return _port_turns[port_id]
 
 
 ## How big a port's docks (and the ships moored and anchored there) are drawn:
@@ -1505,7 +1943,7 @@ func _draw_docks() -> void:
 			tugs[key[0]] = (_spot_tables[key] as Dictionary).keys().max() + 1
 	for port: Dictionary in GameData.ports:
 		var root := port_screen_position(port.id)
-		if not view.has_point(root):
+		if not view.has_point(root) or _port_locked(port.id):
 			continue
 		var layout := _port_layout(port.id)
 		if float(layout.mouth.x) * _ship_scale() < DOCK_MIN_PX:
@@ -1656,7 +2094,7 @@ func _docked_pose(ship: Ship) -> Array:
 
 ## A dock-units facing on screen (mirrored with its port's layout).
 func _dock_angle(port_id: String, facing: float) -> float:
-	return _port_sea_angle(port_id) + facing * float(_dock_flips.get(port_id, 1.0))
+	return _port_sea_angle(port_id) + _port_turn(port_id) + facing * float(_dock_flips.get(port_id, 1.0))
 
 
 ## Where a docked ship is in dock units and which way it faces: moored at its
@@ -1832,6 +2270,8 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 	var labels := []
 	var bounds := Rect2(Vector2.ZERO, size)
 	for port: Dictionary in ranked:
+		if _port_locked(port.id):
+			continue  # Its name is hidden till its region is unlocked.
 		var pos := port_screen_position(port.id)
 		var text_size := font.get_string_size(port.name, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE)
 		var rect := Rect2(pos + Vector2(-text_size.x / 2.0, _port_radius(port.id) + 2.0), text_size)
@@ -1965,9 +2405,14 @@ func _draw_ports(labels: Array) -> void:
 	var label_color := _color(&"label")
 	var shadow := _color(&"label_shadow")
 	var visible_area := Rect2(Vector2.ZERO, size).grow(PORT_RADIUS_MAX + 4.0)
+	var locked_fill := _color(&"port_locked")
 	var draw_port := func(port_id: String) -> void:
 		var pos := port_screen_position(port_id)
 		if not visible_area.has_point(pos):
+			return
+		if _port_locked(port_id):
+			# In a locked region: a small faint dot, no more.
+			_canvas.draw_circle(pos, PORT_RADIUS_MIN, locked_fill)
 			return
 		var port_fill := fill if price_commodity.is_empty() else _price_color(port_id)
 		var radius := _port_radius(port_id)
@@ -2073,17 +2518,39 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 	var sea_lane = GameData.lane(from_port, to_port)
 	if sea_lane == null:
 		return
-	# Shift the whole lane by one wrap offset so it doesn't split at the seam.
-	var start: Vector2 = sea_lane.points[0]
-	var shift := _wrap_near(start.x, _center.x) - start.x
+	# Its points on the sphere are worked out once; on screen, it's cut where
+	# it goes round the far side of the globe.
+	var units: PackedVector3Array = _lane_units.get(sea_lane, PackedVector3Array())
+	if units.is_empty():
+		for p: Vector2 in sea_lane.points:
+			units.append(_unit(p))
+		_lane_units[sea_lane] = units
 	var points := PackedVector2Array()
-	for p: Vector2 in sea_lane.points:
-		points.append(size / 2.0 + Vector2(p.x + shift - _center.x, _center.y - p.y) * _zoom)
-	if dashed:
-		for i in range(1, points.size()):
-			_canvas.draw_dashed_line(points[i - 1], points[i], color, width, 8.0)
-	else:
-		_canvas.draw_polyline(points, color, width, true)
+	for p in units:
+		points.append(_unit_to_screen(p))
+	for part in _visible_runs(points):
+		if dashed:
+			for i in range(1, part.size()):
+				_canvas.draw_dashed_line(part[i - 1], part[i], color, width, 8.0)
+		else:
+			_canvas.draw_polyline(part, color, width, true)
+
+
+## A line's points on screen cut into the runs on the near side of the globe
+## (each at least two points long), leaving out the HIDDEN ones.
+static func _visible_runs(points: PackedVector2Array) -> Array[PackedVector2Array]:
+	var runs: Array[PackedVector2Array] = []
+	var run := PackedVector2Array()
+	for p in points:
+		if _is_hidden(p):
+			if run.size() >= 2:
+				runs.append(run)
+			run = PackedVector2Array()
+		else:
+			run.append(p)
+	if run.size() >= 2:
+		runs.append(run)
+	return runs
 
 
 ## Each canal as a water channel across the land (a convoy canal doubled where
@@ -2094,25 +2561,28 @@ func _draw_canals() -> void:
 	var view := Rect2(Vector2.ZERO, size).grow(40.0)
 	for canal in GameData.canals:
 		var points := _canal_screen_path(canal)
+		if points.size() < 2:
+			continue
 		var bounds := Rect2(points[0], Vector2.ZERO)
 		for p in points:
 			bounds = bounds.expand(p)
 		if not view.intersects(bounds.grow(1.0)):
 			continue
-		var width := maxf(CANAL_WIDTH * _zoom, CANAL_MIN_WIDTH)
+		var zoom := _canal_zoom(canal)
+		var width := maxf(CANAL_WIDTH * zoom, CANAL_MIN_WIDTH)
 		if canal.get("type", "") == "convoy":
 			_draw_convoy_channel(canal, points, width)
 		else:
 			_canvas.draw_polyline(points, _color(&"ocean"), width, true)
-		if _zoom >= LOCK_MIN_ZOOM:
+		if zoom >= LOCK_MIN_ZOOM:
 			for chamber: Dictionary in canal.chambers:
 				_draw_chamber(canal, chamber, points)
 			if canal.get("type", "") == "convoy":
 				_draw_anchorage_labels(canal)
-		if _zoom >= LOCK_LABEL_ZOOM:
+		if zoom >= LOCK_LABEL_ZOOM:
 			for lock_index in canal.get("locks", []).size():
 				var center := lock_screen_position(canal.id, lock_index)
-				_draw_canal_label(canal.locks[lock_index].name, center + Vector2(CHAMBER_LANE_WIDTH * _zoom * 1.5 + 6.0, 4.0))
+				_draw_canal_label(canal.locks[lock_index].name, center + Vector2(CHAMBER_LANE_WIDTH * zoom * 1.5 + 6.0, 4.0))
 			for label: Array in canal.get("labels", []):
 				_draw_canal_label(label[0], world_to_screen(Geo.project(Vector2(label[1], label[2]))))
 		elif _web_zoom() >= CANAL_LABEL_WEB_ZOOM:
@@ -2123,7 +2593,7 @@ func _draw_canals() -> void:
 ## side (DOUBLE_CHANNEL_GAP apart) in the doubled ones.
 func _draw_convoy_channel(canal: Dictionary, points: PackedVector2Array, width: float) -> void:
 	var water := _color(&"ocean")
-	var gap := DOUBLE_CHANNEL_GAP * _zoom / 2.0
+	var gap := DOUBLE_CHANNEL_GAP * _canal_zoom(canal) / 2.0
 	var previous := 0
 	for pair: Array in canal.get("double", []):
 		var i := int(pair[0])
@@ -2160,14 +2630,22 @@ func _anchorage_screen_position(canal: Dictionary, forward: bool) -> Vector2:
 	return world_to_screen(Geo.project(Vector2(point[0], point[1])))
 
 
-## A canal's path on screen, shifted as a whole to the copy of the world nearest the view.
+## A canal's path on screen, or none while any of it is round the far side of
+## the globe (canals are short: it's only ever just at the edge).
 func _canal_screen_path(canal: Dictionary) -> PackedVector2Array:
-	var path: PackedVector2Array = canal.projected_path
-	var shift := _wrap_near(path[0].x, _center.x) - path[0].x
 	var points := PackedVector2Array()
-	for p in path:
-		points.append(size / 2.0 + Vector2(p.x + shift - _center.x, _center.y - p.y) * _zoom)
+	for p: Vector2 in canal.projected_path:
+		var at := world_to_screen(p)
+		if _is_hidden(at):
+			return PackedVector2Array()
+		points.append(at)
 	return points
+
+
+## Pixels per projected degree where a canal is (its widths and locks are
+## sized in projected degrees).
+func _canal_zoom(canal: Dictionary) -> float:
+	return _local_zoom((canal.projected_path as PackedVector2Array)[0])
 
 
 ## One lock chamber: a lane per slot side by side (with a lane each way, ships
@@ -2177,8 +2655,9 @@ func _draw_chamber(canal: Dictionary, chamber: Dictionary, points: PackedVector2
 	var center := points[i]
 	var across := _path_normal(points, i)  # Right of a ship sailing along the path.
 	var along := Vector2(across.y, -across.x)
-	var half := along * CHAMBER_LENGTH * _zoom / 2.0
-	var lane := across * CHAMBER_LANE_WIDTH * _zoom
+	var zoom := _canal_zoom(canal)
+	var half := along * CHAMBER_LENGTH * zoom / 2.0
+	var lane := across * CHAMBER_LANE_WIDTH * zoom
 	var slots := GameData.chamber_slots(canal, chamber)
 	var lanes := float(slots.size())
 	for k in slots.size():
@@ -2215,7 +2694,10 @@ func lock_screen_position(canal_id: String, lock_index: int) -> Vector2:
 	var count := 0
 	for chamber: Dictionary in GameData.get_canal(canal_id).get("chambers", []):
 		if chamber.lock == lock_index:
-			total += world_to_screen(chamber.position)
+			var at := world_to_screen(chamber.position)
+			if _is_hidden(at):
+				return HIDDEN
+			total += at
 			count += 1
 	return total / count if count > 0 else Vector2.ZERO
 
@@ -2223,21 +2705,22 @@ func lock_screen_position(canal_id: String, lock_index: int) -> Vector2:
 ## Where a convoy canal's popup sits: the middle of its path.
 func canal_screen_position(canal_id: String) -> Vector2:
 	var points := _canal_screen_path(GameData.get_canal(canal_id))
-	return points[floori(points.size() / 2.0)] if not points.is_empty() else Vector2.ZERO
+	return points[floori(points.size() / 2.0)] if not points.is_empty() else HIDDEN
 
 
 ## [canal id, lock index] of the lock under a screen point, or [] (only once
 ## the chambers are drawn).
 func _lock_at(screen_pos: Vector2) -> Array:
-	if _zoom < LOCK_MIN_ZOOM:
-		return []
 	for canal in GameData.canals:
+		var zoom := _canal_zoom(canal)
+		if zoom < LOCK_MIN_ZOOM:
+			continue
 		for lock_index in canal.get("locks", []).size():
 			var center := lock_screen_position(canal.id, lock_index)
 			var reach := LOCK_HIT_RADIUS
 			for chamber: Dictionary in canal.chambers:
 				if chamber.lock == lock_index:
-					reach = maxf(reach, world_to_screen(chamber.position).distance_to(center) + CHAMBER_LENGTH * _zoom / 2.0)
+					reach = maxf(reach, world_to_screen(chamber.position).distance_to(center) + CHAMBER_LENGTH * zoom / 2.0)
 			if center.distance_to(screen_pos) <= reach:
 				return [canal.id, lock_index]
 	return []
@@ -2288,19 +2771,19 @@ func _canal_lane_offset(ship: Ship) -> Vector2:
 	var direction := sailing.heading()
 	if direction == Vector2.ZERO:
 		return Vector2.ZERO
-	var on_screen := Vector2(direction.x, -direction.y).normalized()
+	var on_screen := Vector2.from_angle(_heading_angle(direction, sailing.world_position()))
 	var right := Vector2(-on_screen.y, on_screen.x)
 	var canal: Dictionary = crossing.canal
 	if canal.get("type", "") == "convoy":
 		if GameData.in_single_stretch(canal, GameData.canal_s(crossing, sailing.traveled_nm)):
 			return Vector2.ZERO
-		return right * DOUBLE_CHANNEL_GAP * _zoom / 2.0
+		return right * DOUBLE_CHANNEL_GAP * _canal_zoom(canal) / 2.0
 	var chamber := sailing.lock_chamber()
 	if not chamber.is_empty() and chamber.canal.locks[chamber.lock].get("lanes", "each_way") == "shared":
 		var slots := GameData.chamber_slots(chamber.canal, chamber)
-		var offset := (float(slots.find(sailing.lock_slot)) - (slots.size() - 1) / 2.0) * CHAMBER_LANE_WIDTH * _zoom
+		var offset := (float(slots.find(sailing.lock_slot)) - (slots.size() - 1) / 2.0) * CHAMBER_LANE_WIDTH * _canal_zoom(chamber.canal)
 		return right * (offset if chamber.forward else -offset)
-	return right * CHAMBER_LANE_WIDTH * _zoom / 2.0
+	return right * CHAMBER_LANE_WIDTH * _canal_zoom(canal) / 2.0
 
 
 ## A red dot (like the nav tabs') by each HQ or hub with an upgrade that can be
@@ -2342,7 +2825,7 @@ func _draw_tow_lines() -> void:
 	for tug in GameState.ships:
 		if not tug.is_tug() or not tug.tug_lead or tug.job_phase != Ship.JOB_TOW or tug.rescuing == null:
 			continue
-		var along := Vector2.from_angle(_heading_angle(tug.heading()))
+		var along := Vector2.from_angle(_heading_angle(tug.heading(), tug.world_position()))
 		var tug_rect: Rect2 = _model_look(tug.model_id)[7]
 		var ship_rect: Rect2 = _model_look(tug.rescuing.model_id)[7]
 		var stern := ship_screen_position(tug) - along * tug_rect.size.x / 2.0 * _ship_scale()
@@ -2407,7 +2890,7 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 			return
 		var on_lane := world_to_screen(here[0]) + _canal_lane_offset(ship)
 		at = _harbour_blend(ship, on_lane)
-		angle = _blended_heading(ship, on_lane, at, _heading_angle(here[1]))
+		angle = _blended_heading(ship, on_lane, at, _heading_angle(here[1], here[0]))
 	else:
 		at = ship_screen_position(ship)
 		angle = _screen_angle(ship)
@@ -2558,7 +3041,7 @@ func _draw_storms() -> void:
 		var cloud := STORM_CLOUD
 		for ring: Array in STORM_HAZE:
 			_canvas.draw_circle(center, radius * float(ring[0]), Color(cloud, float(ring[1]) * alpha))
-		# Map north is up on screen, so anticlockwise there is a falling angle.
+		# North is up on screen (near enough, on the globe), so anticlockwise there is a falling angle.
 		var spin := -1.0 if lat >= 0.0 else 1.0
 		var turn := spin * GameState.play_time * STORM_SPIN
 		var arms := 3 if tropical else 2
@@ -2587,10 +3070,9 @@ func _draw_storms() -> void:
 
 ## A storm's center on screen and its radius there (px): [center, radius].
 func _storm_circle(storm: Dictionary) -> Array:
-	var lat: float = storm.lat
-	# Near the map's scale there, a projected degree is 60 nm x cos(latitude).
-	var radius: float = float(storm.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
-	return [world_to_screen(Geo.project(Vector2(storm.lon, lat))), radius]
+	# A degree of the globe's surface is 60 nm.
+	var radius: float = float(storm.radius_nm) / 60.0 * _zoom
+	return [world_to_screen(Geo.project(Vector2(storm.lon, storm.lat))), radius]
 
 
 ## The storm with the given key, or {} if it has blown out.
@@ -2633,35 +3115,27 @@ func _draw_storm_tracks() -> void:
 		var behind := Weather.track_behind(storm)
 		var points := behind.duplicate()
 		points.append_array(GameState.weather.track_ahead(storm).slice(1))
-		var path := _storm_path_on_screen(points, behind.size() - 1)
+		var path := _track_on_screen(points)
 		var storm_key := Weather.key(storm)
 		var highlight := storm_key == _hovered_storm or storm_key == selected_storm
 		var color := Color(STORM_TRACK_COLOR, STORM_TRACK_HIGHLIGHT_ALPHA if highlight else STORM_TRACK_COLOR.a)
-		var bounds := Rect2(path[0], Vector2.ZERO)
-		for p in path:
-			bounds = bounds.expand(p)
-		if view.intersects(bounds.grow(STORM_TRACK_WIDTH)):
-			_draw_dashed_path(path, color, STORM_TRACK_WIDTH)
+		for part in _visible_runs(path):
+			var bounds := Rect2(part[0], Vector2.ZERO)
+			for p in part:
+				bounds = bounds.expand(p)
+			if view.intersects(bounds.grow(STORM_TRACK_WIDTH)):
+				_draw_dashed_path(part, color, STORM_TRACK_WIDTH)
 		if highlight:
 			var circle := _storm_circle(storm)
 			for share: float in [1.0, Weather.CORE]:
 				_draw_dashed_path(_circle_points(circle[0], float(circle[1]) * share), color, 2.0)
 
 
-## A storm's track points (lon, lat) on screen, unwrapped so it runs smoothly
-## across the date line, placed so its point `now` (the storm's position)
-## is where the storm itself is drawn.
-func _storm_path_on_screen(points: PackedVector2Array, now: int) -> PackedVector2Array:
-	var projected := PackedVector2Array()
-	for i in points.size():
-		var p := Geo.project(points[i])
-		if i > 0:
-			p.x = projected[i - 1].x + wrapf(p.x - projected[i - 1].x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0)
-		projected.append(p)
-	var shift := _wrap_near(projected[now].x, _center.x) - projected[now].x
+## A track's points (lon, lat) on screen (HIDDEN round the far side of the globe).
+func _track_on_screen(points: PackedVector2Array) -> PackedVector2Array:
 	var out := PackedVector2Array()
-	for p in projected:
-		out.append(size / 2.0 + Vector2(p.x + shift - _center.x, _center.y - p.y) * _zoom)
+	for p in points:
+		out.append(world_to_screen(Geo.project(p)))
 	return out
 
 
@@ -2814,17 +3288,23 @@ func _draw_decor() -> void:
 		return
 	var data := GameData.world_map
 	var max_tier := -1
+	var center_zoom := _local_zoom(_center)
 	for tier in data.decor_tier_spacing.size():
-		if data.decor_tier_spacing[tier] * _zoom >= DECOR_MIN_SPACING_PX:
+		if data.decor_tier_spacing[tier] * center_zoom >= DECOR_MIN_SPACING_PX:
 			max_tier = tier
 	if max_tier < 0:
 		return
 	var scale := clampf(sqrt(_zoom / DECOR_ZOOM_REFERENCE), DECOR_SCALE_RANGE.x, DECOR_SCALE_RANGE.y)
-	var margin := Vector2.ONE * DECOR_SIZE_PX.y * scale / _zoom
-	var a := screen_to_world(Vector2.ZERO)
-	var b := screen_to_world(size)
-	var low := Vector2(minf(a.x, b.x), minf(a.y, b.y)) - margin
-	var high := Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) + margin
+	# The cells that can be in view: those within the stretch of globe the
+	# view's corners reach (all of the near side, zoomed right out).
+	var reach := rad_to_deg(asin(minf(size.length() / 2.0 / _radius(), 1.0))) + DECOR_SIZE_PX.y * scale / _zoom
+	var across := 180.0
+	if absf(_view_lat) + reach < 89.0:
+		across = rad_to_deg(asin(minf(sin(deg_to_rad(minf(reach, 90.0))) / cos(deg_to_rad(_view_lat)), 1.0)))
+		if reach >= 90.0:
+			across = 180.0
+	var low := Vector2(_view_lon - across, _mercator_y(_view_lat - reach))
+	var high := Vector2(_view_lon + across, _mercator_y(_view_lat + reach))
 	var columns := ceili(Geo.WORLD_WIDTH / DECOR_BUCKET)
 	var shown := []  # [screen position, kind]
 	var screen := Rect2(Vector2.ZERO, size).grow(DECOR_SIZE_PX.y * scale)
@@ -2835,12 +3315,16 @@ func _draw_decor() -> void:
 			for i: int in _decor_buckets.get(Vector2i(posmod(column, columns), row), PackedInt32Array()):
 				if data.decor_tiers[i] > max_tier:
 					continue
+				if _decor_locked(i):
+					continue  # Its region is locked: shaded, bare.
+				if center_zoom < float(DECOR_MIN_ZOOM.get(data.decor_kind_names[data.decor_kinds[i]], 0.0)):
+					continue  # Not yet: it shows only from closer in.
 				var at := world_to_screen(data.decor_positions[i])
 				if not screen.has_point(at):
 					continue
 				# Only while all of it fits clear of the water (land drawings on land, waves
 				# on the sea): its corners reach about its size from its spot.
-				if i < data.decor_clearance.size() and data.decor_clearance[i] * _zoom < _decor_side(data.decor_kind_names[data.decor_kinds[i]], scale) * 1.05:
+				if i < data.decor_clearance.size() and data.decor_clearance[i] * _local_zoom(data.decor_positions[i]) < _decor_side(data.decor_kind_names[data.decor_kinds[i]], scale) * 1.05:
 					continue
 				shown.append([at, data.decor_kinds[i]])
 	shown.sort_custom(func(p: Array, q: Array) -> bool: return p[0].y < q[0].y)
@@ -2901,7 +3385,7 @@ func _draw_sea_life() -> void:
 		if not view.has_point(center):
 			continue
 		var heading: Vector2 = state.heading
-		var target: float = Vector2(heading.x, -heading.y).angle() if heading != Vector2.ZERO else float(_pod_angles.get(i, 0.0))
+		var target: float = _heading_angle(heading, Geo.project(state.pos)) if heading != Vector2.ZERO else float(_pod_angles.get(i, 0.0))
 		var angle := lerp_angle(float(_pod_angles.get(i, target)), target, 0.08)
 		_pod_angles[i] = angle
 		var shown := mini(int(pod.size), int(kind.shown))
@@ -3054,12 +3538,13 @@ func _sea_silhouette(art: String) -> Texture2D:
 ## A pod's year: its migration paths and the areas it stays in, dashed.
 func _draw_pod_routes(sea: SeaLife, pod: int) -> void:
 	for points in sea.pod_paths(pod):
-		_draw_dashed_path(_storm_path_on_screen(points, 0), SEA_ROUTE_COLOR, 2.0)
+		for part in _visible_runs(_track_on_screen(points)):
+			_draw_dashed_path(part, SEA_ROUTE_COLOR, 2.0)
 	for stay: Dictionary in sea.pods[pod].stays:
 		var area: Dictionary = sea.areas[stay.area]
-		var lat := float(area.lat)
-		var radius := float(area.radius_nm) / (60.0 * maxf(cos(deg_to_rad(lat)), 0.1)) * _zoom
-		_draw_dashed_path(_circle_points(world_to_screen(Geo.project(Vector2(area.lon, lat))), radius), SEA_ROUTE_COLOR, 2.0)
+		var at := world_to_screen(Geo.project(Vector2(area.lon, area.lat)))
+		if not _is_hidden(at):
+			_draw_dashed_path(_circle_points(at, float(area.radius_nm) / 60.0 * _zoom), SEA_ROUTE_COLOR, 2.0)
 
 
 ## The pod under a screen point (as last drawn), the nearest if several, or -1.

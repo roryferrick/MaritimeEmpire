@@ -100,7 +100,7 @@ func _tips_list() -> Array[Dictionary]:
 		{id = "welcome", title = "Welcome to %s" % GameState.company_name, show = always,
 			text = func() -> String: return "You run a shipping company. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's dear.\n\nYour headquarters is %s: the port with a ring in your color. Tips like this one come up as you play; switch them off any time with the Tutorial switch in the top right of the map." % GameData.port_name(GameState.home_port)},
 		{id = "map", title = "Getting around", show = func() -> bool: return seen.call("welcome"),
-			text = func() -> String: return "Drag the map to move it and scroll to zoom. Click a port to see its prices, or a ship to see what it's doing.\n\nThe buttons at the top right of the screen set the game speed: pause, or speed up to 8x (F steps through them)."},
+			text = func() -> String: return "Drag the globe to turn it and scroll to zoom. Click a port to see its prices, or a ship to see what it's doing.\n\nThe buttons at the top right of the screen set the game speed: pause, or speed up to 8x (F steps through them)."},
 		# Shown over the Route Assignment map, so it comes before the tip that opens it.
 		{id = "route_screen", title = "Planning a route",
 			show = func() -> bool: return seen.call("map") and _route_screen_open(),

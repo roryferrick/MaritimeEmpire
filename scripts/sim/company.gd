@@ -36,6 +36,11 @@ var xp := 0.0
 var bank_reserve := 0
 ## The HQ (at the home port, first) and the hubs placed since.
 var hubs: Array[Hub] = []
+## The market regions unlocked (ids from markets.json regions): the home
+## port's from the start, then one more every few company levels (see
+## Progression.region_slots()). Empty in saves from before regions, until
+## GameState fits it to the fleet.
+var regions: Array[String] = []
 ## All-time totals for each of GameState.MONEY_KINDS.
 var totals := {}
 ## Per canal id: {crossings, tolls, xp (the extra company XP its bonus gave)}.
@@ -107,6 +112,7 @@ func to_dict() -> Dictionary:
 		"hidden_gem_claimed": hidden_gem_claimed,
 		"bank_reserve": bank_reserve,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
+		"regions": regions,
 		"totals": totals,
 		"canal_stats": canal_stats,
 		"finance_window": finance_window,
@@ -133,6 +139,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.mega_upgrades.assign(data.get("mega_upgrades", []))
 	company.hidden_gem_claimed = bool(data.get("hidden_gem_claimed", false))
 	company.bank_reserve = int(data.get("bank_reserve", 0))
+	company.regions.assign(data.get("regions", []))
 	for hub_data: Dictionary in data.get("hubs", []):
 		company.hubs.append(Hub.from_dict(hub_data))
 	if company.hubs.is_empty():  # Saves from before hubs: the HQ at the home port.
@@ -169,7 +176,7 @@ func apply_update(data: Dictionary, keep_prefs := false) -> void:
 				color = value
 			"company_xp":
 				xp = value
-			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models":
+			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models", "regions":
 				(get(key) as Array).assign(value)
 			"hubs":
 				var kept: Array[Hub] = []
