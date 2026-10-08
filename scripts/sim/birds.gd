@@ -15,6 +15,10 @@ extends RefCounted
 ## Seabirds (condors, albatrosses, terns, pelicans, shearwaters): when a ship
 ## at sea is where a species is that month, now and then some take up
 ## following it for a stretch of seabird_follow_hours.
+##
+## Raptors (eagles, hawks, the osprey) never follow ships: they live along
+## the shore, and a port in a species' range that month has some about it by
+## day, in some stretches of raptor_hours: perched, fishing, soaring.
 
 const DATA_PATH := "res://data/birds.json"
 const MONTH_SECONDS := 86400.0
@@ -36,14 +40,18 @@ const NEAR_PORT_NM := 40.0
 const POD_CHANCE := 0.4
 ## Cargo carried that brings gulls (model categories).
 const GULL_CARGO := ["grain", "livestock"]
+## Raptors are out between these local hours (by the sun).
+const RAPTOR_DAY := Vector2(6.0, 19.0)
 
 static var _shared: Birds
 
 var gulls := {}
 var seabirds := {}
+var raptors := {}
 var land_animals := {}
 var gull_hours := 3.0
 var seabird_hours := 6.0
+var raptor_hours := 4.0
 
 ## Ships loading or unloading at each port, as of _busy_time (see _busy()).
 var _busy_ports := {}
@@ -61,14 +69,16 @@ func _init() -> void:
 	if data is Dictionary:
 		gulls = data.get("gulls", {})
 		seabirds = data.get("seabirds", {})
+		raptors = data.get("raptors", {})
 		land_animals = data.get("land_animals", {})
 		gull_hours = float(data.get("gull_follow_hours", 3.0))
 		seabird_hours = float(data.get("seabird_follow_hours", 6.0))
+		raptor_hours = float(data.get("raptor_hours", 4.0))
 
 
-## A species' data (gull or seabird), or {}.
+## A species' data (gull, seabird or raptor), or {}.
 func species(id: String) -> Dictionary:
-	return gulls.get(id, seabirds.get(id, {}))
+	return gulls.get(id, seabirds.get(id, raptors.get(id, {})))
 
 
 # --- Where and when -------------------------------------------------------------
@@ -244,7 +254,7 @@ func followers(ship: Ship) -> Array:
 	var month := month_of(unix)
 	var stretch_s := seabird_hours * 3600.0
 	for id: String in seabirds:
-		var info: Dictionary = seabirds[id]
+		var info := species(id)
 		if not is_at(info, lon_lat, month):
 			continue
 		# Each species keeps its own stretches, so they come and go at different times.
@@ -256,6 +266,37 @@ func followers(ship: Ship) -> Array:
 		var fewest := int(follow[1])
 		var most := int(follow[2])
 		out.append({id = id, count = fewest + floori(chance(["count", ship.id, id, stretch]) * (most - fewest + 1))})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.count) > int(b.count))
+	return out
+
+
+# --- Raptors along the shore ----------------------------------------------------
+
+## The raptors about a port's shore now: [{id, count}], most first. Each
+## species whose range covers the port that month is there in some stretches
+## of raptor_hours (its visit chance), only by day (raptors hunt by sight).
+func port_raptors(port_id: String) -> Array:
+	var out := []
+	var unix := float(GameState.calendar_time())
+	var port := GameData.get_port(port_id)
+	var lon_lat := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+	var hour := local_hour(lon_lat.x, unix)
+	if hour < RAPTOR_DAY.x or hour > RAPTOR_DAY.y:
+		return out
+	var month := month_of(unix)
+	var stretch_s := raptor_hours * 3600.0
+	for id: String in raptors:
+		var info: Dictionary = raptors[id]
+		if not is_at(info, lon_lat, month):
+			continue
+		var offset := chance([id, "offset"]) * stretch_s
+		var stretch := floori((unix + offset) / stretch_s)
+		var visit: Array = info.get("visit", [0.3, 1, 2])
+		if chance(["raptor", port_id, id, stretch]) >= float(visit[0]):
+			continue
+		var fewest := int(visit[1])
+		var most := int(visit[2])
+		out.append({id = id, count = fewest + floori(chance(["count", port_id, id, stretch]) * (most - fewest + 1))})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.count) > int(b.count))
 	return out
 

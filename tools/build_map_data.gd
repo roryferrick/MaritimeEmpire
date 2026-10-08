@@ -105,19 +105,9 @@ const ANIMALS := [
 	# Water buffalo on the floodplains of Australia's Top End, and a pizza on Albuquerque.
 	["water_buffalo", 132.5, -12.6, 2], ["water_buffalo", 131.0, -13.4, 3],
 	["pizza", -106.65, 35.08, 2],
-	# Birds, drawn soaring (the quetzal perched): resplendent quetzals in the
-	# cloud forests of Guatemala and Costa Rica; red-tailed hawks across North
-	# America; bald eagles on its coasts, rivers and lakes; ospreys by water on
-	# every continent but Antarctica.
+	# The resplendent quetzal (perched) in the cloud forests of Guatemala and
+	# Costa Rica. (Eagles, hawks and ospreys fly with the seabirds: Birds.)
 	["quetzal", -90.4, 15.4, 2], ["quetzal", -84.8, 10.3, 2],
-	["red_tailed_hawk", -98.0, 38.5, 2], ["red_tailed_hawk", -112.0, 36.0, 2], ["red_tailed_hawk", -86.0, 40.0, 3],
-	["red_tailed_hawk", -120.5, 44.5, 3], ["red_tailed_hawk", -106.0, 51.0, 3], ["red_tailed_hawk", -101.5, 24.5, 3],
-	["red_tailed_hawk", -80.5, 35.5, 3], ["red_tailed_hawk", -93.5, 45.0, 3],
-	["bald_eagle", -134.5, 58.3, 2], ["bald_eagle", -123.8, 50.2, 2], ["bald_eagle", -89.5, 46.5, 2], ["bald_eagle", -152.0, 60.5, 3],
-	["bald_eagle", -81.3, 28.3, 3], ["bald_eagle", -76.8, 38.9, 3], ["bald_eagle", -66.5, 46.0, 3], ["bald_eagle", -122.6, 45.6, 3],
-	["osprey", -69.5, 44.5, 2], ["osprey", 15.5, 61.5, 2], ["osprey", 135.0, -33.5, 2], ["osprey", -81.6, 26.8, 3],
-	["osprey", -4.2, 57.2, 3], ["osprey", 12.5, 53.3, 3], ["osprey", 9.1, 42.2, 3], ["osprey", 152.5, -26.5, 3],
-	["osprey", 140.5, 39.0, 3], ["osprey", -116.0, 44.0, 3],
 ]
 const LANES_OUT := "res://data/sea_lanes.res"
 

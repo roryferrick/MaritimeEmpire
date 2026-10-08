@@ -86,7 +86,7 @@ const DECOR_ZOOM_REFERENCE := 30.0
 const DECOR_SCALE_RANGE := Vector2(0.9, 1.5)
 const DECOR_ANIMALS: Array[String] = ["penguin", "polar_bear", "camel", "elephant", "giraffe", "lion", "zebra", "kangaroo", "koala",
 	"panda", "tiger", "bison", "moose", "brown_bear", "reindeer", "llama", "toucan", "gorilla", "orangutan", "kiwi", "lemur",
-	"quetzal", "red_tailed_hawk", "bald_eagle", "osprey", "water_buffalo", "pizza"]
+	"quetzal", "water_buffalo", "pizza"]
 ## Kinds of drawing hidden until the map is zoomed in this far (px per projected
 ## degree), whatever their tier: the pizza on Albuquerque is a close-up secret.
 const DECOR_MIN_ZOOM := {pizza = 250.0}
@@ -533,6 +533,13 @@ var _lake_cells := {}
 ## hubs or prices (ports, labels, route lanes; see STATIC_REFRESH_S), and ships
 ## (every frame). _canvas is the layer being drawn, which the draw helpers use.
 var _decor_layer := Control.new()
+## The land animals roaming over the land drawings (every frame while any show;
+## see _draw_fauna()), the groups _draw_decor() found in view: [patch key,
+## art, its spot on screen, art side (px), how much of its patch fits on land,
+## species info, tree art], and their goings on.
+var _fauna_layer := Control.new()
+var _fauna := []
+var _land_life := LandLife.new()
 var _weather_layer := Control.new()
 ## The storm whose popup is open, and the one under the mouse (Weather.key()s; "" for none).
 var selected_storm := ""
@@ -867,7 +874,7 @@ func _ready() -> void:
 	RenderingServer.canvas_item_set_custom_rect(_land_mask_art.get_canvas_item(), true, NEVER_CULLED)
 	_land_mask.add_child(_land_mask_art)
 
-	for layer: Control in [_decor_layer, _dock_layer]:
+	for layer: Control in [_decor_layer, _fauna_layer, _dock_layer]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
@@ -884,6 +891,8 @@ func _ready() -> void:
 		add_child(layer)
 	_decor_layer.draw.connect(_draw_decor)
 	_decor_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_fauna_layer.draw.connect(_draw_fauna)
+	_fauna_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_load_decor()
 	_weather_layer.draw.connect(_draw_weather_layer)
 	_canal_layer.draw.connect(_draw_canal_layer)
@@ -910,6 +919,8 @@ func _process(delta: float) -> void:
 	_ease_view(delta)
 	_update_regions()
 	_update_sky()
+	if not _fauna.is_empty():
+		_fauna_layer.queue_redraw()  # The land animals going about their day.
 	if not show_ships:
 		return
 	_weather_layer.queue_redraw()
@@ -1800,6 +1811,7 @@ func _draw() -> void:
 
 func _redraw_layers() -> void:
 	_decor_layer.queue_redraw()
+	_fauna_layer.queue_redraw()
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_static_layer.queue_redraw()
@@ -4780,8 +4792,10 @@ static func _load_decor() -> void:
 ## (a little bigger zoomed in), the lower ones in front.
 func _draw_decor() -> void:
 	_canvas = _decor_layer
+	_fauna.clear()
 	if gray_mode:
 		return
+	var animals := Birds.shared().land_animals
 	var data := GameData.world_map
 	var max_tier := -1
 	var center_zoom := _local_zoom(_center)
@@ -4820,7 +4834,18 @@ func _draw_decor() -> void:
 					continue
 				# Only while all of it fits clear of the water (land drawings on land, waves
 				# on the sea): its corners reach about its size from its spot.
-				if i < data.decor_clearance.size() and data.decor_clearance[i] * _local_zoom(data.decor_positions[i]) < _decor_side(data.decor_kind_names[data.decor_kinds[i]], scale) * 1.05:
+				var kind_name := data.decor_kind_names[data.decor_kinds[i]]
+				var side := _decor_side(kind_name, scale)
+				var room := data.decor_clearance[i] * _local_zoom(data.decor_positions[i]) if i < data.decor_clearance.size() else INF
+				if room < side * 1.05:
+					continue
+				var info: Dictionary = animals.get(kind_name, {})
+				if info.has("group"):
+					# A group roaming its patch (see _draw_fauna()), as much of it as
+					# keeps it on land.
+					var roam := float(info.get("roam", 2.0)) * side
+					var fit := clampf(maxf(room - side * 1.05, side * 1.2) / roam, 0.0, 1.0)
+					_fauna.append(["%d" % i, _decor_textures[data.decor_kinds[i]], at, side, fit, info, _decor_texture(str(info.get("tree", "")))])
 					continue
 				shown.append([at, data.decor_kinds[i]])
 	shown.sort_custom(func(p: Array, q: Array) -> bool: return p[0].y < q[0].y)
@@ -4837,6 +4862,110 @@ func _draw_decor() -> void:
 static func _decor_side(kind_name: String, scale: float) -> float:
 	var big := DECOR_ANIMALS.has(kind_name) or kind_name == "waves"
 	return (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if big else DECOR_SIZE_PX.x)) * scale
+
+
+## A land drawing's art by its name (as _load_decor() loaded it), or null.
+static func _decor_texture(kind_name: String) -> Texture2D:
+	var index := GameData.world_map.decor_kind_names.find(kind_name)
+	return _decor_textures[index] if index >= 0 and index < _decor_textures.size() else null
+
+
+## The land animals in view (_fauna, found by _draw_decor()), each group
+## roaming its patch and going about its day (LandLife): drawn standing on
+## their feet, the nearer ones in front, a bear's rubbing tree behind it, with
+## whatever goes with what they're doing (sleepers' z's, an elephant's spray,
+## a roar...). They keep going while the game's paused, like the birds.
+func _draw_fauna() -> void:
+	_canvas = _fauna_layer
+	var now := Time.get_ticks_msec() / 1000.0
+	var items := []  # [feet y, texture, pose, feet (screen), art side (px), info]
+	for group: Array in _fauna:
+		var key: String = group[0]
+		var texture: Texture2D = group[1]
+		var home: Vector2 = group[2]
+		var side: float = group[3]
+		var fit: float = group[4]
+		var info: Dictionary = group[5]
+		if texture == null:
+			continue
+		var tree: Variant = LandLife.tree_spot(key, info)
+		if tree != null and group[6] != null:
+			var foot := home + (tree as Vector2) * side * fit
+			items.append([foot.y - 0.01, group[6], null, foot, side, info])
+		for pose: Dictionary in _land_life.poses(key, info, now):
+			var feet := home + (pose.at as Vector2) * side * fit
+			items.append([feet.y, texture, pose, feet, side, info])
+	items.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	for item: Array in items:
+		var side: float = item[4]
+		if item[2] == null:
+			_canvas.draw_texture_rect(item[1], Rect2(item[3] - Vector2(side / 2.0, side * LandLife.FEET), Vector2(side, side)), false)
+			continue
+		_draw_land_animal(item[1], item[2], item[3], side, item[5])
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## One animal in its pose (LandLife.poses()), its feet at a screen point, its
+## art `side` px for a full-sized one: turned the way it faces, about its
+## pivot, then what goes with its act.
+func _draw_land_animal(texture: Texture2D, pose: Dictionary, feet: Vector2, side: float, info: Dictionary) -> void:
+	var art := side * float(pose.size)
+	var faces := str(info.get("faces", "left"))
+	var f := float(pose.facing)
+	var flip := -f if faces == "left" else (f if faces == "right" else 1.0)
+	var pivot: Vector2 = pose.pivot
+	var scale: Vector2 = pose.scale
+	var origin := feet + Vector2((pivot.x - 0.5) * flip, pivot.y - LandLife.FEET) * art
+	var rot := float(pose.rot)
+	_canvas.draw_set_transform(origin, rot, Vector2(flip * scale.x, scale.y))
+	_canvas.draw_texture_rect(texture, Rect2(-pivot * art, Vector2(art, art)), false)
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+	var act := str(pose.act)
+	if act == "rest":
+		return
+	var head_local := ((pose.head as Vector2) - pivot) * art
+	var head := origin + (Vector2(head_local.x * flip * scale.x, head_local.y * scale.y)).rotated(rot)
+	var u := float(pose.u)
+	var t := float(pose.t)
+	match act:
+		"nap", "sleep":
+			# Z's drifting up from its head.
+			var font := get_theme_default_font()
+			var font_size := maxi(int(art * 0.32), 8)
+			for k in 2:
+				var rise := fmod(t * 0.45 + k * 0.5, 1.0)
+				var at := head + Vector2(f * art * (0.1 + 0.25 * rise), -art * (0.2 + 0.5 * rise))
+				_canvas.draw_string(font, at, "z", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(1, 1, 1, 0.85 * sin(rise * PI)))
+		"spray", "dust", "wallow":
+			# Water (or dust) thrown up over its back from its trunk.
+			var color := Color(0.62, 0.82, 1.0) if act == "spray" else Color(0.74, 0.6, 0.42)
+			for k in 7:
+				var s := fmod(t * 1.1 + k / 7.0, 1.0)
+				var at := head + Vector2(-f * s * art * 0.8, -sin(s * PI) * art * 0.55)
+				if act == "wallow":
+					at = feet + Vector2((k - 3) * art * 0.12, -art * 0.1 - s * art * 0.35)
+				var radius := art * (0.035 if act == "spray" else 0.05 + 0.05 * s)
+				_canvas.draw_circle(at, radius, Color(color, (0.9 if act == "spray" else 0.55) * (1.0 - s)))
+		"roar":
+			# Its roar rolling out ahead of it.
+			for k in 3:
+				var s := fmod(t * 1.4 + k / 3.0, 1.0)
+				var middle := head + Vector2(f * art * 0.12, 0.0)
+				var facing_angle := 0.0 if f > 0.0 else PI
+				_canvas.draw_arc(middle, art * (0.15 + 0.45 * s), facing_angle - 0.6, facing_angle + 0.6, 10, Color(1, 1, 1, 0.8 * (1.0 - s)), maxf(art * 0.04, 1.0), true)
+		"spit":
+			if u > 0.3:
+				var s := (u - 0.3) / 0.7
+				_canvas.draw_circle(head + Vector2(f * s * art * 0.9, s * s * art * 0.3), art * 0.04, Color(1, 1, 1, 0.9 * (1.0 - s)))
+		"chest":
+			# Thumping its chest: little bursts either side.
+			var burst := absf(sin(t * 20.0))
+			var chest := feet - Vector2(0.0, art * 0.5 * float((pose.scale as Vector2).y))
+			for side_sign: float in [-1.0, 1.0]:
+				for k in 3:
+					var angle := (0.0 if side_sign > 0.0 else PI) + (k - 1) * 0.5
+					var from := chest + Vector2(side_sign * art * 0.42, 0.0) + Vector2.from_angle(angle) * art * 0.05
+					_canvas.draw_line(from, from + Vector2.from_angle(angle) * art * 0.12 * burst, Color(1, 1, 1, 0.8), maxf(art * 0.03, 1.0), true)
 
 
 # --- Sea animals -------------------------------------------------------------------
@@ -5257,10 +5386,11 @@ static func land_colors_texture() -> Texture2D:
 
 # --- Birds ---------------------------------------------------------------------
 
-## Birds (Birds: gulls round ports, ships and sea animals; seabirds following
-## ships), drawn from above over everything once zoomed in far enough that a
-## gull's wings are BIRD_MIN_PX across: each a little silhouette in its
-## species' colors, flapping (or gliding), with a faint shadow on the water.
+## Birds (Birds: gulls round ports, ships and sea animals; raptors along the
+## shore at ports; seabirds following ships), drawn from above over
+## everything once zoomed in far enough that a gull's wings are BIRD_MIN_PX
+## across: each a little silhouette in its species' colors, flapping (or
+## gliding), with a faint shadow on the water.
 ## Each bird's way round its flock is its own (steady from the flock's key);
 ## they keep flying while the game's paused.
 func _draw_birds() -> void:
@@ -5281,6 +5411,7 @@ func _draw_birds() -> void:
 		var radius := float(_port_layout(port_id).radius) * scale
 		var flock := birds.port_flock(port_id)
 		_draw_gulls(flock, root, radius * 0.35, radius * 1.15, now, {port = port_id})
+		_draw_raptors(port_id, root, radius, now)
 	# Round ships (gulls, and the seabirds following ships at sea).
 	var reach := view.grow(SHIP_CULL_MARGIN * scale)
 	for ship in GameState.ships:
@@ -5376,6 +5507,212 @@ func _draw_followers(ship: Ship, entry: Dictionary, at: Vector2, heading: float,
 		_bird_hits.append([pos, maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale() * 0.6, BIRD_HIT_MIN_PX), {ship = ship}, flock])
 
 
+## The raptors about a port (Birds.port_raptors()), each going about its day
+## as it really does along a shore, round a marina `radius` px across, its
+## sea out one way and the land the other: sea eagles sit on their perch on
+## the shore, now and then flying out to swoop and snatch a fish off the water
+## and carrying it back; the osprey circles over the water, hovers, plunges
+## feet first with a splash and carries its fish head forward to a perch to
+## eat; golden and wedge-tailed eagles soar high over the land and stoop;
+## buzzards and the like circle on thermals over the land and hang on the
+## wind, hunting below; Swainson's hawks pass over in a kettle, circling up
+## and streaming off; Harris's hawks sit together, then hunt low over the land
+## in a line, taking turns to lead; goshawks and Cooper's hawks sit hidden on
+## the shore and dash off low, flap-flap-glide.
+func _draw_raptors(port_id: String, root: Vector2, radius: float, now: float) -> void:
+	var birds := Birds.shared()
+	var sea := Vector2.from_angle(_port_sea_angle(port_id))
+	var across := sea.orthogonal()
+	var land := -sea
+	for entry: Dictionary in birds.port_raptors(port_id):
+		var id: String = entry.id
+		var info := birds.species(id)
+		var behavior := str(info.get("behavior", "kite"))
+		var count := int(entry.count)
+		var traits := _bird_traits("raptor/%s/%s" % [port_id, id], count)
+		var flock := {count = count, species = [id], key = id}
+		var span := _bird_span(info)
+		# Where it perches on the shore, where it fishes and where it soars over
+		# the land: its own, either side of the marina.
+		var wind := Birds.chance([port_id, "wind"]) * TAU  # Where the wind blows from (hawks hang facing into it).
+		for k in count:
+			var t: PackedFloat32Array = traits[k]
+			var phase := t[0] * TAU
+			var turn := 1.0 if t[3] < 0.5 else -1.0
+			var flank := across * turn
+			var perch := root + land * radius * (1.75 + 0.3 * t[2]) + flank * radius * (0.6 + 0.6 * t[1])
+			var water := root + sea * radius * (1.5 + 0.6 * t[2]) + flank * radius * (0.4 + 0.6 * t[1])
+			var over_land := root + land * radius * (2.6 + 0.8 * t[2]) + flank * radius * 0.6 * t[1]
+			var pos := perch
+			var facing := sea.angle()  # Perched looking out to sea.
+			var wings := 0.24  # Folded.
+			var height := 0.05
+			var fish := false
+			var splash := -1.0
+			match behavior:
+				"snatch":
+					var cycle := 34.0 + 10.0 * t[1]
+					var c := fmod(now / cycle + t[0], 1.0)
+					if c >= 0.55 and c < 0.75:
+						# Out low over the water, dropping to it, and up with a fish.
+						var s := (c - 0.55) / 0.2
+						var out := perch.lerp(water, smoothstep(0.0, 0.7, s))
+						var back := water.lerp(perch, smoothstep(0.7, 1.0, s))
+						pos = out if s < 0.7 else back
+						facing = (water - perch).angle() if s < 0.6 else (perch - water).angle()
+						height = 1.3 - 1.15 * sin(clampf((s - 0.3) / 0.4, 0.0, 1.0) * PI)
+						wings = 0.9 + 0.1 * cos(now * 5.0 + phase)
+						if absf(s - 0.5) < 0.08:
+							splash = (s - 0.42) / 0.16
+							wings = 0.7
+						fish = s > 0.55
+					elif c >= 0.75:
+						# Back on its perch, tearing at its fish.
+						fish = true
+						facing = sea.angle() + 0.3 * sin(now * 3.0 + phase) * turn
+				"plunge":
+					var cycle := 26.0 + 8.0 * t[1]
+					var c := fmod(now / cycle + t[0], 1.0)
+					var round := phase + now * 0.2 * turn
+					var circling := water + Vector2.from_angle(round) * radius * 0.5
+					height = 1.8
+					wings = 1.0
+					if c < 0.3:
+						pos = circling
+						facing = round + PI / 2.0 * turn
+					elif c < 0.36:
+						pos = circling.lerp(water, smoothstep(0.0, 1.0, (c - 0.3) / 0.06))
+						facing = wind
+					elif c < 0.44:
+						pos = water  # Hovering into the wind, looking down.
+						facing = wind
+						wings = 0.65 + 0.35 * absf(sin(now * 16.0 + phase))
+						height = 1.6
+					elif c < 0.47:
+						pos = water
+						facing = wind
+						wings = 0.3
+						height = lerpf(1.6, 0.0, (c - 0.44) / 0.03)
+					elif c < 0.5:
+						pos = water
+						facing = wind
+						wings = 0.45
+						height = 0.0
+						splash = (c - 0.47) / 0.03
+					elif c < 0.66:
+						var s := smoothstep(0.0, 1.0, (c - 0.5) / 0.16)
+						pos = water.lerp(perch, s)
+						facing = (perch - water).angle()
+						height = 0.2 + 1.2 * sin(s * PI)
+						wings = 0.8 + 0.2 * cos(now * 7.0 + phase)
+						fish = true
+					else:
+						fish = c < 0.9  # Eating it on its perch.
+						facing = land.angle() + 0.3 * sin(now * 3.0 + phase)
+				"stoop":
+					var cycle := 40.0 + 10.0 * t[1]
+					var c := fmod(now / cycle + t[0], 1.0)
+					var round := phase + now * (0.07 + 0.03 * t[1]) * turn
+					var circling := over_land + Vector2.from_angle(round) * radius * (0.9 + 0.4 * t[2])
+					pos = circling
+					facing = round + PI / 2.0 * turn
+					wings = 1.0
+					height = 3.2
+					if c >= 0.8 and c < 0.92:
+						var s := (c - 0.8) / 0.12
+						var ground := over_land + flank * radius * 0.3
+						var dip := smoothstep(0.0, 0.45, s) * (1.0 - smoothstep(0.55, 1.0, s))
+						pos = circling.lerp(ground, dip)
+						height = lerpf(3.2, 0.1, dip)
+						wings = lerpf(1.0, 0.3, dip)
+						facing = (ground - circling).angle() if s < 0.5 else (circling - ground).angle()
+				"kite":
+					var cycle := 24.0 + 8.0 * t[1]
+					var c := fmod(now / cycle + t[0], 1.0)
+					var round := phase + now * 0.16 * turn
+					var circling := over_land + Vector2.from_angle(round) * radius * (0.6 + 0.3 * t[2])
+					wings = 1.0
+					height = 1.8
+					if c < 0.5:
+						pos = circling  # Circling on a thermal.
+						facing = round + PI / 2.0 * turn
+					elif c < 0.56:
+						pos = circling.lerp(over_land, smoothstep(0.0, 1.0, (c - 0.5) / 0.06))
+						facing = wind
+					elif c < 0.8:
+						pos = over_land + Vector2(sin(now * 1.7 + phase), cos(now * 1.3 + phase)) * span * 0.05
+						facing = wind  # Hanging on the wind, wings trembling.
+						wings = 0.9 + 0.1 * sin(now * 12.0 + phase)
+						height = 1.5
+					elif c < 0.86:
+						var s := (c - 0.8) / 0.06
+						pos = over_land.lerp(perch, smoothstep(0.0, 1.0, s))
+						facing = (perch - over_land).angle()
+						height = lerpf(1.5, 0.05, s)
+					else:
+						pos = perch  # On a post, watching the ground.
+						facing = land.angle()
+						wings = 0.24
+						height = 0.05
+				"kettle":
+					# Circling up together on a thermal over the land, then
+					# streaming off one after another on their way.
+					var cycle := 60.0
+					var c := fmod(now / cycle, 1.0)
+					var round := phase + now * 0.4
+					var thermal := root + land * radius * 3.0
+					pos = thermal + Vector2.from_angle(round) * radius * (0.3 + 0.6 * t[2])
+					facing = round + PI / 2.0
+					wings = 1.0
+					height = 1.2 + 2.0 * c
+					var leave := 0.7 + 0.25 * t[1]
+					if c > leave:
+						var s := (c - leave) / (1.0 - leave)
+						var way := Vector2.from_angle(Birds.chance([port_id, "kettle"]) * TAU)
+						pos = pos.lerp(thermal + way * radius * 5.0, s)
+						facing = way.angle()
+				"pack":
+					# Perched together, then off hunting low over the land in a
+					# line, taking turns to lead.
+					var cycle := 30.0
+					var c := fmod(now / cycle, 1.0)
+					var lead := posmod(floori(now / cycle) + k, count)
+					pos = root + land * radius * 1.8 + across * radius * (0.8 + 0.18 * k)
+					facing = land.angle()
+					if c > 0.6:
+						var s := (c - 0.6) / 0.4
+						var loop := over_land + Vector2.from_angle(s * TAU + PI) * radius * 0.9
+						var trail := s - 0.04 * lead
+						var at_trail := over_land + Vector2.from_angle(trail * TAU + PI) * radius * 0.9
+						pos = pos.lerp(at_trail, sin(s * PI))
+						facing = (loop - pos).angle() if loop.distance_to(pos) > 0.5 else facing + PI / 2.0
+						wings = 0.85 + 0.15 * cos(now * 9.0 + phase)
+						height = lerpf(0.05, 0.5, sin(s * PI))
+				"perch":
+					var cycle := 28.0 + 8.0 * t[1]
+					var c := fmod(now / cycle + t[0], 1.0)
+					facing = land.angle() + 0.4 * turn
+					if c >= 0.8:
+						# A dash low along the shore and back: flap-flap-glide.
+						var s := (c - 0.8) / 0.2
+						var far := perch + flank * radius * 1.4 + land * radius * 0.4
+						pos = perch.lerp(far, sin(s * PI))
+						facing = (far - perch).angle() if s < 0.5 else (perch - far).angle()
+						wings = 1.0 if fmod(now * 2.5, 1.0) > 0.6 else 0.7 + 0.3 * absf(cos(now * 18.0))
+						height = lerpf(0.05, 0.4, sin(s * PI))
+			if splash >= 0.0:
+				for ring in 2:
+					var r := clampf(splash - ring * 0.3, 0.0, 1.0)
+					if r > 0.0:
+						_canvas.draw_arc(pos, span * (0.15 + 0.35 * r), 0.0, TAU, 16, Color(1, 1, 1, 0.75 * (1.0 - r)), maxf(span * 0.04, 1.0), true)
+			_draw_bird(pos, facing, info, wings, height)
+			if fish:
+				# Held head forward under it, its tail showing behind the bird's.
+				var back := Vector2.from_angle(facing)
+				_canvas.draw_line(pos - back * span * 0.26, pos - back * span * 0.44, Color(0.78, 0.82, 0.86), maxf(span * 0.07, 1.5), true)
+			_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
+
+
 ## Steady numbers for each bird of a flock (0 to 1: where it starts round,
 ## how fast, how far out, which way, its rhythm), made once per flock.
 func _bird_traits(key: String, count: int) -> Array:
@@ -5389,39 +5726,88 @@ func _bird_traits(key: String, count: int) -> Array:
 	_bird_trait_cache[key] = traits
 	return traits
 
-## One bird seen from above at a screen point, heading a way (see draw_bird()).
-func _draw_bird(at: Vector2, heading: float, info: Dictionary, wings: float) -> void:
-	draw_bird(_canvas, at, heading, info, wings, maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale(), BIRD_MIN_PX))
+## One bird seen from above at a screen point, heading a way (see draw_bird()),
+## `height` times as high as a gull's usual (its shadow that much further off).
+func _draw_bird(at: Vector2, heading: float, info: Dictionary, wings: float, height := 1.0) -> void:
+	draw_bird(_canvas, at, heading, info, wings, _bird_span(info), true, height)
+
+
+## A bird's wingspan on screen (px).
+func _bird_span(info: Dictionary) -> float:
+	return maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale(), BIRD_MIN_PX)
 
 
 ## A bird seen from above on any canvas item, at a point, heading a way,
 ## `span` px from wingtip to wingtip: body and tail in its mantle color, its
 ## head and bill (a pelican's long), wings out to its span (times `wings`,
-## shorter as they beat up and down) with dark tips, and its shadow below.
+## shorter as they beat up and down or fold) with dark tips, and its shadow
+## below (`height` times as far off as usual). A raptor (one with a tail
+## color) has broad wings with fingered tips (an osprey's bent at the wrist),
+## a fanned tail and a hooked bill; some have pale or chestnut shoulders.
 ## Leaves the canvas item's transform reset.
-static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dictionary, wings: float, span: float, shadow := true) -> void:
+static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dictionary, wings: float, span: float, shadow := true, height := 1.0) -> void:
 	var colors: Dictionary = info.get("colors", {})
 	var mantle := Color.from_string(str(colors.get("mantle", "#aab4bd")), Color.GRAY)
 	var head := Color.from_string(str(colors.get("head", "#f4f4f2")), Color.WHITE)
 	var tip := Color.from_string(str(colors.get("tip", "#1e1e1e")), Color.BLACK)
 	var bill := Color.from_string(str(colors.get("bill", "#e8c440")), Color.YELLOW)
+	var raptor := colors.has("tail")
 	var half := span * 0.5 * wings
-	var wing := PackedVector2Array([Vector2(span * 0.06, 0.0), Vector2(-span * 0.04, half), Vector2(-span * 0.13, half * 0.96), Vector2(-span * 0.1, 0.0)])
-	var tip_part := PackedVector2Array([Vector2(-span * 0.01, half * 0.7), Vector2(-span * 0.04, half), Vector2(-span * 0.13, half * 0.96), Vector2(-span * 0.11, half * 0.7)])
+	var wing: PackedVector2Array
+	var tip_part: PackedVector2Array
+	var tail := PackedVector2Array()
+	if raptor:
+		var bent := str(info.get("behavior", "")) == "plunge"
+		# Broad and square (bent forward at the wrist for an osprey), the tip
+		# spread into fingers.
+		var wrist := Vector2(span * (0.11 if bent else 0.07), half * 0.5)
+		wing = PackedVector2Array([Vector2(span * 0.07, 0.0), wrist, Vector2(span * 0.03, half * 0.86), Vector2(-span * 0.15, half * 0.86),
+			Vector2(-span * (0.1 if bent else 0.17), half * 0.5), Vector2(-span * 0.13, 0.0)])
+		tip_part = PackedVector2Array([Vector2(span * 0.03, half * 0.84)])
+		for k in 5:
+			var x := span * (0.03 - 0.045 * k)
+			tip_part.append(Vector2(x, half * (0.9 + 0.1 * sin(PI * (k + 0.5) / 5.0))))
+			tip_part.append(Vector2(x - span * 0.022, half * 0.88))
+		tip_part.append(Vector2(-span * 0.16, half * 0.84))
+		var fan := 0.07 if bent else 0.11
+		tail = PackedVector2Array([Vector2(-span * 0.18, span * 0.045), Vector2(-span * 0.34, span * fan), Vector2(-span * 0.36, 0.0),
+			Vector2(-span * 0.34, -span * fan), Vector2(-span * 0.18, -span * 0.045)])
+	else:
+		wing = PackedVector2Array([Vector2(span * 0.06, 0.0), Vector2(-span * 0.04, half), Vector2(-span * 0.13, half * 0.96), Vector2(-span * 0.1, 0.0)])
+		tip_part = PackedVector2Array([Vector2(-span * 0.01, half * 0.7), Vector2(-span * 0.04, half), Vector2(-span * 0.13, half * 0.96), Vector2(-span * 0.11, half * 0.7)])
 	if shadow:
-		# Down and to the side on the water.
-		canvas.draw_set_transform(at + Vector2(span * 0.45, span * 0.55), heading, Vector2.ONE)
-		canvas.draw_colored_polygon(wing, Color(0, 0, 0, 0.16))
-		canvas.draw_colored_polygon(_mirror_y(wing), Color(0, 0, 0, 0.16))
+		# Down and to the side on the water (further off the higher it is).
+		var off := Vector2(span * 0.45, span * 0.55) * height
+		var dark := Color(0, 0, 0, 0.16 / sqrt(maxf(height, 0.5)))
+		canvas.draw_set_transform(at + off, heading, Vector2.ONE)
+		canvas.draw_colored_polygon(wing, dark)
+		canvas.draw_colored_polygon(_mirror_y(wing), dark)
+		if raptor:
+			canvas.draw_colored_polygon(tail, dark)
 	canvas.draw_set_transform(at, heading, Vector2.ONE)
+	if raptor:
+		canvas.draw_colored_polygon(tail, Color.from_string(str(colors.tail), mantle))
 	canvas.draw_colored_polygon(wing, mantle)
 	canvas.draw_colored_polygon(_mirror_y(wing), mantle)
+	if colors.has("shoulder"):
+		var shoulder := Color.from_string(str(colors.shoulder), mantle)
+		var patch := PackedVector2Array([Vector2(span * 0.05, span * 0.05), Vector2(span * 0.05, half * 0.45), Vector2(-span * 0.03, half * 0.45), Vector2(-span * 0.03, span * 0.05)])
+		canvas.draw_colored_polygon(patch, shoulder)
+		canvas.draw_colored_polygon(_mirror_y(patch), shoulder)
 	canvas.draw_colored_polygon(tip_part, tip)
 	canvas.draw_colored_polygon(_mirror_y(tip_part), tip)
 	var long_bill := str(info.get("behavior", "")) == "line"
-	canvas.draw_colored_polygon(PackedVector2Array([Vector2(span * 0.16, 0.0), Vector2(span * 0.04, span * 0.06), Vector2(-span * 0.22, span * 0.05), Vector2(-span * 0.3, 0.0), Vector2(-span * 0.22, -span * 0.05), Vector2(span * 0.04, -span * 0.06)]), mantle.lerp(head, 0.25))
-	canvas.draw_circle(Vector2(span * 0.17, 0.0), span * 0.055, head)
-	canvas.draw_line(Vector2(span * 0.21, 0.0), Vector2(span * (0.36 if long_bill else 0.27), 0.0), bill, maxf(span * 0.03, 1.0))
+	var body := mantle.lerp(head, 0.25)
+	if raptor:
+		body = mantle.lerp(Color.from_string(str(colors.get("belly", colors.mantle)), mantle), 0.2)
+	canvas.draw_colored_polygon(PackedVector2Array([Vector2(span * 0.16, 0.0), Vector2(span * 0.04, span * 0.06), Vector2(-span * 0.22, span * 0.05), Vector2(-span * 0.3, 0.0), Vector2(-span * 0.22, -span * 0.05), Vector2(span * 0.04, -span * 0.06)]), body)
+	if raptor:
+		# A big head and a short hooked bill.
+		canvas.draw_circle(Vector2(span * 0.17, 0.0), span * 0.065, head)
+		canvas.draw_colored_polygon(PackedVector2Array([Vector2(span * 0.21, -span * 0.025), Vector2(span * 0.27, 0.0), Vector2(span * 0.21, span * 0.025)]), bill)
+	else:
+		canvas.draw_circle(Vector2(span * 0.17, 0.0), span * 0.055, head)
+		canvas.draw_line(Vector2(span * 0.21, 0.0), Vector2(span * (0.36 if long_bill else 0.27), 0.0), bill, maxf(span * 0.03, 1.0))
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 

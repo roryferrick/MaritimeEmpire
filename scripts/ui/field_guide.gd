@@ -3,12 +3,13 @@ class_name FieldGuide
 extends Control
 ## The field guide (the paw button at the map's top right): every bird, sea
 ## animal and land animal in the game, a tab each. Birds (data/birds.json):
-## the gulls and the seabirds, each with its picture, Latin name, where and
-## when to see it, and a fact. Sea animals (data/sea_life.json): each with its
-## picture, size, the waters its pods visit, and a fact. Land animals (the
-## drawings on the map: data/birds.json land_animals): each with its picture,
-## where it lives, and a fact. Over the map, dimming it; Esc, X or a click
-## outside closes it.
+## the gulls, the seabirds and the raptors, each with its picture, Latin
+## name, where and when to see it, and a fact. Sea animals
+## (data/sea_life.json): each with its picture, size, the waters its pods
+## visit, and a fact. Land animals (the groups roaming the map:
+## data/birds.json land_animals): each with its picture, where it lives, its
+## habits, and a fact. Over the map, dimming it; Esc, X or a click outside
+## closes it.
 
 const PANEL_SIZE := Vector2(820, 640)
 const TEXT_WIDTH := 600.0
@@ -90,6 +91,9 @@ func _show(tab: int) -> void:
 			_heading("Seabirds", "Out at sea they take up following ships for a few hours at a time, where they are that season: condors along the coasts, albatrosses and shearwaters over the open ocean, terns and pelicans nearer land.")
 			for id: String in birds.seabirds:
 				_bird_entry(birds.seabirds[id])
+			_heading("Eagles, hawks and the osprey", "Along the shore at ports, by day, each hunting its own way: sea eagles sit on a perch and swoop out to snatch fish off the water, the osprey hovers and plunges in feet first, golden eagles soar high and stoop, buzzards hang on the wind over the land, Harris's hawks hunt in packs, goshawks dash out from cover, and Swainson's hawks pass over in great circling kettles on their way to and from Argentina.")
+			for id: String in birds.raptors:
+				_bird_entry(birds.raptors[id])
 		1:
 			var sea := SeaLife.shared()
 			for id: String in sea.species:
@@ -165,8 +169,15 @@ func _sea_entry(sea: SeaLife, id: String) -> void:
 
 
 func _land_entry(id: String, info: Dictionary) -> void:
-	_entry(_picture(MapView.DECOR_ART_DIR + id + ".svg", Vector2.ONE * ICON_SIZE), str(info.get("name", id)), "",
-		["Where: %s" % info.get("where", ""), str(info.get("fact", ""))])
+	var group: Array = info.get("group", [1, 1])
+	var subtitle := "On its own" if int(group[1]) <= 1 else "In groups of %d to %d" % [int(group[0]), int(group[1])]
+	if int(group[0]) <= 1 and int(group[1]) > 1:
+		subtitle = "Alone, or up to %d together" % int(group[1])
+	var lines: Array[String] = ["Where: %s" % info.get("where", "")]
+	if info.has("habits"):
+		lines.append(str(info.habits))
+	lines.append(str(info.get("fact", "")))
+	_entry(_picture(MapView.DECOR_ART_DIR + id + ".svg", Vector2.ONE * ICON_SIZE), str(info.get("name", id)), subtitle, lines)
 
 
 static func _picture(path: String, side: Vector2) -> Control:
