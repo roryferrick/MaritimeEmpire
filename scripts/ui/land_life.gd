@@ -72,7 +72,8 @@ static func tree_spot(key: String, info: Dictionary) -> Variant:
 
 ## Every member of a patch's group now: [{at (art widths from the spot, its
 ## feet), pivot (where on the drawing it turns, a share of its side), rot,
-## scale, facing (1 right, -1 left on screen), size (of the art), act, u (how
+## scale, facing (1 right, -1 left on screen), size (of the art), act, moving
+## (its gait or travel act while it's on its way, else ""), u (how
 ## far through it, 0 to 1), t (s into it)}].
 func poses(key: String, info: Dictionary, now: float) -> Array:
 	var out := []
@@ -199,7 +200,7 @@ func _pose(info: Dictionary, spell: Dictionary, into: float, young: bool) -> Dic
 	var faces := str(info.get("faces", "left"))
 	var head_x := 0.2 if faces == "left" else (0.8 if faces == "right" else 0.5)
 	var pose := {at = spell.end, pivot = Vector2(0.5, FEET), rot = 0.0, scale = Vector2.ONE, facing = float(spell.facing),
-		size = float(info.get("size", 0.8)) * (YOUNG_SIZE if young else 1.0), act = "rest", u = 0.0, t = into, head = Vector2(head_x, 0.35)}
+		size = float(info.get("size", 0.8)) * (YOUNG_SIZE if young else 1.0), act = "rest", moving = "", u = 0.0, t = into, head = Vector2(head_x, 0.35)}
 	var f := float(spell.facing)
 	var start: Vector2 = spell.start
 	var end: Vector2 = spell.end
@@ -218,6 +219,7 @@ func _pose(info: Dictionary, spell: Dictionary, into: float, young: bool) -> Dic
 			var gone := lerpf(u, smoothstep(0.0, 1.0, u), 0.35)
 			gone = clampf(gone, 0.0, 1.0)
 			pose.at = start.lerp(end, gone)
+			pose.moving = str(spell.style)
 			_gait(pose, str(spell.style), gone * distance, u, f, head_x)
 			return pose
 		act_from = travel_s

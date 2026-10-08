@@ -39,6 +39,7 @@ func _ready() -> void:
 	_map.storm_clicked.connect(_open_storm_popup)
 	_map.pod_clicked.connect(_open_pod_popup)
 	_map.birds_clicked.connect(_open_birds_popup)
+	_map.animals_clicked.connect(_open_animals_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -336,6 +337,20 @@ func _add_zoom_buttons() -> void:
 
 
 ## A flock of birds clicked: what birds are round what it's round, following it.
+## A land animal group's popup, following its patch on the map.
+func _open_animals_popup(key: String, kind: String) -> void:
+	var popup := LandLifePopup.new()
+	popup.key = key
+	popup.kind = kind
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at := _map.animal_group_screen_position(key)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)
+
+
 func _open_birds_popup(about: Dictionary, _flock: Dictionary) -> void:
 	var popup := BirdsPopup.new()
 	popup.about = about

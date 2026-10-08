@@ -36,8 +36,9 @@ const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head o
 ## Each group's rows sit on a faint band of its ship line's color.
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0
-## The Compare companies table's columns.
+## The Compare companies table's columns, and how big (px) each company's CEO's face is in it.
 const COMPARE_COLUMNS: Array[String] = ["Company", "Level", "Money", "Ships", "Hubs", "Profit, last 10 min", "Profit, all time", "Delivered"]
+const CEO_FACE_SIZE := 34.0
 ## Choices for "Keep in the bank" (0 = spend everything on cargo).
 const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000]
 
@@ -375,9 +376,10 @@ func _show_page(compare: bool) -> void:
 	_refresh()
 
 
-## A row per company, richest first: its name (in its color; this player's
-## marked), level, money, ships, hubs, operating profit over the last 10
-## minutes and all time, and units delivered.
+## A row per company, richest first: its CEO's face (their name on hover) and
+## its name (in its color; this player's marked), level, money, ships, hubs,
+## operating profit over the last 10 minutes and all time, and units
+## delivered.
 func _fill_comparison() -> void:
 	_clear(_compare_grid)
 	for column: String in COMPARE_COLUMNS:
@@ -385,7 +387,16 @@ func _fill_comparison() -> void:
 	var companies := GameState.all_companies().duplicate()
 	companies.sort_custom(func(a: Company, b: Company) -> bool: return a.money > b.money)
 	for each: Company in companies:
-		var name := _add_label(_compare_grid, each.name + ("  (you)" if each == GameState.company else ""))
+		# Its CEO's face, then its name.
+		var cell := HBoxContainer.new()
+		cell.add_theme_constant_override(&"separation", 8)
+		_compare_grid.add_child(cell)
+		var face := Portrait.new(each.ceo, true)
+		face.custom_minimum_size = Vector2.ONE * CEO_FACE_SIZE
+		face.tooltip_text = str(each.ceo.get("name", ""))
+		cell.add_child(face)
+		var name := _add_label(cell, each.name + ("  (you)" if each == GameState.company else ""))
+		name.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		name.add_theme_color_override(&"font_color", GameState.company_color_value(each.color))
 		_add_label(_compare_grid, str(each.level()))
 		_add_label(_compare_grid, Fmt.money(each.money))

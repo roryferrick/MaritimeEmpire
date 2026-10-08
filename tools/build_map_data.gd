@@ -13,6 +13,10 @@ extends SceneTree
 ##   Godot --headless --path . -s tools/build_map_data.gd
 ## "-- --biomes-only" redraws just the biome patches into the existing
 ## data/world_map.res (after changing BIOME_SIMPLIFY, say), in about a minute.
+## "-- --animals-only" puts the animals (ANIMALS) into the existing map's
+## land drawings again and works out every drawing's clearance (in seconds);
+## add "--nudge" to have it suggest a spot further inland for any animal too
+## near the water to show (see ANIMAL_ROOM).
 ## While working on the routing, "-- --lanes-only --pairs PUS-YOK,DXB-HKG" (or
 ## "--ports CPH,GDN" for every lane to or from those ports)
 ## re-routes just those lanes into the existing data/sea_lanes.res (in under a
@@ -81,33 +85,33 @@ const WAVES_CHANCE := 0.6
 const WAVES_TIERS := 3
 ## Animals where they live: [art name, lon, lat, tier].
 const ANIMALS := [
-	["penguin", 40.0, -69.5, 1], ["penguin", -60.5, -64.0, 2], ["penguin", 168.0, -77.0, 2], ["penguin", -69.0, -52.3, 3], ["penguin", 18.6, -34.1, 3],
-	["polar_bear", -95.0, 68.0, 1], ["polar_bear", -150.0, 69.8, 2], ["polar_bear", 17.0, 78.6, 2], ["polar_bear", -40.0, 73.0, 2], ["polar_bear", 140.0, 71.0, 3],
+	["penguin", 42.39, -69.57, 1], ["penguin", -60.29, -64.16, 2], ["penguin", 170.80, -76.60, 2], ["penguin", -69.01, -52.42, 3], ["penguin", 18.62, -34.23, 3],
+	["polar_bear", -92.86, 67.52, 1], ["polar_bear", -149.81, 69.51, 2], ["polar_bear", 18.22, 78.80, 2], ["polar_bear", -40.00, 73.00, 2], ["polar_bear", 140.34, 70.56, 3],
 	["camel", 12.0, 25.0, 1], ["camel", 46.0, 22.0, 2], ["camel", 105.0, 43.0, 2], ["camel", 28.0, 21.0, 3],
-	["elephant", 37.5, -2.8, 1], ["elephant", 24.0, -19.0, 2], ["elephant", 77.0, 12.0, 2],
-	["giraffe", 35.5, -4.0, 2], ["giraffe", 20.0, -21.0, 3],
+	["elephant", 37.51, -2.65, 1], ["elephant", 24.0, -19.0, 2], ["elephant", 76.80, 11.51, 2],
+	["giraffe", 35.35, -4.59, 2], ["giraffe", 20.0, -21.0, 3],
 	["lion", 34.8, -2.3, 2], ["lion", 25.0, -23.5, 3],
-	["zebra", 36.5, -6.5, 3], ["zebra", 27.0, -17.5, 3],
+	["zebra", 36.5, -6.5, 3], ["zebra", 26.41, -17.11, 3],
 	["kangaroo", 134.0, -25.0, 1], ["kangaroo", 145.5, -28.0, 2], ["kangaroo", 121.0, -28.0, 2],
 	["koala", 150.5, -29.5, 2],
 	["panda", 103.5, 30.5, 1],
-	["tiger", 80.0, 22.0, 2], ["tiger", 135.5, 46.0, 2], ["tiger", 89.0, 22.3, 3],
-	["bison", -101.0, 44.0, 1], ["bison", -110.5, 44.6, 3],
-	["moose", -100.0, 56.0, 2], ["moose", -74.0, 49.5, 2], ["moose", 18.0, 64.0, 2], ["moose", 128.0, 61.0, 3],
+	["tiger", 80.0, 22.0, 2], ["tiger", 135.5, 46.0, 2], ["tiger", 88.97, 23.08, 3],
+	["bison", -101.32, 43.68, 1], ["bison", -110.24, 45.52, 3],
+	["moose", -98.34, 55.99, 2], ["moose", -73.39, 49.13, 2], ["moose", 17.94, 63.91, 2], ["moose", 128.0, 61.0, 3],
 	["brown_bear", -152.0, 62.0, 2], ["brown_bear", 45.0, 62.0, 2], ["brown_bear", 159.0, 56.5, 2],
-	["reindeer", 25.0, 68.5, 1], ["reindeer", 100.0, 68.0, 2], ["reindeer", -118.0, 64.0, 2],
-	["llama", -68.5, -16.5, 1], ["llama", -72.0, -13.8, 3],
+	["reindeer", 24.23, 68.71, 1], ["reindeer", 100.0, 68.0, 2], ["reindeer", -118.15, 63.99, 2],
+	["llama", -68.06, -17.08, 1], ["llama", -72.0, -13.8, 3],
 	["toucan", -62.0, -4.0, 1], ["toucan", -71.0, 0.0, 2], ["toucan", -52.0, -9.0, 3],
-	["gorilla", 13.0, 0.5, 2], ["gorilla", 29.4, -1.5, 3],
-	["orangutan", 114.0, 1.0, 2], ["orangutan", 98.0, 3.5, 3],
-	["kiwi", 175.5, -39.0, 2], ["kiwi", 170.0, -44.0, 3],
+	["gorilla", 13.0, 0.5, 2], ["gorilla", 29.33, -1.16, 3],
+	["orangutan", 114.0, 1.0, 2], ["orangutan", 98.03, 3.44, 3],
+	["kiwi", 175.12, -39.25, 2], ["kiwi", 169.69, -43.93, 3],
 	["lemur", 46.5, -20.0, 2],
 	# Water buffalo on the floodplains of Australia's Top End, and a pizza on Albuquerque.
-	["water_buffalo", 132.5, -12.6, 2], ["water_buffalo", 131.0, -13.4, 3],
+	["water_buffalo", 132.82, -13.23, 2], ["water_buffalo", 131.29, -13.52, 3],
 	["pizza", -106.65, 35.08, 2],
 	# The resplendent quetzal (perched) in the cloud forests of Guatemala and
 	# Costa Rica. (Eagles, hawks and ospreys fly with the seabirds: Birds.)
-	["quetzal", -90.4, 15.4, 2], ["quetzal", -84.8, 10.3, 2],
+	["quetzal", -90.4, 15.4, 2], ["quetzal", -84.33, 10.57, 2],
 ]
 const LANES_OUT := "res://data/sea_lanes.res"
 
@@ -276,6 +280,10 @@ func _init() -> void:
 		_resplice_lanes()
 		quit()
 		return
+	if "--animals-only" in args:
+		_replace_animals("--nudge" in args)
+		quit()
+		return
 	if "--biomes-only" in args:
 		_rebuild_biomes("--dry" in args)
 		quit()
@@ -375,6 +383,68 @@ func _build_map(land_polygons: Array) -> void:
 	Geo.tessellate_map(map)
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
+
+
+## The animals (ANIMALS) again, into the existing map's land drawings (see
+## --animals-only): they're its first drawings, in order; any after them that
+## were animals once (in the map, not in ANIMALS any more) go. Then every
+## drawing's clearance again. With nudge, an animal too near the water to show
+## (less than ANIMAL_ROOM of real distance from it) is walked inland, away
+## from the nearest shore, till it has that room, and the spot is printed to
+## go into ANIMALS (the map gets it too).
+func _replace_animals(nudge: bool) -> void:
+	var map: WorldMapData = load(MAP_OUT)
+	var count := ANIMALS.size()
+	for k in count:
+		assert(map.decor_kind_names[map.decor_kinds[k]] == ANIMALS[k][0], "Drawing %d isn't a %s" % [k, ANIMALS[k][0]])
+		map.decor_positions[k] = Geo.project(Vector2(ANIMALS[k][1], ANIMALS[k][2]))
+		map.decor_tiers[k] = int(ANIMALS[k][3])
+	var animal_names := {}
+	for animal: Array in ANIMALS:
+		animal_names[animal[0]] = true
+	var plants := ["acacia", "cactus", "conifer", "deciduous", "dunes", "grass", "mountain", "mountain_snow", "palm", "rainforest", "red_rock", "shrub", "waves"]
+	while count < map.decor_positions.size() and not plants.has(map.decor_kind_names[map.decor_kinds[count]]) and not animal_names.has(map.decor_kind_names[map.decor_kinds[count]]):
+		print("  Dropped a %s" % map.decor_kind_names[map.decor_kinds[count]])
+		map.decor_positions.remove_at(count)
+		map.decor_kinds.remove_at(count)
+		map.decor_tiers.remove_at(count)
+	_add_decor_clearance(map)
+	if nudge:
+		var shores := map.coast_segments.duplicate()
+		for triangles in map.lake_triangles:
+			shores.append_array(_outline_edges(triangles))
+		for k in ANIMALS.size():
+			var p := map.decor_positions[k]
+			var want := ANIMAL_ROOM * cosh(deg_to_rad(p.y))  # (Projected degrees shrink on the globe away from the equator.)
+			if map.decor_clearance[k] >= want:
+				continue
+			var start := p
+			for step in 80:
+				var nearest := _nearest_on(shores, p)
+				var room := nearest.distance_to(p)
+				if room >= want:
+					break
+				p += (p - nearest).normalized() * 0.05 * cosh(deg_to_rad(p.y))
+			map.decor_positions[k] = p
+			var at := Geo.unproject(p)
+			print("  %s at (%s, %s): to (%.2f, %.2f)" % [ANIMALS[k][0], ANIMALS[k][1], ANIMALS[k][2], at.x, at.y])
+		_add_decor_clearance(map)
+	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % MAP_OUT)
+
+
+## The nearest point to p on any of the shore segments (pairs of points).
+static func _nearest_on(shores: PackedVector2Array, p: Vector2) -> Vector2:
+	var best := Vector2.INF
+	for i in range(0, shores.size(), 2):
+		var a := shores[i]
+		var b := shores[i + 1]
+		if absf(a.x - p.x) > 4.0 or absf(a.y - p.y) > 8.0:
+			continue
+		var q := Geometry2D.get_closest_point_to_segment(p, a, b)
+		if q.distance_squared_to(p) < best.distance_squared_to(p):
+			best = q
+	return best
 
 
 ## The biome patches again, into the existing map (see --biomes-only); dry, only
@@ -571,6 +641,10 @@ const BIOME_MIN_AREA := 0.12
 ## Drawings' distance to the shore is looked for this far (projected degrees), in
 ## buckets this size.
 const DECOR_CLEARANCE_MAX := 3.0
+## How far (real degrees) an animal's spot should be from the water so it
+## shows from mid zoom in (see --animals-only --nudge): a little more than its size on
+## screen at 50 px a degree.
+const ANIMAL_ROOM := 0.9
 const CLEARANCE_BUCKET := 0.5
 
 

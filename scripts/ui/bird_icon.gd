@@ -14,4 +14,7 @@ func _init(for_info: Dictionary, side := 44.0) -> void:
 
 
 func _draw() -> void:
+	if info.has("raft"):
+		MapView.draw_duck(self, size / 2.0 + Vector2(0, size.y * 0.08), -PI / 2.0, info, minf(size.x, size.y) * 1.6, false)  # A sea duck, swimming.
+		return
 	MapView.draw_bird(self, size / 2.0 + Vector2(0, size.y * 0.06), -PI / 2.0, info, 1.0, minf(size.x, size.y) * 0.95, false)

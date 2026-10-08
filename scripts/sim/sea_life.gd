@@ -25,6 +25,9 @@ const RAMP_DAYS := 4.0
 const MONTH_STARTS := [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
 
 static var _shared: SeaLife = null
+## The calendar year _year_day() last worked in: its start and end (unix).
+static var _year_start := INF
+static var _year_end := -INF
 
 ## id -> {name, plural, word, kind, art, length_px, spacing_px, shown, surface, breach, length_m, fact}.
 var species := {}
@@ -43,6 +46,8 @@ var _task := -1
 var _ready := false
 ## "from>to" -> [points (lon, lat), miles along to each point].
 var _paths := {}
+## Wander spots worked out (see _spot()).
+var _spots := {}
 
 
 ## The one SeaLife (loaded the first time it's asked for).
@@ -130,10 +135,14 @@ func _place(pod_index: int, unix: float) -> Dictionary:
 
 ## The day of the year (0 to 365) at a calendar time, a leap year squeezed to 365 days.
 static func _year_day(unix: float) -> float:
-	var date := Time.get_datetime_dict_from_unix_time(int(unix))
-	var start := Time.get_unix_time_from_datetime_dict({year = date.year, month = 1, day = 1, hour = 0, minute = 0, second = 0})
-	var end := Time.get_unix_time_from_datetime_dict({year = date.year + 1, month = 1, day = 1, hour = 0, minute = 0, second = 0})
-	return (unix - start) / float(end - start) * 365.0
+	# The year's start and end are kept (asked for every pod, every frame).
+	if unix < _year_start or unix >= _year_end:
+		var date := Time.get_datetime_dict_from_unix_time(int(unix))
+		var start := Time.get_unix_time_from_datetime_dict({year = date.year, month = 1, day = 1, hour = 0, minute = 0, second = 0})
+		var end := Time.get_unix_time_from_datetime_dict({year = date.year + 1, month = 1, day = 1, hour = 0, minute = 0, second = 0})
+		_year_start = start
+		_year_end = end
+	return (unix - _year_start) / (_year_end - _year_start) * 365.0
 
 
 ## Where in its area a pod has wandered to (nm east and north of the middle):
@@ -146,13 +155,21 @@ func _wander(pod_index: int, center: Vector2, radius_nm: float, days: float) -> 
 
 
 func _spot(pod_index: int, center: Vector2, radius_nm: float, leg: int) -> Vector2:
+	var key := [pod_index, center, radius_nm, leg]
+	if _spots.has(key):
+		return _spots[key]  # (The same every time: kept, as it's asked for every frame.)
+	if _spots.size() > 4096:
+		_spots.clear()
+	var found := Vector2.ZERO
 	var rng := RandomNumberGenerator.new()
 	for attempt in 6:
 		rng.seed = hash([pod_index, leg, attempt])
 		var offset := Vector2.from_angle(rng.randf() * TAU) * sqrt(rng.randf()) * radius_nm * WANDER_SHARE
 		if is_sea(_offset(center, offset)):
-			return offset
-	return Vector2.ZERO
+			found = offset
+			break
+	_spots[key] = found
+	return found
 
 
 ## A (lon, lat) point moved some nm east and north.

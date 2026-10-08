@@ -19,6 +19,10 @@ extends RefCounted
 ## Raptors (eagles, hawks, the osprey) never follow ships: they live along
 ## the shore, and a port in a species' range that month has some about it by
 ## day, in some stretches of raptor_hours: perched, fishing, soaring.
+##
+## Sea ducks (eiders and scoters) raft on the sea off ports where a species
+## is that month, in stretches of sea_duck_hours, day and night; on their
+## migrations (seasons marked moving) they pass in long low lines instead.
 
 const DATA_PATH := "res://data/birds.json"
 const MONTH_SECONDS := 86400.0
@@ -48,14 +52,20 @@ static var _shared: Birds
 var gulls := {}
 var seabirds := {}
 var raptors := {}
+var sea_ducks := {}
 var land_animals := {}
 var gull_hours := 3.0
 var seabird_hours := 6.0
 var raptor_hours := 4.0
+var sea_duck_hours := 12.0
 
 ## Ships loading or unloading at each port, as of _busy_time (see _busy()).
 var _busy_ports := {}
 var _busy_time := -1
+
+## Answers kept for a game minute (see _remembered()), and that minute.
+var _memo := {}
+var _memo_minute := -1
 
 
 static func shared() -> Birds:
@@ -70,15 +80,17 @@ func _init() -> void:
 		gulls = data.get("gulls", {})
 		seabirds = data.get("seabirds", {})
 		raptors = data.get("raptors", {})
+		sea_ducks = data.get("sea_ducks", {})
 		land_animals = data.get("land_animals", {})
 		gull_hours = float(data.get("gull_follow_hours", 3.0))
 		seabird_hours = float(data.get("seabird_follow_hours", 6.0))
 		raptor_hours = float(data.get("raptor_hours", 4.0))
+		sea_duck_hours = float(data.get("sea_duck_hours", 12.0))
 
 
-## A species' data (gull, seabird or raptor), or {}.
+## A species' data (gull, seabird, raptor or sea duck), or {}.
 func species(id: String) -> Dictionary:
-	return gulls.get(id, seabirds.get(id, raptors.get(id, {})))
+	return gulls.get(id, seabirds.get(id, raptors.get(id, sea_ducks.get(id, {}))))
 
 
 # --- Where and when -------------------------------------------------------------
@@ -92,7 +104,7 @@ static func month_of(unix: float) -> int:
 static func is_at(info: Dictionary, lon_lat: Vector2, month: int) -> bool:
 	for season: Dictionary in info.get("seasons", []):
 		var months: Array = season.get("months", [])
-		if not months.is_empty() and not months.has(month):
+		if not _in_months(months, month):
 			continue
 		for box: Array in season.get("ranges", []):
 			if lon_lat.x >= float(box[0]) and lon_lat.x <= float(box[1]) and lon_lat.y >= float(box[2]) and lon_lat.y <= float(box[3]):
@@ -100,12 +112,18 @@ static func is_at(info: Dictionary, lon_lat: Vector2, month: int) -> bool:
 	return false
 
 
+## True if a season's months (none: all year) have this month in them (the
+## data's months read in as floats).
+static func _in_months(months: Array, month: int) -> bool:
+	return months.is_empty() or months.has(month) or months.has(float(month))
+
+
 ## How far (degrees, roughly) a place is from a species' nearest range that month.
 static func _distance_to(info: Dictionary, lon_lat: Vector2, month: int) -> float:
 	var best := INF
 	for season: Dictionary in info.get("seasons", []):
 		var months: Array = season.get("months", [])
-		if not months.is_empty() and not months.has(month):
+		if not _in_months(months, month):
 			continue
 		for box: Array in season.get("ranges", []):
 			var near := Vector2(clampf(lon_lat.x, float(box[0]), float(box[1])), clampf(lon_lat.y, float(box[2]), float(box[3])))
@@ -190,7 +208,7 @@ func _flock(key: String, lon_lat: Vector2, unix: float, busiest: float, fewest: 
 
 
 ## The gulls circling a port now (always some).
-func port_flock(port_id: String) -> Dictionary:
+func _port_flock_now(port_id: String) -> Dictionary:
 	var unix := float(GameState.calendar_time())
 	var port := GameData.get_port(port_id)
 	var lon_lat := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
@@ -203,7 +221,7 @@ func port_flock(port_id: String) -> Dictionary:
 
 ## The gulls round a ship now: always over a grain or livestock carrier,
 ## sometimes over others (more often near port), or {}.
-func ship_flock(ship: Ship) -> Dictionary:
+func _ship_flock_now(ship: Ship) -> Dictionary:
 	if ship.is_carried():
 		return {}
 	var unix := float(GameState.calendar_time())
@@ -223,7 +241,7 @@ func ship_flock(ship: Ship) -> Dictionary:
 
 
 ## The gulls round a pod of sea animals now, or {}.
-func pod_flock(pod_index: int, lon_lat: Vector2) -> Dictionary:
+func _pod_flock_now(pod_index: int, lon_lat: Vector2) -> Dictionary:
 	var unix := float(GameState.calendar_time())
 	if chance(["pod", pod_index, floori(unix / (gull_hours * 3600.0))]) >= POD_CHANCE:
 		return {}
@@ -245,7 +263,7 @@ func _busy(port_id: String) -> int:
 # --- Seabirds following ships ---------------------------------------------------
 
 ## The seabirds following a ship at sea now: [{id, count}], most first.
-func followers(ship: Ship) -> Array:
+func _followers_now(ship: Ship) -> Array:
 	var out := []
 	if ship.is_docked() or ship.is_lost():
 		return out
@@ -275,7 +293,7 @@ func followers(ship: Ship) -> Array:
 ## The raptors about a port's shore now: [{id, count}], most first. Each
 ## species whose range covers the port that month is there in some stretches
 ## of raptor_hours (its visit chance), only by day (raptors hunt by sight).
-func port_raptors(port_id: String) -> Array:
+func _port_raptors_now(port_id: String) -> Array:
 	var out := []
 	var unix := float(GameState.calendar_time())
 	var port := GameData.get_port(port_id)
@@ -299,6 +317,92 @@ func port_raptors(port_id: String) -> Array:
 		out.append({id = id, count = fewest + floori(chance(["count", port_id, id, stretch]) * (most - fewest + 1))})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.count) > int(b.count))
 	return out
+
+
+# --- Sea ducks off the coast ----------------------------------------------------
+
+## The sea ducks off a port now: [{id, count, moving (passing on migration,
+## not rafting)}], most first.
+func _port_sea_ducks_now(port_id: String) -> Array:
+	var out := []
+	var unix := float(GameState.calendar_time())
+	var port := GameData.get_port(port_id)
+	var lon_lat := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+	var month := month_of(unix)
+	var stretch_s := sea_duck_hours * 3600.0
+	for id: String in sea_ducks:
+		var info: Dictionary = sea_ducks[id]
+		if not is_at(info, lon_lat, month):
+			continue
+		var offset := chance([id, "offset"]) * stretch_s
+		var stretch := floori((unix + offset) / stretch_s)
+		var raft: Array = info.get("raft", [0.5, 15, 30])
+		if chance(["ducks", port_id, id, stretch]) >= float(raft[0]):
+			continue
+		var fewest := int(raft[1])
+		var most := int(raft[2])
+		var count := fewest + floori(chance(["count", port_id, id, stretch]) * (most - fewest + 1))
+		out.append({id = id, count = count, moving = _moving(info, lon_lat, month)})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.count) > int(b.count))
+	return out
+
+
+## True if a species is somewhere that month only on its way through (a season marked moving).
+static func _moving(info: Dictionary, lon_lat: Vector2, month: int) -> bool:
+	for season: Dictionary in info.get("seasons", []):
+		var months: Array = season.get("months", [])
+		if not _in_months(months, month):
+			continue
+		for box: Array in season.get("ranges", []):
+			if lon_lat.x >= float(box[0]) and lon_lat.x <= float(box[1]) and lon_lat.y >= float(box[2]) and lon_lat.y <= float(box[3]):
+				return bool(season.get("moving", false))
+	return false
+
+
+# --- Remembered for a game minute -------------------------------------------------
+
+## The gulls circling a port now (always some; see _port_flock_now()).
+func port_flock(port_id: String) -> Dictionary:
+	return _remembered(["port", port_id], _port_flock_now.bind(port_id))
+
+
+## The gulls round a ship now, or {} (see _ship_flock_now()).
+func ship_flock(ship: Ship) -> Dictionary:
+	return _remembered(["ship", ship.id, ship.is_docked(), ship.is_docking(), ship.is_carried()], _ship_flock_now.bind(ship))
+
+
+## The gulls round a pod of sea animals now, or {} (see _pod_flock_now()).
+func pod_flock(pod_index: int, lon_lat: Vector2) -> Dictionary:
+	return _remembered(["pod", pod_index], _pod_flock_now.bind(pod_index, lon_lat))
+
+
+## The seabirds following a ship at sea now (see _followers_now()).
+func followers(ship: Ship) -> Array:
+	return _remembered(["follow", ship.id, ship.is_docked(), ship.is_lost()], _followers_now.bind(ship))
+
+
+## The raptors about a port's shore now (see _port_raptors_now()).
+func port_raptors(port_id: String) -> Array:
+	return _remembered(["raptors", port_id], _port_raptors_now.bind(port_id))
+
+
+## The sea ducks off a port now (see _port_sea_ducks_now()).
+func port_sea_ducks(port_id: String) -> Array:
+	return _remembered(["ducks", port_id], _port_sea_ducks_now.bind(port_id))
+
+
+## What birds are where only changes with the hour, the seasons and ships
+## coming and going, but the map asks every frame for every port and ship in
+## view: each answer's kept for a game minute (and a ship's while it's in the
+## same state), then worked out again.
+func _remembered(key: Array, work: Callable) -> Variant:
+	var minute := floori(float(GameState.calendar_time()) / 60.0)
+	if minute != _memo_minute:
+		_memo_minute = minute
+		_memo.clear()
+	if not _memo.has(key):
+		_memo[key] = work.call()
+	return _memo[key]
 
 
 # --- Words for popups -----------------------------------------------------------

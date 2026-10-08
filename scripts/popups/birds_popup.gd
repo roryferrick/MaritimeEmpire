@@ -2,11 +2,11 @@
 class_name BirdsPopup
 extends AnchoredPopup
 ## Opened by clicking a flock of birds on the map (see Birds): what birds are
-## round what was clicked (a port, with its gulls and raptors; a ship; or a
-## pod of sea animals) now, each species with its picture, name, Latin name,
-## how many and a fact. Follows what it's about; looks again every couple of
-## seconds (flocks come and go with the time of day, and seabirds and raptors
-## with the hours).
+## round what was clicked (a port, with its gulls, raptors and sea ducks; a
+## ship; or a pod of sea animals) now, each species with its picture, name,
+## Latin name, how many and a fact. Follows what it's about; looks again
+## every couple of seconds (flocks come and go with the time of day, and
+## seabirds, raptors and sea ducks with the hours).
 
 const REFRESH_SECONDS := 2.0
 const TEXT_WIDTH := 300.0
@@ -64,6 +64,8 @@ func _birds_now() -> Array:
 		flock = birds.port_flock(about.port)
 		for entry: Dictionary in birds.port_raptors(about.port):
 			entries.append([entry.id, "%d about" % int(entry.count)])
+		for entry: Dictionary in birds.port_sea_ducks(about.port):
+			entries.append([entry.id, ("%d passing" if entry.moving else "a raft of %d") % int(entry.count)])
 	elif about.has("ship"):
 		var ship: Ship = about.ship
 		title = "Birds round %s" % ship.name
