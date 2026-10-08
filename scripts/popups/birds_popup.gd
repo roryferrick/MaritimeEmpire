@@ -4,19 +4,25 @@ extends AnchoredPopup
 ## Opened by clicking a flock of birds on the map (see Birds): what birds are
 ## round what was clicked (a port, with its gulls, raptors, cormorants, waders and
 ## sea ducks; a ship; or a pod of sea animals) now, each species with its
-## picture, name, Latin name, how many and a fact. Follows what it's about;
+## picture, name, Latin name and how many (its fact on hovering), in a list
+## that scrolls once it's long. Follows what it's about;
 ## looks again every couple of seconds (flocks come and go with the time of
 ## day, and seabirds, raptors, cormorants and sea ducks with the hours).
 
 const REFRESH_SECONDS := 2.0
-const TEXT_WIDTH := 300.0
-const FONT_SIZE := 14
+const ICON_SIZE := 32.0
+const NAME_FONT_SIZE := 15
+## The list scrolls past this tall (px), with room for its scrollbar.
+const MAX_LIST_HEIGHT := 340.0
+const SCROLLBAR_ROOM := 14.0
+const FONT_SIZE := 12
 
 ## Set before adding to the tree: {port}, {ship} or {pod} (see MapView.birds_clicked).
 var about: Dictionary
 
 var _title := Label.new()
 var _list := VBoxContainer.new()
+var _scroll := ScrollContainer.new()
 var _clock := 0.0
 var _shown := ""  # What the list shows (so it's only rebuilt when that changes).
 
@@ -40,8 +46,10 @@ func _ready() -> void:
 	close.flat = true
 	close.pressed.connect(queue_free)
 	header.add_child(close)
-	_list.add_theme_constant_override(&"separation", 10)
-	content.add_child(_list)
+	_list.add_theme_constant_override(&"separation", 4)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.add_child(_list)
+	content.add_child(_scroll)
 	_refresh()
 
 
@@ -106,6 +114,7 @@ func _refresh() -> void:
 		return
 	_shown = key
 	for child in _list.get_children():
+		_list.remove_child(child)
 		child.queue_free()
 	if (now[1] as Array).is_empty():
 		var gone := Label.new()
@@ -116,20 +125,25 @@ func _refresh() -> void:
 		_list.add_child(_species_row(entry[0], entry[1]))
 	# Seen: checked in the field guide.
 	Achievements.discover((now[1] as Array).map(func(entry: Array) -> String: return "bird:" + str(entry[0])))
-	reset_size.call_deferred()
+	_fit_list.call_deferred()
 
 
-## A species: its picture, then its name and how many, its Latin name and a fact.
+## A species, in a line or two: its picture, its name and how many, and its
+## Latin name under them; its fact on hovering.
 static func _species_row(id: String, count: String) -> Control:
 	var info := Birds.shared().species(id)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override(&"separation", 10)
-	var icon := BirdIcon.new(info, 48.0)
-	icon.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.add_theme_constant_override(&"separation", 8)
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	row.tooltip_text = str(info.get("fact", ""))
+	var icon := BirdIcon.new(info, ICON_SIZE)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(icon)
 	var text := VBoxContainer.new()
-	text.add_theme_constant_override(&"separation", 0)
+	text.add_theme_constant_override(&"separation", -2)
+	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var name := Label.new()
+	name.add_theme_font_size_override(&"font_size", NAME_FONT_SIZE)
 	name.text = "%s · %s" % [info.get("name", id), count]
 	text.add_child(name)
 	var latin := Label.new()
@@ -137,12 +151,15 @@ static func _species_row(id: String, count: String) -> Control:
 	latin.add_theme_font_size_override(&"font_size", FONT_SIZE)
 	latin.text = str(info.get("latin", ""))
 	text.add_child(latin)
-	var fact := Label.new()
-	fact.theme_type_variation = &"DimLabel"
-	fact.add_theme_font_size_override(&"font_size", FONT_SIZE)
-	fact.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	fact.custom_minimum_size.x = TEXT_WIDTH
-	fact.text = str(info.get("fact", ""))
-	text.add_child(fact)
 	row.add_child(text)
 	return row
+
+
+## Fits the list's scroll to it, up to MAX_LIST_HEIGHT (or half the screen)
+## tall: scrolled beyond that.
+func _fit_list() -> void:
+	var wanted := _list.get_combined_minimum_size()
+	var tallest := minf(MAX_LIST_HEIGHT, get_viewport_rect().size.y * 0.5)
+	var scrolls := wanted.y > tallest
+	_scroll.custom_minimum_size = Vector2(wanted.x + (SCROLLBAR_ROOM if scrolls else 0.0), minf(wanted.y, tallest))
+	reset_size()
