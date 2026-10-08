@@ -28,7 +28,7 @@ func open(ship: Ship) -> void:
 	%TitleLabel.text = "Route for %s" % ship.name
 	var current := "Current route: %s" % GameData.route_text(ship.route) if ship.has_route() else "No current route."
 	var needs := str(ship.model().get("min_port", ""))
-	var docks := " Docks only at %s ports or bigger." % needs.capitalize() if not needs.is_empty() else ""
+	var docks := " Docks only at %s ports or bigger, or at an HQ or hub." % needs.capitalize() if not needs.is_empty() else ""
 	%CurrentLabel.text = "%s\nRange: %s nm per leg.%s Starting from %s." % [
 		current, Fmt.thousands(roundi(ship.range_nm())), docks, GameData.port_name(ship.reference_port())]
 	_refresh()
@@ -256,4 +256,8 @@ func _trade_text(from_port: String, to_port: String) -> String:
 			return "nothing to trade: sails empty"
 		return "nothing to trade: sails empty, about -%s in fuel and repairs" % Fmt.money(roundi(cost))
 	var quantity := floori(_ship.capacity() * (1.0 - GameData.leg_lightening(from_port, to_port, model)))
-	return "loads %s: about +%s" % [GameData.commodity(best[0]).get("name", best[0]), Fmt.money(roundi(best[1] * quantity))]
+	var market := GameState.market
+	var margin: float = (market.sell_price(to_port, best[0]) - market.buy_price(from_port, best[0])) * quantity
+	var fee := GameState.port_fee(to_port, margin)
+	return "loads %s: about +%s%s" % [GameData.commodity(best[0]).get("name", best[0]), Fmt.money(roundi(best[1] * quantity - fee)),
+		" after a %s port fee" % Fmt.money(fee) if fee > 0 else ""]

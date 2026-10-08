@@ -32,24 +32,14 @@ const PORT_RADIUS_MAX := 9.0
 const PORT_RADIUS_SIZE := 63.0
 const PORT_RADIUS := 6.0
 const PORT_HIT_RADIUS := 14.0
-const SHIP_HIT_RADIUS := 12.0
+const SHIP_HIT_RADIUS := 6.0
 ## However small ships are drawn, a click this close (px) still picks one.
 const SHIP_HIT_MIN_PX := 7.0
-## Storms (see _draw_storms()): dark cloud, pale rim and calm eye colors, the haze as [share of the
-## radius, opacity] rings, the bands' opacity, how far each winds round
-## (radians) and in how many pieces, how fast they turn (radians a second of
-## play), how strong a tropical storm is before its eye shows, and from what
-## on-screen radius its name is shown.
-const STORM_CLOUD := Color(0.07, 0.07, 0.1)
-const STORM_RIM := Color(0.7, 0.74, 0.8)
-const STORM_EYE := Color(0.55, 0.62, 0.7, 0.55)
-const STORM_HAZE := [[1.0, 0.2], [0.82, 0.2], [0.64, 0.24], [0.46, 0.3], [0.3, 0.36], [0.16, 0.3]]
-const STORM_BAND_ALPHA := 0.8
-## A thin pale edge along each band, so the dark clouds stand out on deep sea.
-const STORM_RIM_ALPHA := 0.45
-const STORM_ARM_WIND := 4.2
-const STORM_ARM_STEPS := 28
-const STORM_SPIN := 0.6
+## Ships shorter than this on screen (px) are drawn as dots (see _draw_tiny_ship()).
+const TINY_SHIP_PX := 2.5
+## Storms (see _draw_storms(); their cloud is the sky's, globe.gdshader): how
+## strong a tropical storm is before its eye clears (the shader's too), and
+## from what on-screen radius its name is shown.
 const STORM_EYE_FROM := 0.6
 const STORM_LABEL_MIN_RADIUS := 26.0
 const STORM_FONT_SIZE := 14
@@ -146,13 +136,27 @@ const BAND_STEP := 2.0
 const ARCTIC_DEPTH := 3000
 const ANTARCTIC_ICE := Color(0.93, 0.95, 0.97)
 const NEVER_CULLED := Rect2(-1.0e6, -1.0e6, 2.0e6, 2.0e6)
+## The clouds fade out as the map zooms in between these (px a degree), and
+## the storms thin to this much; the sky draws up to this many storms.
+const CLOUD_ZOOM := Vector2(7.0, 24.0)
+const STORM_CLOSE_ALPHA := 0.75
+const MAX_SKY_STORMS := 16
+## Gusts (see _draw_gusts()): one at most per this many px across, each
+## blowing for this long (s of play); none in winds under GUST_STRENGTH.x,
+## always one over .y; this long (px) in light wind to strong, this bright.
+const GUST_CELL_PX := 90.0
+const GUST_CYCLE_S := 1.6
+const GUST_STRENGTH := Vector2(0.25, 1.0)
+const GUST_LENGTH_PX := Vector2(10.0, 36.0)
+const GUST_ALPHA := 0.55
+const SELECTED_RING := Color(1.0, 0.8, 0.25)
 const PORT_FONT_SIZE := 15
 const COUNTRY_FONT_SIZE := 13
 const LABEL_PADDING := 3.0
 ## A ship's pointed bow sticks out this many times its width.
 const BOW_LENGTH_FACTOR := 0.6
 ## Ships are drawn this share of their map_size (and of everything built on it).
-const SHIP_SIZE := 0.7
+const SHIP_SIZE := 0.35
 ## Ship art, per model category: <category>_hull.svg (white, tinted with the
 ## model's map color), <category>_details.svg (drawn as is, over the cargo) and,
 ## for categories whose cargo shows, <category>_cargo.svg. Categories without
@@ -167,7 +171,7 @@ const CARGO_STEPS := 4
 ## pixels at SHIP_WORLD_ZOOM px a degree, so they grow and shrink with the map
 ## like the coast does (tiny zoomed right out). Sea animals are sized in the
 ## world too, their length_px at ANIMAL_WORLD_ZOOM px a degree.
-const SHIP_WORLD_ZOOM := 37.5
+const SHIP_WORLD_ZOOM := 75.0
 const ANIMAL_WORLD_ZOOM := 220.0
 ## Where a ship being carried sits on its recovery boat: the middle of the
 ## open work deck aft (x from the stern, in art units), clear of the wheelhouse.
@@ -395,6 +399,26 @@ var dimmed_ports: Dictionary = {}:
 		dimmed_ports = value
 		_static_layer.queue_redraw()
 
+## Picking a port (the new company's home port): when not empty, only these
+## port ids are named and can be clicked, each filled with its color here (the
+## rest are faint dots, as in a locked region), and nothing of any company
+## (region shading, HQ and hub rings) is drawn. selected_port gets a gold ring.
+var selectable_ports: Dictionary = {}:
+	set(value):
+		selectable_ports = value
+		_regions_key = []
+		_labels_key = []
+		_static_layer.queue_redraw()
+var selected_port := "":
+	set(value):
+		selected_port = value
+		_static_layer.queue_redraw()
+## Where the view opens (when it's first given a size): centered on this port
+## (by default the company's home port), zoomed right out to the whole globe if
+## opens_whole_globe, else to game_config's initial_view_width_deg.
+var opens_at_port := ""
+var opens_whole_globe := false
+
 ## Choosing a region to unlock: every region is outlined, the locked one under
 ## the mouse (or hovered_region) lights up, and clicks pick regions
 ## (region_clicked) instead of ports and ships.
@@ -408,6 +432,9 @@ var hovered_region := ""
 ## The market regions' overlay (locked ones shaded: see RegionShade), and what
 ## it was last set for ([image ready, unlocked regions, choosing, hovered]).
 var _globe_regions := ShaderMaterial.new()
+## The sky over the map: clouds and storms (see SkyArt), and its material.
+var _sky := SkyArt.new()
+var _globe_sky := ShaderMaterial.new()
 var _regions_key := []
 ## Each land drawing's region (index + 1; 0 until the region map is ready), so
 ## those in locked regions are left out.
@@ -441,6 +468,8 @@ var _drag_samples: Array = []
 var _lane_units := {}
 ## Port id -> its docks' turn on screen for the current view (see _dock_point()).
 var _port_turns := {}
+## Port id -> where it is on screen for the current view (see port_screen_position()).
+var _port_screens := {}
 ## Ship drawing caches: each docked ship's ring slot (and the frame it was for),
 ## the draw order (redone when the fleet changes) and each model's look.
 var _dock_slots := {}
@@ -515,13 +544,14 @@ var _pod_hits: Array = []
 var _sea_warming := true
 ## Land drawings: a texture per kind (WorldMapData.decor_kind_names), and the
 ## drawings by DECOR_BUCKET-degree cell, so only those near the view are looked at.
-var _decor_textures: Array[Texture2D] = []
-var _decor_buckets := {}
+static var _decor_textures: Array[Texture2D] = []
+static var _decor_buckets := {}
 var _canal_layer := Control.new()
 var _static_layer := Control.new()
-## Docked ships (dots in rings round their ports, tugs as ticks): drawn apart
-## from the ships at sea, since they only move when the view does or a ship
-## docks or leaves (redrawn then, and with the ports' slow size changes).
+## The ports' marinas (see _draw_marinas()), over the land drawings and under
+## the clouds, ports and labels; on the gray map, docked ships (dots in rings
+## round their ports, tugs as ticks) instead. Redrawn when the view changes, a
+## ship docks or leaves, and with the ports' slow size changes.
 var _dock_layer := Control.new()
 var _overlay := Control.new()
 var _canvas: Control = _overlay
@@ -591,6 +621,17 @@ class LandArt:
 ## overlay (MapView._globe_regions): locked regions shaded, and while choosing
 ## one, the regions outlined and the hovered one lit up.
 class RegionShade:
+	extends Node2D
+
+	var art: WorldArt
+
+	func _draw() -> void:
+		draw_mesh(art.sea_mesh, art.white)
+
+
+## The whole globe once more, over the marinas, as the sky (MapView._globe_sky):
+## clouds that clear as the map zooms in, and the storms. Only on the World map.
+class SkyArt:
 	extends Node2D
 
 	var art: WorldArt
@@ -697,35 +738,38 @@ class RiverTier:
 		draw_multiline(segments, view._color(&"river"), -1.0)
 
 
+func _exit_tree() -> void:
+	if GameState.berth_route.get_object() == self:
+		GameState.berth_route = Callable()
+
+
 func _ready() -> void:
 	clip_contents = true
 	mouse_filter = MOUSE_FILTER_STOP
 	resized.connect(_on_resized)
-	GameState.ships_changed.connect(func() -> void: _draw_order_dirty = true)
+	if not GameState.berth_route.is_valid():
+		GameState.berth_route = berth_route_seconds  # (The first map open measures ships' ways in and out of port.)
+	GameState.ships_changed.connect(func() -> void:
+		_draw_order_dirty = true
+		_spots_dirty = true)
+	GameState.ship_changed.connect(func(_ship: Ship) -> void: _spots_dirty = true)
 
 	var data := GameData.world_map
-	# The map data stops at Geo.MAX_LAT: the globe's caps round the poles are
-	# Antarctica's ice (flat ANTARCTIC_ICE: the land colors' last row, stretched
-	# to the pole, streaks) and the deep Arctic Ocean.
-	var south_cap := _triangle_mesh(_lat_band(-90.0, -Geo.MAX_LAT))
-	var north_cap := _lat_band(Geo.MAX_LAT, 90.0)
-	var land_mesh := _triangle_mesh(data.land_triangles)
-	var biome_mesh := _triangle_mesh(data.biome_triangles, data.biome_colors)
-	var water_mesh := _triangle_mesh(data.water_triangles)
-	var lake_island_mesh := _triangle_mesh(data.lake_island_triangles)
-	var lake_meshes: Array[ArrayMesh] = []
-	for triangles in data.lake_triangles:
-		lake_meshes.append(_triangle_mesh(triangles) if not triangles.is_empty() else null)
-	var depth_meshes: Array[ArrayMesh] = []
-	var depth_hole_meshes: Array[ArrayMesh] = []
-	for band in data.depth_levels.size():
-		var cap := north_cap if data.depth_levels[band] <= ARCTIC_DEPTH else PackedVector2Array()
-		depth_meshes.append(_triangle_mesh(data.depth_triangles[band] + cap))
-		depth_hole_meshes.append(_triangle_mesh(data.depth_hole_triangles[band]))
+	var meshes := _world_meshes()
+	var south_cap: ArrayMesh = meshes.south_cap
+	var land_mesh: ArrayMesh = meshes.land
+	var biome_mesh: ArrayMesh = meshes.biome
+	var water_mesh: ArrayMesh = meshes.water
+	var lake_island_mesh: ArrayMesh = meshes.lake_island
+	var lake_meshes: Array[ArrayMesh] = meshes.lakes
+	var depth_meshes: Array[ArrayMesh] = meshes.depths
+	var depth_hole_meshes: Array[ArrayMesh] = meshes.depth_holes
 	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
 	image.fill(Color.WHITE)
 	var white := ImageTexture.create_from_image(image)
-	var land_colors: Texture2D = load(LAND_COLORS) if ResourceLoader.exists(LAND_COLORS) else white
+	var land_colors: Texture2D = land_colors_texture()
+	if land_colors == null:
+		land_colors = white
 	# The land colors are drawn far below their size when zoomed out.
 	_art_root.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_globe.shader = GLOBE_SHADER
@@ -733,7 +777,7 @@ func _ready() -> void:
 	add_child(_art_root)
 	var art := WorldArt.new()
 	art.view = self
-	art.sea_mesh = _triangle_mesh(_lat_band(-90.0, 90.0))
+	art.sea_mesh = meshes.sea
 	art.land_mesh = land_mesh
 	art.south_cap_mesh = south_cap
 	art.biome_mesh = biome_mesh
@@ -818,7 +862,18 @@ func _ready() -> void:
 	RenderingServer.canvas_item_set_custom_rect(_land_mask_art.get_canvas_item(), true, NEVER_CULLED)
 	_land_mask.add_child(_land_mask_art)
 
-	for layer: Control in [_decor_layer, _weather_layer, _canal_layer, _static_layer, _dock_layer, _overlay]:
+	for layer: Control in [_decor_layer, _dock_layer]:
+		layer.mouse_filter = MOUSE_FILTER_IGNORE
+		layer.set_anchors_preset(PRESET_FULL_RECT)
+		add_child(layer)
+	# The sky (clouds and storms) over the land and marinas, under the gusts, ports and ships.
+	_globe_sky.shader = GLOBE_SHADER
+	_globe_sky.set_shader_parameter(&"sky", true)
+	_sky.art = art
+	_sky.material = _globe_sky
+	RenderingServer.canvas_item_set_custom_rect(_sky.get_canvas_item(), true, NEVER_CULLED)
+	add_child(_sky)
+	for layer: Control in [_weather_layer, _canal_layer, _static_layer, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
@@ -831,7 +886,10 @@ func _ready() -> void:
 	_overlay.draw.connect(_draw_overlay)
 	_dock_layer.draw.connect(_draw_dock_layer)
 	_dock_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	GameState.ship_changed.connect(func(_ship: Ship) -> void: _dock_layer.queue_redraw())
+	# Docked ships are drawn on the dock layer only on the gray map (as dots): redraw it for them only there.
+	GameState.ship_changed.connect(func(_ship: Ship) -> void:
+		if not docks_shown():
+			_dock_layer.queue_redraw())
 	GameState.ships_changed.connect(_dock_layer.queue_redraw)
 	# Ship art is drawn well below its size at most zooms: mipmaps keep it smooth.
 	_overlay.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -842,6 +900,7 @@ func _process(delta: float) -> void:
 		return
 	_ease_view(delta)
 	_update_regions()
+	_update_sky()
 	if not show_ships:
 		return
 	_weather_layer.queue_redraw()
@@ -866,23 +925,50 @@ func _process(delta: float) -> void:
 		_dock_layer.queue_redraw()  # Ports grow and shrink, and their rings with them.
 
 
+## The world art's meshes, made once and shared by every map (the World map's
+## and the route screen's): {sea (the whole sphere), south_cap, land, biome,
+## water, lake_island, lakes, depths, depth_holes}. The map data stops at
+## Geo.MAX_LAT: the globe's caps round the poles are Antarctica's ice (flat
+## ANTARCTIC_ICE: the land colors' last row, stretched to the pole, streaks)
+## and the deep Arctic Ocean (added to the deep sea's bands).
+static func _world_meshes() -> Dictionary:
+	if not _shared_meshes.is_empty():
+		return _shared_meshes
+	var data := GameData.world_map
+	var north_cap := _lat_band(Geo.MAX_LAT, 90.0)
+	var lakes: Array[ArrayMesh] = []
+	for triangles in data.lake_triangles:
+		lakes.append(_triangle_mesh(triangles) if not triangles.is_empty() else null)
+	var depths: Array[ArrayMesh] = []
+	var depth_holes: Array[ArrayMesh] = []
+	for band in data.depth_levels.size():
+		var cap := north_cap if data.depth_levels[band] <= ARCTIC_DEPTH else PackedVector2Array()
+		depths.append(_triangle_mesh(data.depth_triangles[band] + cap))
+		depth_holes.append(_triangle_mesh(data.depth_hole_triangles[band]))
+	_shared_meshes = {
+		sea = _triangle_mesh(_lat_band(-90.0, 90.0)),
+		south_cap = _triangle_mesh(_lat_band(-90.0, -Geo.MAX_LAT)),
+		land = _triangle_mesh(data.land_triangles),
+		biome = _triangle_mesh(data.biome_triangles, data.biome_colors),
+		water = _triangle_mesh(data.water_triangles),
+		lake_island = _triangle_mesh(data.lake_island_triangles),
+		lakes = lakes,
+		depths = depths,
+		depth_holes = depth_holes,
+	}
+	return _shared_meshes
+
+
 ## A mesh of map triangles (already small enough to curve round the globe:
-## see Geo.tessellate()), with each point's place on LAND_COLORS as its UV (the
-## texture spans x -180 to 180 and y Geo.MAX_LAT down to -Geo.MAX_LAT).
-func _triangle_mesh(triangles: PackedVector2Array, colors := PackedColorArray()) -> ArrayMesh:
+## see Geo.tessellate()), and their colors if any. Their place on LAND_COLORS
+## (their UV) is worked out by the globe's shader from where they are.
+static func _triangle_mesh(triangles: PackedVector2Array, colors := PackedColorArray()) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	if triangles.is_empty():
 		return mesh
-	var top := Geo.project(Vector2(0.0, Geo.MAX_LAT)).y
-	var uvs := PackedVector2Array()
-	uvs.resize(triangles.size())
-	for i in triangles.size():
-		var p := triangles[i]
-		uvs[i] = Vector2((p.x + Geo.WORLD_WIDTH / 2.0) / Geo.WORLD_WIDTH, (top - p.y) / (2.0 * top))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = triangles
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	if not colors.is_empty():
 		arrays[Mesh.ARRAY_COLOR] = colors
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -942,14 +1028,20 @@ func screen_to_world(screen: Vector2) -> Vector2:
 ## The (lon, lat) under a screen point, poles and all (off the globe: the
 ## nearest point on its edge).
 func _screen_lon_lat(screen: Vector2) -> Vector2:
+	var p := _screen_unit(screen)
+	return Vector2(rad_to_deg(atan2(p.y, p.x)), rad_to_deg(asin(clampf(p.z, -1.0, 1.0))))
+
+
+## The point on the unit sphere (see _unit()) under a screen point (off the
+## globe: the nearest point on its edge). Cheaper than screen_to_world().
+func _screen_unit(screen: Vector2) -> Vector3:
 	var q := (screen - size / 2.0) / _radius()
 	q.y = -q.y
 	var d := q.length_squared()
 	if d > 1.0:
 		q /= sqrt(d)
 		d = 1.0
-	var p := _right * q.x + _up * q.y + _toward * sqrt(1.0 - d)
-	return Vector2(rad_to_deg(atan2(p.y, p.x)), rad_to_deg(asin(clampf(p.z, -1.0, 1.0))))
+	return _right * q.x + _up * q.y + _toward * sqrt(1.0 - d)
 
 
 ## A map point (projected) on the unit sphere: x through (0, 0), z the north pole.
@@ -988,7 +1080,11 @@ func _orient() -> void:
 
 
 func port_screen_position(port_id: String) -> Vector2:
-	return world_to_screen(GameData.port_position(port_id))
+	# Asked for very often (every port, marina and docked ship, every frame), and
+	# ports only move on screen when the view does: kept until it changes.
+	if not _port_screens.has(port_id):
+		_port_screens[port_id] = world_to_screen(GameData.port_position(port_id))
+	return _port_screens[port_id]
 
 
 ## Docked ships are dots spread in rings around their port, in fleet order,
@@ -1007,7 +1103,10 @@ func ship_screen_position(ship: Ship) -> Vector2:
 		if ship.is_tug() and ship.job_phase == Ship.JOB_TOW and ship.rescuing != null:
 			# At the ship it's towing, as that's drawn (eased into its harbour near port).
 			return ship_screen_position(ship.rescuing) + Vector2.from_angle(_heading_angle(ship.heading(), ship.world_position())) * _tug_offset(ship)
-		return _harbour_blend(ship, world_to_screen(ship.world_position()) + _canal_lane_offset(ship))
+		var harbour := _harbour_pose(ship)
+		if not harbour.is_empty():
+			return harbour[0]
+		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
 	if docks_shown():
 		return _docked_pose(ship)[0]
 	if ship.is_tug():
@@ -1053,6 +1152,10 @@ func _screen_angle(ship: Ship) -> float:
 	var pose := _turning_pose(ship)
 	if not pose.is_empty():
 		return pose[1]
+	if not (ship.is_tug() and ship.job_phase == Ship.JOB_TOW):
+		var harbour := _harbour_pose(ship)
+		if not harbour.is_empty():
+			return harbour[1]
 	return _heading_angle(ship.heading(), ship.world_position())
 
 
@@ -1305,7 +1408,11 @@ func _min_zoom() -> float:
 func _on_resized() -> void:
 	if not _has_fit and size.x > 0 and size.y > 0:
 		_has_fit = true
-		reset_view()
+		reset_view(opens_at_port)
+		if opens_whole_globe:
+			_zoom = _min_zoom()
+			_zoom_goal = _zoom
+			_changed()
 	else:
 		_zoom = maxf(_zoom, _min_zoom())
 		_zoom_goal = maxf(_zoom_goal, _min_zoom())
@@ -1487,7 +1594,8 @@ func _changed() -> void:
 	_view_lat = clampf(_view_lat, -MAX_VIEW_LAT, MAX_VIEW_LAT)
 	_orient()
 	_center = Geo.project(Vector2(_view_lon, _view_lat))
-	for material in [_globe, _globe_masked, _globe_regions]:
+	for material in [_globe, _globe_masked, _globe_regions, _globe_sky]:
+		material.set_shader_parameter(&"land_top", Geo.project(Vector2(0.0, Geo.MAX_LAT)).y)
 		material.set_shader_parameter(&"east", _right)
 		material.set_shader_parameter(&"north", _up)
 		material.set_shader_parameter(&"toward", _toward)
@@ -1497,6 +1605,7 @@ func _changed() -> void:
 	_land_mask.size = Vector2i((size * pixels).ceil()).max(Vector2i.ONE)
 	_land_mask_art.scale = Vector2.ONE * pixels
 	_port_turns.clear()
+	_port_screens.clear()
 	_update_rivers()
 	if not _ice_circles.is_empty():
 		for node in _ice_arts:
@@ -1522,20 +1631,50 @@ func _ease_view(delta: float) -> void:
 		_changed()
 
 
+## The sky (World map only): its clouds fade out as the map zooms in from
+## CLOUD_ZOOM.x to .y px a degree, so ships show, and the storms thin to
+## STORM_CLOSE_ALPHA; and the storms, each with its strength, kind and turn.
+func _update_sky() -> void:
+	_sky.visible = show_ships and not gray_mode
+	if not _sky.visible:
+		return
+	var fade := 1.0 - smoothstep(CLOUD_ZOOM.x, CLOUD_ZOOM.y, _zoom)
+	_globe_sky.set_shader_parameter(&"time", GameState.play_time)
+	_globe_sky.set_shader_parameter(&"cloud_alpha", fade)
+	_globe_sky.set_shader_parameter(&"storm_alpha", lerpf(STORM_CLOSE_ALPHA, 1.0, fade))
+	var shapes := PackedVector4Array()
+	var looks := PackedVector4Array()
+	shapes.resize(MAX_SKY_STORMS)
+	looks.resize(MAX_SKY_STORMS)
+	var count := 0
+	for storm: Dictionary in GameState.weather.storms:
+		if count >= MAX_SKY_STORMS:
+			break
+		var at := _unit(Geo.project(Vector2(storm.lon, storm.lat)))
+		shapes[count] = Vector4(at.x, at.y, at.z, float(storm.radius_nm) / Geo.EARTH_RADIUS_NM)
+		looks[count] = Vector4(Weather.intensity(storm), 1.0 if Weather.TROPICAL.has(storm.kind) else 0.0,
+			1.0 if float(storm.lat) >= 0.0 else -1.0, float(hash(Weather.key(storm)) % 1000) / 37.0)
+		count += 1
+	_globe_sky.set_shader_parameter(&"storm_count", count)
+	_globe_sky.set_shader_parameter(&"storm_a", shapes)
+	_globe_sky.set_shader_parameter(&"storm_b", looks)
+
+
 ## Keeps the regions' overlay in step with the unlocked regions (which a
 ## joined player's game hears of from the host), and with choosing one; when
 ## they change, the ports, docks and land drawings are redrawn too.
 func _update_regions() -> void:
-	var key := [RegionMap.is_ready(), GameState.regions.duplicate(), choosing_region, hovered_region]
+	var key := [RegionMap.is_ready(), GameState.regions.duplicate(), choosing_region, hovered_region, selectable_ports.is_empty()]
 	if key == _regions_key:
 		return
 	_regions_key = key
 	var locked := 0
 	var regions: Array = GameData.markets.get("regions", [])
 	for i in regions.size():
-		if not GameState.is_region_unlocked(regions[i].id):
+		if selectable_ports.is_empty() and not GameState.is_region_unlocked(regions[i].id):
 			locked |= 1 << i
 	_globe_regions.set_shader_parameter(&"region_map", RegionMap.texture)
+	_globe_regions.set_shader_parameter(&"region_ports", RegionMap.ports_texture)
 	_globe_regions.set_shader_parameter(&"locked_mask", locked)
 	_globe_regions.set_shader_parameter(&"choosing", choosing_region)
 	_globe_regions.set_shader_parameter(&"hovered", RegionMap.index_of(hovered_region))
@@ -1545,6 +1684,8 @@ func _update_regions() -> void:
 
 ## True if a port's region is locked (its name, dock and clicks are hidden).
 func _port_locked(port_id: String) -> bool:
+	if not selectable_ports.is_empty():
+		return not selectable_ports.has(port_id)
 	return not GameState.is_port_unlocked(port_id)
 
 
@@ -1565,7 +1706,7 @@ func region_screen_position(region_id: String) -> Vector2:
 
 ## True if a land drawing is in a locked region.
 func _decor_locked(index: int) -> bool:
-	if not RegionMap.is_ready():
+	if not RegionMap.is_ready() or not selectable_ports.is_empty():
 		return false
 	var data := GameData.world_map
 	if _decor_regions.is_empty():
@@ -1623,6 +1764,42 @@ func _draw_weather_layer() -> void:
 		_draw_ice()
 		_draw_route_labels()
 		_draw_storms()
+		_draw_gusts()
+
+
+## Gusts of wind (see Wind): short pale streaks blowing the way the wind does
+## there, each drifting along and fading in and out over GUST_CYCLE_S of play,
+## one now and then in each GUST_CELL_PX cell of the screen (somewhere new
+## each time), more often, longer and brighter the stronger the wind. Gone in
+## a calm, crowded in a gale or a storm.
+func _draw_gusts() -> void:
+	if gray_mode:
+		return
+	var t := GameState.play_time
+	var storms := GameState.weather.storms
+	var middle := size / 2.0
+	var reach := _radius() * 0.97
+	var rng := RandomNumberGenerator.new()
+	for row in ceili(size.y / GUST_CELL_PX):
+		for col in ceili(size.x / GUST_CELL_PX):
+			rng.seed = hash([col, row])
+			var cycle := t / GUST_CYCLE_S + rng.randf()
+			rng.seed = hash([col, row, floori(cycle)])
+			var at := Vector2(col + rng.randf(), row + rng.randf()) * GUST_CELL_PX
+			if at.distance_to(middle) > reach:
+				continue
+			var lon_lat := _screen_lon_lat(at)
+			var wind := Wind.at(lon_lat, t, storms)
+			var strength := wind.length()
+			if rng.randf() > smoothstep(GUST_STRENGTH.x, GUST_STRENGTH.y, strength):
+				continue
+			var way := _screen_way(Geo.project(lon_lat), wind / strength).normalized()
+			var u := fposmod(cycle, 1.0)
+			var length := lerpf(GUST_LENGTH_PX.x, GUST_LENGTH_PX.y, clampf(strength / 1.5, 0.0, 1.0))
+			var head := at + way * length * u * 1.5
+			var alpha := sin(PI * u) * clampf(strength, 0.0, 1.2) * GUST_ALPHA
+			_canvas.draw_polyline_colors(PackedVector2Array([head - way * length, head - way * length * 0.4, head]),
+				PackedColorArray([Color(1, 1, 1, 0.0), Color(1, 1, 1, alpha * 0.6), Color(1, 1, 1, alpha)]), 1.5, true)
 
 
 func _draw_canal_layer() -> void:
@@ -1634,7 +1811,7 @@ func _draw_canal_layer() -> void:
 func _draw_static_layer() -> void:
 	_canvas = _static_layer
 	# Where labels go only changes with the view (or the hubs), not every frame.
-	var key := [_center, _zoom, size, GameState.hubs.map(func(hub: Hub) -> String: return hub.port_id)]
+	var key := [_center, _zoom, size, GameState.hubs.map(func(hub: Hub) -> String: return hub.port_id), selected_port]
 	if key != _labels_key:
 		_labels_key = key
 		var placed_labels: Array[Rect2] = []
@@ -1654,7 +1831,7 @@ func _draw_dock_layer() -> void:
 		return
 	_canvas = _dock_layer
 	if docks_shown():
-		_draw_docks()
+		_draw_marinas()
 	var outline := _color(&"ship_outline")
 	for ship in GameState.ships:
 		if ship.is_docked() and not docks_shown():  # (Shown, docked ships are drawn with the others: see _draw_ships().)
@@ -1662,69 +1839,145 @@ func _draw_dock_layer() -> void:
 	_canvas = _overlay
 
 
-# --- Docks ---------------------------------------------------------------------------
+# --- Marinas -------------------------------------------------------------------------
 
-## Each port has its docks (see Docks): piers pointing
-## out to sea (where the sea is around it: _port_sea_angle()), a berth each
-## side, as many as its size band has (Small one, Medium one and a quay, Large
-## three, Giant four), the piers lengthening for a hub's extra berths;
-## each long enough for the biggest ship that can dock there. Ships moor
-## alongside facing the shore, lie at the anchorage further out (each keeping
-## its spot in a fixed grid off to one side), and tugs tie up along
-## the wharf. Ships glide between the mouth, the anchorage and their berth.
-## Dock geometry is in "dock units", the ships' own map size, turned to face the
-## sea and sized like the ships, in the world (_ship_scale()).
-## Ships glide this long (seconds of play) from the harbour mouth to their spot
-## at the anchorage or wharf; the anchorage is ANCHOR_COLUMNS spots across.
-const ANCHOR_GLIDE_S := 5.0
-const ANCHOR_COLUMNS := 4
-## A port's docks smaller than this on screen (px, out to the mouth) aren't drawn.
-const DOCK_MIN_PX := 8.0
-## How far ahead (nm) a ship eased near a port looks to see which way it faces.
-const HEADING_PROBE_NM := 1.5
+## Each port is a marina (see Docks), grown out of its circle on the map: the
+## circle sits on the coast, facing the sea (_port_sea_angle()), cleared of
+## any land and dug out to water. Its inland half is the berths, one per side
+## of a half-polygon inside it (Small a half-square, 2 sides; Medium half a
+## hexagon, 3; Large half an octagon, 4; Giant half a decagon, 5), each side
+## long enough for the longest ship that can dock there, with a stone quay
+## behind; a hub port (any company's HQ or hub) has 6 berths and, in the
+## middle, a slip running inland with a big berth along each wall. Its seaward half is a
+## jetty, a breakwater round the circle with the entrance in the middle (red
+## and green lights on its ends). Ships waiting or idle in port, tugs and other
+## service ships lie at the port's anchorage (data/anchorages.json; see
+## _anchor_spots()), each at its own anchor, swung round to face into the wind.
+## Geometry is in "dock units", the ships' own map size, turned to face the sea
+## and sized like the ships, in the world (_ship_scale()); +x is out to sea.
+## Ships in harbour sail at their own speed, as at sea (see _sailed_share()),
+## but at least this (nm/s), so one at a standstill still gets in.
+const MIN_HARBOUR_SPEED := 0.5
+## A port's marina is drawn (and its dot not) once its radius on screen is this
+## many px more than the dot's.
+const MARINA_OVER_DOT_PX := 2.0
+## No marina reaches further than this from its port (dock units, its slip and all).
+const MARINA_MAX_REACH := 60.0
+## Nor does a port's furthest anchor point (dock units: data/anchorages.json's
+## 420 nm, plus the ship), for culling.
+const PORT_MAX_REACH := 300.0
+## A ship near a port curves between its lane and its harbour over at least
+## this many times the harbour's distance from the port in lane (see
+## _harbour_pose()).
+const HARBOUR_REACH := 3.0
+## The shortest stretch of lane (nm) a ship curves in or out of port over.
+const HARBOUR_MIN_NM := 2.0
+## How hard the curve leans into each end's heading (a share of its length):
+## a little less than elsewhere, so ships don't swing too wide round a breakwater.
+const HARBOUR_CURVE_HANDLE := 0.3
+## How many straight pieces each curve of a ship's path in and out of port is drawn in.
+const POSE_PATH_STEPS := 32
+## A ship weighing (or dropping) anchor comes round from (or to) facing the
+## wind over this share of its way out of (or to) its spot, but at least this
+## long (s of play; see _anchor_turn()).
+const ANCHOR_TURN_SHARE := 0.3
+const ANCHOR_TURN_MIN_S := 3.0
+## In harbour a ship slows for any bend tighter than this many of its lengths
+## across (turning radius), and never below this share of its speed.
+const HARBOUR_TURN_LENGTHS := 1.0
+const HARBOUR_CRAWL := 0.15
 ## A port's sea direction comes from about this many of its lanes, this far out.
 const SEA_ANGLE_LANES := 24
 const SEA_ANGLE_MILES := 12.0
-const PIER_WIDTH := 2.0
+## The quay behind the berths and the jetty round the sea side (dock units
+## wide), the gap between a moored ship and the quay, room to spare along each
+## berth (past the ship's length and its corners' room: see _marina_layout()), and
+## the entrance (this many times the widest ship that can come in).
+const QUAY_WIDTH := 0.9
+const JETTY_WIDTH := 0.8
 const BERTH_GAP := 0.3
-const PIER_COLOR := Color(0.66, 0.6, 0.5)
-const PIER_EDGE := Color(0.22, 0.2, 0.17)
-## The docks are built half the ships' size (PIER_WIDTH, BERTH_GAP...): piers
-## half as long as the ships that moor there, which overhang them out to sea.
-## Bollards (the tie-down posts) every BOLLARD_STEP along both edges of each
-## pier and quay, BOLLARD_INSET in from the edge; a moored ship is tied to them
-## by four ropes (bow and stern lines and two springs).
+const BERTH_ROOM := 0.6
+const ENTRANCE_WIDTHS := 3.0
+## The slip at a hub port: as long as the longest of the biggest ships plus this,
+## and this many times the widest across (one moored each side, room between).
+const SLIP_ROOM := 3.0
+const SLIP_WIDTHS := 3.8
+## Points round the marina's circle, for drawing.
+const MARINA_ARC_POINTS := 64
+const QUAY_COLOR := Color(0.6, 0.58, 0.54)
+const QUAY_EDGE := Color(0.25, 0.23, 0.2)
+const JETTY_COLOR := Color(0.52, 0.53, 0.56)
+const ENTRANCE_LIGHTS := [Color(0.9, 0.15, 0.12), Color(0.15, 0.85, 0.3)]
+## Bollards (the tie-down posts) every BOLLARD_STEP along each berth's quay
+## edge, BOLLARD_INSET back from it; a moored ship is tied to them by four
+## ropes (bow and stern lines and two springs).
 const BOLLARD_STEP := 1.75
 const BOLLARD_INSET := 0.35
 const BOLLARD_RADIUS := 0.25
 const BOLLARD_COLOR := Color(0.16, 0.15, 0.14)
 const ROPE_COLOR := Color(0.95, 0.9, 0.74)
-## Tugs tie up alongside the wharf this far apart (dock units: a tug, 6.4, and a
-## clear bollard's worth of wharf between each).
-const TUG_STEP := 7.5
-## Stone blocks join the dock pieces where they meet: this wide, dressed grey stone.
-const STONE_BLOCK := 3.25
-const STONE_COLOR := Color(0.6, 0.6, 0.62)
-const STONE_JOINT := Color(0.42, 0.42, 0.45)
-const PIERS_BY_BAND := {small = 1, medium = 1, large = 3, giant = 4}
+## Coming in, how far off the berth (ship widths) a ship lies before it slides
+## in sideways on its thrusters (and pulling out, slides off to).
+const BERTH_OFF_WIDTHS := 1.6
+## Ships keep to the right-hand side of a harbour entrance, this many widths
+## (of the widest ship the marina takes) off its middle.
+const KEEP_RIGHT_WIDTHS := 0.6
+## A ship backing out of a berth it lies bow in to (a hub's slip) goes this
+## share of its speed, then turns round in this long (s of play) on its
+## thrusters before heading out (see _unberth_plan()).
+const UNBERTH_REVERSE_SPEED := 0.5
+const UNBERTH_TURN_S := 2.5
+## At anchor in a storm, ships swing and pitch on their anchors, up to this
+## far (radians) at full strength.
+const STORM_SWING := 0.45
 const BAND_RANK := {small = 0, medium = 1, large = 2, giant = 3}
 ## data/port_facing.json, and port id -> the sea's direction from it on screen (see _port_sea_angle()).
 const PORT_FACING_PATH := "res://data/port_facing.json"
+## data/anchorages.json (tools/build_anchorages.gd): each port's anchor points.
+const ANCHORAGES_PATH := "res://data/anchorages.json"
 static var _port_facing := {}
+## The world art's meshes, shared by every map (see _world_meshes()).
+static var _shared_meshes := {}
+static var _anchorages := {}
 var _sea_angles := {}
-## Port id -> 1 or -1: which side of its piers its quay and tugs go (see _port_sea_angle()).
+## Port id -> 1 or -1: which way its marina's local +y goes (see _port_sea_angle()).
 var _dock_flips := {}
-## [band, berths] -> its layout (see _dock_layout()).
-var _dock_layouts := {}
-## Each lying ship's spot (see _update_spots()): [port, tug?] -> {slot: ship},
-## ship -> its slot and that key, when it got to its port ([port, play time]),
-## and where it last lay in port ([port, dock-units position, facing]).
+## [band, hub port] -> its marina's layout (see _marina_layout()).
+var _marina_layouts := {}
+## Port id -> its marina's layout this frame, and the frame (see _port_layout()).
+var _port_layouts := {}
+var _port_layouts_frame := -1
+## Port id and anchorage -> [the marina radius they were for, its anchor points (lon, lat) clear of it] (see _anchor_spots()).
+var _spot_cache := {}
+## Each lying ship's spot (see _update_spots()): [port, "all" or "small"] ->
+## {slot: ship}, ship -> its slot and that key, when it got to its port ([port,
+## play time]), and where it last lay in port ([port, map point]).
 var _spot_tables := {}
 var _spot_slots := {}
 var _spot_keys := {}
 var _spots_frame := -1
+## Set when any ship changes (docks, leaves, takes or gives up a berth): the
+## spots are only looked at again then.
+var _spots_dirty := true
 var _dock_seen := {}
 var _last_spot := {}
+## Ship -> [its leg, how far it curves in and out of port] (see _harbour_reaches()).
+var _harbour_reach_cache := {}
+## Port id -> the way into the wind there on screen, worked out once a frame.
+var _upwind := {}
+## Port id -> the strongest storm's strength there, this frame (see _storm_strength_at_port()).
+var _port_storms := {}
+## Each docked ship's screen pose this frame, and the frame (see _docked_pose()).
+var _poses := {}
+var _poses_frame := -1
+## Ship -> [port, anchorage, slot, marina radius, its anchor on the unit sphere] (see _anchor_screen_cached()).
+var _anchor_units := {}
+## Model id -> the anchorage its ships lie in (see _anchor_pool()).
+var _anchor_pools := {}
+## Port id -> _marina_shown() this frame, and the frame.
+var _marinas_shown := {}
+var _marinas_shown_frame := -1
+var _upwind_frame := -1
 
 
 func docks_shown() -> bool:
@@ -1732,9 +1985,9 @@ func docks_shown() -> bool:
 
 
 ## Which way the sea is from a port, as an on-screen angle with north straight
-## up (the globe turns it: _port_turn()), and which side its quay goes: from
-## data/port_facing.json, or else the average
-## way its sea lanes head out of it.
+## up (the globe turns it: _port_turn()), and which side is its marina's +y:
+## from data/port_facing.json, or else the average way its sea lanes head out
+## of it.
 func _port_sea_angle(port_id: String) -> float:
 	if _sea_angles.has(port_id):
 		return _sea_angles[port_id]
@@ -1785,20 +2038,7 @@ func _port_sea_angle(port_id: String) -> float:
 		sum = (sum.normalized() if sum.length() > 0.001 else Vector2.ZERO) + open.normalized() * openness * 1.5
 	var angle := Vector2(sum.x, -sum.y).angle() if sum.length() > 0.001 else PI / 2.0
 	_sea_angles[port_id] = angle
-	# Its docks' quay (and tugs) go on whichever side of the piers has more sea,
-	# looking a little way offshore (the sea mask is coarse along the coast).
-	var seaward := Vector2(sum.x, sum.y).normalized()
-	var side := seaward.orthogonal()
-	var wet := [0, 0]
-	for reach: float in [0.25, 0.4, 0.55]:
-		wet[0] += int(sea.is_sea(_lon_lat_offset(at, (seaward + side) * reach)))
-		wet[1] += int(sea.is_sea(_lon_lat_offset(at, (seaward - side) * reach)))
-	# Dock units' +y is a quarter turn clockwise on screen from the sea: flip the
-	# layout if that isn't the wetter side.
-	var plus_y := Vector2.from_angle(angle + PI / 2.0)  # On screen (y down).
-	var side_screen := Vector2(side.x, -side.y)
-	var plus_is_side := plus_y.dot(side_screen) > 0.0
-	_dock_flips[port_id] = 1.0 if (wet[0] >= wet[1]) == plus_is_side else -1.0
+	_dock_flips[port_id] = 1.0
 	return angle
 
 
@@ -1817,8 +2057,7 @@ static func _band_ship_length(band: String) -> float:
 		var needs := str(model.get("min_port", "small"))
 		if int(BAND_RANK.get(needs, 0)) > int(BAND_RANK.get(band, 0)):
 			continue
-		var dims: Array = model.get("map_size", [14, 6])
-		longest = maxf(longest, (float(dims[0]) + float(dims[1]) * BOW_LENGTH_FACTOR) * SHIP_SIZE)
+		longest = maxf(longest, _model_length(model))
 	return longest
 
 
@@ -1833,93 +2072,149 @@ static func _widest_ship(band: String) -> float:
 	return widest
 
 
-## A port's docks in dock units, from the shore end (0, 0) out to sea along +x:
-## {piers: [[from, to]], quay: [from, to] or [] (Medium's), berths: [[position, facing,
-## the way to its pier or quay]],
-## length (the longest ship), width, mouth (where ships come in and leave) and
-## tugs (where the first tug ties up, the next ones along -y)}.
-func _dock_layout(band: String, berths: int) -> Dictionary:
-	var key := [band, berths]
-	if _dock_layouts.has(key):
-		return _dock_layouts[key]
-	var length := _band_ship_length(band)
-	var width := _widest_ship(band)
-	var base_length := length * 0.5 + 1.5  # Half the longest ship: they overhang it.
-	var piers := int(PIERS_BY_BAND.get(band, 1))
-	var spacing := 2.0 * (width + BERTH_GAP) + PIER_WIDTH + 0.4  # Just room for a ship each side.
-	var layout := {piers = [], quay = [], berths = [], length = length, width = width}
-	# The band's berths: a pair on each pier, and Medium's one along a quay by the
-	# pier's root. A hub's extra berths lengthen the piers, a pair further out at a
-	# time, round the piers in turn. A pier berth is [where the ship's bow sits,
-	# facing, the way to the pier, the pier's span along x, true]: ships moor bow
-	# to the shore end, so a longer ship reaches further out; the quay's is [its
-	# middle, facing, the way to the quay, its span along y, false].
-	var on_quay := 1 if band == "medium" else 0
-	var extra := maxi(berths - 2 * piers - on_quay, 0)
-	var rows := 1 + ceili(extra / (2.0 * piers))
-	var step := length + 2.0
-	var bow_x := PIER_WIDTH / 2.0 + 0.5
-	for p in piers:
-		var y := (p - (piers - 1) / 2.0) * spacing
-		var pier_rows := 1 + ceili(maxf(extra - 2 * p, 0.0) / (2.0 * piers))
-		layout.piers.append([Vector2(0.0, y), Vector2(base_length + (pier_rows - 1) * step, y)])
-	for k in 2 * piers + extra:
-		var p := (k / 2) % piers
-		var row := k / (2 * piers)
-		var y := (p - (piers - 1) / 2.0) * spacing
-		var side := -1.0 if k % 2 == 0 else 1.0
-		var pier_end: float = layout.piers[p][1].x
-		layout.berths.append([Vector2(bow_x + row * step, y + side * (PIER_WIDTH / 2.0 + BERTH_GAP + width / 2.0)), PI, Vector2(0.0, -side),
-			Vector2(BOLLARD_STEP * 0.5, pier_end - BOLLARD_STEP * 0.3), true])
-	if on_quay > 0:
-		var y0 := (piers - 1) / 2.0 * spacing + spacing / 2.0
-		var quay_length := step * 0.5 + 1.0
-		layout.quay = [Vector2(1.0, y0), Vector2(1.0, y0 + quay_length)]
-		layout.berths.insert(2, [Vector2(1.0 + PIER_WIDTH / 2.0 + BERTH_GAP + width / 2.0, y0 + quay_length / 2.0), PI / 2.0, Vector2(-1.0, 0.0),
-			Vector2(y0 + BOLLARD_STEP * 0.5, y0 + quay_length - BOLLARD_STEP * 0.3), false])
-	layout.mouth = Vector2(bow_x + (rows - 1) * step + length * 1.4, 0.0)
-	layout.tugs = Vector2(0.0, -(piers - 1) / 2.0 * spacing - spacing / 2.0 - TUG_STEP / 2.0)
-	_dock_layouts[key] = layout
+## A model's length and width in dock units (bow included).
+static func _model_length(model: Dictionary) -> float:
+	var dims: Array = model.get("map_size", [14, 6])
+	return (float(dims[0]) + float(dims[1]) * BOW_LENGTH_FACTOR) * SHIP_SIZE
+
+
+## The longest ship of any kind (dock units): what an anchorage leaves room to swing.
+static func _longest_ship() -> float:
+	var longest := 0.0
+	for model: Dictionary in GameData.ship_models:
+		longest = maxf(longest, _model_length(model))
+	return longest
+
+
+## A marina's layout in dock units, the port at (0, 0) and the sea along +x,
+## for its berths' kinds (Docks.berth_kinds()): {radius (the circle: the
+## jetty's middle), inner (the half-polygon's corners' distance), corners (the
+## half-polygon's, from +y round the land side to -y), berths (one per kind:
+## [where the middle of a ship moored there is, on the quay's edge; the way
+## along the quay; the way in off it; the quay's length; its middle; its
+## kind]), slip ([mouth middle, length, width] at a hub port, its berth along
+## the slip's wall; or []), gap (the entrance's half-angle), mouth (where
+## ships come in and leave, just outside), inside (just inside the entrance),
+## length and width (the longest and widest ship that docks)}.
+## Each side is as long as the longest ship its berth takes, plus room at each
+## corner it shares with the next berth (none at the coast) for the ships
+## there to clear each other: a ship's width at a right angle, less the more
+## open the corner; the ship lies against its side's coast end.
+func _marina_layout(kinds: String, hub: bool) -> Dictionary:
+	var key := [kinds, hub]
+	if _marina_layouts.has(key):
+		return _marina_layouts[key]
+	# The half-polygon's sides: [kind, the berths along it]; at a hub port, its
+	# big berths share one side, the slip's mouth.
+	var polygon := []
+	for i in kinds.length():
+		if hub and kinds[i] == "B" and not polygon.is_empty() and polygon[-1][0] == "slip":
+			(polygon[-1][1] as Array).append(i)
+		else:
+			polygon.append(["slip" if hub and kinds[i] == "B" else kinds[i], [i]])
+	var count := polygon.size()
+	var spread := 1.0 / tan((PI - PI / count) / 2.0)  # A corner's room per width (see above).
+	var sides := PackedFloat32Array()
+	var length := 0.0
+	var width := 0.0
+	for j in count:
+		var ship := _berth_ship("B" if polygon[j][0] == "slip" else polygon[j][0])
+		length = maxf(length, ship.x)
+		width = maxf(width, ship.y)
+		if polygon[j][0] == "slip":
+			sides.append(ship.y * SLIP_WIDTHS + 1.0)  # The slip's mouth: room for a ship moored each side and one between.
+			continue
+		var shared := (1.0 if j > 0 else 0.0) + (1.0 if j < count - 1 else 0.0)  # Corners shared with a neighbour.
+		sides.append(ship.x + shared * (ship.y + BERTH_GAP) * spread + BERTH_ROOM)
+	var inner := _inscribed_radius(sides)
+	var radius := inner + QUAY_WIDTH
+	var corners := PackedVector2Array([Vector2.from_angle(PI / 2.0) * inner])
+	var angle := PI / 2.0
+	for side in sides:
+		angle += 2.0 * asin(minf(side / (2.0 * inner), 1.0))
+		corners.append(Vector2.from_angle(angle) * inner)
+	var berth_list := []
+	berth_list.resize(kinds.length())
+	var slip := []
+	for j in count:
+		var a := corners[j]
+		var b := corners[j + 1]
+		var along := (b - a).normalized()
+		var middle := (a + b) / 2.0
+		var inward := -middle.normalized()
+		var berths: Array = polygon[j][1]
+		if polygon[j][0] == "slip":
+			# The slip runs inland from the side's middle, a berth along each wall.
+			var slip_length := _berth_ship("B").x + SLIP_ROOM
+			slip = [middle, slip_length, sides[j]]
+			for k in berths.size():
+				var wall_side := 1.0 if k == 0 else -1.0
+				var wall := middle - inward * slip_length / 2.0 + along * wall_side * sides[j] / 2.0
+				berth_list[berths[k]] = [wall, -inward, -along * wall_side, slip_length, wall, "B"]
+			continue
+		var ship := _berth_ship(polygon[j][0])
+		# Against its coast end if it has one (the first and last sides), else
+		# in the middle, clear of both corners.
+		var from_a := sides[j] / 2.0
+		if count > 1 and j == 0:
+			from_a = BERTH_ROOM / 2.0 + ship.x / 2.0
+		elif count > 1 and j == count - 1:
+			from_a = sides[j] - BERTH_ROOM / 2.0 - ship.x / 2.0
+		berth_list[berths[0]] = [a + along * from_a, along, inward, sides[j], middle, polygon[j][0]]
+	var gap := asin(clampf(width * ENTRANCE_WIDTHS / 2.0 / radius, 0.05, 0.6))
+	var layout := {radius = radius, inner = inner, corners = corners, berths = berth_list, slip = slip, gap = gap,
+		mouth = Vector2(radius + length * 1.2, 0.0), inside = Vector2(radius * 0.45, 0.0), length = length, width = width}
+	_marina_layouts[key] = layout
 	return layout
 
 
-## Where a ship moored at a berth lies (dock units): [its middle, facing]. At
-## a pier its bow sits at the berth's point (by the shore end) and the rest
-## reaches out to sea past the pier; at the quay it lies centered on it.
-func _berth_pose(berth: Array, ship: Ship) -> Array:
-	var point: Vector2 = berth[0]
-	if berth.size() > 4 and berth[4]:
-		var half := (_model_look(ship.model_id)[7] as Rect2).size.x / 2.0
-		point -= Vector2.from_angle(float(berth[1])) * half
-	return [point, berth[1]]
+## The longest and widest cargo ship (dock units) a berth of a kind takes (see
+## Docks.berth_kinds()): the Small ports' ships, the Medium's, or the biggest.
+static func _berth_ship(kind: String) -> Vector2:
+	var band := "large" if kind == "B" else ("medium" if kind == "m" else "small")
+	return Vector2(_band_ship_length(band), _widest_ship(band))
 
 
-## Where the slot-th tug lies tied up alongside the wharf (dock units, facing
-## along it): one after another from the end by the piers, TUG_STEP apart.
-static func _tug_mooring(layout: Dictionary, slot: int) -> Array:
-	var tug_width := _tug_width()
-	return [Vector2(PIER_WIDTH / 2.0 + BERTH_GAP * 0.6 + tug_width / 2.0, float(layout.tugs.y) - slot * TUG_STEP), -PI / 2.0]
+## The radius of the circle a run of chords (side lengths) spans exactly half
+## of, round the land side.
+static func _inscribed_radius(sides: PackedFloat32Array) -> float:
+	var low := 0.0
+	var high := 0.0
+	for side in sides:
+		low = maxf(low, side / 2.0)
+		high += side
+	for i in 50:
+		var r := (low + high) / 2.0
+		var spanned := 0.0
+		for side in sides:
+			spanned += 2.0 * asin(minf(side / (2.0 * r), 1.0))
+		if spanned > PI:
+			low = r
+		else:
+			high = r
+	return high
 
 
-static func _tug_width() -> float:
-	for model: Dictionary in GameData.ship_models:
-		if model.get("tug", false):
-			return float(model.get("map_size", [7, 3.6])[1]) * SHIP_SIZE
-	return 2.5
-
-
-## A port's layout as it is now (its band and berths).
+## A port's marina as it is now (its berths, and whether it's a hub port).
 func _port_layout(port_id: String) -> Dictionary:
-	return _dock_layout(GameState.port_sizes.band(port_id), GameState.docks.berth_count(port_id))
+	# Asked for very often (every port and docked ship, every frame): worked out
+	# once a frame per port (a port's berths change only with its size and hubs).
+	var frame := Engine.get_process_frames()
+	if frame != _port_layouts_frame:
+		_port_layouts_frame = frame
+		_port_layouts.clear()
+	if not _port_layouts.has(port_id):
+		_port_layouts[port_id] = _marina_layout(GameState.docks.berth_kinds(port_id), GameState.docks.has_hub(port_id))
+	return _port_layouts[port_id]
 
 
-## A point of a port's docks (dock units) on screen.
+## A point of a port's marina (dock units) on screen.
 func _dock_point(port_id: String, local: Vector2) -> Vector2:
 	var angle := _port_sea_angle(port_id) + _port_turn(port_id)  # (Works out the flip too.)
 	return port_screen_position(port_id) + Vector2(local.x, local.y * float(_dock_flips.get(port_id, 1.0))).rotated(angle) * dock_scale(port_id)
 
 
-## How much the globe turns a port's docks on screen (see _turn_at()),
+## How much the globe turns a port's marina on screen (see _turn_at()),
 ## worked out once per view.
 func _port_turn(port_id: String) -> float:
 	if not _port_turns.has(port_id):
@@ -1927,262 +2222,778 @@ func _port_turn(port_id: String) -> float:
 	return _port_turns[port_id]
 
 
-## How big a port's docks (and the ships moored and anchored there) are drawn:
-## always just like the ships at sea, so a ship keeps its size as it docks.
-func dock_scale(_port_id: String) -> float:
-	return _ship_scale()
-
-
-## Every port's piers and quay on screen, a weathered wooden grey with a dark edge.
-func _draw_docks() -> void:
-	var view := Rect2(Vector2.ZERO, size).grow(80.0 * _ship_scale())
-	_update_spots()
-	var tugs := {}  # Port id -> how many tug spots its wharf needs (its highest kept slot + 1).
-	for key: Array in _spot_tables:
-		if key[1] and not (_spot_tables[key] as Dictionary).is_empty():
-			tugs[key[0]] = (_spot_tables[key] as Dictionary).keys().max() + 1
-	for port: Dictionary in GameData.ports:
-		var root := port_screen_position(port.id)
-		if not view.has_point(root) or _port_locked(port.id):
-			continue
-		var layout := _port_layout(port.id)
-		if float(layout.mouth.x) * _ship_scale() < DOCK_MIN_PX:
-			continue  # Zoomed far out: too small to see.
-		var wharf := _wharf(layout, int(tugs.get(port.id, 0)))
-		var spans: Array = [wharf]
-		spans.append_array(layout.piers)
-		if not layout.quay.is_empty():
-			spans.append(layout.quay)
-		for span: Array in spans:
-			_draw_pier(port.id, span[0], span[1])
-		# Stone blocks where the pieces meet: each pier's root on the wharf, the
-		# quay's, and the wharf's two ends.
-		var joins: Array[Vector2] = [wharf[0], wharf[1]]
-		for pier: Array in layout.piers:
-			joins.append(pier[0])
-		if not layout.quay.is_empty():
-			joins.append(Vector2(0.0, float(layout.quay[0].y)))
-		var placed: Array[Vector2] = []
-		for join in joins:
-			if placed.any(func(other: Vector2) -> bool: return other.distance_to(join) < STONE_BLOCK * 1.2):
-				continue  # A pier's root at the wharf's end: one block does for both.
-			placed.append(join)
-			_draw_stone_block(port.id, join)
-
-
-## The wharf along the shore through a port (dock units, along y): from past
-## its tugs (tied up along it, TUG_STEP apart) to past its last pier.
-static func _wharf(layout: Dictionary, tug_count: int) -> Array:
-	var first: Vector2 = layout.piers[0][0]
-	var last: Vector2 = layout.piers[-1][0]
-	var tug_end := float(layout.tugs.y) - maxi(tug_count - 1, 0) * TUG_STEP - TUG_STEP / 2.0
-	var quay_end: float = layout.quay[1].y if not layout.quay.is_empty() else last.y
-	return [Vector2(0.0, minf(first.y, tug_end) - PIER_WIDTH), Vector2(0.0, maxf(maxf(last.y, quay_end), 0.0) + PIER_WIDTH)]
-
-
-## A square block of dressed stone, split into four by its joints, where dock pieces meet.
-func _draw_stone_block(port_id: String, center: Vector2) -> void:
-	var half := STONE_BLOCK / 2.0
-	var corners := [Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)]
-	var points := PackedVector2Array()
-	for corner: Vector2 in corners:
-		points.append(_dock_point(port_id, center + corner))
-	_canvas.draw_colored_polygon(points, STONE_COLOR)
-	_canvas.draw_line(_dock_point(port_id, center + Vector2(-half, 0.0)), _dock_point(port_id, center + Vector2(half, 0.0)), STONE_JOINT, 1.0, true)
-	_canvas.draw_line(_dock_point(port_id, center + Vector2(0.0, -half)), _dock_point(port_id, center + Vector2(0.0, half)), STONE_JOINT, 1.0, true)
-	points.append(points[0])
-	_canvas.draw_polyline(points, PIER_EDGE, 1.0, true)
-
-
-func _draw_pier(port_id: String, from: Vector2, to: Vector2) -> void:
-	var across := (to - from).normalized().orthogonal() * PIER_WIDTH / 2.0
-	var corners := PackedVector2Array([from - across, to - across, to + across, from + across])
-	var points := PackedVector2Array()
-	for corner in corners:
-		points.append(_dock_point(port_id, corner))
-	_canvas.draw_colored_polygon(points, PIER_COLOR)
-	points.append(points[0])
-	_canvas.draw_polyline(points, PIER_EDGE, 1.0, true)
-	# Bollards along both edges, once they're far enough apart on screen to tell apart.
-	var scale := dock_scale(port_id)
-	if BOLLARD_STEP * scale < 4.0:
-		return
-	var along := (to - from).normalized()
-	var axis := 0 if absf(along.x) > 0.5 else 1
-	var inset := across.normalized() * (PIER_WIDTH / 2.0 - BOLLARD_INSET)
-	var radius := maxf(BOLLARD_RADIUS * scale, 0.9)
-	var low := minf(from[axis], to[axis])
-	var high := maxf(from[axis], to[axis])
-	var mark := _bollard_snap(low + BOLLARD_STEP * 0.5)
-	while mark <= high - BOLLARD_STEP * 0.3:
-		var on_line := from + along * (mark - from[axis]) / along[axis]
-		for edge in [inset, -inset]:
-			_canvas.draw_circle(_dock_point(port_id, on_line + edge), radius, BOLLARD_COLOR)
-		mark += BOLLARD_STEP
-
-
-## The bollard nearest a place along a pier or quay (they sit every BOLLARD_STEP
-## from 0, the same on every pier and quay, so ropes always meet one).
-static func _bollard_snap(along: float) -> float:
-	return roundf(along / BOLLARD_STEP) * BOLLARD_STEP
-
-
-## A moored ship's ropes to the bollards beside it: bow and stern lines out
-## ahead and astern, and two springs crossing back along its side (a tug tied
-## up at the wharf: just its bow and stern lines).
-func _draw_mooring_ropes(ship: Ship) -> void:
-	var port := ship.docked_at
-	var layout := _port_layout(port)
-	var rect: Rect2 = _model_look(ship.model_id)[7]
-	var half_length := rect.size.x / 2.0
-	var center: Vector2
-	var ahead: Vector2
-	var toward: Vector2  # Towards the pier, quay or wharf.
-	var reach: float  # From its middle to the bollards.
-	var span := Vector2.ZERO  # Where along its pier or quay its bollards are (zero: the wharf, anywhere).
-	# [where on the hull, where along the pier (ahead of the middle)].
-	var ropes := [[0.8, 0.8 * half_length + 3.0], [-0.8, -0.8 * half_length - 3.0]]
-	if ship.is_tug():
-		_update_spots()
-		var pose := _tug_mooring(layout, int(_spot_slots.get(ship, 0)))
-		center = pose[0]
-		ahead = Vector2.from_angle(float(pose[1]))
-		toward = Vector2(-1.0, 0.0)
-		reach = center.x - PIER_WIDTH / 2.0 + BOLLARD_INSET
-		ropes = [[0.7, 0.7 * half_length + 1.5], [-0.7, -0.7 * half_length - 1.5]]  # Bow and stern lines.
-	else:
-		if ship.berth < 0 or ship.berth >= layout.berths.size():
-			return
-		var berth: Array = layout.berths[ship.berth]
-		var pose := _berth_pose(berth, ship)
-		center = pose[0]
-		ahead = Vector2.from_angle(float(berth[1]))
-		toward = berth[2]
-		span = berth[3]
-		reach = float(layout.width) / 2.0 + BERTH_GAP + BOLLARD_INSET
-		ropes.append_array([[0.35, -0.1 * half_length], [-0.35, 0.1 * half_length]])  # And springs.
-	var hull := center + toward * rect.size.y / 2.0
-	var edge := center + toward * reach
-	var axis := 0 if absf(ahead.x) > 0.5 else 1
-	var width := maxf(0.35 * dock_scale(port), 1.0)
-	for rope: Array in ropes:
-		var from := hull + ahead * float(rope[0]) * half_length
-		var post := edge + ahead * float(rope[1])
-		# To a bollard that's really on its pier or quay (a ship overhangs its
-		# pier, so its stern line runs back to the pier's end).
-		var along := _bollard_snap(post[axis])
-		if span != Vector2.ZERO:
-			while along < span.x - 0.01:
-				along += BOLLARD_STEP
-			while along > span.y + 0.01:
-				along -= BOLLARD_STEP
-		post[axis] = along
-		_canvas.draw_line(_dock_point(port, from), _dock_point(port, post), ROPE_COLOR, width, true)
-
-
-## Where a docked ship is on screen and which way it faces: moored at its
-## berth (facing the shore), coming alongside from the harbour mouth, pulling
-## out (backing off its berth, then turning for the sea), lying at the
-## anchorage (queuing or idle; service ships too), or tied up with the tugs.
-func _docked_pose(ship: Ship) -> Array:
-	var port := ship.docked_at
-	var layout := _port_layout(port)
-	var local := _docked_local(ship, layout)  # [position, facing] in dock units.
-	_last_spot[ship] = [port, local[0], local[1]]  # Where it sets off from when it sails.
-	return [_dock_point(port, local[0]), _dock_angle(port, float(local[1]))]
-
-
 ## A dock-units facing on screen (mirrored with its port's layout).
 func _dock_angle(port_id: String, facing: float) -> float:
 	return _port_sea_angle(port_id) + _port_turn(port_id) + facing * float(_dock_flips.get(port_id, 1.0))
 
 
-## Where a docked ship is in dock units and which way it faces: moored at its
-## berth; coming alongside (from its spot at the anchorage if it waited there,
-## else from the harbour mouth); pulling out (backing off, then coming round
-## for the mouth, or for its spot at the anchorage if it isn't leaving yet);
-## or lying at its spot at the anchorage, or a tug's along the wharf, having
-## glided there from the mouth.
-func _docked_local(ship: Ship, layout: Dictionary) -> Array:
+## How big a port's marina (and the ships moored and anchored there) is drawn:
+## always just like the ships at sea, so a ship keeps its size as it docks.
+func dock_scale(_port_id: String) -> float:
+	return _ship_scale()
+
+
+## True if a port's marina is big enough on screen to draw (instead of its dot).
+func _marina_shown(port_id: String) -> bool:
+	if not docks_shown():
+		return false
+	var frame := Engine.get_process_frames()
+	if frame != _marinas_shown_frame:  # Asked for every ship there, every frame.
+		_marinas_shown_frame = frame
+		_marinas_shown.clear()
+	if not _marinas_shown.has(port_id):
+		_marinas_shown[port_id] = float(_port_layout(port_id).radius) * _ship_scale() >= _port_radius(port_id) + MARINA_OVER_DOT_PX
+	return _marinas_shown[port_id]
+
+
+## Every port's marina in view (see the section's description).
+func _draw_marinas() -> void:
+	var view := Rect2(Vector2.ZERO, size)
+	var near := view.grow(MARINA_MAX_REACH * _ship_scale())
+	for port: Dictionary in GameData.ports:
+		var port_id: String = port.id
+		var root := port_screen_position(port_id)
+		if not near.has_point(root) or _port_locked(port_id) or not _marina_shown(port_id):
+			continue  # (Cheapest first: most ports are well off screen.)
+		var layout := _port_layout(port_id)
+		var reach := (float(layout.radius) * 1.5 + float(layout.slip[1] if not layout.slip.is_empty() else 0.0)) * _ship_scale()  # (The quay's square corners.)
+		if not view.grow(reach).has_point(root):
+			continue
+		_draw_marina(port_id, layout)
+
+
+func _draw_marina(port_id: String, layout: Dictionary) -> void:
+	var radius: float = layout.radius
+	var inner: float = layout.inner
+	var corners: PackedVector2Array = layout.corners
+	var water := _color(&"ocean")
+	var scale := _ship_scale()
+	# The whole circle cleared to shallow water, then the land half's quay
+	# (squared off inland, over all of the cleared circle there), the berths'
+	# water and the slip dug out of it.
+	var clear := radius + JETTY_WIDTH / 2.0
+	_canvas.draw_colored_polygon(_marina_polygon(port_id, _arc(clear, -PI, PI).slice(0, -1)), water)
+	var quay := PackedVector2Array([Vector2(0.0, clear), Vector2(-clear, clear), Vector2(-clear, -clear), Vector2(0.0, -clear)])
+	_canvas.draw_colored_polygon(_marina_polygon(port_id, quay), QUAY_COLOR)
+	if not layout.slip.is_empty():
+		var slip: Array = layout.slip
+		var mouth: Vector2 = slip[0]
+		var slip_length: float = slip[1]
+		var half: float = slip[2] / 2.0
+		_canvas.draw_colored_polygon(_marina_polygon(port_id, _rect(mouth + Vector2(0.5, 0.0), mouth - Vector2(slip_length + QUAY_WIDTH, 0.0), half + QUAY_WIDTH)), QUAY_COLOR)
+		_canvas.draw_colored_polygon(_marina_polygon(port_id, _rect(mouth + Vector2(0.5, 0.0), mouth - Vector2(slip_length, 0.0), half)), water)
+		var wall := _marina_polygon(port_id, _rect(mouth, mouth - Vector2(slip_length, 0.0), half))
+		wall.append(wall[0])
+		_canvas.draw_polyline(wall, QUAY_EDGE, 1.0, true)
+	var basin := PackedVector2Array(corners)
+	basin.append_array(_arc(inner, -PI / 2.0, PI / 2.0).slice(1, -1))
+	_canvas.draw_colored_polygon(_marina_polygon(port_id, basin), water)
+	# The quay's edge along the berths, and the marina's edge on land.
+	var edge := _marina_polygon(port_id, corners)
+	_canvas.draw_polyline(edge, QUAY_EDGE, 1.0, true)
+	_canvas.draw_polyline(_marina_polygon(port_id, quay), QUAY_EDGE, 1.0, true)
+	# The jetty: round the sea half, each side of the entrance, lit at its ends.
+	var gap: float = layout.gap
+	for side: float in [-1.0, 1.0]:
+		var arm := _arc(radius, gap * side, PI / 2.0 * side)
+		var points := _marina_polygon(port_id, arm)
+		_canvas.draw_polyline(points, QUAY_EDGE, JETTY_WIDTH * scale + 2.0, true)
+		_canvas.draw_polyline(points, JETTY_COLOR, JETTY_WIDTH * scale, true)
+		_canvas.draw_circle(points[0], maxf(JETTY_WIDTH * scale * 0.45, 1.2), ENTRANCE_LIGHTS[0 if side < 0.0 else 1])
+	# Bollards along every berth's quay edge, once they're far enough apart to tell apart.
+	if BOLLARD_STEP * scale < 4.0:
+		return
+	var bollard := maxf(BOLLARD_RADIUS * scale, 0.9)
+	for berth: Array in layout.berths:
+		for post in _bollards(berth):
+			_canvas.draw_circle(_dock_point(port_id, post), bollard, BOLLARD_COLOR)
+
+
+## Points round a circle (dock units) from one angle to another.
+static func _arc(radius: float, from: float, to: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var steps := maxi(ceili(absf(to - from) / TAU * MARINA_ARC_POINTS), 2)
+	for i in steps + 1:
+		points.append(Vector2.from_angle(lerpf(from, to, float(i) / steps)) * radius)
+	return points
+
+
+## A rectangle (dock units) along x from one point to another, half_width either side.
+static func _rect(from: Vector2, to: Vector2, half_width: float) -> PackedVector2Array:
+	var across := (to - from).normalized().orthogonal() * half_width
+	return PackedVector2Array([from - across, to - across, to + across, from + across])
+
+
+func _marina_polygon(port_id: String, local: PackedVector2Array) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for p in local:
+		points.append(_dock_point(port_id, p))
+	return points
+
+
+## A berth's bollards (dock units): every BOLLARD_STEP along its quay edge,
+## BOLLARD_INSET back on the quay.
+static func _bollards(berth: Array) -> PackedVector2Array:
+	var middle: Vector2 = berth[4]
+	var along: Vector2 = berth[1]
+	var inward: Vector2 = berth[2]
+	var half: float = float(berth[3]) / 2.0
+	var posts := PackedVector2Array()
+	var s := -half + BOLLARD_STEP * 0.5
+	while s <= half - BOLLARD_STEP * 0.3:
+		posts.append(middle + along * s - inward * BOLLARD_INSET)
+		s += BOLLARD_STEP
+	return posts
+
+
+## Where a ship moored at a berth lies (dock units): [its middle, facing],
+## alongside the quay, in the middle of the berth (or its end of a shared one).
+func _berth_pose(berth: Array, ship: Ship) -> Array:
+	var width := (_model_look(ship.model_id)[7] as Rect2).size.y
+	var along: Vector2 = berth[1]
+	return [_berth_spot(berth, ship) + (berth[2] as Vector2) * (width / 2.0 + BERTH_GAP), along.angle()]
+
+
+## Where the middle of a ship moored at a berth is on the quay's edge (dock
+## units): the berth's middle, or sharing a big berth with another smaller ship
+## (Ship.berth_half), towards its end of it.
+func _berth_spot(berth: Array, ship: Ship) -> Vector2:
+	if ship.berth_half < 0:
+		return berth[0]
+	var shift := (_berth_ship("B").x - (_model_look(ship.model_id)[7] as Rect2).size.x) / 2.0
+	return (berth[0] as Vector2) + (berth[1] as Vector2) * shift * (-1.0 if ship.berth_half == 0 else 1.0)
+
+
+## A moored ship's ropes to the bollards on its quay: bow and stern lines out
+## ahead and astern, and two springs crossing back along its side.
+func _draw_mooring_ropes(ship: Ship) -> void:
+	var port := ship.docked_at
+	var layout := _port_layout(port)
+	if ship.berth < 0 or ship.berth >= layout.berths.size():
+		return
+	var berth: Array = layout.berths[ship.berth]
+	var moored := _berth_spot(berth, ship)
+	var along: Vector2 = berth[1]
+	var inward: Vector2 = berth[2]
+	var quay: Vector2 = berth[4]
+	var half_length: float = (_model_look(ship.model_id)[7] as Rect2).size.x / 2.0
+	var half_berth := float(berth[3]) / 2.0
+	var offset := (moored - quay).dot(along)  # Where the ship's middle is along its quay.
+	var width := maxf(0.35 * dock_scale(port), 1.0)
+	# [where on the hull (share of half its length), where along the quay from the ship's middle].
+	for rope: Array in [[0.8, 0.8 * half_length + 2.5], [-0.8, -0.8 * half_length - 2.5], [0.35, -0.1 * half_length], [-0.35, 0.1 * half_length]]:
+		var hull := moored + inward * BERTH_GAP + along * float(rope[0]) * half_length
+		# To a bollard that's really on its quay.
+		var mark := clampf(roundf((offset + float(rope[1]) + half_berth - BOLLARD_STEP * 0.5) / BOLLARD_STEP), 0.0,
+			floorf((2.0 * half_berth - BOLLARD_STEP * 0.8) / BOLLARD_STEP))
+		var post := quay + along * (-half_berth + BOLLARD_STEP * (0.5 + mark)) - inward * BOLLARD_INSET
+		_canvas.draw_line(_dock_point(port, hull), _dock_point(port, post), ROPE_COLOR, width, true)
+
+
+## Where a docked ship is on screen and which way it faces: moored at its
+## berth, coming in and alongside, pulling out, lying at the anchorage (or a
+## recovery boat in its hub's slip), or gliding out to it.
+func _docked_pose(ship: Ship) -> Array:
+	# Asked for twice a frame (where, and which way): worked out once.
+	var frame := Engine.get_process_frames()
+	if frame != _poses_frame:
+		_poses_frame = frame
+		_poses.clear()
+	if _poses.has(ship):
+		return _poses[ship]
+	var pose := _docked_screen_pose(ship)
+	_poses[ship] = pose
+	_last_spot[ship] = [ship.docked_at, _screen_unit(pose[0]), pose[1]]  # Where it sets off from when it sails (on the unit sphere), and its heading.
+	return pose
+
+
+func _docked_screen_pose(ship: Ship) -> Array:
+	var port := ship.docked_at
+	var layout := _port_layout(port)
 	_update_spots()
-	var turn := float(layout.length) * 0.6
 	if ship.berth >= 0 and ship.berth < layout.berths.size():
-		var berth: Array = _berth_pose(layout.berths[ship.berth], ship)  # [its middle, facing] there.
+		var berth: Array = layout.berths[ship.berth]
+		var moored := _berth_pose(berth, ship)
+		var at := [_dock_point(port, moored[0]), _dock_angle(port, float(moored[1]))]
+		var width := (_model_look(ship.model_id)[7] as Rect2).size.y
+		var off := [_dock_point(port, moored[0] + (berth[2] as Vector2) * width * BERTH_OFF_WIDTHS), at[1]]
+		var settings := Docks.settings()
+		var slide_s := float(settings.get("slide_s", 1.5))
+		var length := (_model_look(ship.model_id)[7] as Rect2).size.x * dock_scale(port)
 		match ship.berth_phase:
 			Ship.BERTH_IN:
-				var t := clampf(ship.berth_time / float(Docks.settings().get("in_s", 6.0)), 0.0, 1.0)
-				var start := _lying_local(ship, layout, GameState.play_time - ship.berth_time)
-				return _turn_pose(start[0], start[1], berth[0], berth[1], turn, t)
+				# Sailing in at its own speed, round through the entrance on its
+				# right-hand side (turning in smoothly where it already is),
+				# slowing only over its last length to lie off the berth, then
+				# sliding sideways onto it on its thrusters (see
+				# GameState._berth_seconds()).
+				var total := ship.berth_duration if ship.berth_duration > 0.0 else float(settings.get("in_s", 6.0))
+				var sail := maxf(total - slide_s, 0.01)
+				if ship.berth_time < sail:
+					var start := _lying_pose(ship, GameState.play_time - ship.berth_time)
+					# Through the mouth heading in, then one long curve round to lie off
+					# its berth (room for the biggest ships to turn). Not by the mouth
+					# when it's there already (coming in from sea), as near as makes no
+					# odds; from an anchor right by it, through just inside the entrance.
+					var weighing := (start[0] as Vector2).distance_to(_rest_pose(ship)[0]) < 1.0  # (Lying at anchor, facing the wind.)
+					var poses := [start]
+					var mouth := _keep_right(port, _entrance_pose(port, false, true))
+					var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * dock_scale(port) * 0.5
+					if (start[0] as Vector2).distance_to(mouth[0]) > maxf(length, mouth_room):
+						poses.append(mouth)
+					elif weighing:
+						poses.append(_keep_right(port, _entrance_pose(port, true, true)))
+					poses.append(off)
+					var shaped := _loosen(poses, weighing, false)
+					var path := _pose_path(shaped)
+					return _follow(poses, shaped, path, _timed_share(path, _path_times(path, _sea_speed_px(ship), length, length, false, true), ship.berth_time / sail), ship.berth_time / _anchor_turn(sail) if weighing else 1.0)
+				return _slide(off, at, (ship.berth_time - sail) / slide_s)
 			Ship.BERTH_OUT:
-				var t := clampf(ship.berth_time / float(Docks.settings().get("out_s", 5.0)), 0.0, 1.0)
-				var clear: Vector2 = berth[0] - Vector2.from_angle(berth[1]) * float(layout.length) * 0.9
-				if t < 0.4:
-					return [berth[0].lerp(clear, smoothstep(0.0, 1.0, t / 0.4)), berth[1]]  # Backing off.
-				var to_anchor := ship.depart_to.is_empty()
-				var goal: Vector2 = _spot_local(ship, layout) if to_anchor else layout.mouth
-				var pose := _turn_pose(clear, berth[1] + PI, goal, PI if to_anchor else 0.0, turn, (t - 0.4) / 0.6)
-				pose[1] = float(pose[1]) + PI * (1.0 - smoothstep(0.0, 1.0, (t - 0.4) / 0.6))  # Coming round from astern.
-				return pose
-		return [berth[0], berth[1]]
-	return _lying_local(ship, layout, GameState.play_time)
+				# Sliding off the berth; if it lies bow away from the way out (in
+				# a hub's slip), backing out stern first to the middle of the
+				# marina and turning there on its thrusters; then getting going,
+				# out at its own speed through the entrance on its right-hand side
+				# to sea (or to its spot at the anchorage, slowing to anchor).
+				if ship.berth_time < slide_s:
+					return _slide(at, off, ship.berth_time / slide_s)
+				var total := ship.berth_duration if ship.berth_duration > 0.0 else float(settings.get("out_s", 5.0))
+				var t := ship.berth_time - slide_s
+				var plan := _unberth_plan(ship)
+				var start := off
+				if plan.reverse:
+					var back := [_dock_point(port, plan.back), at[1]]
+					if t < plan.reverse_s:
+						var share := _sailed_share(t / plan.reverse_s, float(plan.reverse_units), float(plan.ease), true, true)
+						return [(off[0] as Vector2).lerp(back[0], share), at[1]]
+					t -= plan.reverse_s
+					var turned := _dock_angle(port, float(plan.out_angle))
+					if t < UNBERTH_TURN_S:
+						return [back[0], lerp_angle(float(at[1]), turned, smoothstep(0.0, 1.0, t / UNBERTH_TURN_S))]
+					t -= UNBERTH_TURN_S
+					start = [back[0], turned]
+				var anchoring := ship.depart_to.is_empty()
+				var poses := [start, _keep_right(port, _entrance_pose(port, false, false))]  # (One long curve out through the mouth.)
+				if anchoring:
+					var rest := _rest_pose(ship)
+					var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * dock_scale(port) * 0.5
+					if (rest[0] as Vector2).distance_to(poses[-1][0]) < maxf(length, mouth_room):
+						poses.pop_back()  # (Its spot's right by the mouth: straight there.)
+					poses.append(rest)
+				var shaped := _loosen(poses, false, anchoring)
+				var path := _pose_path(shaped)
+				var before := slide_s + (float(plan.reverse_s) + UNBERTH_TURN_S if plan.reverse else 0.0)
+				var u := t / maxf(total - before, 0.01)
+				var sail_s := maxf(total - before, 0.01)
+				var turn := _anchor_turn(sail_s)
+				return _follow(poses, shaped, path, _timed_share(path, _path_times(path, _sea_speed_px(ship), length, length, true, anchoring), u), 1.0, (t - sail_s + turn) / turn if anchoring else 0.0)
+		return at
+	return _lying_pose(ship, GameState.play_time)
 
 
-## Where a ship lying in port (at the anchorage, or a tug at the wharf) is at a
-## play time: gliding in from the harbour mouth for ANCHOR_GLIDE_S after it
-## got there, then at its spot.
-func _lying_local(ship: Ship, layout: Dictionary, at_time: float) -> Array:
-	var spot := _spot_local(ship, layout)
-	var facing := -PI / 2.0 if ship.is_tug() else PI
-	var since: float = _dock_seen.get(ship, [ship.docked_at, -INF])[1]
-	var t := (at_time - since) / ANCHOR_GLIDE_S
-	if t >= 1.0 or ship.berth >= 0 and ship.berth_phase != Ship.BERTH_IN:
-		return [spot, facing]
-	return _turn_pose(layout.mouth, PI, spot, facing, float(layout.length) * 0.6, clampf(t, 0.0, 1.0))
+## A pose (screen) moved over to its right-hand side of its port's harbour
+## entrance, as ships keep to starboard: in and out pass each other.
+func _keep_right(port_id: String, pose: Array) -> Array:
+	var side := float(_port_layout(port_id).width) * KEEP_RIGHT_WIDTHS * dock_scale(port_id)
+	return [(pose[0] as Vector2) + Vector2.from_angle(float(pose[1]) + PI / 2.0) * side, pose[1]]
 
 
-## A ship's own spot at its port: its place in the anchorage's fixed grid (a
-## tug's along the wharf), kept as long as it lies there.
-func _spot_local(ship: Ship, layout: Dictionary) -> Vector2:
+## How a moored ship gets clear of its berth to head out (dock units): if it
+## lies bow away from the way out (in a hub's slip), it backs out stern first
+## from off its berth until it's abreast the middle of the marina (back), at
+## UNBERTH_REVERSE_SPEED of its speed, taking reverse_s (getting going and
+## stopping over ease), then turns there to out_angle. {reverse, back,
+## out_angle, reverse_units, reverse_s, ease}.
+func _unberth_plan(ship: Ship) -> Dictionary:
+	var plan := {reverse = false, back = Vector2.ZERO, out_angle = 0.0, reverse_units = 0.0, reverse_s = 0.0, ease = 0.0}
+	var layout := _port_layout(ship.docked_at)
+	if ship.berth < 0 or ship.berth >= layout.berths.size():
+		return plan
+	var berth: Array = layout.berths[ship.berth]
+	var rect: Rect2 = _model_look(ship.model_id)[7]
+	var moored := _berth_pose(berth, ship)
+	var off: Vector2 = (moored[0] as Vector2) + (berth[2] as Vector2) * rect.size.y * BERTH_OFF_WIDTHS
+	var facing := Vector2.from_angle(float(moored[1]))
+	var way_out: Vector2 = (layout.inside as Vector2) - off
+	if way_out.length() < 0.001 or facing.dot(way_out.normalized()) > -0.2:
+		return plan  # Pointing the way out already, near enough: it turns as it goes.
+	var units := maxf(facing.dot(off), rect.size.x * 0.5)  # Back till it's abreast the marina's middle.
+	plan.reverse = true
+	plan.back = off - facing * units
+	plan.out_angle = ((layout.inside as Vector2) - plan.back).angle()
+	plan.reverse_units = units
+	plan.ease = minf(rect.size.x * 0.5, units / 3.0)
+	var speed := maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0 * UNBERTH_REVERSE_SPEED
+	plan.reverse_s = (units + 2.0 * plan.ease) / speed
+	return plan
+
+
+## Sliding sideways (on its thrusters) from one screen pose to another, eased.
+static func _slide(from: Array, to: Array, t: float) -> Array:
+	t = smoothstep(0.0, 1.0, t)
+	return [(from[0] as Vector2).lerp(to[0], t), lerp_angle(float(from[1]), float(to[1]), t)]
+
+
+## The entrance of a port's marina as a screen pose: just outside it (or just
+## inside), facing in (or out); `out` pushes the outside point further out
+## (times the mouth's distance).
+func _entrance_pose(port_id: String, inside: bool, facing_in: bool, out := 1.0) -> Array:
+	var layout := _port_layout(port_id)
+	var local: Vector2 = layout.inside if inside else (layout.mouth as Vector2) * out
+	return [_dock_point(port_id, local), _dock_angle(port_id, PI if facing_in else 0.0)]
+
+
+## Where a ship lying in port is at a play time (screen pose): sailing on in
+## from the harbour mouth, the way it came, at its own speed after it got
+## there, slowing over its last length to its spot, then at its spot.
+func _lying_pose(ship: Ship, at_time: float) -> Array:
+	var rest := _rest_pose(ship)
+	var seen: Array = _dock_seen.get(ship, [])
+	var since: float = float(seen[1]) if not seen.is_empty() else -INF
+	if since == -INF or seen.size() > 2 and at_time >= float(seen[2]) or ship.berth >= 0 and ship.berth_phase != Ship.BERTH_IN:
+		return rest
+	var poses := [_keep_right(ship.docked_at, _entrance_pose(ship.docked_at, false, true)), rest]
+	var shaped := _loosen(poses, false, true)  # (Coming round to face the wind as it anchors.)
+	var path := _pose_path(shaped)
+	var length := (_model_look(ship.model_id)[7] as Rect2).size.x * dock_scale(ship.docked_at)
+	var distance := _path_length(path)
+	var ease := minf(length, distance / 3.0)
+	var takes := (distance + ease) / maxf(_sea_speed_px(ship), 0.001)
+	# Coming round to face the wind over the end of its way, and on at its
+	# spot if that's too short for it (see _anchor_turn()).
+	var turn := maxf(ANCHOR_TURN_SHARE * takes, ANCHOR_TURN_MIN_S)
+	var turn_from := maxf(takes - ANCHOR_TURN_SHARE * takes, 0.0)
+	if seen.size() < 3:
+		seen.append(since + maxf(takes, turn_from + turn))  # When it's settled (kept, so the glide's end is cheap to check).
+	var elapsed := at_time - since
+	if elapsed >= maxf(takes, turn_from + turn):
+		return rest
+	if distance < length * 2.0:
+		# Its spot's just by the mouth: too little way to follow round, so it
+		# drifts there coming steadily round from heading in to face the wind.
+		var drift := _along_path(path, _sailed_share(clampf(elapsed / takes, 0.0, 1.0), distance, length, false, true))
+		var settled := elapsed / maxf(takes, turn_from + turn)
+		return [drift[0], lerp_angle(float(poses[0][1]), float(rest[1]), smoothstep(0.0, 1.0, settled))]
+	return _follow(poses, shaped, path, _sailed_share(clampf(elapsed / takes, 0.0, 1.0), distance, length, false, true), 1.0, (elapsed - turn_from) / turn)
+
+
+## A ship's speed at sea on screen (px per s of play), as it's drawn sailing.
+func _sea_speed_px(ship: Ship) -> float:
+	return maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0 * _ship_scale()
+
+
+static func _path_length(points: PackedVector2Array) -> float:
+	var total := 0.0
+	for i in range(1, points.size()):
+		total += points[i - 1].distance_to(points[i])
+	return total
+
+
+## How far along (a share) a ship sailing a path of a length at a steady speed
+## is, a share t of the way through the time it takes: getting going over the
+## first ease of it from a stop (start), and slowing to a stop over the last
+## ease (stop), at the same rate a ship slows to anchor; steady in between.
+static func _sailed_share(t: float, length: float, ease: float, start: bool, stop: bool) -> float:
+	if length <= 0.0:
+		return 1.0
+	ease = minf(ease, length / 3.0)
+	var speeding := ease if start else 0.0
+	var slowing := ease if stop else 0.0
+	var cruise := length - speeding - slowing
+	# In units of the time a length takes at speed: speeding up or slowing down over a distance takes twice as long.
+	var time := clampf(t, 0.0, 1.0) * (2.0 * speeding + cruise + 2.0 * slowing)
+	var gone := 0.0
+	if time < 2.0 * speeding:
+		gone = time * time / (4.0 * speeding)
+	elif time < 2.0 * speeding + cruise:
+		gone = speeding + time - 2.0 * speeding
+	else:
+		var late := time - 2.0 * speeding - cruise
+		gone = speeding + cruise + late - late * late / (4.0 * slowing)
+	return clampf(gone / length, 0.0, 1.0)
+
+
+## How long (s of play) a ship takes to sail into its berth (coming_in) from
+## where it lies, or out of it to sea or its spot at the anchorage, at its
+## own speed, slowing for tight bends (see _path_times()), measured on the
+## ground (so off screen too), along the curves the map draws it on:
+## GameState.berth_route.
+func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
+	# Its spot at the anchorage, as things are now (it may only just have
+	# started pulling out to anchor).
+	if _spots_frame >= 0:
+		_spots_dirty = true
+		_spots_frame = Engine.get_process_frames() - 1
 	_update_spots()
+	var port := ship.docked_at
+	if port.is_empty() or ship.berth < 0:
+		return 0.0
+	var layout := _port_layout(port)
+	if ship.berth >= layout.berths.size():
+		return 0.0
+	var berth: Array = layout.berths[ship.berth]
+	var look_rect: Rect2 = _model_look(ship.model_id)[7]
+	var moored := _berth_pose(berth, ship)
+	var off := [(moored[0] as Vector2) + (berth[2] as Vector2) * look_rect.size.y * BERTH_OFF_WIDTHS, float(moored[1])]
+	var mouth_in := [layout.mouth, PI]
+	var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * 0.5
+	var length := look_rect.size.x
+	var speed := maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0
+	# The same curves the map draws it along (_docked_screen_pose()), in dock units.
+	if coming_in:
+		var seen: Array = _dock_seen.get(ship, [])
+		var gliding := not seen.is_empty() and float(seen[1]) > -INF and (seen.size() < 3 or GameState.play_time < float(seen[2]))
+		var anchor := _anchor_local(ship)
+		var weighing := not gliding and anchor.x == anchor.x  # (NAN when it has no spot.)
+		var poses := [[anchor, 0.0] if weighing else mouth_in]
+		if weighing and anchor.distance_to(layout.mouth) > maxf(length, mouth_room):
+			poses.append(mouth_in)
+		elif weighing:
+			poses.append([layout.inside, PI])
+		poses.append(off)
+		var path := _pose_path(_loosen(poses, weighing, false))
+		return _path_times(path, speed, length, length, false, true)[-1]
+	var backing := 0.0  # Backing out and turning round first (s; see _unberth_plan()).
+	var plan := _unberth_plan(ship)
+	var start: Array = off
+	if plan.reverse:
+		backing = float(plan.reverse_s) + UNBERTH_TURN_S
+		start = [plan.back, float(plan.out_angle)]
+	var poses := [start, [layout.mouth, 0.0]]
+	var anchoring := ship.depart_to.is_empty()
+	var anchor := _anchor_local(ship) if anchoring else Vector2(NAN, NAN)
+	if anchor.x == anchor.x:
+		if anchor.distance_to(layout.mouth) < maxf(length, mouth_room):
+			poses.pop_back()
+		poses.append([anchor, 0.0])
+	var path := _pose_path(_loosen(poses, false, anchoring and anchor.x == anchor.x))
+	return backing + _path_times(path, speed, length, length, true, anchoring)[-1]
+
+
+## A ship's anchor at its port's anchorage in its marina's dock units, or NAN
+## if it has no spot there (yet).
+func _anchor_local(ship: Ship) -> Vector2:
+	if not _spot_slots.has(ship):
+		return Vector2(NAN, NAN)
+	var port := ship.docked_at
+	var spots := _anchor_spots(port, _anchor_pool(ship))
+	var slot := int(_spot_slots[ship])
+	if slot >= spots.size():
+		return Vector2(NAN, NAN)
+	var info := GameData.get_port(port)
+	var lat := float(info.get("lat", 0.0))
+	# On the ground near the port: east and south (as the map shows it, north up), in dock units.
+	var ground := Vector2((spots[slot].x - float(info.get("lon", 0.0))) * cos(deg_to_rad(lat)), -(spots[slot].y - lat)) * SHIP_WORLD_ZOOM
+	var local := ground.rotated(-_port_sea_angle(port))
+	local.y *= float(_dock_flips.get(port, 1.0))
+	return local
+
+
+## A lying ship's own spot (screen pose): its anchor at the anchorage, the
+## ship swung round it to face into the wind, its bow at the anchor (and in a
+## storm, swinging and pitching about it).
+func _rest_pose(ship: Ship) -> Array:
+	var port := ship.docked_at
+	var key: Array = _spot_keys[ship] if _spot_keys.has(ship) else [port, _anchor_pool(ship)]
 	var slot := int(_spot_slots.get(ship, 0))
-	if ship.is_tug():
-		return _tug_mooring(layout, slot)[0]
-	return _anchor_spot(layout, slot)
+	var half: float = (_model_look(ship.model_id)[7] as Rect2).size.x / 2.0
+	var anchor := _anchor_screen_cached(ship, port, str(key[1]), slot)
+	var facing := _upwind_angle(port)
+	var storm := _storm_strength_at_port(port)
+	if storm > 0.0:
+		var t := GameState.play_time
+		facing += (sin(t * 1.7 + ship.id * 1.3) * 0.7 + sin(t * 3.3 + ship.id * 0.7) * 0.3) * STORM_SWING * storm
+	return [anchor - Vector2.from_angle(facing) * half * _ship_scale(), facing]
 
 
-## The slot-th spot of a port's anchorage (dock units): a fixed grid out
-## beyond the harbour mouth, off to one side of the way in (the side the
-## quay is, away from the tugs), ANCHOR_COLUMNS across.
-static func _anchor_spot(layout: Dictionary, slot: int) -> Vector2:
-	var cell := Vector2(float(layout.length) + 3.0, float(layout.width) * 2.4 + 1.0)
-	var origin := Vector2(float(layout.mouth.x) + float(layout.length) * 0.6, float(layout.width) * 2.0 + cell.y / 2.0)
-	return origin + Vector2(floori(slot / float(ANCHOR_COLUMNS)) * cell.x, (slot % ANCHOR_COLUMNS) * cell.y)
+## A port's slot-th anchor on screen, in one of its two anchorages (see
+## _anchor_spots()), or if there are too few, one further out to sea past the
+## mouth.
+func _anchor_screen(port_id: String, pool: String, slot: int) -> Vector2:
+	var spots := _anchor_spots(port_id, pool)
+	if slot < spots.size():
+		return world_to_screen(Geo.project(spots[slot]))
+	var layout := _port_layout(port_id)
+	var spacing := _anchor_length(pool) * 1.1
+	var extra := slot - spots.size()
+	return _dock_point(port_id, Vector2(float(layout.radius) + spacing * (2 + extra / 3), spacing * (extra % 3 - 1)))
+
+
+## A ship's anchor on screen (see _anchor_screen()): its point on the globe is
+## kept until its spot (or its port's marina) changes, so only the turn of the
+## view is worked out each frame.
+func _anchor_screen_cached(ship: Ship, port_id: String, pool: String, slot: int) -> Vector2:
+	var radius: float = _port_layout(port_id).radius
+	var cached: Array = _anchor_units.get(ship, [])
+	if cached.is_empty() or cached[0] != port_id or cached[1] != pool or cached[2] != slot or cached[3] != radius:
+		var spots := _anchor_spots(port_id, pool)
+		if slot >= spots.size():
+			_anchor_units.erase(ship)
+			return _anchor_screen(port_id, pool, slot)  # (Past the anchorage's points: placed off the mouth, not kept.)
+		cached = [port_id, pool, slot, radius, _unit(Geo.project(spots[slot]))]
+		_anchor_units[ship] = cached
+	return _unit_to_screen(cached[4])
+
+
+## Which of a port's anchorages (data/anchorages.json) a ship lies in: "small",
+## closer in and denser, for ships up to its small_length; "all" (room for the
+## longest ship) for the rest.
+func _anchor_pool(ship: Ship) -> String:
+	if not _anchor_pools.has(ship.model_id):
+		_load_anchorages()
+		_anchor_pools[ship.model_id] = "small" if (_model_look(ship.model_id)[7] as Rect2).size.x <= _anchor_length("small") else "all"
+	return _anchor_pools[ship.model_id]
+
+
+## The longest ship an anchorage has room to swing (dock units).
+func _anchor_length(pool: String) -> float:
+	return float(_anchorages.get("small_length", 9.0)) if pool == "small" else _longest_ship()
+
+
+func _load_anchorages() -> void:
+	if _anchorages.is_empty():
+		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(ANCHORAGES_PATH)) if FileAccess.file_exists(ANCHORAGES_PATH) else null
+		_anchorages = data if data is Dictionary else {ports = {}}
+
+
+## A port's anchor points (lon, lat) in an anchorage ("all" or "small"),
+## nearest the sea first, leaving out those whose ships could swing into its
+## marina as it is now.
+func _anchor_spots(port_id: String, pool: String) -> PackedVector2Array:
+	var layout := _port_layout(port_id)
+	var key := port_id + pool
+	var cached: Array = _spot_cache.get(key, [])
+	if not cached.is_empty() and float(cached[0]) == float(layout.radius):
+		return cached[1]
+	_load_anchorages()
+	var port := GameData.get_port(port_id)
+	var at := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+	# A dock unit is 1 / SHIP_WORLD_ZOOM degrees of the globe: 60 / SHIP_WORLD_ZOOM nm.
+	var clear_nm := (float(layout.radius) + JETTY_WIDTH + _anchor_length(pool)) * 60.0 / SHIP_WORLD_ZOOM
+	var spots := PackedVector2Array()
+	for spot: Array in (_anchorages.get("ports", {}) as Dictionary).get(port_id, {}).get(pool, []):
+		var point := Vector2(float(spot[0]), float(spot[1]))
+		if Geo.distance_nm(at, point) >= clear_nm:
+			spots.append(point)
+	_spot_cache[key] = [layout.radius, spots]
+	return spots
+
+
+## The way into the wind at a port, on screen (ships at anchor face it).
+func _upwind_angle(port_id: String) -> float:
+	var frame := Engine.get_process_frames()
+	if frame != _upwind_frame:
+		_upwind_frame = frame
+		_upwind.clear()
+		_port_storms.clear()
+	if not _upwind.has(port_id):
+		var port := GameData.get_port(port_id)
+		var at := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+		var wind := Wind.at(at, GameState.play_time, GameState.weather.storms)
+		_upwind[port_id] = _heading_angle(-wind if wind.length() > 0.001 else Vector2.LEFT, GameData.port_position(port_id))
+	return _upwind[port_id]
+
+
+## The strongest storm's strength at a port (0..1).
+func _storm_strength_at_port(port_id: String) -> float:
+	if GameState.weather.storms.is_empty():
+		return 0.0
+	_upwind_angle(port_id)  # (Starts this frame's cache, which keeps this too.)
+	if not _port_storms.has(port_id):
+		var port := GameData.get_port(port_id)
+		_port_storms[port_id] = float(GameState.weather.strongest_at(Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))))[1])
+	return _port_storms[port_id]
+
+
+## A smooth path through screen poses ([point, facing]): a curve from each to
+## the next, leaving and arriving along their facings (handle: how hard, a
+## share of the way), as points.
+static func _pose_path(poses: Array, handle := 0.4) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(1, poses.size()):
+		var a: Vector2 = poses[i - 1][0]
+		var b: Vector2 = poses[i][0]
+		var reach := a.distance_to(b) * handle
+		var curve := [a, a + Vector2.from_angle(float(poses[i - 1][1])) * reach, b - Vector2.from_angle(float(poses[i][1])) * reach, b]
+		for k in range(0 if i == 1 else 1, POSE_PATH_STEPS + 1):
+			points.append(_bezier(curve, float(k) / POSE_PATH_STEPS))
+	return points
+
+
+## The point a share u (0..1) of the way along a path, and which way it heads
+## there: [point, angle]. The heading turns smoothly through the path's
+## corners (from halfway between one piece's way and the last's to halfway
+## between it and the next's), so a ship rounding a curve never snaps round;
+## start_angle and end_angle, if given, are the headings it starts and ends on.
+static func _along_path(points: PackedVector2Array, u: float, start_angle := NAN, end_angle := NAN) -> Array:
+	if points.size() < 2:
+		return [points[0] if not points.is_empty() else Vector2.ZERO, 0.0]
+	var total := 0.0
+	for i in range(1, points.size()):
+		total += points[i - 1].distance_to(points[i])
+	var goal := total * clampf(u, 0.0, 1.0)
+	for i in range(1, points.size()):
+		var step := points[i - 1].distance_to(points[i])
+		if goal <= step or i == points.size() - 1:
+			var t := clampf(goal / step, 0.0, 1.0) if step > 0.0 else 1.0
+			var here := _piece_angle(points, i)
+			var angle := here
+			if t < 0.5:
+				var before := _piece_angle(points, i - 1) if i > 1 else (start_angle if not is_nan(start_angle) else here)
+				angle = lerp_angle(before if i == 1 else lerp_angle(before, here, 0.5), here, t * 2.0)
+			else:
+				var after := _piece_angle(points, i + 1) if i < points.size() - 1 else (end_angle if not is_nan(end_angle) else here)
+				angle = lerp_angle(here, after if i == points.size() - 1 else lerp_angle(here, after, 0.5), t * 2.0 - 1.0)
+			return [points[i - 1].lerp(points[i], t), angle]
+		goal -= step
+	return [points[0], _piece_angle(points, 1)]
+
+
+## How long (cumulative, from the start, at each point) a ship takes along a
+## path: `speed` (path units a second) on the straight, slower round any bend
+## tighter than HARBOUR_TURN_LENGTHS of its length (so it never spins round),
+## and getting going from a standstill over its first `ease` (start) or
+## slowing to one over its last (stop), at a steady rate either way.
+static func _path_times(points: PackedVector2Array, speed: float, ship_length: float, ease: float, start: bool, stop: bool) -> PackedFloat32Array:
+	var times := PackedFloat32Array([0.0])
+	var n := points.size()
+	if n < 2:
+		return times
+	var lengths := PackedFloat32Array()
+	var total := 0.0
+	for i in range(1, n):
+		var step := points[i - 1].distance_to(points[i])
+		lengths.append(step)
+		total += step
+	ease = minf(ease, total / 3.0)
+	var min_radius := maxf(ship_length * HARBOUR_TURN_LENGTHS, 0.0001)
+	var gone := 0.0
+	for i in range(1, n):
+		var step: float = lengths[i - 1]
+		var middle := gone + step / 2.0
+		var limit := speed
+		# Round a bend (the sharper of this piece's two corners): no faster
+		# than takes it round min_radius.
+		for corner: int in [i - 1, i]:
+			if corner >= 1 and corner < n - 1:
+				var bend := absf(angle_difference(_piece_angle(points, corner), _piece_angle(points, corner + 1)))
+				var span := (lengths[corner - 1] + lengths[corner]) / 2.0
+				if bend > 0.0001:
+					limit = minf(limit, speed * clampf(span / bend / min_radius, 0.0, 1.0))
+		if start and ease > 0.0:
+			limit = minf(limit, speed * sqrt(clampf(middle / ease, 0.0, 1.0)))
+		if stop and ease > 0.0:
+			limit = minf(limit, speed * sqrt(clampf((total - middle) / ease, 0.0, 1.0)))
+		times.append(times[-1] + step / maxf(limit, speed * HARBOUR_CRAWL))
+		gone += step
+	return times
+
+
+## The share of a path's length a ship has gone (see _path_times()) a share t
+## of the way through the time it takes.
+static func _timed_share(points: PackedVector2Array, times: PackedFloat32Array, t: float) -> float:
+	var n := mini(points.size(), times.size())
+	if n < 2 or times[n - 1] <= 0.0:
+		return clampf(t, 0.0, 1.0)
+	var goal := clampf(t, 0.0, 1.0) * times[n - 1]
+	var total := 0.0
+	for i in range(1, n):
+		total += points[i - 1].distance_to(points[i])
+	var gone := 0.0
+	for i in range(1, n):
+		var step := points[i - 1].distance_to(points[i])
+		if goal <= times[i] or i == n - 1:
+			var piece := times[i] - times[i - 1]
+			gone += step * (clampf((goal - times[i - 1]) / piece, 0.0, 1.0) if piece > 0.0 else 1.0)
+			break
+		gone += step
+	return gone / total if total > 0.0 else 1.0
+
+
+## Poses for _pose_path() with a loose first (or last) one, a ship at anchor
+## facing the wind, set to head straight for the next (from the last), so it
+## doesn't bend the path (see _follow()).
+static func _loosen(poses: Array, loose_start: bool, loose_end: bool) -> Array:
+	var shaped := poses.duplicate()
+	if loose_start and poses.size() > 1:
+		shaped[0] = [poses[0][0], ((poses[1][0] as Vector2) - (poses[0][0] as Vector2)).angle()]
+	if loose_end and poses.size() > 1:
+		shaped[-1] = [poses[-1][0], ((poses[-1][0] as Vector2) - (poses[-2][0] as Vector2)).angle()]
+	return shaped
+
+
+## A ship a share of the way (by distance) along a path through poses
+## (shaped by _loosen()): [point, heading]. Weighing anchor from a loose first
+## pose, it comes round from its own facing as `weighed` goes 0 to 1; dropping
+## anchor at a loose last one, round to its facing as `anchoring` does (see
+## _anchor_turn()).
+static func _follow(poses: Array, shaped: Array, path: PackedVector2Array, share: float, weighed := 1.0, anchoring := 0.0) -> Array:
+	var at := _along_path(path, share, float(shaped[0][1]), float(shaped[-1][1]))
+	# Each turn goes the way it set out to (from its facing to the way it heads
+	# off, or from the way it comes in to its facing), even when that's most of
+	# the way round: so it never swaps sides halfway.
+	if weighed < 1.0:
+		at[1] = _turn_toward(float(poses[0][1]), float(at[1]), smoothstep(0.0, 1.0, weighed), angle_difference(float(poses[0][1]), float(shaped[0][1])))
+	if anchoring > 0.0:
+		at[1] = _turn_toward(float(at[1]), float(poses[-1][1]), smoothstep(0.0, 1.0, anchoring), angle_difference(float(shaped[-1][1]), float(poses[-1][1])))
+	return at
+
+
+## An angle a share w of the way from one to another, turning the way nearest
+## `hint` (a signed turn from `from`): round the long way if that's the side
+## the turn started on.
+static func _turn_toward(from: float, to: float, w: float, hint: float) -> float:
+	var turn := angle_difference(from, to)
+	if absf(turn - hint) > PI:
+		turn += TAU if turn < hint else -TAU
+	return from + turn * w
+
+
+## How long (s) a ship takes to come round from facing the wind as it weighs
+## anchor, or round to face it as it anchors, on a way that takes `way_s`:
+## ANCHOR_TURN_SHARE of it, but at least ANCHOR_TURN_MIN_S (so it never swings
+## round on a short way), and no more than all of it.
+static func _anchor_turn(way_s: float) -> float:
+	return minf(maxf(ANCHOR_TURN_SHARE * way_s, ANCHOR_TURN_MIN_S), maxf(way_s, 0.001))
+
+
+## Which way a path's piece (from point i - 1 to i) heads; for one too short to
+## say, the nearest piece that isn't (before it first).
+static func _piece_angle(points: PackedVector2Array, i: int) -> float:
+	for k in points.size():
+		for j: int in [i - k, i + k]:
+			if j >= 1 and j < points.size():
+				var way := points[j] - points[j - 1]
+				if way.length_squared() > 0.000001:
+					return way.angle()
+	return 0.0
 
 
 ## Once a frame: every docked ship's spot in its port. A ship lying at the
-## anchorage (or about to: coming in, or pulling out to anchor) or a tug keeps
-## the slot it was given, the first free one, until it leaves; and when it
-## arrived in port, for its glide in from the mouth.
+## anchorage (or about to: coming in, or pulling out to anchor) keeps the anchor
+## it was given, the first free one, until it leaves. And when it arrived in
+## port, for its glide in from the mouth.
 func _update_spots() -> void:
 	var frame := Engine.get_process_frames()
-	if frame == _spots_frame:
+	if frame == _spots_frame or not _spots_dirty and _spots_frame >= 0:
 		return
 	var first := _spots_frame < 0
 	_spots_frame = frame
+	_spots_dirty = false
 	var alive := {}
 	for ship in GameState.ships:
 		if not ship.is_docked():
 			continue
 		alive[ship] = true
+		_harbour_reach_cache.erase(ship)  # (Its next leg's curves are worked out when it sails.)
 		var port := ship.docked_at
 		var seen: Array = _dock_seen.get(ship, [])
 		if seen.is_empty() or seen[0] != port:
 			_dock_seen[ship] = [port, -INF if first else GameState.play_time]  # Already there when the map opened: no glide.
-		var lies := ship.is_tug() or ship.berth < 0 or ship.berth_phase == Ship.BERTH_IN \
+		var lies := ship.berth < 0 or ship.berth_phase == Ship.BERTH_IN \
 			or ship.berth_phase == Ship.BERTH_OUT and ship.depart_to.is_empty()
-		var key := [port, ship.is_tug()]
-		var taken: Dictionary = _spot_tables.get_or_add(key, {})
 		if lies and not _spot_slots.has(ship):
+			var key := [port, _anchor_pool(ship)]
+			var taken: Dictionary = _spot_tables.get_or_add(key, {})
 			var slot := 0
 			while taken.has(slot):
 				slot += 1
@@ -2190,6 +3001,8 @@ func _update_spots() -> void:
 			_spot_slots[ship] = slot
 			_spot_keys[ship] = key
 		elif not lies and _spot_slots.has(ship):
+			_free_spot(ship)
+		elif _spot_slots.has(ship) and _spot_keys[ship][0] != port:
 			_free_spot(ship)
 	for ship: Ship in _spot_slots.keys():
 		if not alive.has(ship):
@@ -2199,50 +3012,117 @@ func _update_spots() -> void:
 			_dock_seen.erase(ship)
 
 
-## Which way a ship eased near a port (see _harbour_blend()) faces: along the
-## way it's really moving on screen, from where it is to where it'll be
-## HEADING_PROBE_NM further on; its lane's heading otherwise.
-func _blended_heading(ship: Ship, on_lane: Vector2, at: Vector2, lane_angle: float) -> float:
-	if on_lane.distance_squared_to(at) < 0.01:
-		return lane_angle  # Not near a port.
-	var lane = GameData.lane(ship.from_port, ship.to_port)
-	if lane == null or ship.traveled_nm + HEADING_PROBE_NM > lane.length():
-		return lane_angle
-	var ahead := _harbour_blend(ship, world_to_screen(lane.sample(ship.traveled_nm + HEADING_PROBE_NM)[0]))
-	var way := ahead - at
-	return way.angle() if way.length() > 0.2 else lane_angle
-
-
 func _free_spot(ship: Ship) -> void:
 	var taken: Dictionary = _spot_tables.get(_spot_keys.get(ship, []), {})
 	taken.erase(_spot_slots[ship])
 	_spot_slots.erase(ship)
 	_spot_keys.erase(ship)
+	_anchor_units.erase(ship)
 
 
-## A ship sailing near a port it's leaving or making for is drawn eased from
-## where it lay there (its berth's mouth, or its spot at the anchorage) and
-## towards that port's harbour mouth, so it meets its docks smoothly. The
-## easing reaches 3 times the mouth's distance from the port, which (docks
-## being sized in the world) is the same stretch of sea at every zoom.
-func _harbour_blend(ship: Ship, at: Vector2) -> Vector2:
-	if not docks_shown():
-		return at
-	for port: String in [ship.from_port, ship.to_port]:
+## A ship sailing near a port it's making for (or leaving) sails a curve
+## between its lane and the harbour: leaving its lane along the lane's heading
+## and coming round to the harbour mouth heading in (or from where it lay
+## there, its spot at the anchorage or the mouth, round onto its lane). The
+## curve takes the last (or first) HARBOUR_REACH times the harbour's distance
+## from the port of its lane (more if the curve is longer, so it's never
+## faster than at sea; the two ends share a short leg), gone along evenly.
+## [screen point, angle], or [] when it isn't near a port.
+func _harbour_pose(ship: Ship) -> Array:
+	if not docks_shown() or ship.is_docked():
+		return []
+	var lane = GameData.lane(ship.from_port, ship.to_port)
+	if lane == null:
+		return []
+	var length: float = lane.length()
+	var reaches := _harbour_reaches(ship, lane, length)
+	for i in 2:
+		var arriving := i == 0
+		var port := ship.to_port if arriving else ship.from_port
+		var reach: float = reaches[i]
+		var gone := length - ship.traveled_nm if arriving else ship.traveled_nm
+		if port.is_empty() or reach <= 0.0 or gone >= reach:
+			continue
+		var curve := _harbour_curve(ship, lane, length, arriving, reach)
+		if curve.is_empty():
+			continue
+		return _follow(curve[1], curve[2], curve[0], 1.0 - gone / reach if arriving else gone / reach, 1.0 if arriving else gone / reach / ANCHOR_TURN_SHARE)
+	return []
+
+
+## Where a ship near a port lay, or will come in: the harbour mouth heading in
+## (arriving), or its spot at the anchorage or the mouth heading out (leaving).
+func _harbour_end(ship: Ship, port: String, arriving: bool) -> Array:
+	if arriving:
+		return _keep_right(port, _entrance_pose(port, false, true))
+	var last: Array = _last_spot.get(ship, [])
+	if not last.is_empty() and last[0] == port and last.size() > 2:
+		var spot := _unit_to_screen(last[1])
+		if not _is_hidden(spot):
+			return [spot, float(last[2])]
+	return _keep_right(port, _entrance_pose(port, false, false))
+
+
+## The curve between a ship's lane, `reach` nm from a port, and that port's
+## harbour (see _harbour_pose()), from the lane in arriving and from the
+## harbour out leaving (from where it lay, loose: it comes round from there as
+## it gets going, see _follow()): [screen points, poses, shaped poses], or []
+## if either end is round the far side.
+func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: float) -> Array:
+	var port := ship.to_port if arriving else ship.from_port
+	if _is_hidden(port_screen_position(port)):
+		return []
+	var harbour := _harbour_end(ship, port, arriving)
+	var mile := length - reach if arriving else reach
+	var sample: Array = lane.sample(clampf(mile, 0.0, length))
+	var edge := world_to_screen(sample[0])
+	if _is_hidden(edge) or _is_hidden(harbour[0]):
+		return []
+	var on_lane := [edge, _heading_angle(sample[1], sample[0])]
+	var poses := [on_lane, harbour] if arriving else [harbour, on_lane]
+	var shaped := _loosen(poses, not arriving, false)
+	return [_pose_path(shaped, HARBOUR_CURVE_HANDLE), poses, shaped]
+
+
+## How far (nm of lane) from each end of its leg a ship sails its curve in or
+## out of port: [arriving, leaving], worked out once a leg (0 for none).
+func _harbour_reaches(ship: Ship, lane, length: float) -> PackedFloat32Array:
+	var key := [ship.from_port, ship.to_port]
+	var keep := true  # (Not while a port is round the far side: worked out again when it comes round.)
+	var cached: Array = _harbour_reach_cache.get(ship, [])
+	if not cached.is_empty() and cached[0] == key:
+		return cached[1]
+	var px_per_nm := _zoom / 60.0
+	var reaches := PackedFloat32Array([0.0, 0.0])
+	for i in 2:
+		var arriving := i == 0
+		var port := ship.to_port if arriving else ship.from_port
 		if port.is_empty():
 			continue
-		var layout := _port_layout(port)
-		var root := port_screen_position(port)
-		var mouth := _dock_point(port, layout.mouth)
-		var target := mouth
-		var last: Array = _last_spot.get(ship, [])
-		if port == ship.from_port and not last.is_empty() and last[0] == port:
-			target = _dock_point(port, last[1])
-		var reach := root.distance_to(mouth) * 3.0
-		var distance := at.distance_to(root)
-		if distance < reach:
-			at += (target - root) * (1.0 - smoothstep(0.0, reach, distance))
-	return at
+		if _is_hidden(port_screen_position(port)):
+			keep = false
+			continue
+		var harbour := _harbour_end(ship, port, arriving)
+		var reach := maxf((harbour[0] as Vector2).distance_to(port_screen_position(port)) / px_per_nm * HARBOUR_REACH, HARBOUR_MIN_NM)
+		# A longer curve than its stretch of lane would be faster than at sea:
+		# give it as much lane as it's long.
+		for k in 3:
+			var curve := _harbour_curve(ship, lane, length, arriving, minf(reach, length))
+			if curve.is_empty():
+				break
+			var curve_nm := _path_length(curve[0]) / px_per_nm
+			if curve_nm <= reach:
+				break
+			reach = curve_nm * 1.05
+		reaches[i] = reach
+	# A short leg: the two ends share it.
+	if reaches[0] + reaches[1] > length and reaches[0] + reaches[1] > 0.0:
+		var fit := length / (reaches[0] + reaches[1])
+		reaches[0] *= fit
+		reaches[1] *= fit
+	if keep:
+		_harbour_reach_cache[ship] = [key, reaches]
+	return reaches
 
 
 func _draw_overlay() -> void:
@@ -2261,10 +3141,13 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 		_ports_by_rank = GameData.ports.duplicate()
 		_ports_by_rank.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 			return a.get("rank", 999) < b.get("rank", 999))
-	# The HQ and hubs get their names placed first, then the rest by rank.
+	# The HQ and hubs get their names placed first (picking a port: the picked
+	# one), then the rest by rank.
 	var hub_ports := {}
-	for hub in GameState.hubs:
+	for hub in GameState.hubs if selectable_ports.is_empty() else []:
 		hub_ports[hub.port_id] = true
+	if not selected_port.is_empty():
+		hub_ports[selected_port] = true
 	var ranked := _ports_by_rank.filter(func(port: Dictionary) -> bool: return hub_ports.has(port.id))
 	ranked.append_array(_ports_by_rank.filter(func(port: Dictionary) -> bool: return not hub_ports.has(port.id)))
 	var labels := []
@@ -2414,13 +3297,20 @@ func _draw_ports(labels: Array) -> void:
 			# In a locked region: a small faint dot, no more.
 			_canvas.draw_circle(pos, PORT_RADIUS_MIN, locked_fill)
 			return
+		if _marina_shown(port_id):
+			return  # Grown into its marina (see _draw_marinas()).
 		var port_fill := fill if price_commodity.is_empty() else _price_color(port_id)
+		if selectable_ports.get(port_id) is Color:
+			port_fill = selectable_ports[port_id]
 		var radius := _port_radius(port_id)
 		_canvas.draw_circle(pos, radius, dimmed if dimmed_ports.has(port_id) else port_fill)
 		_canvas.draw_arc(pos, radius, 0.0, TAU, 24, outline, 1.5, true)
-	# Every company's HQ and hubs (other players' too, in multiplayer).
+		if port_id == selected_port:
+			_canvas.draw_arc(pos, radius + 4.0, 0.0, TAU, 32, SELECTED_RING, 3.0, true)
+	# Every company's HQ and hubs (other players' too, in multiplayer; none while
+	# picking a port, before there's a company).
 	var hub_ports := {}  # Port id -> [[hub, its company's ring color], ...]
-	for each in GameState.all_companies():
+	for each in GameState.all_companies() if selectable_ports.is_empty() else []:
 		var each_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value(each.color)
 		for hub in each.hubs:
 			(hub_ports.get_or_add(hub.port_id, []) as Array).append([hub, each_color])
@@ -2432,9 +3322,11 @@ func _draw_ports(labels: Array) -> void:
 	for port_id: String in hub_ports:
 		draw_port.call(port_id)
 		var radius := _port_radius(port_id) + 1.0
+		if _marina_shown(port_id):
+			radius = (float(_port_layout(port_id).radius) + JETTY_WIDTH) * _ship_scale() + 1.0  # Round its marina.
 		for entry: Array in hub_ports[port_id]:
 			var width := HQ_RING_WIDTH if entry[0].is_hq else HUB_RING_WIDTH
-			_canvas.draw_arc(port_screen_position(port_id), radius + width / 2.0, 0.0, TAU, 32, entry[1], width, true)
+			_canvas.draw_arc(port_screen_position(port_id), radius + width / 2.0, 0.0, TAU, clampi(int(radius), 32, 128), entry[1], width, true)
 			radius += width
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
@@ -2882,21 +3774,45 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 		return
 	var at: Vector2
 	var angle: float
+	# Far off screen (most of a big fleet, most of the time): skipped before
+	# working out just where (anchored ships lie up to PORT_MAX_REACH from their
+	# port, and ships near a port are eased towards it by about as much).
+	var near := Rect2(Vector2.ZERO, size).grow((SHIP_CULL_MARGIN + PORT_MAX_REACH) * _ship_scale())
+	if ship.is_docked() and not near.has_point(port_screen_position(ship.docked_at)):
+		return
+	# In port while its marina is too small to show, its port's dot stands for it.
+	if ship.is_docked() and not _marina_shown(ship.docked_at):
+		return
+	# Too small to make out (zoomed well out): a dot in its color, where it is.
+	var tiny := (look[7] as Rect2).size.x * _ship_scale() < TINY_SHIP_PX
 	if not ship.is_docked() and not ship.is_service() and ship.rescuer == null and not ship.canal_state in [Ship.CANAL_ANCHORED, Ship.CANAL_CONVOY, Ship.CANAL_TOLL]:
 		# A cargo ship on its lane (most of them): where and which way from
 		# one sample of the lane.
 		var here := ship.lane_sample()
 		if here.is_empty():
 			return
-		var on_lane := world_to_screen(here[0]) + _canal_lane_offset(ship)
-		at = _harbour_blend(ship, on_lane)
-		angle = _blended_heading(ship, on_lane, at, _heading_angle(here[1], here[0]))
+		var on_lane := world_to_screen(here[0])
+		if not near.has_point(on_lane):
+			return
+		if tiny:
+			_draw_tiny_ship(on_lane, color)
+			return
+		var harbour := _harbour_pose(ship)
+		if harbour.is_empty():
+			at = on_lane + _canal_lane_offset(ship)
+			angle = _heading_angle(here[1], here[0])
+		else:
+			at = harbour[0]
+			angle = harbour[1]
 	else:
 		at = ship_screen_position(ship)
+		if tiny:
+			_draw_tiny_ship(at, color)
+			return
 		angle = _screen_angle(ship)
 	if not Rect2(Vector2.ZERO, size).grow(SHIP_CULL_MARGIN * _ship_scale()).has_point(at):
 		return  # Off screen.
-	if ship.is_docked() and docks_shown() and (ship.is_tug() or ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE):
+	if ship.is_docked() and docks_shown() and not ship.is_tug() and ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		_draw_mooring_ropes(ship)  # Moored: tied up to the bollards.
 	_canvas.draw_set_transform(at, angle, Vector2.ONE * _ship_scale())
@@ -2915,6 +3831,13 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	_canvas.draw_primitive(look[3], colors, PackedVector2Array())
 	_canvas.draw_primitive(look[4], colors, PackedVector2Array())
 	_canvas.draw_polyline(look[5], outline, 1.0)
+
+
+## A ship too small on screen to make out (see TINY_SHIP_PX): a dot in its color.
+func _draw_tiny_ship(at: Vector2, color: Color) -> void:
+	if Rect2(Vector2.ZERO, size).has_point(at):
+		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+		_canvas.draw_rect(Rect2(at - Vector2.ONE, Vector2.ONE * 2.0), color)
 
 
 ## The hull in the model's color, the cargo (cut off behind how full the hold
@@ -3020,16 +3943,14 @@ func _draw_marker(at: Vector2, color: Color) -> void:
 
 # --- Storms --------------------------------------------------------------
 
-## Each storm (GameState.weather) as a soft, slowly turning cloud: a haze over
-## its reach, spiral bands that wind into the core (turning anticlockwise in
-## the north, clockwise in the south, as storms do), a clear eye once a
-## tropical storm is strong, and its name under the core when there's room.
-## The bands turn with play time, so they stop when the game is paused.
+## Each storm (GameState.weather): its cloud is the sky's (globe.gdshader:
+## dark spiral bands for tropical storms, ragged rain cloud for the rest), and
+## over it, its track, lightning in a tropical storm's bands, and its name
+## under the core when there's room.
 func _draw_storms() -> void:
 	_draw_storm_tracks()
 	var font := get_theme_default_font()
 	for storm: Dictionary in GameState.weather.storms:
-		var lat: float = storm.lat
 		var circle := _storm_circle(storm)
 		var center: Vector2 = circle[0]
 		var radius: float = circle[1]
@@ -3037,29 +3958,8 @@ func _draw_storms() -> void:
 			continue
 		var strength := Weather.intensity(storm)
 		var alpha := lerpf(0.35, 1.0, strength)
-		var tropical := Weather.TROPICAL.has(storm.kind)
-		var cloud := STORM_CLOUD
-		for ring: Array in STORM_HAZE:
-			_canvas.draw_circle(center, radius * float(ring[0]), Color(cloud, float(ring[1]) * alpha))
-		# North is up on screen (near enough, on the globe), so anticlockwise there is a falling angle.
-		var spin := -1.0 if lat >= 0.0 else 1.0
-		var turn := spin * GameState.play_time * STORM_SPIN
-		var arms := 3 if tropical else 2
-		for arm in arms:
-			var previous := Vector2.INF
-			for step in STORM_ARM_STEPS + 1:
-				var t := float(step) / STORM_ARM_STEPS
-				var angle := turn + TAU * arm / arms - spin * t * STORM_ARM_WIND
-				var point := center + Vector2.from_angle(angle) * radius * lerpf(0.1, 0.95, t)
-				if previous != Vector2.INF:
-					var width := maxf(radius * lerpf(0.16, 0.04, t), 1.0)
-					_canvas.draw_line(previous, point, Color(cloud, STORM_BAND_ALPHA * alpha * (1.0 - t * 0.7)), width, true)
-					_canvas.draw_line(previous, point, Color(STORM_RIM, STORM_RIM_ALPHA * alpha * (1.0 - t)), maxf(width * 0.2, 1.0), true)
-				previous = point
-		if tropical and radius > LIGHTNING_MIN_RADIUS:
+		if Weather.TROPICAL.has(storm.kind) and radius > LIGHTNING_MIN_RADIUS:
 			_draw_lightning(storm, center, radius, strength)
-		if tropical and strength > STORM_EYE_FROM and radius > 12.0:
-			_canvas.draw_circle(center, maxf(radius * 0.045, 2.0), Color(STORM_EYE, STORM_EYE.a * alpha))
 		if radius > STORM_LABEL_MIN_RADIUS:
 			var text := Weather.title(storm)
 			var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE).x
@@ -3263,8 +4163,10 @@ func _feature_text(index: int) -> String:
 # --- Land drawings ---------------------------------------------------------
 
 ## Loads each kind of land drawing's art and sorts the drawings into
-## DECOR_BUCKET-degree cells.
-func _load_decor() -> void:
+## DECOR_BUCKET-degree cells, once for every map view.
+static func _load_decor() -> void:
+	if not _decor_textures.is_empty():
+		return
 	var data := GameData.world_map
 	for kind_name in data.decor_kind_names:
 		var path := DECOR_ART_DIR + kind_name + ".svg"
@@ -3749,3 +4651,11 @@ func _draw_route_labels() -> void:
 		_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, ROUTE_LABEL_FONT_SIZE, SEA_LABEL_OUTLINE + 1,
 			_color(&"sea_label_outline"))
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, ROUTE_LABEL_FONT_SIZE, _color(&"sea_label"))
+
+
+## The land's biome colors (LAND_COLORS), from the load GameData starts in the
+## background at boot, or null if there are none.
+static func land_colors_texture() -> Texture2D:
+	if ResourceLoader.load_threaded_get_status(LAND_COLORS) != ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+		return ResourceLoader.load_threaded_get(LAND_COLORS) as Texture2D
+	return load(LAND_COLORS) as Texture2D if ResourceLoader.exists(LAND_COLORS) else null

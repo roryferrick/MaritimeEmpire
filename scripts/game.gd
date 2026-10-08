@@ -64,6 +64,8 @@ func _ready() -> void:
 	GameState.canal_entered.connect(_on_canal_entered)
 	GameState.ship_held.connect(_on_ship_held)
 	GameState.ship_broke_down.connect(_on_ship_broke_down)
+	GameState.ship_battered.connect(_on_ship_battered)
+	GameState.wages_paid.connect(_on_wages_paid)
 	GameState.ship_lost.connect(_on_ship_lost)
 	GameState.ship_recovered.connect(_on_ship_recovered)
 	GameState.tugs_handed.connect(_on_tugs_handed)
@@ -186,15 +188,15 @@ func _close_route_screen() -> void:
 ## "Sea Otter sold Toys at Rotterdam: +$2,300 profit (bought $1,200, sold $3,500)":
 ## the trade's profit after the canal tolls on the way; a loss is shown in red.
 ## A muted model's profitable sales are left out.
-func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity: int, cost: int, sale: int, tolls: int) -> void:
+func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity: int, cost: int, sale: int, tolls: int, fee: int) -> void:
 	if not GameState.is_mine(ship):
 		return  # Another player's (see Net).
-	var profit := sale - cost - tolls
+	var profit := sale - cost - tolls - fee
 	if profit >= 0 and GameState.muted_models.has(ship.model_id):
 		return
-	var text := "%s sold %s at %s: %s%s profit (bought %s, sold %s%s)" % [ship.name, GameData.commodity(commodity_id).get("name", commodity_id),
+	var text := "%s sold %s at %s: %s%s profit (bought %s, sold %s%s%s)" % [ship.name, GameData.commodity(commodity_id).get("name", commodity_id),
 		GameData.port_name(port_id), "+" if profit >= 0 else "", Fmt.money(profit), Fmt.money(cost), Fmt.money(sale),
-		", tolls %s" % Fmt.money(tolls) if tolls > 0 else ""]
+		", tolls %s" % Fmt.money(tolls) if tolls > 0 else "", ", port fee %s" % Fmt.money(fee) if fee > 0 else ""]
 	ActivityLog.add(text, ActivityLog.Kind.INFO if profit >= 0 else ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
@@ -233,6 +235,21 @@ func _on_ship_held(ship: Ship, reason: String) -> void:
 	if not GameState.is_mine(ship):
 		return  # Another player's (see Net).
 	ActivityLog.add("%s is held at %s: %s" % [ship.name, GameData.port_name(ship.docked_at), reason], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
+
+
+func _on_wages_paid(ship: Ship, total: int, ship_count: int) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
+	ActivityLog.add("Payday: %s in crew wages for %d ship%s%s" % [Fmt.money(total), ship_count, "" if ship_count == 1 else "s",
+		" - you're in debt: your ships run on credit, but nothing can be bought until you're back above $0" if GameState.in_debt() else ""],
+		ActivityLog.Kind.BAD if GameState.in_debt() else ActivityLog.Kind.INFO)
+
+
+func _on_ship_battered(ship: Ship, storm: Dictionary) -> void:
+	if not GameState.is_mine(ship):
+		return  # Another player's (see Net).
+	ActivityLog.add("%s was battered at anchor off %s by %s: maintenance down to %d%%" % [ship.name, GameData.port_name(ship.docked_at),
+		Weather.title(storm), floori(ship.maintenance * 100.0)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 
 
 func _on_ship_broke_down(ship: Ship) -> void:

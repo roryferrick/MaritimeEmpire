@@ -3,19 +3,22 @@ class_name ShipTile
 extends Button
 ## One compact tile on the Ships screen: status dot, ship name, what it's
 ## carrying and its level (highlighted while it has skill points to spend), and
-## mini maintenance, fuel and cargo bars. Hovering shows the full name.
+## mini maintenance, fuel and cargo bars, with its captain's picture and name.
+## Hovering shows the full name.
 
 const THEME_TYPE := &"StatusDot"
 const DOT_RADIUS := 5.0
 const NAME_FONT_SIZE := 13
 const INFO_FONT_SIZE := 11
 const PADDING := 5
+const CAPTAIN_SIZE := 30.0
 
 var ship: Ship
 
 var _dot := Control.new()
 var _info := Label.new()
 var _name := Label.new()
+var _captain := Label.new()
 
 
 func _init(for_ship: Ship) -> void:
@@ -36,6 +39,12 @@ func _init(for_ship: Ship) -> void:
 	_dot.draw.connect(_draw_dot)
 	row.add_child(_dot)
 
+	var face := Portrait.new(ship.captain(), true)
+	face.custom_minimum_size = Vector2.ONE * CAPTAIN_SIZE
+	face.size_flags_vertical = SIZE_SHRINK_CENTER
+	face.mouse_filter = MOUSE_FILTER_IGNORE
+	row.add_child(face)
+
 	var column := VBoxContainer.new()
 	column.mouse_filter = MOUSE_FILTER_IGNORE
 	column.size_flags_vertical = SIZE_SHRINK_CENTER
@@ -52,6 +61,12 @@ func _init(for_ship: Ship) -> void:
 	_info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_info.custom_minimum_size.x = 1
 	column.add_child(_info)
+	_captain.text = "Capt. %s" % ship.captain().get("name", "")
+	_captain.theme_type_variation = &"DimLabel"
+	_captain.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
+	_captain.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_captain.custom_minimum_size.x = 1
+	column.add_child(_captain)
 	var bars := ShipBars.new(ship, true)
 	column.add_child(bars)
 	_update_info()

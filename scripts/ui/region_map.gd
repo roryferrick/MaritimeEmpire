@@ -12,6 +12,8 @@ const SIZE := Vector2i(2048, 1024)
 const SHADER := preload("res://scripts/ui/region_map.gdshader")
 
 static var texture: Texture2D = null
+## The ports (see region_map.gdshader), for the map's exact region edges.
+static var ports_texture: Texture2D = null
 static var image: Image = null
 static var _building := false
 ## Each region's middle (lon, lat), where its unlock button goes (see center()).
@@ -33,7 +35,8 @@ static func build(host: Node) -> void:
 		ports.set_pixel(i, 0, Color(unit.x, unit.y, unit.z, index + 1))
 	var material := ShaderMaterial.new()
 	material.shader = SHADER
-	material.set_shader_parameter(&"ports", ImageTexture.create_from_image(ports))
+	ports_texture = ImageTexture.create_from_image(ports)
+	material.set_shader_parameter(&"ports", ports_texture)
 	material.set_shader_parameter(&"count", GameData.ports.size())
 	var viewport := SubViewport.new()
 	viewport.size = SIZE

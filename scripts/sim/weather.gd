@@ -35,6 +35,11 @@ var _closed := {}  # Port id -> closed_by(), worked out once a step (every ship 
 var _can_close := false  # Any storm strong enough to close a port this step.
 
 
+## True if any storm is strong enough to close a port this step (see closed_by()).
+func can_close() -> bool:
+	return _can_close
+
+
 
 func _init(state: Node) -> void:
 	_state = state
@@ -188,9 +193,7 @@ func factors(lon_lat: Vector2) -> Array:
 ## The tropical storm closing a port (strong enough over it: the level's
 ## close_at), or {} if it's open.
 func closed_by(port_id: String) -> Dictionary:
-	if not active() or storms.is_empty():
-		return {}
-	if not _can_close:
+	if not _can_close or storms.is_empty() or not active():  # (Cheapest first: most of the time no storm can close a port.)
 		return {}
 	if _closed.has(port_id):
 		return _closed[port_id]

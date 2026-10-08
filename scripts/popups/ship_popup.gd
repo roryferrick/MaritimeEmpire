@@ -6,7 +6,8 @@ extends AnchoredPopup
 ## name to rename the ship. Lost ships get a Send Recovery button; recovery boats
 ## have no route controls. Cargo ships show their level, and the Upgrades button
 ## (red dot while points are unspent) swaps the bars for spending upgrade points
-## on the skill paths.
+## on the skill paths. Under the stats, the captain's picture and name; the
+## Crew button swaps the bars for all its officers (captain and mates) and crew.
 
 ## Selling takes a second click within this many seconds.
 const SELL_CONFIRM_SECONDS := 3.0
@@ -28,6 +29,10 @@ var _upgrades_alert := AlertDot.new(4.0, Vector2(6, 6))
 var _cargo_label := Label.new()
 ## The skills panel's "+" buttons, by skill (their price and state follow the money).
 var _skill_buttons := {}
+## The Crew button, and the page it swaps the bars for: every officer (the
+## captain and mates) with their picture, and the crew.
+var _crew_button := Button.new()
+var _crew_box := VBoxContainer.new()
 
 
 func _ready() -> void:
@@ -60,6 +65,7 @@ func _ready() -> void:
 		%Buttons.get_parent().move_child(%Buttons, -1)
 	%BarsSlot.add_child(ShipBars.new(ship))
 	%SkillsButton.toggled.connect(_show_skills)
+	_add_captain()
 	%SkillsButton.add_child(_upgrades_alert)
 	%CloseButton.pressed.connect(queue_free)
 	%NameLabel.gui_input.connect(_on_name_input)
@@ -103,7 +109,7 @@ func _update_live() -> void:
 	var toll := ship.stop_toll
 	var has_costs := ship.is_docked() and (ship.stop_sale > 0 or fuel + repair + toll > 0)
 	_update_cargo()
-	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed and GameState.is_mine(ship))
+	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed and not _crew_button.button_pressed and GameState.is_mine(ship))
 	var costs := "Fuel %s · Repair %s" % [Fmt.money(-fuel), Fmt.money(-repair)]
 	if toll > 0:
 		costs += " · Toll %s" % Fmt.money(-toll)
@@ -120,7 +126,7 @@ func _update_live() -> void:
 ## What's aboard: its cost and what it should sell for where it's going, at
 ## today's prices; hidden when the hold is empty (the cargo bar says so).
 func _update_cargo() -> void:
-	_set_shown(_cargo_label, not ship.is_service() and not %SkillsButton.button_pressed and not ship.cargo_id.is_empty())
+	_set_shown(_cargo_label, not ship.is_service() and not %SkillsButton.button_pressed and not _crew_button.button_pressed and not ship.cargo_id.is_empty())
 	if ship.cargo_id.is_empty():
 		return
 	var commodity := GameData.commodity(ship.cargo_id)
@@ -370,3 +376,78 @@ func _end_rename() -> void:
 	%RenameEdit.visible = false
 	%NameLabel.visible = true
 	%NameLabel.text = ship.name
+
+
+# --- Officers --------------------------------------------------------------------
+
+## The captain's picture and name under the stats (and the mates and crew, in
+## brief), and the Crew button and its page.
+func _add_captain() -> void:
+	var crew := GameState.crew_of(ship.model())
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var picture := Portrait.new(ship.captain(), true)
+	picture.custom_minimum_size = Vector2(44, 44)
+	row.add_child(picture)
+	var column := VBoxContainer.new()
+	column.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	column.add_theme_constant_override(&"separation", 0)
+	var name_label := Label.new()
+	name_label.text = "Captain %s" % ship.captain().get("name", "")
+	column.add_child(name_label)
+	var mates := ship.captains.size() - 1
+	var detail := Label.new()
+	detail.theme_type_variation = &"DimLabel"
+	detail.text = "%s%d crew" % ["%d %s · " % [mates, "mate" if mates == 1 else "mates"] if mates > 0 else "", int(crew[1])]
+	column.add_child(detail)
+	row.add_child(column)
+	$Content/Stats.add_sibling(row)
+	_crew_button.text = "Crew"
+	_crew_button.toggle_mode = true
+	_crew_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_crew_button.tooltip_text = "The ship's captain, mates and crew."
+	_crew_button.toggled.connect(_show_crew)
+	%SkillsButton.add_sibling(_crew_button)
+	%SkillsButton.get_parent().move_child(_crew_button, %SkillsButton.get_index())
+	%SkillsButton.toggled.connect(func(on: bool) -> void:
+		if on:
+			_crew_button.set_pressed_no_signal(false)
+			_crew_box.visible = false)
+	_crew_box.visible = false
+	_crew_box.add_theme_constant_override(&"separation", 6)
+	%SkillsBox.add_sibling(_crew_box)
+	for i in ship.captains.size():
+		var officer: Dictionary = ship.captains[i]
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override(&"separation", 10)
+		var face := Portrait.new(officer, true)
+		face.custom_minimum_size = Vector2(56, 56)
+		line.add_child(face)
+		var text := VBoxContainer.new()
+		text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		text.add_theme_constant_override(&"separation", 0)
+		var who := Label.new()
+		who.text = str(officer.get("name", ""))
+		text.add_child(who)
+		var rank := Label.new()
+		rank.theme_type_variation = &"DimLabel"
+		rank.text = Characters.rank(i) + (" (in command)" if i == 0 and ship.captains.size() > 1 else "")
+		text.add_child(rank)
+		line.add_child(text)
+		_crew_box.add_child(line)
+	var settings: Dictionary = GameData.config.get("crew", {})
+	var hands := Label.new()
+	hands.theme_type_variation = &"DimLabel"
+	hands.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hands.text = "And %d crew. Wages %s every %d days it works." % [int(crew[1]), Fmt.money(GameState.crew_wages(ship.model())), int(settings.get("period_days", 14))]
+	_crew_box.add_child(hands)
+
+
+func _show_crew(on: bool) -> void:
+	if on and %SkillsButton.button_pressed:
+		%SkillsButton.button_pressed = false  # (Shows the bars again: hidden below.)
+	_crew_box.visible = on
+	%BarsSlot.visible = not on
+	%Toggles.visible = not on
+	_update_live()
+	reset_size.call_deferred()

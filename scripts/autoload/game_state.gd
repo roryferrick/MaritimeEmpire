@@ -14,7 +14,7 @@ signal ships_changed
 signal ship_changed(ship: Ship)
 ## A ship sold its cargo at a port: what it was, how many units, what they cost
 ## to buy, what they sold for, and the canal tolls paid on the way.
-signal cargo_sold(ship: Ship, port_id: String, commodity_id: String, quantity: int, cost: int, sale: int, tolls: int)
+signal cargo_sold(ship: Ship, port_id: String, commodity_id: String, quantity: int, cost: int, sale: int, tolls: int, fee: int)
 ## A ship bought cargo at a port to sell at its next one (to_port).
 signal cargo_loaded(ship: Ship, port_id: String, commodity_id: String, quantity: int, cost: int, to_port: String)
 ## A running ship is stuck in port, e.g. without enough fuel for its next leg.
@@ -26,6 +26,11 @@ signal ship_departed(ship: Ship, port_id: String, sale: int, fuel_cost: int, rep
 signal canal_entered(ship: Ship, canal: Dictionary, toll: int)
 ## A random breakdown knocked a ship's maintenance down.
 signal ship_broke_down(ship: Ship)
+## A storm battered a ship lying at anchor (see _batter_anchored()).
+signal ship_battered(ship: Ship, storm: Dictionary)
+## A company paid its crews (see _check_payday()): one of its ships (so it goes
+## to its player in multiplayer), the total and how many ships.
+signal wages_paid(ship: Ship, total: int, ship_count: int)
 ## A ship ran out of fuel or maintenance at sea.
 signal ship_lost(ship: Ship)
 ## A Mammoth dropped a lost ship at a port (its destination, or back where it came from).
@@ -77,7 +82,7 @@ const WINDOW_SECONDS := 600.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "bought", "sold", "hubs", "upgrades", "mega"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The hidden gem (click the company name): money it gives, once per company.
@@ -85,6 +90,10 @@ const HIDDEN_GEM_MONEY := 10000000
 ## How often (game seconds) a ship waiting in port for a full load looks again
 ## (it also looks as soon as the money reaches what it needed).
 const LOAD_RECHECK_S := 2.0
+## A cargo ship at the anchorage with nothing to load sets off straight from
+## there only this fit (and with the fuel for its leg); otherwise it comes into
+## port for repairs and fuel first (see _anchored_call()).
+const DIRECT_DEPART_MAINTENANCE := 0.95
 ## How often (game seconds) a ship at sea checks it can still make port (see
 ## _check_at_risk()); a breakdown or a new leg checks at once.
 const AT_RISK_CHECK_S := 1.0
@@ -94,6 +103,10 @@ const STORM_OFFSHORE_NM := 25.0
 ## play: two calendar days) a storm heading for a port is warned of.
 const STORM_WARNING_CHECK_S := 1.0
 const STORM_WARNING_AHEAD_S := 144.0
+## A storm over this strength (0..1) where a ship lies at anchor batters it,
+## once, taking this much of its maintenance (see _batter_anchored()).
+const STORM_BATTER_AT := 0.5
+const STORM_BATTER := 0.2
 ## A ship is said to be sailing through a storm once it's this strong there.
 const STORM_SHIP_NOTICE := 0.3
 ## How long (game seconds) a worked-out fuel_reserve() is used before it's redone.
@@ -104,6 +117,10 @@ const PLAYER_USE_REFRESH_S := 10.0
 ## How often (seconds of play) a ship at sea looks again at the storms and ice
 ## where it is.
 const STORM_FACTOR_REFRESH_S := 0.25
+## How often a ship at sea looks again for an icebreaker's ice area on its leg.
+const ICE_HOLD_REFRESH_S := 0.5
+## How often a ship in port looks again at whether a seasonal closure blocks its next leg.
+const SEASON_RECHECK_S := 1.0
 ## How often (seconds of play) a docking ship is repaired and refueled (and
 ## pays for it).
 const REFILL_BILL_S := 0.25
@@ -182,6 +199,9 @@ var ships: Array[Ship] = []
 ## The id the next ship bought gets (see Ship.id).
 var next_ship_id := 1
 var in_session := false
+## Set by the map: how long (s of play) a ship takes to sail its way into its
+## berth (true) or out of it (false) at its own speed (see _berth_seconds()).
+var berth_route := Callable()
 ## The save slot (1 to SAVE_SLOTS) this session saves to.
 var save_slot := 1
 ## Whether save_slot is one of the multiplayer slots (kept apart from the
@@ -209,6 +229,8 @@ var storms := "none"
 var seasons := false
 
 ## Seconds the company has been playing (only counts while a session is open).
+## The last crew pay period paid (see _check_payday()), counted from the calendar's start.
+var wage_period := 0
 var play_time := 0.0
 ## The calendar's start (Unix time) and calendar seconds per second of play,
 ## read from game_config once (-1 until then).
@@ -276,6 +298,7 @@ func _step(delta: float) -> void:
 	canal_traffic.step(delta)
 	port_sizes.step(delta)
 	weather.step(delta)
+	_check_payday()
 	icebreaking.refresh()
 	for ship in ships:
 		_advance(ship, delta)
@@ -284,6 +307,7 @@ func _step(delta: float) -> void:
 	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
 		_storm_warning_clock = 0.0
 		_storm_warnings()
+		_batter_anchored()
 		_season_warnings()
 	_auto_recovery_clock += delta
 	if _auto_recovery_clock >= AUTO_RECOVERY_INTERVAL:
@@ -391,6 +415,7 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	next_ship_id += 1
 	ship.company = company
 	ship.purchase_price = price
+	ship.captains = Characters.officers_for(model)
 	ships.append(ship)
 	if ship.is_service():
 		ship.base_port = port_id
@@ -439,7 +464,7 @@ func buy_error(model_id: String) -> String:
 		var on_lakes := hubs.all(func(hub: Hub) -> bool: return GameData.get_port(hub.port_id).get("seaway", false))
 		if on_lakes and not model.get("seaway", false):
 			return "A %s is too big for the St. Lawrence Seaway, and your HQ and hubs are all on the Great Lakes. Found a hub on the coast to launch one." % model.get("name", model_id)
-		return "Your HQ and hubs are all too small to launch a %s, which needs a %s port." % [
+		return "Your HQ and hubs can't launch a %s, which needs a %s port or an HQ or hub." % [
 			model.get("name", model_id), str(model.get("min_port", "")).capitalize()]
 	return ""
 
@@ -567,6 +592,150 @@ func fleet(of: Company = null) -> Array[Ship]:
 		if owner_of(ship) == who:
 			out.append(ship)
 	return out
+
+
+## The port fee on a delivery: game_config port_fee (10%) of the trade's margin
+## (what the cargo sold for, less what it cost), at a port where the company
+## has no HQ or hub; nothing at its own, or on a trade at a loss.
+func port_fee(port_id: String, margin: float, of: Company = null) -> int:
+	var who := of if of != null else company
+	if margin <= 0.0 or who.hub_at(port_id) != null:
+		return 0
+	return roundi(margin * float(GameData.config.get("port_fee", 0.1)))
+
+
+## A model's crew: [captains, crew], by its tier (game_config crew).
+static func crew_of(model: Dictionary) -> Array:
+	var settings: Dictionary = GameData.config.get("crew", {})
+	var tier := clampi(int(model.get("tier", 1)), 1, 5) - 1
+	return [int(settings.get("captains", [1])[mini(tier, settings.get("captains", [1]).size() - 1)]),
+		int(settings.get("crew", [2])[mini(tier, settings.get("crew", [2]).size() - 1)])]
+
+
+## What a model's captains and crew are paid each period (game_config crew).
+static func crew_wages(model: Dictionary) -> int:
+	var settings: Dictionary = GameData.config.get("crew", {})
+	var crew := crew_of(model)
+	return int(crew[0]) * int(settings.get("captain_wage", 0)) + int(crew[1]) * int(settings.get("crew_wage", 0))
+
+
+## The crew pay period now: game_config crew period_days of calendar time,
+## counted from the calendar's start.
+func _pay_period() -> int:
+	var days := float(GameData.config.get("crew", {}).get("period_days", 14))
+	return floori((calendar_time() - calendar_time_at(0.0)) / (days * 86400.0))
+
+
+## Payday, once a period: each ship that worked in the period that just ended
+## (sailed, did a job or a stop in port: see _advance()) pays its captains and
+## crew their wages, whatever the money (it may go into debt: see in_debt());
+## ships idle all period pay nothing. A save from before wages starts counting
+## from now.
+func _check_payday() -> void:
+	var period := _pay_period()
+	if period == wage_period:
+		return
+	if wage_period < 0:
+		wage_period = period
+		return
+	wage_period = period
+	var paid := {}  # Company -> [total, ships, one of its ships].
+	for ship in ships:
+		if not ship.worked:
+			continue
+		ship.worked = false
+		var wages := crew_wages(ship.model())
+		var who := owner_of(ship)
+		_add_money(who, -wages)
+		_record(ship, "wages", wages)
+		var tally: Array = paid.get_or_add(who, [0, 0, ship])
+		tally[0] += wages
+		tally[1] += 1
+	for who: Company in paid:
+		wages_paid.emit(paid[who][2], paid[who][0], paid[who][1])
+	# Interest on loans, paid at the same time.
+	for who in all_companies():
+		var interest := loan_interest(who.loan)
+		if interest > 0:
+			_add_money(who, -interest)
+			_record(null, "interest", interest, who)
+			if who == company:
+				ActivityLog.add("Paid %s interest on your %s loan." % [Fmt.money(interest), Fmt.money(who.loan)], ActivityLog.Kind.INFO)
+
+
+# --- Loans -------------------------------------------------------------------
+
+## game_config loans: {max, step, yearly_interest}.
+static func loan_settings() -> Dictionary:
+	return GameData.config.get("loans", {})
+
+
+## The interest on a loan each crew pay period (yearly_interest, a period's share).
+static func loan_interest(amount: int) -> int:
+	var days := float(GameData.config.get("crew", {}).get("period_days", 14))
+	return roundi(amount * float(loan_settings().get("yearly_interest", 0.08)) * days / 365.0)
+
+
+## Why this player's company can't borrow another step, or "".
+func take_loan_error() -> String:
+	if company.loan + int(loan_settings().get("step", 1000000)) > int(loan_settings().get("max", 10000000)):
+		return "You've borrowed the most the bank will lend (%s)." % Fmt.money(int(loan_settings().get("max", 10000000)))
+	return ""
+
+
+## Borrows another step (game_config loans step) up to the max. Returns why it
+## couldn't, or "".
+func take_loan() -> String:
+	var error := take_loan_error()
+	if not error.is_empty():
+		return error
+	if Net.command(&"take_loan"):
+		return ""
+	var step := int(loan_settings().get("step", 1000000))
+	company.loan += step
+	_add_money(company, step)
+	ActivityLog.add("Borrowed %s (%s owed in all)." % [Fmt.money(step), Fmt.money(company.loan)], ActivityLog.Kind.INFO)
+	return ""
+
+
+## Why this player's company can't pay a step of its loan back, or "".
+func repay_loan_error() -> String:
+	var step := mini(int(loan_settings().get("step", 1000000)), company.loan)
+	if step <= 0:
+		return "You don't owe the bank anything."
+	if company.money < step:
+		return "You need %s to pay back." % Fmt.money(step)
+	return ""
+
+
+## Pays back a step of the loan (or what's left of it). Returns why it couldn't, or "".
+func repay_loan() -> String:
+	var error := repay_loan_error()
+	if not error.is_empty():
+		return error
+	if Net.command(&"repay_loan"):
+		return ""
+	var step := mini(int(loan_settings().get("step", 1000000)), company.loan)
+	company.loan -= step
+	_add_money(company, -step)
+	ActivityLog.add("Paid back %s of your loan%s." % [Fmt.money(step), "" if company.loan == 0 else " (%s still owed)" % Fmt.money(company.loan)], ActivityLog.Kind.GOOD)
+	return ""
+
+
+## True if a company (this player's by default) is in debt: crew wages (see
+## _pay_wages()) can take its money below $0. Its ships then run on credit,
+## buying their fuel, repairs, cargo and canal tolls whatever the money, so
+## nothing stops and sales pay the debt off; but nothing else can be bought
+## (ships, upgrades) until it's back above $0.
+func in_debt(of: Company = null) -> bool:
+	return (of if of != null else company).money < 0
+
+
+## True while a ship waiting for a full load is still short of the money for
+## it (never in debt, when it loads on credit).
+func _short_of_load(ship: Ship) -> bool:
+	var who := owner_of(ship)
+	return not in_debt(who) and who.money < ship.load_need
 
 
 ## Adds money to a company (or takes it, if negative), telling the screens
@@ -1012,9 +1181,9 @@ func port_size_text(port_id: String) -> String:
 	return "%s %d" % [port_sizes.band(port_id).capitalize(), port_sizes.level(port_id)]
 
 
-## "Taipei (Small 11) is too small for a Dominator, which needs a Large port."
+## "Taipei (Small 11) is too small for a Dominator, which needs a Large port or an HQ or hub."
 func port_size_error(model: Dictionary, port_id: String) -> String:
-	return "%s (%s) is too small for a %s, which needs a %s port." % [GameData.port_name(port_id),
+	return "%s (%s) is too small for a %s, which needs a %s port or an HQ or hub." % [GameData.port_name(port_id),
 		port_size_text(port_id), model.get("name", ""),
 		str(model.get("min_port", "")).capitalize()]
 
@@ -1139,7 +1308,7 @@ func sell_ship(ship: Ship) -> String:
 
 func _advance(ship: Ship, delta: float) -> void:
 	# A ship waiting in port for a full load, not due another look: nothing to do.
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need and ship.is_docked() \
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _short_of_load(ship) and ship.is_docked() \
 			and ship.berth_phase == Ship.BERTH_NONE:
 		return
 	# A recovery boat or tug standing by at its base (most of them, most of the
@@ -1147,6 +1316,14 @@ func _advance(ship: Ship, delta: float) -> void:
 	if ship.dock_time < 0.0 and ship.docked_at == ship.base_port and ship.hold_reason.is_empty() \
 			and not ship.docked_at.is_empty() and (ship.is_recovery() or ship.is_tug()) and not ship.is_on_job():
 		return
+	# A cargo ship lying idle at the anchorage (no route, or paused): likewise.
+	if ship.dock_time < 0.0 and ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE and ship.hold_reason.is_empty() \
+			and not ship.docked_at.is_empty() and not ship.is_service() and not ship.is_running():
+		return
+	# Working, so its crew is paid this period (see _pay_wages()): sailing, on a
+	# job, or doing a stop in port.
+	if not ship.worked and (not ship.is_docked() and not ship.is_lost() or ship.is_on_job() or ship.is_docking()):
+		ship.worked = true
 	if ship.is_icebreaker():
 		_advance_icebreaker(ship, delta)
 	elif ship.is_tug() and ship.is_on_job():
@@ -1167,20 +1344,31 @@ func _advance(ship: Ship, delta: float) -> void:
 ## one slowed by the ship ahead burns fuel and wears only for the distance it
 ## makes, so the fuel it set off with always covers the leg.
 func _sail(ship: Ship, delta: float) -> bool:
-	if canal_traffic.hold(ship, delta):
+	# Canals, storm-closed ports and icebreakers' ice hold up few ships: the
+	# rest skip asking (this runs for every ship at sea, every step).
+	var canal := ship.lock_time >= 0.0 or not ship.canal_state.is_empty() or ship.leg_has_canal()
+	if canal and canal_traffic.hold(ship, delta):
 		return true
 	if ship.escort != null:
 		return true  # In a convoy: its icebreaker moves it (see _escort()).
-	var zone := ship.zone_factors(ship.traveled_nm)
+	var zone := ship.zone_at(ship.traveled_nm)
 	var storm := _storm_factors(ship)
 	var speed := ship.speed()
 	if ship.is_service():
 		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
-	speed *= float(zone[0]) * float(storm[0])
-	var target := _ice_hold(ship, _storm_hold(ship, canal_traffic.limit(ship, ship.traveled_nm + speed * delta)))
+	speed *= float(zone[1]) * float(storm[0])
+	var target := ship.traveled_nm + speed * delta
+	if canal:
+		target = canal_traffic.limit(ship, target)
+	if weather.can_close():
+		target = _storm_hold(ship, target)
+	elif not ship.weather_wait.is_empty() and ship.ice_wait.is_empty():
+		ship.weather_wait = ""  # A storm that closed its port has eased.
+	if icebreaking.any_open_closure() or not ship.ice_wait.is_empty():
+		target = _ice_hold(ship, target)
 	var effort := clampf((target - ship.traveled_nm) / (speed * delta), 0.0, 1.0) if speed * delta > 0.0 else 1.0
 	if ship.is_running() or ship.is_service():
-		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * float(zone[1]) * float(storm[1]) * delta * effort, 0.0)
+		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * float(zone[2]) * float(storm[1]) * delta * effort, 0.0)
 	# A storm costs time, not fuel per mile: the engines make less way, so the
 	# fuel a ship set off with still covers the leg.
 	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * float(storm[0]) * delta * effort, 0.0)
@@ -1245,8 +1433,14 @@ func _storm_hold(ship: Ship, target: float) -> float:
 func _ice_hold(ship: Ship, target: float) -> float:
 	if ship.is_service():
 		return target
-	var item := icebreaking.area_for_leg(ship.from_port, ship.to_port)
-	var entry := icebreaking.entry_mile(item, ship.from_port, ship.to_port) if not item.is_empty() else -1.0
+	# Areas open and close slowly: looked up again only every ICE_HOLD_REFRESH_S
+	# (and on a new leg).
+	if play_time >= ship.ice_check_time or play_time < ship.ice_check_time - ICE_HOLD_REFRESH_S:
+		ship.ice_check_time = play_time + ICE_HOLD_REFRESH_S
+		ship.ice_area = icebreaking.area_for_leg(ship.from_port, ship.to_port)
+		ship.ice_entry = icebreaking.entry_mile(ship.ice_area, ship.from_port, ship.to_port) if not ship.ice_area.is_empty() else -1.0
+	var item := ship.ice_area
+	var entry := ship.ice_entry
 	if entry <= 0.0 or ship.traveled_nm > entry + 0.001 or target <= entry:
 		if not ship.ice_wait.is_empty() and ship.escort == null:
 			ship.ice_wait = ""  # The ice went out of season, or the icebreaker left.
@@ -1424,6 +1618,29 @@ func _lose(ship: Ship, reason: String) -> void:
 	ship_changed.emit(ship)
 
 
+## Once a second (with the storm warnings): ships lying at anchor in port
+## (waiting for a berth, idle, tugs, recovery boats and other service ships)
+## ride out the storms there: one over STORM_BATTER_AT of its strength where
+## the port is batters each ship once, taking STORM_BATTER of its maintenance.
+func _batter_anchored() -> void:
+	if weather.storms.is_empty() or not weather.active():
+		return
+	var at_ports := {}  # Port id -> [strongest storm, strength], once a step.
+	for ship in ships:
+		if not ship.is_docked() or ship.berth >= 0:
+			continue
+		if not at_ports.has(ship.docked_at):
+			var port := GameData.get_port(ship.docked_at)
+			at_ports[ship.docked_at] = weather.strongest_at(Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))))
+		var found: Array = at_ports[ship.docked_at]
+		if float(found[1]) <= STORM_BATTER_AT or ship.storm_hit == Weather.key(found[0]):
+			continue
+		ship.storm_hit = Weather.key(found[0])
+		ship.maintenance = maxf(ship.maintenance - STORM_BATTER, 0.0)
+		ship_battered.emit(ship, found[0])
+		ship_changed.emit(ship)
+
+
 ## From the breakdowns min_company_level on, every interval_s each ship at sea
 ## (not service ships, not in a canal, and not waiting out weather or ice or
 ## in an icebreaker's convoy) rolls its own
@@ -1476,6 +1693,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	if not ship.is_service():
 		# Its stop waits for a berth: it anchors and queues (see _advance_docked()).
 		ship.berth = -1
+		ship.berth_half = -1
 		ship.berth_phase = Ship.BERTH_WAIT
 		ship.berth_since = play_time
 		docks.join_queue(ship)
@@ -1496,7 +1714,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 
 
 ## A cargo ship's stop needs a berth (see Docks): it waits at anchor for one,
-## first come first served, comes alongside (docks in_s), and only then does
+## first come first served, comes alongside (at its own speed: _berth_seconds()), and only then does
 ## its stop; when it's done it pulls out (docks out_s), to sail or, if it
 ## can't go yet, to lie at the anchorage. The stop runs on a fixed clock:
 ## repair for one refill phase, then refuel for one, with unloading (and
@@ -1546,24 +1764,25 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 				return false
 			ship.berth_phase = Ship.BERTH_IN
 			ship.berth_time = 0.0
+			ship.berth_duration = _berth_seconds(ship, true)
 			ship_changed.emit(ship)
 			return false
 		Ship.BERTH_IN:
 			ship.berth_time += delta
-			if ship.berth_time < float(settings.get("in_s", 6.0)):
+			if ship.berth_time < (ship.berth_duration if ship.berth_duration > 0.0 else float(settings.get("in_s", 6.0))):
 				return false
 			ship.berth_phase = Ship.BERTH_NONE
 			ship_changed.emit(ship)
 		Ship.BERTH_OUT:
 			ship.berth_time += delta
-			if ship.berth_time < float(settings.get("out_s", 5.0)):
+			if ship.berth_time < (ship.berth_duration if ship.berth_duration > 0.0 else float(settings.get("out_s", 5.0))):
 				return false
 			docks.release(ship)
 			ship.berth_phase = Ship.BERTH_NONE
 			var to := ship.depart_to
 			ship.depart_to = ""
 			if not to.is_empty():
-				_set_off(ship, to)
+				_set_off(ship, to, true)
 			else:
 				ship_changed.emit(ship)
 			return false
@@ -1575,7 +1794,21 @@ func _pull_out(ship: Ship, to: String) -> void:
 	ship.berth_phase = Ship.BERTH_OUT
 	ship.berth_time = 0.0
 	ship.depart_to = to
+	ship.berth_duration = _berth_seconds(ship, false)
 	ship_changed.emit(ship)
+
+
+## How long a ship's coming alongside (or pulling out) takes, s of play: the
+## way in through its marina (or out) at its own speed, slowing only at the
+## end (or getting going at the start), as berth_route (the map) works it out,
+## plus docks slide_s on its thrusters; without a map, docks in_s (out_s).
+func _berth_seconds(ship: Ship, coming_in: bool) -> float:
+	var settings := Docks.settings()
+	if berth_route.is_valid():
+		var sail: float = berth_route.call(ship, coming_in)
+		if sail > 0.0:
+			return sail + float(settings.get("slide_s", 1.5))
+	return float(settings.get("in_s" if coming_in else "out_s", 6.0))
 
 
 ## Halfway through a stop: sells the cargo it brought (if any), then loads its
@@ -1598,7 +1831,11 @@ func _sell_cargo(ship: Ship) -> void:
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
 	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
 	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
-	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll)
+	var fee := port_fee(ship.docked_at, ship.cargo_payment - ship.cargo_cost, who)
+	if fee > 0:
+		_add_money(who, -fee)
+		_record(ship, "port_fees", fee)
+	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll, fee)
 	var hub := hub_at(ship.docked_at, who)
 	var xp := Progression.xp_for_cargo(ship.cargo_qty, ship.cargo_id, ship.cargo_leg_nm)
 	# Cargo that came through canals earns their XP bonuses on top of the hub's.
@@ -1641,6 +1878,8 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	var reserve := fuel_reserve(who)
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
 	var quantity := mini(room, floori((float(who.money) - ship.bill - reserve - who.bank_reserve) / price))
+	if in_debt(who):
+		quantity = room  # On credit (see in_debt()).
 	if quantity <= 0 or (ship.full_loads and quantity < room):
 		# What a full hold would need in the bank, for ships waiting for one.
 		ship.load_need = roundi(room * price + ship.bill + reserve + who.bank_reserve)
@@ -1695,7 +1934,7 @@ func _fuel_to_leave(ship: Ship, to: String) -> float:
 ## full or the money runs out, and is held in port while it lacks fuel for the leg.
 func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	# Waiting for a full load, and not due another look (see _waiting_for_load()).
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need:
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _short_of_load(ship):
 		return
 	if not ship.fits_port(to):
 		_set_hold(ship, "%s is too small for this ship; assign a new route" % GameData.port_name(to))
@@ -1708,17 +1947,29 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	# A leg it couldn't finish before a seasonal closure shuts its way: wait for
 	# the closure to end (again nothing for the player to do).
 	if seasonal.active():
-		var seconds := ship.leg_seconds(ship.docked_at, to, 0.0, GameData.distance_nm(ship.docked_at, to), maxf(ship.maintenance, 0.01))
-		var closure := seasonal.leg_blocker(ship.docked_at, to, seconds)
-		if not closure.is_empty():
-			ship.weather_wait = Seasons.wait_text(closure)
+		# Costly to work out, and closures come and go by the calendar day: looked
+		# at again only every SEASON_RECHECK_S (or for a new destination).
+		if play_time >= ship.season_check_time or ship.season_check_to != to or play_time < ship.season_check_time - SEASON_RECHECK_S:
+			ship.season_check_time = play_time + SEASON_RECHECK_S
+			ship.season_check_to = to
+			var seconds := ship.leg_seconds(ship.docked_at, to, 0.0, GameData.distance_nm(ship.docked_at, to), maxf(ship.maintenance, 0.01))
+			ship.season_blocker = seasonal.leg_blocker(ship.docked_at, to, seconds)
+		if not ship.season_blocker.is_empty():
+			ship.weather_wait = Seasons.wait_text(ship.season_blocker)
 			return
 	ship.weather_wait = ""
+	# A cargo ship lying at the anchorage loads, refuels and repairs only in
+	# port: it comes in for a stop if it needs to (see _anchored_call()).
+	var anchored := not ship.is_service() and ship.berth < 0
+	if anchored and _anchored_call(ship, to):
+		return
 	var phase := ship.refill_phase_seconds()
-	var topping_up := ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
+	var topping_up := not anchored and ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
 	if topping_up or ship.fuel < _fuel_to_leave(ship, to):
 		var too_worn := _fuel_to_leave(ship, to) > ship.fuel_tank()
-		if too_worn and ship.auto_repair:
+		if anchored:
+			pass  # (Can't take fuel or repairs out here: it says why below.)
+		elif too_worn and ship.auto_repair:
 			_repair(ship, delta / phase)
 		elif ship.auto_refuel:
 			_refuel(ship, ship.fuel_tank() / phase * delta)
@@ -1759,6 +2010,66 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	_depart(ship, to)
 
 
+## A cargo ship lying at the anchorage, about to sail for `to`: comes into port
+## for a stop (queuing for a berth: see _call_in()) when it has a cargo to
+## pick up for the leg (once it can afford a full one, with full loads on), or
+## needs fuel for the leg or repairs (under DIRECT_DEPART_MAINTENANCE) and has
+## the money for them. True if it's coming in or waiting; false if it can go
+## on to set off straight from the anchorage (or be held for a reason the
+## stop wouldn't help: out of range, no money for fuel...).
+func _anchored_call(ship: Ship, to: String) -> bool:
+	var who := owner_of(ship)
+	if ship.cargo_id.is_empty():
+		var best: String = market.best_cargo(ship.model(), ship.docked_at, to, who)[0]
+		if not best.is_empty():
+			if ship.full_loads and not in_debt(who):
+				var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
+				ship.load_need = roundi(room * market.buy_price(ship.docked_at, best) + ship.bill + fuel_reserve(who) + who.bank_reserve)
+				if who.money < ship.load_need:
+					ship.load_check_time = play_time + LOAD_RECHECK_S
+					_set_hold(ship, "")
+					var reason := "waiting for money for a full load to %s" % GameData.port_name(to)
+					if who.bank_reserve > 0:
+						reason += " (keeping %s in the bank)" % Fmt.money(who.bank_reserve)
+					_set_load_wait(ship, reason)
+					return true
+			_set_load_wait(ship, "")
+			_call_in(ship)
+			return true
+	_set_load_wait(ship, "")
+	var need := _fuel_to_leave(ship, to)
+	var short_of_fuel := ship.fuel < need and need <= ship.fuel_tank() and ship.auto_refuel
+	var worn := ship.maintenance < DIRECT_DEPART_MAINTENANCE and ship.auto_repair
+	if (short_of_fuel or worn) and _can_spend(ship):
+		_call_in(ship)
+		return true
+	return false
+
+
+## A cargo ship lying at the anchorage comes into port for a stop: it queues
+## for a berth, comes alongside and does a stop as if it had just arrived
+## (repairs, fuel, loading for its next leg; a cargo already aboard stays
+## aboard), then sails.
+func _call_in(ship: Ship) -> void:
+	ship.unloaded = not ship.cargo_id.is_empty()
+	ship.berth = -1
+	ship.berth_half = -1
+	ship.berth_phase = Ship.BERTH_WAIT
+	ship.berth_since = play_time
+	docks.join_queue(ship)
+	ship.dock_time = 0.0
+	ship.refill_billed = 0.0
+	var phase := ship.refill_phase_seconds()
+	ship.repair_rate = (1.0 - ship.maintenance) / phase
+	ship.refuel_rate = (ship.fuel_tank() - ship.fuel) / phase
+	ship.stop_sale = 0
+	ship.stop_cost = 0
+	ship.stop_fuel_cost = 0.0
+	ship.stop_repair_cost = 0.0
+	_set_hold(ship, "")
+	ship_changed.emit(ship)
+
+
 ## With full loads on, a cargo ship with an empty hold stays in port until it
 ## can buy a full one (see _load_cargo()), saying why in its load_wait. A leg
 ## where no cargo makes a profit is sailed empty straight away.
@@ -1768,7 +2079,7 @@ func _waiting_for_load(ship: Ship, to: String) -> bool:
 		return false
 	# Already waiting: look again as soon as the money reaches what a full hold
 	# needed, and otherwise only every LOAD_RECHECK_S (prices drift slowly).
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and owner_of(ship).money < ship.load_need:
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _short_of_load(ship):
 		return true
 	ship.load_check_time = play_time + LOAD_RECHECK_S
 	if _load_cargo(ship, to).is_empty() or not ship.cargo_id.is_empty():
@@ -1807,17 +2118,21 @@ func _depart(ship: Ship, to: String) -> void:
 	_set_off(ship, to)
 
 
-func _set_off(ship: Ship, to: String) -> void:
+## Sets off for `to`: from a berth (it may still load there, if it didn't when
+## unloading: a new ship, or a new route), or straight from the anchorage.
+func _set_off(ship: Ship, to: String, from_berth := false) -> void:
 	docks.release(ship)  # It might have been queuing (a convoy leaving an iced port).
 	ship.berth_phase = Ship.BERTH_NONE
 	if not ship.is_service():
 		ship.route_index = ship.next_route_index()
-		_load_cargo(ship, to)  # If it didn't load when unloading (a new ship, or a new route).
+		if from_berth:
+			_load_cargo(ship, to)
 	_leave_port(ship)
 	ship.from_port = ship.docked_at
 	ship.to_port = to
 	ship.risk_check_time = 0.0
 	ship.storm_check_time = 0.0
+	ship.ice_check_time = 0.0
 	ship.traveled_nm = 0.0
 	ship.docked_at = ""
 	canal_traffic.start_leg(ship)
@@ -2517,6 +2832,7 @@ func _start_segment(ship: Ship, segment: Array) -> void:
 	ship.traveled_nm = segment[2]
 	ship.segment_end = segment[3]
 	ship.storm_check_time = 0.0
+	ship.ice_check_time = 0.0
 	canal_traffic.start_leg(ship)
 
 
@@ -2646,12 +2962,13 @@ func _refuel(ship: Ship, amount: float) -> void:
 
 
 ## Spends up to `cost` dollars of a kind ("fuel" or "repair") without going
-## below $0 and returns what was spent. Money is whole dollars, so fractions
+## below $0 (or all of it on credit, if its company is in debt already: see
+## in_debt()) and returns what was spent. Money is whole dollars, so fractions
 ## build up on the ship's bill.
 func _spend(ship: Ship, cost: float, kind: String) -> float:
 	if cost <= 0.0:
 		return 0.0
-	var paid := minf(cost, float(owner_of(ship).money) - ship.bill)
+	var paid := cost if in_debt(owner_of(ship)) else minf(cost, float(owner_of(ship).money) - ship.bill)
 	if paid <= 0.0:
 		return 0.0
 	_record(ship, kind, paid)
@@ -2720,7 +3037,9 @@ func recent_finances(of: Company = null) -> Dictionary:
 			fleet[kind] = float(fleet.get(kind, 0.0)) + bucket.fleet[kind]
 		for ship_name: String in bucket.ships:
 			var tally: Dictionary = bucket.ships[ship_name]
-			var costs := float(tally.get("fuel", 0.0)) + float(tally.get("repair", 0.0)) + float(tally.get("tolls", 0.0)) + float(tally.get("cargo", 0.0))
+			var costs := 0.0
+			for kind: String in ["fuel", "repair", "tolls", "cargo", "port_fees", "wages"]:
+				costs += float(tally.get(kind, 0.0))
 			ship_profit[ship_name] = float(ship_profit.get(ship_name, 0.0)) + float(tally.get("income", 0.0)) - costs
 	return {fleet = fleet, ships = ship_profit}
 
@@ -2761,6 +3080,7 @@ func found_company_error(new_name: String, new_home_port: String) -> String:
 func found_company(new_name: String, new_color: String, new_home_port: String) -> int:
 	var founded := Company.new(new_name.strip_edges().left(MAX_COMPANY_NAME_LENGTH), new_color, new_home_port)
 	founded.money = int(GameData.config.get("starting_money", 10000))
+	founded.ceo = Company.random_ceo()
 	founded.hubs.assign([Hub.new(new_home_port, true)])
 	if companies.is_empty():
 		companies.assign([company])
@@ -2804,6 +3124,7 @@ func _client_frame(delta: float) -> void:
 	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
 		_storm_warning_clock = 0.0
 		_storm_warnings()
+		_batter_anchored()
 		_season_warnings()
 # --- Saving --------------------------------------------------------------
 
@@ -2862,12 +3183,14 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company = Company.new(new_company_name.strip_edges(), new_color, new_home_port)
 	company.money = int(GameData.config.get("starting_money", 10000))
 	company.tutorials = bool(options.get("tutorials", false))
+	company.ceo = options.get("ceo", {}) if not (options.get("ceo", {}) as Dictionary).is_empty() else Company.random_ceo()
 	company.hubs.assign([Hub.new(new_home_port, true)])
 	company.regions.assign([str(GameData.port_region(new_home_port).get("id", ""))])
 	companies.assign([company])
 	_clear_ships()
 	next_ship_id = 1
 	play_time = 0.0
+	wage_period = 0
 	canal_traffic.clear()
 	market.clear()
 	port_sizes.reset()
@@ -2906,6 +3229,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	company = companies[clampi(local if local >= 0 else int(data.get("local_company", 0)), 0, companies.size() - 1)]
 	_clear_ships()
 	play_time = float(data.get("play_time", 0.0))
+	wage_period = int(data.get("wage_period", -1))  # Saves from before wages: none owed for the time before.
 	market.from_dict(data.get("market", {}))
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
@@ -2976,6 +3300,7 @@ func world_dict() -> Dictionary:
 		"local_company": all.find(Net.acting_for if Net.acting_for != null else company),
 		"next_ship_id": next_ship_id,
 		"play_time": play_time,
+		"wage_period": wage_period,
 		"max_time_speed": max_time_speed,
 		"storms": storms,
 		"seasons": seasons,

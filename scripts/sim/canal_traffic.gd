@@ -516,7 +516,7 @@ func _pay_toll(ship: Ship, canal: Dictionary) -> bool:
 	if not ship.is_service():
 		var toll: int = _state.cargo_toll(ship, canal)
 		var who: Company = _state.owner_of(ship)
-		if who.money < toll:
+		if who.money < toll and not _state.in_debt(who):  # (In debt, on credit: see GameState.in_debt().)
 			return false
 		_state._add_money(who, -toll)
 		_state.record_toll(ship, canal, toll)

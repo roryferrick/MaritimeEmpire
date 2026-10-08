@@ -1,10 +1,11 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
-## to (recommended great and harder starts first, from data/starts.json, then
-## the Great Lakes, then every port), choose the company's color, its fastest
-## game speed, its storms (none, moderate or harsh), and whether to have seasonal
-## closures and the tutorial.
+## to on the globe (only the recommended great and harder starts from
+## data/starts.json and the Great Lakes ports, colored by kind), choose the
+## company's color, its fastest game speed, its storms (none, moderate or
+## harsh), and whether to have seasonal closures and the tutorial; then make
+## the CEO: their name and looks (Characters), part by part or at random.
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -12,64 +13,66 @@ const DEFAULT_HOME_PORT := "ROM"
 const DEFAULT_COLOR := "purple"
 const DEFAULT_STORMS := "moderate"
 const SWATCH_SIZE := Vector2(56, 36)
-const START_HEADINGS := {great = "Great starts", harder = "Harder starts"}
+## The starting ports' colors on the map, by kind of start.
+const START_COLORS := {great = Color(0.35, 0.85, 0.4), harder = Color(1.0, 0.75, 0.25), great_lakes = Color(0.45, 0.75, 1.0)}
 
+var _home_port := DEFAULT_HOME_PORT
 var _color := DEFAULT_COLOR
 var _max_speed: int = GameState.TIME_SPEEDS[-1]
 var _storms := DEFAULT_STORMS
+## The CEO being made (Characters: {name, look}), and their page.
+var _ceo := Company.random_ceo()
+var _ceo_page := CenterContainer.new()
+var _ceo_portrait := Portrait.new()
+var _ceo_name := LineEdit.new()
+var _part_labels := {}
 
 
 func _ready() -> void:
 	%NameEdit.max_length = GameState.MAX_COMPANY_NAME_LENGTH
 	_add_ports()
-	%PortPicker.item_selected.connect(_show_start_note.unbind(1))
-	_show_start_note()
 	_add_color_swatches()
 	_add_speed_choices()
 	_add_storm_choices()
 	%NameEdit.text_changed.connect(_validate.unbind(1))
 	%NameEdit.text_submitted.connect(_start.unbind(1))
 	%StartButton.pressed.connect(_start)
+	%StartButton.text = "Next: Your CEO"
+	_add_ceo_page()
 	%BackButton.pressed.connect(func() -> void: get_tree().change_scene_to_file(MAIN_MENU_SCENE))
 	%NameEdit.grab_focus()
 	_validate()
 
 
-## The recommended starts (great, then harder, each by name), the Great Lakes
-## ports, and then every port a Scooter can start from (not starts.json's
-## excluded ones) by name, under headings; each item's metadata is its port id.
+## The starting ports on the map: the recommended starts (great and harder,
+## from data/starts.json) and the Great Lakes ports, each in its kind's color
+## (START_COLORS); every other port is a faint dot that can't be picked.
 func _add_ports() -> void:
-	var picker: OptionButton = %PortPicker
-	for kind: String in START_HEADINGS:
-		var entries: Array = GameData.starts.get(kind, []).duplicate()
-		entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return GameData.port_name(a.port) < GameData.port_name(b.port))
-		picker.add_separator(START_HEADINGS[kind])
-		for entry: Dictionary in entries:
-			_add_port(GameData.get_port(entry.port))
-	picker.add_separator("Great Lakes starts")
-	var lake_ports: Array = GameData.starts.get("great_lakes", {}).get("ports", []).map(GameData.get_port)
-	lake_ports.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.name < b.name)
-	for port: Dictionary in lake_ports:
-		_add_port(port)
-	picker.add_separator("All ports")
-	var excluded: Array = GameData.starts.get("excluded", [])
-	for port in GameData.ports_by_name():
-		if not excluded.has(port.id):
-			_add_port(port)
-	for i in picker.item_count:
-		if picker.get_item_metadata(i) == DEFAULT_HOME_PORT:
-			picker.select(i)
-			return
+	var map: MapView = %MapView
+	var choices := {}
+	for kind: String in ["great", "harder"]:
+		for entry: Dictionary in GameData.starts.get(kind, []):
+			choices[entry.port] = START_COLORS[kind]
+	for port_id: String in GameData.starts.get("great_lakes", {}).get("ports", []):
+		choices[port_id] = START_COLORS.great_lakes
+	map.selectable_ports = choices
+	map.opens_at_port = DEFAULT_HOME_PORT
+	map.opens_whole_globe = true
+	map.port_clicked.connect(_pick_port)
+	_pick_port(DEFAULT_HOME_PORT)
 
 
-func _add_port(port: Dictionary) -> void:
-	var picker: OptionButton = %PortPicker
-	picker.add_item("%s, %s" % [port.name, port.get("country", "")])
-	picker.set_item_metadata(picker.item_count - 1, port.id)
+func _pick_port(port_id: String) -> void:
+	_home_port = port_id
+	%MapView.selected_port = port_id
+	var port := GameData.get_port(port_id)
+	%PortName.text = "%s, %s" % [port.name, port.get("country", "")]
+	_show_start_note()
+	%StartNote.tooltip_text = %StartNote.text
 
 
 func _selected_port() -> String:
-	return str(%PortPicker.get_item_metadata(%PortPicker.selected))
+	return _home_port
 
 
 ## What kind of start the chosen port is, and why.
@@ -83,7 +86,7 @@ func _show_start_note() -> void:
 		"great_lakes":
 			%StartNote.text = info.note
 		_:
-			%StartNote.text = "Not a recommended start: Scooters find only thin trade in range."
+			%StartNote.text = ""
 
 
 ## One swatch per company color; the chosen one gets a white border (dark on
@@ -158,14 +161,141 @@ func _validate() -> bool:
 	return error.is_empty()
 
 
+## On to making the CEO (once the company's name will do).
 func _start() -> void:
 	if not _validate():
+		return
+	$Row.visible = false
+	_ceo_page.visible = true
+	_ceo_name.grab_focus()
+
+
+# --- The CEO --------------------------------------------------------------------
+
+## The CEO page, hidden till Next: the CEO standing on the left; their name
+## (typed, or a random one), a row per part of their look (Characters.PARTS)
+## to step through its options, Randomize, and Back or Found Company.
+func _add_ceo_page() -> void:
+	_ceo_page.visible = false
+	_ceo_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_ceo_page)
+	var card := PanelContainer.new()
+	card.theme_type_variation = &"CardPanel"
+	_ceo_page.add_child(card)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 28)
+	card.add_child(row)
+	_ceo_portrait.custom_minimum_size = Vector2(250, 500)
+	_ceo_portrait.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(_ceo_portrait)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override(&"separation", 6)
+	row.add_child(column)
+	var title := Label.new()
+	title.theme_type_variation = &"HeaderLabel"
+	title.text = "Your CEO"
+	column.add_child(title)
+	var name_row := HBoxContainer.new()
+	_ceo_name.custom_minimum_size.x = 280
+	_ceo_name.max_length = 32
+	_ceo_name.placeholder_text = "Your CEO's name"
+	_ceo_name.text_changed.connect(func(text: String) -> void:
+		_ceo.name = text.strip_edges()
+		_validate_ceo())
+	name_row.add_child(_ceo_name)
+	var random_name := Button.new()
+	random_name.text = "Random name"
+	random_name.pressed.connect(func() -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		_ceo.name = Characters.random_name(rng)
+		_show_ceo())
+	name_row.add_child(random_name)
+	column.add_child(name_row)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override(&"h_separation", 8)
+	grid.add_theme_constant_override(&"v_separation", 2)
+	for part: Array in Characters.PARTS:
+		var key: String = part[0]
+		var title_label := Label.new()
+		title_label.theme_type_variation = &"DimLabel"
+		title_label.text = part[1]
+		grid.add_child(title_label)
+		grid.add_child(_step_button("<", key, -1))
+		var value := Label.new()
+		value.custom_minimum_size.x = 170
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_part_labels[key] = value
+		grid.add_child(value)
+		grid.add_child(_step_button(">", key, 1))
+	column.add_child(grid)
+	var randomize := Button.new()
+	randomize.text = "Randomize looks"
+	randomize.pressed.connect(func() -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		_ceo.look = Characters.random_look(rng)
+		_show_ceo())
+	column.add_child(randomize)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(spacer)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override(&"separation", 8)
+	var back := Button.new()
+	back.text = "Back"
+	back.custom_minimum_size = Vector2(0, 48)
+	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	back.pressed.connect(func() -> void:
+		_ceo_page.visible = false
+		$Row.visible = true)
+	buttons.add_child(back)
+	var found := Button.new()
+	found.name = "FoundButton"
+	found.text = "Found Company"
+	found.custom_minimum_size = Vector2(0, 48)
+	found.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	found.pressed.connect(_found)
+	buttons.add_child(found)
+	column.add_child(buttons)
+	_show_ceo()
+
+
+func _step_button(text: String, key: String, step: int) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(36, 0)
+	button.pressed.connect(func() -> void:
+		_ceo.look[key] = posmod(int(_ceo.look.get(key, 0)) + step, Characters.option_count(key))
+		_show_ceo())
+	return button
+
+
+func _show_ceo() -> void:
+	if _ceo_name.text.strip_edges() != _ceo.name:
+		_ceo_name.text = _ceo.name
+	for key: String in _part_labels:
+		(_part_labels[key] as Label).text = Characters.option_name(key, int(_ceo.look.get(key, 0)))
+	_ceo_portrait.character = _ceo
+	_validate_ceo()
+
+
+func _validate_ceo() -> void:
+	var found: Button = _ceo_page.find_child("FoundButton", true, false)
+	if found != null:
+		found.disabled = str(_ceo.name).is_empty()
+
+
+func _found() -> void:
+	if str(_ceo.name).is_empty() or not _validate():
 		return
 	GameState.new_game(%NameEdit.text, _selected_port(), _color, {
 		tutorials = %TutorialToggle.button_pressed,
 		max_time_speed = _max_speed,
 		storms = _storms,
 		seasons = %SeasonsToggle.button_pressed,
+		ceo = _ceo.duplicate(true),
 	})
 	if GameState.multiplayer_save:
 		Net.host_error = Net.host(MainMenu.host_settings)  # Friends can join it; the game says if it couldn't.

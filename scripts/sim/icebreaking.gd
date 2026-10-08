@@ -165,6 +165,12 @@ func port_inside(item: Dictionary, port_id: String) -> bool:
 	return inside(item, Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))))
 
 
+## True if any open area leads convoys now (so any ship's lane might be held
+## at its ice edge: see area_for_leg()).
+func any_open_closure() -> bool:
+	return _any_open_closure
+
+
 ## The open area a ship needs leading through on a leg: one its lane enters, or
 ## starts in. {} if none.
 func area_for_leg(from_port: String, to_port: String) -> Dictionary:

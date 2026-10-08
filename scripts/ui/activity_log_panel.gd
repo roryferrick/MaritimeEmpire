@@ -30,6 +30,10 @@ var _chat_list: VBoxContainer = null
 var _chat: LineEdit = null
 var _showing_chat := false
 var _unread := 0
+## Messages waiting to be added at the end of the frame (see _add_row()), and
+## the highlight boxes behind them, made once by theme color name.
+var _pending: Array[Dictionary] = []
+var _boxes := {}
 
 
 func _ready() -> void:
@@ -144,7 +148,23 @@ func _scroll_chat_to_end() -> void:
 	_chat_scroll.scroll_vertical = int(_chat_scroll.get_v_scroll_bar().max_value)
 
 
+## A new message: added with any others from this frame once it's over (a big
+## fleet at full speed logs many a frame, and each new row lays the list out
+## again), the newest ActivityLog.MAX_ENTRIES of them.
 func _add_row(entry: Dictionary) -> void:
+	_pending.append(entry)
+	if _pending.size() == 1:
+		_add_pending.call_deferred()
+
+
+func _add_pending() -> void:
+	var entries := _pending.slice(maxi(_pending.size() - ActivityLog.MAX_ENTRIES, 0))
+	_pending.clear()
+	for entry: Dictionary in entries:
+		_add_label(entry)
+
+
+func _add_label(entry: Dictionary) -> void:
 	var label := Label.new()
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.text = "%s  %s" % [_clock(entry.time), entry.text]
@@ -154,11 +174,11 @@ func _add_row(entry: Dictionary) -> void:
 		label.add_theme_color_override(&"font_color", _readable(color))
 	match entry.kind:
 		ActivityLog.Kind.INFO:
-			label.add_theme_stylebox_override(&"normal", _highlight(Color.TRANSPARENT))
+			label.add_theme_stylebox_override(&"normal", _box(&"", Color.TRANSPARENT))
 		ActivityLog.Kind.GOOD:
-			label.add_theme_stylebox_override(&"normal", _highlight(_color(&"good_highlight", Color(0.2, 0.6, 0.3, 0.35))))
+			label.add_theme_stylebox_override(&"normal", _box(&"good_highlight", Color(0.2, 0.6, 0.3, 0.35)))
 		ActivityLog.Kind.BAD:
-			label.add_theme_stylebox_override(&"normal", _highlight(_color(&"bad_highlight", Color(0.75, 0.2, 0.2, 0.35))))
+			label.add_theme_stylebox_override(&"normal", _box(&"bad_highlight", Color(0.75, 0.2, 0.2, 0.35)))
 	_list.add_child(label)
 	_list.move_child(label, 0)
 	while _list.get_child_count() > ActivityLog.MAX_ENTRIES:
@@ -169,6 +189,7 @@ func _add_row(entry: Dictionary) -> void:
 
 
 func _clear() -> void:
+	_pending.clear()
 	for child in _list.get_children():
 		_list.remove_child(child)
 		child.queue_free()
@@ -197,6 +218,13 @@ func _show_folded(folded: bool) -> void:
 			_update_chat_tab()
 	%CollapseButton.text = "»" if folded else "«"
 	%CollapseButton.tooltip_text = "Show the activity log" if folded else "Fold the activity log away"
+
+
+## A highlight box in a theme color (or a fallback), made once and shared.
+func _box(color_name: StringName, fallback: Color) -> StyleBoxFlat:
+	if not _boxes.has(color_name):
+		_boxes[color_name] = _highlight(_color(color_name, fallback) if not String(color_name).is_empty() else fallback)
+	return _boxes[color_name]
 
 
 static func _highlight(color: Color) -> StyleBoxFlat:

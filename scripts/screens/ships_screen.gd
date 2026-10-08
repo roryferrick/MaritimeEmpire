@@ -13,6 +13,9 @@ enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY }
 const COLUMNS := 8
 ## Fewer columns rather than tiles narrower than this (px).
 const MIN_TILE_WIDTH := 100.0
+## The picture of the model before each group's name (px): this long, and room
+## for the widest model this tall.
+const MODEL_PICTURE_SIZE := Vector2(72, 26)
 ## The page margins either side (see the scene), and room for the scrollbar.
 const MARGIN := 24.0
 const SCROLLBAR_ROOM := 12.0
@@ -209,6 +212,10 @@ func _add_group(model: Dictionary) -> GridContainer:
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override(&"separation", 12)
 	box.add_child(title_row)
+	var picture := ShipPicture.new(model, MODEL_PICTURE_SIZE.x)  # The model, bow to the right, before its name.
+	picture.custom_minimum_size = MODEL_PICTURE_SIZE
+	picture.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_row.add_child(picture)
 	var title := Label.new()
 	title.text = model.get("name", model.id)
 	title.add_theme_color_override(&"font_color", color)

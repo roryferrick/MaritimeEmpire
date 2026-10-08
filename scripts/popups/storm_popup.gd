@@ -97,8 +97,10 @@ func _refresh() -> void:
 
 	# The cloud as drawn, its size and course.
 	var eye := tropical and intensity > MapView.STORM_EYE_FROM
-	_row("Cloud", "%d rings, %d spiral bands%s" % [MapView.STORM_HAZE.size(), 3 if tropical else 2,
-		", a clear eye" if eye else (", no eye yet" if tropical else "")])
+	if tropical:
+		_row("Cloud", "Dark spiral bands round a dense core%s" % (", a clear eye" if eye else ", no eye yet"))
+	else:
+		_row("Cloud", "A ragged mass of dark rain cloud")
 	_row("Size", "%s nm radius (%s nm across)" % [_nm(radius), _nm(radius * 2.0)])
 	var ahead := weather.track_ahead(storm)
 	if ahead.size() >= 2:

@@ -22,6 +22,9 @@ const STEP_S := 5.0
 const BAND_HYSTERESIS := 1.0
 
 var _state: Node  # GameState
+## The size bands' names and smallest sizes, from the config (see band_of()).
+var _band_names := PackedStringArray()
+var _band_mins := PackedFloat32Array()
 var _sizes := {}  # port id -> size
 ## Growth earned but not yet applied (applied at up to max_growth_per_hour).
 var _pending := {}  # port id -> size points
@@ -61,10 +64,14 @@ func band(port_id: String) -> String:
 
 
 func band_of(value: float) -> String:
+	if _band_mins.is_empty():  # (Asked for very often: the bands are read from the config once.)
+		for entry: Array in _settings().get("bands", []):
+			_band_names.append(str(entry[0]))
+			_band_mins.append(float(entry[1]))
 	var found := ""
-	for entry: Array in _settings().get("bands", []):
-		if value >= float(entry[1]):
-			found = entry[0]
+	for i in _band_mins.size():
+		if value >= _band_mins[i]:
+			found = _band_names[i]
 	return found
 
 
@@ -89,11 +96,12 @@ func rate(port_id: String) -> float:
 	return float(_rates.get(port_id, 0.0))
 
 
-## Whether a ship model can dock here: its min_port band or bigger (recovery
-## boats and models without one anywhere).
+## Whether a ship model can dock here: its min_port band or bigger, or any
+## port with an HQ or hub (whose marina's slip takes the biggest ships; see
+## Docks); recovery boats and models without a min_port dock anywhere.
 func fits(model: Dictionary, port_id: String) -> bool:
 	var needs := str(model.get("min_port", ""))
-	return needs.is_empty() or size(port_id) >= band_min(needs)
+	return needs.is_empty() or size(port_id) >= band_min(needs) or _state.docks.has_hub(port_id)
 
 
 ## Cargo value the player's ships loaded or unloaded here.

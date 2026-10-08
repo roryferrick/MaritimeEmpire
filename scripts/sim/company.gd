@@ -34,6 +34,11 @@ var hidden_gem_claimed := false
 var xp := 0.0
 ## Money cargo purchases leave in the bank (set on the Finances screen).
 var bank_reserve := 0
+## Money borrowed on the Finances screen and not yet paid back (see
+## GameState.take_loan()).
+var loan := 0
+## The CEO (Characters: {name, look}), made on the New Company screen.
+var ceo := {}
 ## The HQ (at the home port, first) and the hubs placed since.
 var hubs: Array[Hub] = []
 ## The market regions unlocked (ids from markets.json regions): the home
@@ -111,6 +116,8 @@ func to_dict() -> Dictionary:
 		"mega_upgrades": mega_upgrades,
 		"hidden_gem_claimed": hidden_gem_claimed,
 		"bank_reserve": bank_reserve,
+		"loan": loan,
+		"ceo": ceo,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
 		"regions": regions,
 		"totals": totals,
@@ -139,6 +146,10 @@ static func from_dict(data: Dictionary) -> Company:
 	company.mega_upgrades.assign(data.get("mega_upgrades", []))
 	company.hidden_gem_claimed = bool(data.get("hidden_gem_claimed", false))
 	company.bank_reserve = int(data.get("bank_reserve", 0))
+	company.loan = int(data.get("loan", 0))
+	company.ceo = data.get("ceo", {})
+	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.
+		company.ceo = Company.random_ceo(absi(company.name.hash()))
 	company.regions.assign(data.get("regions", []))
 	for hub_data: Dictionary in data.get("hubs", []):
 		company.hubs.append(Hub.from_dict(hub_data))
@@ -191,3 +202,13 @@ func apply_update(data: Dictionary, keep_prefs := false) -> void:
 				hubs = kept
 			_:
 				set(key, value)
+
+
+## A CEO made up at random (seed -1), or the same for the same seed.
+static func random_ceo(seed := -1) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	if seed >= 0:
+		rng.seed = seed
+	else:
+		rng.randomize()
+	return Characters.random_character(rng)

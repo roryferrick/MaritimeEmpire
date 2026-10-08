@@ -26,6 +26,14 @@ func _init(for_ship: Ship, is_compact := false) -> void:
 
 func _ready() -> void:
 	custom_minimum_size.y = 3.0 * _row_height() - _gap()
+	set_process(is_visible_in_tree())
+
+
+## Only follows its ship while it can be seen: a big fleet's Ships tab, hidden,
+## would otherwise still have every tile's bars look every frame.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		set_process(is_visible_in_tree())
 
 
 ## Redraws only when a bar has moved by a pixel or so (or the cargo changed):

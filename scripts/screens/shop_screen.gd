@@ -262,6 +262,12 @@ func _make_card(model: Dictionary) -> Control:
 		rows[1] = ["Job", "Leads your ships through seasonal ice in convoys"]
 		rows[2] = ["Needed", "Only in winter ice: %s" % ", ".join(areas)]
 		rows.remove_at(3)
+	# Its crew, by its tier, and their wages each period (see GameState.crew_wages()).
+	var crew := GameState.crew_of(model)
+	rows.insert(rows.size() - 2, ["Officers", "Captain" if int(crew[0]) <= 1 else "Captain + %d %s" % [int(crew[0]) - 1, "mate" if int(crew[0]) == 2 else "mates"]])
+	rows.insert(rows.size() - 2, ["Crew", str(crew[1])])
+	rows.insert(rows.size() - 2, ["Wages", "%s / %d days" % [Fmt.money_short(GameState.crew_wages(model)),
+		int(GameData.config.get("crew", {}).get("period_days", 14))]])
 	for row: Array in rows:
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override(&"separation", 6)

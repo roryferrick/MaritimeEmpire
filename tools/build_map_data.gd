@@ -11,6 +11,8 @@ extends SceneTree
 ## existing lanes again in seconds (without rounding the corners where they
 ## join; see _round_corners(), which needs the land grid of a lanes run):
 ##   Godot --headless --path . -s tools/build_map_data.gd
+## "-- --biomes-only" redraws just the biome patches into the existing
+## data/world_map.res (after changing BIOME_SIMPLIFY, say), in about a minute.
 ## While working on the routing, "-- --lanes-only --pairs PUS-YOK,DXB-HKG" (or
 ## "--ports CPH,GDN" for every lane to or from those ports)
 ## re-routes just those lanes into the existing data/sea_lanes.res (in under a
@@ -284,6 +286,10 @@ func _init() -> void:
 		_resplice_lanes()
 		quit()
 		return
+	if "--biomes-only" in args:
+		_rebuild_biomes("--dry" in args)
+		quit()
+		return
 	var land_rings := _read_land_rings()
 	print("Land: %d rings" % land_rings.size())
 	if not "--lanes-only" in args:
@@ -377,6 +383,22 @@ func _build_map(land_polygons: Array) -> void:
 	_add_decor_clearance(map)
 	# Split small enough to curve round the globe (the map is drawn on one).
 	Geo.tessellate_map(map)
+	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % MAP_OUT)
+
+
+## The biome patches again, into the existing map (see --biomes-only); dry, only
+## counting their outlines' points.
+func _rebuild_biomes(dry: bool) -> void:
+	var map: WorldMapData = load(MAP_OUT)
+	map.biome_triangles = PackedVector2Array()
+	map.biome_colors = PackedColorArray()
+	_add_biome_polygons(map, _build_biomes())
+	if dry:
+		return
+	var biomes := Geo.tessellate(map.biome_triangles, map.biome_colors)
+	map.biome_triangles = biomes[0]
+	map.biome_colors = biomes[1]
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 
@@ -554,7 +576,7 @@ const BIOME_EDGE_UPSCALE := 3
 ## The biome polygons (_add_biome_polygons()): how far (projected degrees)
 ## their outlines may stray from the cell edges when straightened, and the
 ## smallest patch kept (projected square degrees).
-const BIOME_SIMPLIFY := 0.45
+const BIOME_SIMPLIFY := 0.18
 const BIOME_MIN_AREA := 0.12
 ## Drawings' distance to the shore is looked for this far (projected degrees), in
 ## buckets this size.
@@ -955,7 +977,7 @@ func _add_biome_polygons(map: WorldMapData, biomes: PackedByteArray) -> void:
 			var area := _signed_area(ring)
 			if area <= BIOME_MIN_AREA:
 				continue  # A hole (its inside is another patch, drawn over it), or a speck.
-			var simple := _simplify_ring(ring, BIOME_SIMPLIFY)
+			var simple := _simplify_ring(ring, _biome_simplify())
 			if simple.size() >= 3:
 				shapes.append([area, b, simple, ring])
 	shapes.sort_custom(func(x: Array, y: Array) -> bool: return x[0] > y[0])
@@ -969,7 +991,10 @@ func _add_biome_polygons(map: WorldMapData, biomes: PackedByteArray) -> void:
 		for i in indices:
 			map.biome_triangles.append(points[i])
 			map.biome_colors.append(color)
-	print("Biome polygons: %d patches, %d triangles" % [shapes.size(), map.biome_triangles.size() / 3])
+	var outline_points := 0
+	for shape: Array in shapes:
+		outline_points += (shape[2] as PackedVector2Array).size()
+	print("Biome polygons: %d patches, %d outline points, %d triangles" % [shapes.size(), outline_points, map.biome_triangles.size() / 3])
 
 
 static func _add_edge(out: Dictionary, from: int, to: int) -> void:
@@ -2377,3 +2402,11 @@ func _grid_point(lon_lat: Vector2) -> Vector2:
 static func _lon_lat_text(p: Vector2) -> String:
 	var lon := wrapf(p.x, -180.0, 180.0)
 	return "%.1f%s %.1f%s" % [absf(p.y), "N" if p.y >= 0.0 else "S", absf(lon), "E" if lon >= 0.0 else "W"]
+
+
+## BIOME_SIMPLIFY, or "-- --biome-simplify=0.2" to try another.
+static func _biome_simplify() -> float:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--biome-simplify="):
+			return float(arg.get_slice("=", 1))
+	return BIOME_SIMPLIFY

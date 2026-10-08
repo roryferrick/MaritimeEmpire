@@ -54,6 +54,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _on_money_changed(money: int) -> void:
 	%MoneyLabel.text = Fmt.money(money)
+	# In debt (crew wages can do it: see GameState.in_debt()): in red, saying so.
+	if money < 0:
+		%MoneyLabel.add_theme_color_override(&"font_color", Color(0.95, 0.35, 0.3))
+		%MoneyLabel.tooltip_text = "In debt: your ships run on credit, but nothing can be bought until you're back above $0. Open Finances"
+	else:
+		%MoneyLabel.remove_theme_color_override(&"font_color")
+		%MoneyLabel.tooltip_text = "Open Finances"
 
 
 func _process(_delta: float) -> void:

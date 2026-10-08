@@ -18,19 +18,19 @@ const CARD_GAP := 12
 ## Table columns: [title, sort key]. Money columns sort biggest first.
 const COLUMNS := [
 	["Ship", "name"], ["Model", "model"], ["Sales", "income"], ["Cargo", "cargo"], ["Fuel", "fuel"],
-	["Repairs", "repair"], ["Tolls", "tolls"], ["Profit", "profit"], ["Last 10 min", "recent"],
+	["Repairs", "repair"], ["Tolls & fees", "tolls"], ["Wages", "wages"], ["Profit", "profit"], ["Last 10 min", "recent"],
 ]
 ## Totals rows: [title, money kind, is a cost].
 const TOTAL_ROWS := [
 	["Cargo sales", "income", false], ["Cargo bought", "cargo", true], ["Fuel", "fuel", true], ["Repairs", "repair", true],
-	["Canal tolls", "tolls", true],
+	["Canal tolls", "tolls", true], ["Port fees", "port_fees", true], ["Crew wages", "wages", true], ["Loan interest", "interest", true],
 	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true],
 ]
 ## Ship table groups, in shop order: [title, ship_models.json category].
 const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"]]
 ## Money columns summed in each group's total row.
-const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "profit", "recent"]
+const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "wages", "profit", "recent"]
 ## The Delivered card's heading for each markets.json unit.
 const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head of livestock", vehicle = "Vehicles"}
 ## Each group's rows sit on a faint band of its ship line's color.
@@ -49,6 +49,10 @@ var _delivered_grid := GridContainer.new()
 var _canal_card := PanelContainer.new()
 var _canal_label := Label.new()
 var _bank_picker := OptionButton.new()
+## The loan row (see _add_loan_row()).
+var _loan_label := Label.new()
+var _borrow_button := Button.new()
+var _repay_button := Button.new()
 ## The Compare companies page (see _add_tabs()), and whether it's showing.
 var _compare_card := PanelContainer.new()
 var _compare_grid := GridContainer.new()
@@ -78,6 +82,7 @@ func _ready() -> void:
 	row.add_child(_delivered_card)
 	row.add_sibling(_canal_card)
 	_add_bank_row()
+	_add_loan_row()
 	_add_tabs()
 	%ShipTable.draw.connect(_draw_bands)
 	visibility_changed.connect(_refresh)
@@ -101,6 +106,7 @@ func _refresh() -> void:
 		_fill_comparison()
 		return
 	_show_bank_reserve()
+	_show_loan()
 	var recent := GameState.recent_finances()
 	_fill_totals(recent.fleet)
 	_fill_delivered()
@@ -123,11 +129,12 @@ func _fill_totals(recent: Dictionary) -> void:
 		_add_label(%Totals, Fmt.money(roundi(profit)), &"GainLabel" if profit >= 0.0 else &"ErrorLabel")
 
 
-## Cargo sales minus cargo bought, fuel, repairs and canal tolls (not buying or
+## Cargo sales minus cargo bought, fuel, repairs, canal tolls, port fees, crew wages and loan interest (not buying or
 ## selling ships).
 static func _operating_profit(source: Dictionary) -> float:
 	return (float(source.get("income", 0.0)) - float(source.get("cargo", 0.0)) - float(source.get("fuel", 0.0))
-		- float(source.get("repair", 0.0)) - float(source.get("tolls", 0.0)))
+		- float(source.get("repair", 0.0)) - float(source.get("tolls", 0.0)) - float(source.get("port_fees", 0.0)) - float(source.get("wages", 0.0))
+		- float(source.get("interest", 0.0)))
 
 
 ## Everything the fleet has delivered, all time: a total for each unit
@@ -197,7 +204,8 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 			cargo = ship.ledger.cargo,
 			fuel = ship.ledger.fuel,
 			repair = ship.ledger.repair,
-			tolls = ship.ledger.tolls,
+			tolls = ship.ledger.tolls + ship.ledger.port_fees,
+			wages = ship.ledger.wages,
 			profit = ship.profit(),
 			recent = float(recent_profit.get(ship.name, 0.0)),
 		})
@@ -228,7 +236,7 @@ func _add_row(row: Dictionary, title_color := Color.TRANSPARENT) -> Array[Label]
 	cells.append(_add_label(%ShipTable, row.name))
 	cells.append(_add_label(%ShipTable, row.model, &"DimLabel"))
 	cells.append(_add_money(roundi(row.income)))
-	for key: String in ["cargo", "fuel", "repair", "tolls"]:
+	for key: String in ["cargo", "fuel", "repair", "tolls", "wages"]:
 		cells.append(_add_money(-roundi(row[key])))
 	for key: String in ["profit", "recent"]:
 		cells.append(_add_money(roundi(row[key]), &"GainLabel" if row[key] >= 0.0 else &"ErrorLabel"))
@@ -346,7 +354,7 @@ func _add_tabs() -> void:
 	box.add_child(title)
 	var hint := Label.new()
 	hint.theme_type_variation = &"DimLabel"
-	hint.text = "Every company in this game. Operating profit is cargo sales less cargo, fuel, repairs and tolls."
+	hint.text = "Every company in this game. Operating profit is cargo sales less cargo, fuel, repairs, tolls, port fees and wages."
 	box.add_child(hint)
 	_compare_grid.columns = COMPARE_COLUMNS.size()
 	_compare_grid.add_theme_constant_override(&"h_separation", 20)
@@ -419,3 +427,44 @@ func _show_bank_reserve() -> void:
 	_bank_picker.add_item(Fmt.money(GameState.bank_reserve))
 	_bank_picker.set_item_metadata(_bank_picker.item_count - 1, GameState.bank_reserve)
 	_bank_picker.select(_bank_picker.item_count - 1)
+
+
+## The loan row, under Keep in the bank: what's owed, and buttons to borrow or
+## pay back a step (game_config loans) at a time.
+func _add_loan_row() -> void:
+	var settings := GameState.loan_settings()
+	var step := int(settings.get("step", 1000000))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 12)
+	var title := Label.new()
+	title.text = "Loan"
+	row.add_child(title)
+	row.add_child(_loan_label)
+	_borrow_button.text = "Borrow %s" % Fmt.money(step)
+	_borrow_button.pressed.connect(func() -> void:
+		GameState.take_loan()
+		_show_loan())
+	row.add_child(_borrow_button)
+	_repay_button.text = "Pay back %s" % Fmt.money(step)
+	_repay_button.pressed.connect(func() -> void:
+		GameState.repay_loan()
+		_show_loan())
+	row.add_child(_repay_button)
+	var hint := Label.new()
+	hint.theme_type_variation = &"DimLabel"
+	hint.text = "Up to %s, at %s%% a year, paid every %d days with the crew's wages." % [Fmt.money(int(settings.get("max", 10000000))),
+		str(snappedf(float(settings.get("yearly_interest", 0.08)) * 100.0, 0.1)).trim_suffix(".0"), int(GameData.config.get("crew", {}).get("period_days", 14))]
+	row.add_child(hint)
+	$Scroll/Margin/Content.add_child(row)
+	$Scroll/Margin/Content.move_child(row, 1)
+
+
+func _show_loan() -> void:
+	var loan := GameState.company.loan
+	_loan_label.text = "Nothing owed" if loan == 0 else "%s owed (%s interest a payday)" % [Fmt.money(loan), Fmt.money(GameState.loan_interest(loan))]
+	var borrow_error := GameState.take_loan_error()
+	_borrow_button.disabled = not borrow_error.is_empty()
+	_borrow_button.tooltip_text = borrow_error
+	var repay_error := GameState.repay_loan_error()
+	_repay_button.disabled = not repay_error.is_empty()
+	_repay_button.tooltip_text = repay_error

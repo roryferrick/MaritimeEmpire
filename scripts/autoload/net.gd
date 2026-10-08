@@ -80,13 +80,13 @@ const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "s
 ## GameState signals whose first argument is a ship: sent to that ship's
 ## company's player. port_band_changed goes to everyone.
 const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_held", &"ship_departed", &"canal_entered",
-	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled"]
+	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled", &"ship_battered", &"wages_paid"]
 ## Commands a joined player's game sends, done by the host for their company
 ## (each is the GameState function of that name).
 const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel",
 	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve", &"level_skill", &"upgrade_all",
 	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
-	&"rename_ship", &"set_prefs", &"unlock_region"]
+	&"rename_ship", &"set_prefs", &"unlock_region", &"take_loan", &"repay_loan"]
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its
@@ -1081,7 +1081,8 @@ func _emit(signal_name: StringName, args: Array) -> void:
 		4: GameState.emit_signal(signal_name, args[0], args[1], args[2], args[3])
 		5: GameState.emit_signal(signal_name, args[0], args[1], args[2], args[3], args[4])
 		6: GameState.emit_signal(signal_name, args[0], args[1], args[2], args[3], args[4], args[5])
-		_: GameState.emit_signal(signal_name, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+		7: GameState.emit_signal(signal_name, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+		_: GameState.emit_signal(signal_name, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
 
 
 ## Host: an activity log message for a joined player (from their command).

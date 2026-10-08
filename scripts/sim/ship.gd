@@ -43,6 +43,8 @@ const BERTH_NONE := ""
 const BERTH_WAIT := "wait"
 const BERTH_IN := "in"
 const BERTH_OUT := "out"
+## The zone of open sea, past a leg's last zone (see zone_at()).
+const OPEN_SEA_ZONE := [INF, 1.0, 1.0]
 
 ## A ship sells for this fraction of its price, times its maintenance.
 const SELL_FRACTION := 0.5
@@ -97,10 +99,31 @@ var dock_time := -1.0
 ## it joined the queue (play time), and the port it's pulling out to sail to
 ## ("" if it's going to the anchorage).
 var berth := -1
+## Which half of a big berth it shares with another smaller ship (see
+## Docks.shares()): 0 the end nearer the coast, 1 the other; -1 the whole berth.
+var berth_half := -1
+## Its officers (Characters: {name, look}): the captain first, then its mates
+## (GameState.crew_of()), made up when it was bought.
+var captains: Array = []
 var berth_phase := BERTH_NONE
 var berth_time := 0.0
 var berth_since := 0.0
+## How long (s of play) its coming alongside or pulling out takes: the way in
+## or out at its own speed, and the slide on or off the berth (see
+## GameState._berth_seconds()); 0 for the fixed docks in_s and out_s.
+var berth_duration := 0.0
 var depart_to := ""
+## The last storm to batter it at anchor (its Weather.key()), so each does
+## only once (see GameState._batter_anchored()).
+var storm_hit := ""
+## Worked (sailed, did a job or a stop) since the last payday: its crew is
+## paid then (see GameState._check_payday()).
+var worked := false
+## Queuing for a berth: its port's change count when it last tried, which
+## port, and when it tries again anyway (see Docks.claim()). Not saved.
+var claim_stamp := -1
+var claim_port := ""
+var claim_retry := 0.0
 ## How far into its stop (dock_time) its repairs and fuel have been done and
 ## paid for. Not saved: a stop carries on from where it was loaded.
 var refill_billed := 0.0
@@ -198,12 +221,22 @@ var risk_check_time := 0.0
 ## saved.
 var storm_factors := [1.0, 1.0]
 var storm_check_time := 0.0
+## The ice area its leg runs into ({} if none) and the mile it enters it, kept
+## until ice_check_time (see GameState._ice_hold()). Not saved.
+var ice_area := {}
+var ice_entry := -1.0
+var ice_check_time := 0.0
+## In port: the seasonal closure blocking its next leg ({} if none), for which
+## port, kept until season_check_time (see GameState._try_depart()). Not saved.
+var season_blocker := {}
+var season_check_to := ""
+var season_check_time := 0.0
 ## Seconds spent sailing since it was bought; older ships break down more.
 var sea_time := 0.0
 ## Lifetime money in (income: cargo sold) and out (cargo bought, fuel, repair
 ## and canal tolls), in dollars. A
 ## recovery boat's own running costs go on its own ledger.
-var ledger := {"income": 0.0, "cargo": 0.0, "fuel": 0.0, "repair": 0.0, "tolls": 0.0}
+var ledger := {"income": 0.0, "cargo": 0.0, "fuel": 0.0, "repair": 0.0, "tolls": 0.0, "port_fees": 0.0, "wages": 0.0}
 ## Total XP from deliveries (cargo ships only), and skill levels bought with
 ## the points its levels give: "speed", "durability", "efficiency".
 var xp := 0.0
@@ -362,7 +395,7 @@ func can_sell() -> bool:
 
 
 func profit() -> float:
-	return ledger.income - ledger.cargo - ledger.fuel - ledger.repair - ledger.tolls
+	return ledger.income - ledger.cargo - ledger.fuel - ledger.repair - ledger.tolls - ledger.port_fees - ledger.wages
 
 
 ## Top speed, including the speed skill and the model's mega upgrade.
@@ -732,14 +765,15 @@ func _current_zones() -> Array:
 	return _leg_zones
 
 
-## Speed and wear factors ([speed, wear]) at a mile of the current leg (see
-## GameData.zone_factors()).
-func zone_factors(mile: float) -> Array:
+## The zone at a mile of the current leg: [where it ends, speed factor, wear
+## factor] (see GameData.zone_factors()). Read, not changed: it's the leg's own
+## (no new array every step at sea).
+func zone_at(mile: float) -> Array:
 	_update_leg()
 	for zone: Array in _leg_zones:
 		if mile < zone[0]:
-			return [zone[1], zone[2]]
-	return [1.0, 1.0]
+			return zone
+	return OPEN_SEA_ZONE
 
 
 ## The current leg's length and zones, looked up once per leg rather than on
@@ -1143,10 +1177,15 @@ func to_dict() -> Dictionary:
 		"auto_repair": auto_repair,
 		"dock_time": dock_time,
 		"berth": berth,
+		"berth_half": berth_half,
+		"captains": captains,
 		"berth_phase": berth_phase,
 		"berth_time": berth_time,
+		"berth_duration": berth_duration,
 		"berth_since": berth_since,
 		"depart_to": depart_to,
+		"storm_hit": storm_hit,
+		"worked": worked,
 		"cargo_id": cargo_id,
 		"cargo_from": cargo_from,
 		"cargo_qty": cargo_qty,
@@ -1213,9 +1252,16 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.dock_time = float(data.get("dock_time", -1.0))
 	ship.refill_billed = maxf(ship.dock_time, 0.0)
 	ship.berth = int(data.get("berth", -1))
+	ship.berth_half = int(data.get("berth_half", -1))
+	ship.captains = data.get("captains", [])
+	if ship.captains.is_empty():  # Saves from before officers: the same ones every time it loads.
+		ship.captains = Characters.officers_for(ship.model(), ship.id * 7919 + 17)
 	ship.berth_time = float(data.get("berth_time", 0.0))
+	ship.berth_duration = float(data.get("berth_duration", 0.0))
 	ship.berth_since = float(data.get("berth_since", 0.0))
 	ship.depart_to = str(data.get("depart_to", ""))
+	ship.storm_hit = str(data.get("storm_hit", ""))
+	ship.worked = bool(data.get("worked", false))
 	# A cargo ship from a save before berths that was mid-stop queues for a berth to finish it.
 	var mid_stop := ship.dock_time >= 0.0 and not ship.is_service() and not str(data.get("docked_at", "")).is_empty()
 	ship.berth_phase = str(data.get("berth_phase", BERTH_WAIT if mid_stop else BERTH_NONE))
@@ -1305,3 +1351,8 @@ func apply_update(data: Dictionary) -> void:
 				(get(key) as Array).assign(value)
 			_:
 				set(key, value)
+
+
+## Its captain (Characters), or {} if it has none.
+func captain() -> Dictionary:
+	return captains[0] if not captains.is_empty() else {}

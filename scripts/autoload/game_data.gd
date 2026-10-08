@@ -133,6 +133,9 @@ func _ready() -> void:
 	_load_canals()
 	_load_markets()
 	starts = _load_json(STARTS_PATH)
+	# The map's land colors take a while to decode: start on them now, so
+	# they're ready by the time a map shows (see MapView.land_colors()).
+	ResourceLoader.load_threaded_request("res://data/land_colors.webp")
 
 
 func get_port(id: String) -> Dictionary:

@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/new_company.gd" id="1_company"]
+[ext_resource type="Script" path="res://scripts/ui/map_view.gd" id="2_map"]
 
 [node name="NewCompany" type="Control"]
 layout_mode = 3
@@ -21,75 +22,91 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.08, 0.2, 0.36, 1)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Row" type="HBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 0
 
-[node name="Card" type="PanelContainer" parent="Center"]
+[node name="MapView" type="Control" parent="Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("2_map")
+
+[node name="Side" type="CenterContainer" parent="Row"]
+custom_minimum_size = Vector2(500, 0)
+layout_mode = 2
+
+[node name="Card" type="PanelContainer" parent="Row/Side"]
 custom_minimum_size = Vector2(460, 0)
 layout_mode = 2
 theme_type_variation = &"CardPanel"
 
-[node name="Content" type="VBoxContainer" parent="Center/Card"]
+[node name="Content" type="VBoxContainer" parent="Row/Side/Card"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 6
 
-[node name="Title" type="Label" parent="Center/Card/Content"]
+[node name="Title" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"HeaderLabel"
 text = "Found your company"
 
-[node name="NameLabel" type="Label" parent="Center/Card/Content"]
+[node name="NameLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
 text = "Company name"
 
-[node name="NameEdit" type="LineEdit" parent="Center/Card/Content"]
+[node name="NameEdit" type="LineEdit" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 placeholder_text = "e.g. Blue Horizon Shipping"
 
-[node name="PortLabel" type="Label" parent="Center/Card/Content"]
+[node name="PortLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
-text = "Home port (new ships are delivered here)"
+text = "Home port (new ships are delivered here): click one on the map. Green: great start, gold: harder, blue: Great Lakes."
+autowrap_mode = 3
 
-[node name="PortPicker" type="OptionButton" parent="Center/Card/Content"]
+[node name="PortName" type="Label" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Rome, Italy"
 
-[node name="StartNote" type="Label" parent="Center/Card/Content"]
+[node name="StartNote" type="Label" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 44)
+custom_minimum_size = Vector2(0, 116)
 layout_mode = 2
 theme_type_variation = &"DimLabel"
 text = "Great start"
 autowrap_mode = 3
+mouse_filter = 1
+text_overrun_behavior = 3
+max_lines_visible = 4
 
-[node name="ColorLabel" type="Label" parent="Center/Card/Content"]
+[node name="ColorLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
 text = "Company color (your name and the rings around your hubs)"
 
-[node name="ColorRow" type="GridContainer" parent="Center/Card/Content"]
+[node name="ColorRow" type="GridContainer" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 8
 theme_override_constants/v_separation = 8
 columns = 6
 
-[node name="SpeedRow" type="HBoxContainer" parent="Center/Card/Content"]
+[node name="SpeedRow" type="HBoxContainer" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="SpeedLabel" type="Label" parent="Center/Card/Content/SpeedRow"]
+[node name="SpeedLabel" type="Label" parent="Row/Side/Card/Content/SpeedRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"DimLabel"
@@ -97,12 +114,12 @@ tooltip_text = "The most this company's game can be sped up."
 mouse_filter = 1
 text = "Fastest game speed"
 
-[node name="StormRow" type="HBoxContainer" parent="Center/Card/Content"]
+[node name="StormRow" type="HBoxContainer" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="StormLabel" type="Label" parent="Center/Card/Content/StormRow"]
+[node name="StormLabel" type="Label" parent="Row/Side/Card/Content/StormRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"DimLabel"
@@ -110,11 +127,11 @@ tooltip_text = "Storms form in their real seasons and seas. From company level 6
 mouse_filter = 1
 text = "Storms"
 
-[node name="ToggleRow" type="HBoxContainer" parent="Center/Card/Content"]
+[node name="ToggleRow" type="HBoxContainer" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="TutorialToggle" type="CheckButton" parent="Center/Card/Content/ToggleRow"]
+[node name="TutorialToggle" type="CheckButton" parent="Row/Side/Card/Content/ToggleRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -122,7 +139,7 @@ tooltip_text = "Recommended for new players: tips that explain the basics as you
 button_pressed = true
 text = "Tutorial"
 
-[node name="SeasonsToggle" type="CheckButton" parent="Center/Card/Content/ToggleRow"]
+[node name="SeasonsToggle" type="CheckButton" parent="Row/Side/Card/Content/ToggleRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -130,22 +147,22 @@ tooltip_text = "Real seasonal closures: the Great Lakes locks shut in winter, An
 button_pressed = true
 text = "Seasonal closures"
 
-[node name="Spacer" type="Control" parent="Center/Card/Content"]
+[node name="Spacer" type="Control" parent="Row/Side/Card/Content"]
 custom_minimum_size = Vector2(0, 2)
 layout_mode = 2
 
-[node name="Buttons" type="HBoxContainer" parent="Center/Card/Content"]
+[node name="Buttons" type="HBoxContainer" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="BackButton" type="Button" parent="Center/Card/Content/Buttons"]
+[node name="BackButton" type="Button" parent="Row/Side/Card/Content/Buttons"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Back"
 
-[node name="StartButton" type="Button" parent="Center/Card/Content/Buttons"]
+[node name="StartButton" type="Button" parent="Row/Side/Card/Content/Buttons"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2

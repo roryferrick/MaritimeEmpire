@@ -34,6 +34,7 @@ func _ready() -> void:
 	%QuitButton.pressed.connect(get_tree().quit)
 	_add_copyright()
 	%DeleteDialog.confirmed.connect(_delete)
+	_warm_up()
 	Net.leave()  # Back at the title screen: no longer hosting or joined.
 	if Net.invited_lobby != 0:  # A Steam invite accepted while playing: join it now.
 		get_tree().change_scene_to_file.call_deferred(JOIN_SCENE)
@@ -236,3 +237,12 @@ func _add_copyright() -> void:
 	label.offset_top = -30.0
 	label.offset_bottom = -8.0
 	add_child(label)
+
+
+## Loads the game and new company scenes in the background, once, while the
+## title screen is up: compiling the game's scripts takes most of a second,
+## and change_scene_to_file() then picks up the loaded scenes.
+static func _warm_up() -> void:
+	for path: String in [GAME_SCENE, NEW_COMPANY_SCENE]:
+		if not ResourceLoader.has_cached(path) and ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			ResourceLoader.load_threaded_request(path)
