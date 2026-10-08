@@ -10,6 +10,7 @@ extends Control
 ## luminance so they read on the dark panel.
 const ZOOM_BUTTON_SIZE := Vector2(44, 44)
 const ZOOM_BUTTON_MARGIN := 14
+const FIELD_GUIDE_BUTTON := 44.0
 const LINE_MIN_LUMINANCE := 0.5
 ## How strongly each ship line's group is tinted in the price menu.
 const PRICE_GROUP_TINT := 0.16
@@ -37,6 +38,7 @@ func _ready() -> void:
 	_map.canal_clicked.connect(_open_convoy_popup)
 	_map.storm_clicked.connect(_open_storm_popup)
 	_map.pod_clicked.connect(_open_pod_popup)
+	_map.birds_clicked.connect(_open_birds_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -45,6 +47,7 @@ func _ready() -> void:
 	_add_price_picker()
 	_add_region_choice()
 	_add_zoom_buttons()
+	_add_field_guide_button()
 
 
 func _process(_delta: float) -> void:
@@ -330,3 +333,43 @@ func _add_zoom_buttons() -> void:
 		button.pressed.connect(func() -> void: _map.zoom_by(factor))
 		column.add_child(button)
 	add_child(column)
+
+
+## A flock of birds clicked: what birds are round what it's round, following it.
+func _open_birds_popup(about: Dictionary, _flock: Dictionary) -> void:
+	var popup := BirdsPopup.new()
+	popup.about = about
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at := Vector2.INF
+		if about.has("port"):
+			at = _map.port_screen_position(about.port)
+		elif about.has("ship"):
+			at = _map.ship_screen_position(about.ship)
+		elif about.has("pod"):
+			at = _map.pod_screen_position(int(about.pod))
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)
+
+
+## The field guide's square paw button at the map's top right, beside the
+## Routes panel (see FieldGuide).
+func _add_field_guide_button() -> void:
+	var button := Button.new()
+	button.tooltip_text = "Field guide: every bird, sea animal and land animal in the game"
+	button.focus_mode = Control.FOCUS_NONE
+	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	button.offset_right = $RoutesPanel.offset_left - 10.0
+	button.offset_left = button.offset_right - FIELD_GUIDE_BUTTON
+	button.offset_top = $RoutesPanel.offset_top
+	button.offset_bottom = button.offset_top + FIELD_GUIDE_BUTTON
+	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	var paw := PawIcon.new()
+	paw.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 5)
+	button.add_child(paw)
+	button.pressed.connect(func() -> void:
+		PopupHost.find(self).close()
+		add_child(FieldGuide.new()))
+	add_child(button)

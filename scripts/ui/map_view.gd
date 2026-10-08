@@ -17,6 +17,9 @@ signal empty_clicked
 signal storm_clicked(storm_key: String)
 ## A pod of sea animals was clicked (its index in SeaLife.pods).
 signal pod_clicked(pod_index: int)
+## A flock of birds was clicked: what it's round ({port}, {ship} or {pod}) and
+## the flock ({count, species}: see Birds).
+signal birds_clicked(about: Dictionary, flock: Dictionary)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 ## While choosing a region to unlock (choosing_region): a locked region's
@@ -1597,6 +1600,9 @@ func _click(screen_pos: Vector2) -> void:
 		lock_clicked.emit(lock[0], lock[1])
 	elif not _convoy_canal_at(screen_pos).is_empty():
 		canal_clicked.emit(_convoy_canal_at(screen_pos))
+	elif show_ships and not _birds_at(screen_pos).is_empty():
+		var birds := _birds_at(screen_pos)
+		birds_clicked.emit(birds[0], birds[1])
 	elif show_ships and _pod_at(screen_pos) >= 0:
 		pod_clicked.emit(_pod_at(screen_pos))
 	elif show_ships and not _storm_at(screen_pos).is_empty():
@@ -1725,7 +1731,8 @@ func _update_regions() -> void:
 	_redraw_layers()
 
 
-## True if a port's region is locked (its name, dock and clicks are hidden).
+## True if a port's region is locked (it can't be clicked, and its name is
+## dimmed; its marina shows like any other).
 func _port_locked(port_id: String) -> bool:
 	if not selectable_ports.is_empty():
 		return not selectable_ports.has(port_id)
@@ -1981,6 +1988,12 @@ const UNBERTH_TURN_S := 2.5
 const PEEL_AHEAD := 0.9
 const PEEL_OUT_WIDTHS := 1.6
 const PEEL_ANGLE := 0.45
+## Birds show once a gull's wings would be this many px across (and never draw
+## smaller), and a click this near one picks its flock.
+const BIRD_MIN_PX := 5.0
+const BIRD_HIT_MIN_PX := 6.0
+## Birds are drawn this many times their span (in dock units), to read clearly.
+const BIRD_SCALE := 1.4
 ## At anchor in a storm, ships swing and pitch on their anchors, up to this
 ## far (radians) at full strength.
 const STORM_SWING := 0.45
@@ -2017,6 +2030,10 @@ var _dock_seen := {}
 var _last_spot := {}
 ## Ship -> [its leg, how far it curves in and out of port] (see _harbour_reaches()).
 var _harbour_reach_cache := {}
+## Birds drawn this frame, for clicks: [screen point, reach, what they're round, flock] (see _draw_birds()).
+var _bird_hits: Array = []
+## Flock key -> each bird's steady numbers (see _bird_traits()).
+var _bird_trait_cache := {}
 ## [marina radius, slip] -> where an HQ building may stand (see _hq_region()).
 var _hq_regions := {}
 ## Port id -> the way into the wind there on screen, worked out once a frame.
@@ -2309,7 +2326,7 @@ func _draw_marinas() -> void:
 	for port: Dictionary in GameData.ports:
 		var port_id: String = port.id
 		var root := port_screen_position(port_id)
-		if not near.has_point(root) or _port_locked(port_id) or not _marina_shown(port_id):
+		if not near.has_point(root) or not _marina_shown(port_id):
 			continue  # (Cheapest first: most ports are well off screen.)
 		var layout := _port_layout(port_id)
 		var reach := (float(layout.radius) * 1.5 + float(layout.slip[1] if not layout.slip.is_empty() else 0.0)) * _ship_scale()  # (The quay's square corners.)
@@ -3494,6 +3511,7 @@ func _draw_overlay() -> void:
 	_canvas = _overlay
 	if show_ships:
 		_draw_ships()
+		_draw_birds()
 		_draw_hub_alerts()
 
 
@@ -3518,8 +3536,8 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 	var labels := []
 	var bounds := Rect2(Vector2.ZERO, size)
 	for port: Dictionary in ranked:
-		if _port_locked(port.id):
-			continue  # Its name is hidden till its region is unlocked.
+		if not selectable_ports.is_empty() and not selectable_ports.has(port.id):
+			continue  # Picking a port: only the choices are named.
 		var pos := port_screen_position(port.id)
 		var text_size := font.get_string_size(port.name, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE)
 		var rect := Rect2(pos + Vector2(-text_size.x / 2.0, _port_radius(port.id) + 2.0), text_size)
@@ -3658,12 +3676,12 @@ func _draw_ports(labels: Array) -> void:
 		var pos := port_screen_position(port_id)
 		if not visible_area.has_point(pos):
 			return
+		if _marina_shown(port_id):
+			return  # Grown into its marina (see _draw_marinas()), locked or not.
 		if _port_locked(port_id):
 			# In a locked region: a small faint dot, no more.
 			_canvas.draw_circle(pos, PORT_RADIUS_MIN, locked_fill)
 			return
-		if _marina_shown(port_id):
-			return  # Grown into its marina (see _draw_marinas()).
 		var port_fill := fill if price_commodity.is_empty() else _price_color(port_id)
 		if selectable_ports.get(port_id) is Color:
 			port_fill = selectable_ports[port_id]
@@ -3698,7 +3716,7 @@ func _draw_ports(labels: Array) -> void:
 		var rect: Rect2 = label[1]
 		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
 		var text: String = GameData.port_name(label[0])
-		var color := dimmed if dimmed_ports.has(label[0]) else label_color
+		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
 		_canvas.draw_string(font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 
@@ -5025,3 +5043,190 @@ static func land_colors_texture() -> Texture2D:
 	if ResourceLoader.load_threaded_get_status(LAND_COLORS) != ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
 		return ResourceLoader.load_threaded_get(LAND_COLORS) as Texture2D
 	return load(LAND_COLORS) as Texture2D if ResourceLoader.exists(LAND_COLORS) else null
+
+
+# --- Birds ---------------------------------------------------------------------
+
+## Birds (Birds: gulls round ports, ships and sea animals; seabirds following
+## ships), drawn from above over everything once zoomed in far enough that a
+## gull's wings are BIRD_MIN_PX across: each a little silhouette in its
+## species' colors, flapping (or gliding), with a faint shadow on the water.
+## Each bird's way round its flock is its own (steady from the flock's key);
+## they keep flying while the game's paused.
+func _draw_birds() -> void:
+	_bird_hits.clear()
+	if gray_mode or not show_ships or _ship_scale() < BIRD_MIN_PX:
+		return
+	var birds := Birds.shared()
+	var scale := _ship_scale()
+	var now := Time.get_ticks_msec() / 1000.0
+	var view := Rect2(Vector2.ZERO, size)
+	# Gulls round each port's marina.
+	var near := view.grow(MARINA_MAX_REACH * scale)
+	for port: Dictionary in GameData.ports:
+		var port_id: String = port.id
+		var root := port_screen_position(port_id)
+		if not near.has_point(root) or not _marina_shown(port_id):
+			continue
+		var radius := float(_port_layout(port_id).radius) * scale
+		var flock := birds.port_flock(port_id)
+		_draw_gulls(flock, root, radius * 0.35, radius * 1.15, now, {port = port_id})
+	# Round ships (gulls, and the seabirds following ships at sea).
+	var reach := view.grow(SHIP_CULL_MARGIN * scale)
+	for ship in GameState.ships:
+		if ship.is_carried():
+			continue
+		var at := ship_screen_position(ship)
+		if not reach.has_point(at) or ship.is_docked() and not _marina_shown(ship.docked_at):
+			continue
+		var length := (_model_look(ship.model_id)[7] as Rect2).size.x * scale
+		var flock := birds.ship_flock(ship)
+		if not flock.is_empty():
+			_draw_gulls(flock, at, length * 0.35, length * 0.9, now, {ship = ship})
+		for entry: Dictionary in birds.followers(ship):
+			_draw_followers(ship, entry, at, _screen_angle(ship), length, now)
+	# Round pods of sea animals (where they're drawn: see _draw_sea_life()).
+	for hit: Array in _pod_hits:
+		var pod_index: int = hit[0]
+		var center: Vector2 = hit[1]
+		var pod_reach: float = hit[2]
+		var pod := SeaLife.shared().state(pod_index, float(GameState.calendar_time()))
+		var flock := birds.pod_flock(pod_index, pod.pos)
+		if not flock.is_empty():
+			_draw_gulls(flock, center, pod_reach * 0.6, pod_reach * 1.4, now, {pod = pod_index})
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## A flock of gulls wheeling round a point on screen, between two radii (px),
+## each bird one of its species in turn. `about` says what it's round, for
+## clicking it (see bird_clicked).
+func _draw_gulls(flock: Dictionary, center: Vector2, inner: float, outer: float, now: float, about: Dictionary) -> void:
+	var birds := Birds.shared()
+	var count := int(flock.count)
+	var kinds: Array = flock.species
+	var traits := _bird_traits(str(flock.key), count)
+	for k in count:
+		var info := birds.species(str(kinds[k % kinds.size()]))
+		var t: PackedFloat32Array = traits[k]
+		var turn := 1.0 if t[3] < 0.5 else -1.0
+		var angle := t[0] * TAU + turn * (0.35 + 0.4 * t[1]) * now
+		var radius := lerpf(inner, outer, t[2]) * (1.0 + 0.15 * sin(now * 0.7 + t[4] * TAU))
+		var at := center + Vector2.from_angle(angle) * radius
+		var heading := angle + turn * PI / 2.0
+		# Flapping, with spells of gliding.
+		var gliding := sin(now * 0.45 + t[4] * TAU) > 0.35
+		var wings := 1.0 if gliding else 0.78 + 0.22 * cos(now * (6.0 + 3.0 * t[1]) + t[0] * TAU)
+		_draw_bird(at, heading, info, wings)
+		_bird_hits.append([at, maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale() * 0.6, BIRD_HIT_MIN_PX), about, flock])
+
+
+## Seabirds following a ship, each kind its own way: albatrosses glide in
+## sweeping arcs behind, condors circle high and slow above, terns dart round
+## it, pelicans fly in a file alongside, shearwaters skim low weaving behind.
+func _draw_followers(ship: Ship, entry: Dictionary, at: Vector2, heading: float, length: float, now: float) -> void:
+	var birds := Birds.shared()
+	var id: String = entry.id
+	var info := birds.species(id)
+	var behavior := str(info.get("behavior", "glide"))
+	var ahead := Vector2.from_angle(heading)
+	var side := ahead.orthogonal()
+	var count := int(entry.count)
+	var traits := _bird_traits("follow/%d/%s" % [ship.id, id], count)
+	var flock := {count = count, species = [id], key = id}
+	for k in count:
+		var t: PackedFloat32Array = traits[k]
+		var phase := t[0] * TAU
+		var pos := at
+		var facing := heading
+		var wings := 1.0
+		match behavior:
+			"glide":
+				var sweep := sin(now * 0.55 + phase)
+				pos = at - ahead * length * (1.0 + 0.5 * k + 0.2 * cos(now * 0.4 + phase)) + side * length * 1.1 * sweep
+				facing = heading + 0.7 * cos(now * 0.55 + phase)
+			"soar":
+				var round := phase + now * (0.12 + 0.05 * t[1]) * (1.0 if t[3] < 0.5 else -1.0)
+				pos = at - ahead * length * 0.4 + Vector2.from_angle(round) * length * (1.6 + 0.8 * t[2])
+				facing = round + PI / 2.0 * (1.0 if t[3] < 0.5 else -1.0)
+			"dart":
+				var round := phase + now * (1.1 + 0.5 * t[1])
+				pos = at + Vector2.from_angle(round) * length * (0.5 + 0.5 * t[2]) + Vector2(sin(now * 9.0 + phase), cos(now * 7.0 + phase)) * length * 0.04
+				facing = round + PI / 2.0
+				wings = 0.6 + 0.4 * absf(sin(now * 14.0 + phase))
+			"line":
+				var file_side := 1.0 if t[3] < 0.5 else -1.0
+				pos = at + side * length * 0.9 * file_side - ahead * (length * 0.25 + k * float(info.get("span", 1.7)) * _ship_scale() * 0.9) + side * sin(now * 0.8 + phase) * length * 0.05
+				var flapping := sin(now * 0.7 + phase) > 0.4
+				wings = 0.8 + 0.2 * cos(now * 5.0 + phase) if flapping else 1.0
+			"skim":
+				var weave := sin(now * 1.3 + phase)
+				pos = at - ahead * length * (1.2 + 0.35 * k) + side * length * 0.8 * weave
+				facing = heading + 0.6 * cos(now * 1.3 + phase)
+		_draw_bird(pos, facing, info, wings)
+		_bird_hits.append([pos, maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale() * 0.6, BIRD_HIT_MIN_PX), {ship = ship}, flock])
+
+
+## Steady numbers for each bird of a flock (0 to 1: where it starts round,
+## how fast, how far out, which way, its rhythm), made once per flock.
+func _bird_traits(key: String, count: int) -> Array:
+	var traits: Array = _bird_trait_cache.get(key, [])
+	while traits.size() < count:
+		var k := traits.size()
+		var values := PackedFloat32Array()
+		for n in 5:
+			values.append(Birds.chance([key, k, n]))
+		traits.append(values)
+	_bird_trait_cache[key] = traits
+	return traits
+
+## One bird seen from above at a screen point, heading a way (see draw_bird()).
+func _draw_bird(at: Vector2, heading: float, info: Dictionary, wings: float) -> void:
+	draw_bird(_canvas, at, heading, info, wings, maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale(), BIRD_MIN_PX))
+
+
+## A bird seen from above on any canvas item, at a point, heading a way,
+## `span` px from wingtip to wingtip: body and tail in its mantle color, its
+## head and bill (a pelican's long), wings out to its span (times `wings`,
+## shorter as they beat up and down) with dark tips, and its shadow below.
+## Leaves the canvas item's transform reset.
+static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dictionary, wings: float, span: float, shadow := true) -> void:
+	var colors: Dictionary = info.get("colors", {})
+	var mantle := Color.from_string(str(colors.get("mantle", "#aab4bd")), Color.GRAY)
+	var head := Color.from_string(str(colors.get("head", "#f4f4f2")), Color.WHITE)
+	var tip := Color.from_string(str(colors.get("tip", "#1e1e1e")), Color.BLACK)
+	var bill := Color.from_string(str(colors.get("bill", "#e8c440")), Color.YELLOW)
+	var half := span * 0.5 * wings
+	var wing := PackedVector2Array([Vector2(span * 0.06, 0.0), Vector2(-span * 0.04, half), Vector2(-span * 0.13, half * 0.96), Vector2(-span * 0.1, 0.0)])
+	var tip_part := PackedVector2Array([Vector2(-span * 0.01, half * 0.7), Vector2(-span * 0.04, half), Vector2(-span * 0.13, half * 0.96), Vector2(-span * 0.11, half * 0.7)])
+	if shadow:
+		# Down and to the side on the water.
+		canvas.draw_set_transform(at + Vector2(span * 0.45, span * 0.55), heading, Vector2.ONE)
+		canvas.draw_colored_polygon(wing, Color(0, 0, 0, 0.16))
+		canvas.draw_colored_polygon(_mirror_y(wing), Color(0, 0, 0, 0.16))
+	canvas.draw_set_transform(at, heading, Vector2.ONE)
+	canvas.draw_colored_polygon(wing, mantle)
+	canvas.draw_colored_polygon(_mirror_y(wing), mantle)
+	canvas.draw_colored_polygon(tip_part, tip)
+	canvas.draw_colored_polygon(_mirror_y(tip_part), tip)
+	var long_bill := str(info.get("behavior", "")) == "line"
+	canvas.draw_colored_polygon(PackedVector2Array([Vector2(span * 0.16, 0.0), Vector2(span * 0.04, span * 0.06), Vector2(-span * 0.22, span * 0.05), Vector2(-span * 0.3, 0.0), Vector2(-span * 0.22, -span * 0.05), Vector2(span * 0.04, -span * 0.06)]), mantle.lerp(head, 0.25))
+	canvas.draw_circle(Vector2(span * 0.17, 0.0), span * 0.055, head)
+	canvas.draw_line(Vector2(span * 0.21, 0.0), Vector2(span * (0.36 if long_bill else 0.27), 0.0), bill, maxf(span * 0.03, 1.0))
+	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+static func _mirror_y(points: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in points:
+		out.append(Vector2(p.x, -p.y))
+	return out
+
+
+## The flock of birds drawn under a screen point, if any: [what it's round
+## ({port}, {ship} or {pod}), the flock ({count, species})], or [].
+func _birds_at(screen_pos: Vector2) -> Array:
+	for i in range(_bird_hits.size() - 1, -1, -1):
+		var hit: Array = _bird_hits[i]
+		if (hit[0] as Vector2).distance_to(screen_pos) <= float(hit[1]):
+			return [hit[2], hit[3]]
+	return []

@@ -12,6 +12,8 @@ const SHIP_BARS_WIDTH := 80.0
 ## Founding a hub takes a second click within this many seconds (it's permanent).
 const BUILD_CONFIRM_SECONDS := 3.0
 const REFRESH_SECONDS := 1.0
+## The birds line's color: a soft sky blue.
+const BIRDS_COLOR := Color(0.62, 0.8, 0.95)
 ## The market table: its text size, and how far below or above a commodity's
 ## world average price counts as cheap (green) or expensive (red).
 const MARKET_FONT_SIZE := 15
@@ -35,6 +37,8 @@ var _clock := 0.0
 var _size_label := Label.new()
 var _size_bar := ProgressBar.new()
 var _size_effects := Label.new()
+## The gulls over the port now (see Birds).
+var _birds_label := Label.new()
 
 
 func _ready() -> void:
@@ -58,6 +62,7 @@ func _process(delta: float) -> void:
 		_clock = 0.0
 		_update_hub_xp()
 		_update_size()
+		_update_birds()
 		_refresh_market()
 
 
@@ -73,6 +78,10 @@ func _build_size() -> void:
 	_size_effects.theme_type_variation = &"DimLabel"
 	_size_effects.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	%SizeBox.add_child(_size_effects)
+	_birds_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_birds_label.add_theme_color_override(&"font_color", BIRDS_COLOR)
+	%SizeBox.add_child(_birds_label)
+	_update_birds()
 	_update_size()
 
 
@@ -274,3 +283,8 @@ func _add_market_cell(text: String, variation: StringName) -> void:
 	label.theme_type_variation = variation
 	label.add_theme_font_size_override(&"font_size", MARKET_FONT_SIZE)
 	%MarketGrid.add_child(label)
+
+
+## "Gulls: Herring Gull, Yellow-legged Gull (lots)": the flock over the port now.
+func _update_birds() -> void:
+	_birds_label.text = "Gulls: %s" % Birds.shared().flock_text(Birds.shared().port_flock(port_id))

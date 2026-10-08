@@ -11,6 +11,7 @@ extends AnchoredPopup
 
 ## Selling takes a second click within this many seconds.
 const SELL_CONFIRM_SECONDS := 3.0
+const BIRDS_SECONDS := 1.0
 ## Skill paths: [key, name, what each level does ("%d" is the total percent)].
 const SKILLS := [
 	["speed", "Speed", "+%d%%"],
@@ -33,6 +34,10 @@ var _skill_buttons := {}
 ## captain and mates) with their picture, and the crew.
 var _crew_button := Button.new()
 var _crew_box := VBoxContainer.new()
+## The gulls round it and the seabirds following it (see Birds), redone every
+## BIRDS_SECONDS.
+var _birds_label := Label.new()
+var _birds_clock := 0.0
 
 
 func _ready() -> void:
@@ -60,6 +65,10 @@ func _ready() -> void:
 	_cargo_label.theme_type_variation = &"DimLabel"
 	_cargo_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	%CostLabel.add_sibling(_cargo_label)
+	_birds_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_birds_label.add_theme_color_override(&"font_color", PortPopup.BIRDS_COLOR)
+	_cargo_label.add_sibling(_birds_label)
+	_update_birds()
 	if ship.is_icebreaker():
 		%Buttons.add_sibling(_station_picker())
 		%Buttons.get_parent().move_child(%Buttons, -1)
@@ -91,6 +100,24 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	super(delta)
 	_update_live()
+	_birds_clock += delta
+	if _birds_clock >= BIRDS_SECONDS:
+		_birds_clock = 0.0
+		_update_birds()
+
+
+## "Gulls: Herring Gull (a flock) · Following: Wandering Albatross (2)", or
+## hidden when there are none.
+func _update_birds() -> void:
+	var parts := PackedStringArray()
+	var gulls := Birds.shared().flock_text(Birds.shared().ship_flock(ship))
+	if not gulls.is_empty():
+		parts.append("Gulls: %s" % gulls)
+	var following := Birds.shared().followers_text(Birds.shared().followers(ship))
+	if not following.is_empty():
+		parts.append("Following: %s" % following)
+	_birds_label.text = " · ".join(parts)
+	_set_shown(_birds_label, not parts.is_empty() and not %SkillsButton.button_pressed and not _crew_button.button_pressed)
 
 
 func _on_ship_changed(changed: Ship) -> void:
