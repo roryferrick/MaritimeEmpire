@@ -32,6 +32,9 @@ const JOB_APPROACH := "approach"
 const JOB_ALIGN := "align"
 const JOB_TOW := "tow"
 const JOB_UNLOAD := "unload"
+## Tug only: at its port after a tow, working the ship onto its berth (or to
+## its spot at the anchorage) before it lets go (see GameState._advance_tug_job()).
+const JOB_BERTH := "berth"
 ## How long a recovery boat takes to load a lost ship (ballast down, float it
 ## onto the deck, deballast and rise) and, at port, to float it off again.
 const LOAD_SECONDS := 4.5
@@ -261,12 +264,15 @@ var carry_nm := 0.0
 ## Recovery boat only: the HQ or hub port it's based at, returns to after a
 ## job, and sails to when the boats are rebalanced across hubs.
 var base_port := ""
-## Tug only: true for the tug that leads (drags) its job's tow; the other one
-## pushes at the stern.
+## Tug only: true for the tug that leads its job's tow; the other one pulls
+## beside it (and pushes with it at port).
 var tug_lead := false
 ## Tug only: seconds left before it leaves port on its job (the second tug
 ## follows the first out). Not saved: after loading it leaves at once.
 var tug_wait := 0.0
+## Tug only, in JOB_BERTH: how long (s) towing the ship to its spot at the
+## anchorage takes, or -1 when it's bringing it alongside its berth instead.
+var assist_s := -1.0
 ## Recovery boat only: the ship it's carrying faces the other way from it (it
 ## met the ship head on); set as it lines up.
 var carry_reversed := false
@@ -314,7 +320,7 @@ func is_icebreaker() -> bool:
 	return _kind() == KIND_ICEBREAKER
 
 
-## A tug: based at a port on the company's routes, it pushes or drags ships
+## A tug: based at a port on the company's routes, it tows ships
 ## lost near there back in (see GameState.tug_plan()).
 func is_tug() -> bool:
 	return _kind() == KIND_TUG
@@ -1088,7 +1094,11 @@ func _tug_status_text() -> String:
 				return "Turning round to take %s in tow" % rescuing.name
 			return "Waiting for %s to take %s in tow" % [partners[0].name if not partners.is_empty() else "the other tug", rescuing.name]
 		JOB_TOW:
-			return "%s %s to %s%s" % ["Towing" if tug_lead else "Pushing", rescuing.name, GameData.port_name(tow_port), with]
+			return "Towing %s to %s%s" % [rescuing.name, GameData.port_name(tow_port), with]
+		JOB_BERTH:
+			if assist_s < 0.0:
+				return "Bringing %s alongside at %s%s" % [rescuing.name, GameData.port_name(tow_port), with]
+			return "Taking %s to the anchorage at %s%s" % [rescuing.name, GameData.port_name(tow_port), with]
 	if is_docked():
 		var port := GameData.port_name(docked_at)
 		if is_docking():
@@ -1221,6 +1231,7 @@ func to_dict() -> Dictionary:
 		"base_port": base_port,
 		"station": station,
 		"tug_lead": tug_lead,
+		"assist_s": assist_s,
 		"carry_reversed": carry_reversed,
 		"auto_recover": auto_recover,
 		"full_loads": full_loads,
@@ -1302,6 +1313,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.base_port = data.get("base_port", "")
 	ship.station = data.get("station", "")
 	ship.tug_lead = bool(data.get("tug_lead", false))
+	ship.assist_s = float(data.get("assist_s", -1.0))
 	ship.carry_reversed = bool(data.get("carry_reversed", false))
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.full_loads = bool(data.get("full_loads", true))

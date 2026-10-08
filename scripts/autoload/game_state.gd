@@ -126,6 +126,9 @@ const SEASON_RECHECK_S := 1.0
 const REFILL_BILL_S := 0.25
 ## Seconds between tugs leaving port on the same job, so they head out in line.
 const TUG_STAGGER_S := 1.5
+## How long (s) tugs stay with a ship that has to wait at the anchorage when
+## there's no map to work it out (see anchor_route).
+const TUG_ANCHOR_S := 10.0
 ## A recovery boat leaves a ship this share of its port's tugs' reach out (see _tug_handoff_nm()).
 const TUG_HANDOFF_SHARE := 0.9
 
@@ -202,6 +205,9 @@ var in_session := false
 ## Set by the map: how long (s of play) a ship takes to sail its way into its
 ## berth (true) or out of it (false) at its own speed (see _berth_seconds()).
 var berth_route := Callable()
+## Set by the map: how long (s of play) tugs stay with a ship they've towed in
+## that has to wait at the anchorage (see _deliver_tugs()).
+var anchor_route := Callable()
 ## The save slot (1 to SAVE_SLOTS) this session saves to.
 var save_slot := 1
 ## Whether save_slot is one of the multiplayer slots (kept apart from the
@@ -2549,8 +2555,9 @@ func _send_tugs(lost: Ship, plan: Dictionary, auto: bool) -> void:
 
 ## A tug on a job: it sails out to the lost ship and turns round there; once
 ## every tug on the job has, the lead one tows it in at all their tow speeds
-## added up (the other pushing at its stern), each burning fuel and wearing as
-## it goes, and hands it over at their port.
+## added up (the other pulling beside it), each burning fuel and wearing as
+## it goes, and hands it over at their port; there they work it in to its
+## berth (or its spot at the anchorage) and let it go.
 func _advance_tug_job(tug: Ship, delta: float) -> void:
 	match tug.job_phase:
 		Ship.JOB_APPROACH:
@@ -2600,10 +2607,24 @@ func _advance_tug_job(tug: Ship, delta: float) -> void:
 				each.maintenance = maxf(each.maintenance - each.wear_per_s() * delta, 0.01)
 			if target >= tug.segment_end:
 				_deliver_tugs(tug, team)
+		Ship.JOB_BERTH:
+			tug.align_time += delta
+			if not tug.tug_lead:
+				return  # Its lead lets them both go (see below).
+			var lost := tug.rescuing
+			var done := lost == null or lost.docked_at != tug.tow_port
+			if not done:
+				if tug.assist_s < 0.0:
+					done = lost.berth_phase != Ship.BERTH_IN  # Moored (or off again).
+				else:
+					done = tug.align_time >= tug.assist_s or lost.berth_phase == Ship.BERTH_IN
+			if done:
+				_release_tugs(tug, tug.tug_team())
 
 
 ## Hands the towed ship over at the tugs' port (paid as usual if that's where
-## it was going), docks the tugs there, and gives each its XP.
+## it was going) and gives each tug its XP; they stay with it to bring it
+## alongside its berth (or to its spot at the anchorage) before they let go.
 func _deliver_tugs(lead: Ship, team: Array[Ship]) -> void:
 	var lost := lead.rescuing
 	var port := lead.tow_port
@@ -2616,19 +2637,47 @@ func _deliver_tugs(lead: Ship, team: Array[Ship]) -> void:
 		var company := 0.0
 		if tug == lead and not cargo.is_empty():
 			company = Progression.xp_for_cargo(lost.capacity(), cargo[0], tug.carry_nm) * float(settings.get("company_share", 1.0))
-		tug.rescuing = null
-		tug.job_phase = Ship.JOB_NONE
+		# On to work it in (still holding it: see JOB_BERTH in _advance_tug_job()).
+		tug.job_phase = Ship.JOB_BERTH
 		tug.job_segments.clear()
-		tug.tow_port = ""
-		tug.tug_lead = false
+		tug.align_time = 0.0
 		tug.job_nm = 0.0
 		tug.carry_nm = 0.0
-		_arrive(tug, port, false)
 		if boat > 0.0:
 			_gain_xp(tug, boat, 1.0, company / boat)
-	lost.rescuer = null
+	lost.rescuer = lead
 	lost.lost_reason = ""
 	_arrive(lost, port, to_destination)
+	# Alongside its berth if it can have one now (as it would next step), else
+	# to its spot at the anchorage to wait.
+	if lost.berth_phase == Ship.BERTH_WAIT and docks.claim(lost):
+		lost.berth_phase = Ship.BERTH_IN
+		lost.berth_time = 0.0
+		lost.berth_duration = _berth_seconds(lost, true)
+	var anchoring := lost.berth_phase != Ship.BERTH_IN
+	var anchor_s := float(anchor_route.call(lost)) if anchoring and anchor_route.is_valid() else TUG_ANCHOR_S
+	for tug in team:
+		tug.assist_s = anchor_s if anchoring else -1.0
+		ship_changed.emit(tug)
+
+
+## Lets the ship go once the tugs have it moored (or at its spot at the
+## anchorage), and docks them at their port.
+func _release_tugs(lead: Ship, team: Array[Ship]) -> void:
+	var port := lead.tow_port
+	var lost := lead.rescuing
+	for tug in team:
+		tug.rescuing = null
+		tug.job_phase = Ship.JOB_NONE
+		tug.tow_port = ""
+		tug.tug_lead = false
+		tug.assist_s = -1.0
+		tug.align_time = 0.0
+		_arrive(tug, port, false)
+		ship_changed.emit(tug)
+	if lost != null:
+		lost.rescuer = null
+		ship_changed.emit(lost)
 
 
 # --- Canals ----------------------------------------------------------------
@@ -3121,6 +3170,8 @@ func _client_frame(delta: float) -> void:
 	for ship in ships:
 		if ship.berth_phase == Ship.BERTH_IN or ship.berth_phase == Ship.BERTH_OUT:
 			ship.berth_time += delta * time_speed  # Coming alongside or pulling out, smoothly between updates.
+		if ship.is_tug() and ship.job_phase in [Ship.JOB_ALIGN, Ship.JOB_BERTH]:
+			ship.align_time += delta * time_speed  # Turning round (or at work in port), smoothly too.
 		if ship.is_docked() or ship.from_port.is_empty():
 			continue
 		var rate := Net.ship_rate(ship)
