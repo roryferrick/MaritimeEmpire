@@ -8,6 +8,8 @@ extends Control
 
 ## Commodity colors (their ship line's) are brightened to at least this
 ## luminance so they read on the dark panel.
+const ZOOM_BUTTON_SIZE := Vector2(44, 44)
+const ZOOM_BUTTON_MARGIN := 14
 const LINE_MIN_LUMINANCE := 0.5
 ## How strongly each ship line's group is tinted in the price menu.
 const PRICE_GROUP_TINT := 0.16
@@ -42,6 +44,7 @@ func _ready() -> void:
 		_add_tutorial_toggle()
 	_add_price_picker()
 	_add_region_choice()
+	_add_zoom_buttons()
 
 
 func _process(_delta: float) -> void:
@@ -306,3 +309,24 @@ static func _swatch(color: Color) -> ImageTexture:
 	var image := Image.create(12, 12, false, Image.FORMAT_RGBA8)
 	image.fill(color)
 	return ImageTexture.create_from_image(image)
+
+
+## + and - buttons at the map's bottom right, for zooming without a wheel or
+## trackpad gestures (see also MapView's + and - keys).
+func _add_zoom_buttons() -> void:
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override(&"separation", 4)
+	column.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, ZOOM_BUTTON_MARGIN)
+	column.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	column.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	for entry: Array in [["+", "Zoom in (or pinch, or the + key)", MapView.ZOOM_STEP * MapView.ZOOM_STEP], ["−", "Zoom out (or pinch, or the - key)", 1.0 / (MapView.ZOOM_STEP * MapView.ZOOM_STEP)]]:
+		var button := Button.new()
+		button.text = entry[0]
+		button.tooltip_text = entry[1]
+		button.custom_minimum_size = ZOOM_BUTTON_SIZE
+		button.focus_mode = Control.FOCUS_NONE
+		button.add_theme_font_size_override(&"font_size", 24)
+		var factor: float = entry[2]
+		button.pressed.connect(func() -> void: _map.zoom_by(factor))
+		column.add_child(button)
+	add_child(column)

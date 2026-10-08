@@ -108,6 +108,8 @@ const TUG_TICK_GAP := 3.0
 const STATIC_REFRESH_S := 0.25
 const DRAG_THRESHOLD := 5.0
 const ZOOM_STEP := 1.15
+## A two-finger swipe on a trackpad zooms this many wheel steps per unit it moves.
+const SWIPE_ZOOM_RATE := 0.35
 ## Closest zoom, in pixels per degree of the globe's surface.
 const MAX_ZOOM := 800.0
 ## Furthest out, the whole globe fits the view, this share of its height across.
@@ -1423,10 +1425,47 @@ func _on_resized() -> void:
 		_changed()
 
 
+## Zooms in (factor above 1) or out about a point on screen (the middle by
+## default), easing there like the wheel.
+func zoom_by(factor: float, about := Vector2(-1.0, -1.0)) -> void:
+	if factor <= 0.0:
+		return
+	_zoom_goal = clampf(_zoom_goal * factor, _min_zoom(), MAX_ZOOM)
+	_zoom_about = about if about.x >= 0.0 else size / 2.0
+	_fling = Vector2.ZERO
+
+
+## The + and - keys zoom about the middle (for trackpads without gestures).
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not is_visible_in_tree() or not event.is_pressed():
+		return
+	var key := event as InputEventKey
+	if key == null or key.ctrl_pressed or key.meta_pressed or key.alt_pressed:
+		return
+	match key.keycode:
+		KEY_EQUAL, KEY_PLUS, KEY_KP_ADD:
+			zoom_by(ZOOM_STEP * ZOOM_STEP)
+			get_viewport().set_input_as_handled()
+		KEY_MINUS, KEY_KP_SUBTRACT:
+			zoom_by(1.0 / (ZOOM_STEP * ZOOM_STEP))
+			get_viewport().set_input_as_handled()
+
+
 ## Drag to turn the globe (the map follows the mouse; let go while moving and
 ## it keeps turning, slowing to a stop), wheel to zoom in and out about the
-## mouse (easing there: see _process()).
+## mouse (easing there: see _process()). On a trackpad, pinch to zoom about
+## the fingers, or swipe two fingers up and down to zoom like the wheel.
 func _gui_input(event: InputEvent) -> void:
+	var pinch := event as InputEventMagnifyGesture
+	if pinch:
+		zoom_by(pinch.factor, pinch.position)
+		accept_event()
+		return
+	var swipe := event as InputEventPanGesture
+	if swipe:
+		zoom_by(pow(ZOOM_STEP, -swipe.delta.y * SWIPE_ZOOM_RATE), swipe.position)
+		accept_event()
+		return
 	var button := event as InputEventMouseButton
 	if button:
 		match button.button_index:
