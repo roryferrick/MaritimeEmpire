@@ -2090,6 +2090,9 @@ const MARINA_MAX_REACH := 60.0
 ## Nor does a port's furthest anchor point (dock units: data/anchorages.json's
 ## 420 nm, plus the ship), for culling.
 const PORT_MAX_REACH := 300.0
+## How far (nm) past its swing a ship dropping anchor keeps off a drawn lane
+## (see _anchors_in_lanes()).
+const ANCHOR_LANE_MARGIN_NM := 1.5
 ## A ship near a port curves between its lane and its harbour over at least
 ## this many times the harbour's distance from the port in lane (see
 ## _harbour_pose()).
@@ -2237,6 +2240,10 @@ var _poses := {}
 var _poses_frame := -1
 ## Ship -> [port, anchorage, slot, marina radius, its anchor on the unit sphere] (see _anchor_screen_cached()).
 var _anchor_units := {}
+## Port id and anchorage -> [the drawn lanes and anchor points it was worked
+## out for, 1 for each anchor point a drawn lane passes within its ship's
+## swing of] (see _anchors_in_lanes()).
+var _anchor_lanes := {}
 ## Model id -> the anchorage its ships lie in (see _anchor_pool()).
 var _anchor_pools := {}
 ## Port id -> _marina_shown() this frame, and the frame.
@@ -3734,9 +3741,7 @@ func _update_spots() -> void:
 		if lies and not _spot_slots.has(ship):
 			var key := [port, _anchor_pool(ship)]
 			var taken: Dictionary = _spot_tables.get_or_add(key, {})
-			var slot := 0
-			while taken.has(slot):
-				slot += 1
+			var slot := _free_anchor(port, key[1], taken)
 			taken[slot] = ship
 			_spot_slots[ship] = slot
 			_spot_keys[ship] = key
@@ -3750,6 +3755,73 @@ func _update_spots() -> void:
 	for ship: Ship in _dock_seen.keys():
 		if not alive.has(ship):
 			_dock_seen.erase(ship)
+
+
+## The anchor a ship dropping anchor at a port takes (a slot in its
+## anchorage, see _anchor_spots(); `taken`: those lain at now): the first
+## free one out of the shipping lanes drawn now (see _anchors_in_lanes()),
+## or if they're all in a lane, the first free one.
+func _free_anchor(port_id: String, pool: String, taken: Dictionary) -> int:
+	var in_lanes := _anchors_in_lanes(port_id, pool)
+	for slot in in_lanes.size():
+		if in_lanes[slot] == 0 and not taken.has(slot):
+			return slot
+	var slot := 0
+	while taken.has(slot):
+		slot += 1
+	return slot
+
+
+## Which of a port's anchor points (_anchor_spots()) are in the shipping
+## lanes: 1 for each one a lane the map draws (_active_lanes(): every
+## company's routes, bent round other ports' harbours as drawn) passes within
+## its ship's swing of, and ANCHOR_LANE_MARGIN_NM more. Worked out again when
+## the drawn lanes change; ships already lying there stay put.
+func _anchors_in_lanes(port_id: String, pool: String) -> PackedByteArray:
+	var spots := _anchor_spots(port_id, pool)
+	var legs := PackedStringArray()
+	var lanes := []
+	for lane: Array in _active_lanes():
+		var leg := "%s-%s" % ([lane[0], lane[1]] if lane[0] < lane[1] else [lane[1], lane[0]])
+		if not legs.has(leg):
+			legs.append(leg)
+			lanes.append(lane)
+	legs.sort()
+	var key := [",".join(legs), spots]
+	var cached: Array = _anchor_lanes.get(port_id + pool, [])
+	if not cached.is_empty() and cached[0] == key:
+		return cached[1]
+	var flags := PackedByteArray()
+	flags.resize(spots.size())
+	var port := GameData.port_position(port_id)
+	# Projected units a nm here, and how near a lane must come to a spot.
+	var per_nm := 1.0 / (60.0 * maxf(cos(deg_to_rad(float(GameData.get_port(port_id).get("lat", 0.0)))), 0.05))
+	var swing := (_anchor_length(pool) * 60.0 / SHIP_WORLD_ZOOM + ANCHOR_LANE_MARGIN_NM) * per_nm
+	var points := PackedVector2Array()
+	var reach := 0.0
+	for spot in spots:
+		var at := Geo.project(spot)
+		at.x = port.x + wrapf(at.x - port.x, -180.0, 180.0)
+		points.append(at)
+		reach = maxf(reach, at.distance_to(port) + swing)
+	var near := Rect2(port, Vector2.ZERO).grow(reach)
+	for lane: Array in lanes:
+		var sea_lane = GameData.lane(lane[0], lane[1])
+		if sea_lane == null:
+			continue
+		var bent: PackedVector2Array = _bent_lane(sea_lane, lane[0], lane[1]).points
+		for i in range(1, bent.size()):
+			var a := bent[i - 1]
+			var b := bent[i]
+			a.x = port.x + wrapf(a.x - port.x, -180.0, 180.0)
+			b.x = a.x + (b.x - bent[i - 1].x)
+			if not near.intersects(Rect2(a, Vector2.ZERO).expand(b)):
+				continue
+			for k in points.size():
+				if flags[k] == 0 and Geometry2D.get_closest_point_to_segment(points[k], a, b).distance_to(points[k]) < swing:
+					flags[k] = 1
+	_anchor_lanes[port_id + pool] = [key, flags]
+	return flags
 
 
 func _free_spot(ship: Ship) -> void:
