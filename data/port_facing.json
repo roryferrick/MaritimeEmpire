@@ -87,9 +87,9 @@
 			"note": "Philadelphia: down the Delaware to the south-west"
 		},
 		"YOK": {
-			"bearing": 90.0,
+			"bearing": 180.0,
 			"quay": "right",
-			"note": "Yokohama: out east across Tokyo Bay"
+			"note": "Yokohama: out south, down Tokyo Bay"
 		},
 		"NGB": {
 			"bearing": 112.5,

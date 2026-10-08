@@ -200,7 +200,7 @@ func _pose(info: Dictionary, spell: Dictionary, into: float, young: bool) -> Dic
 	var faces := str(info.get("faces", "left"))
 	var head_x := 0.2 if faces == "left" else (0.8 if faces == "right" else 0.5)
 	var pose := {at = spell.end, pivot = Vector2(0.5, FEET), rot = 0.0, scale = Vector2.ONE, facing = float(spell.facing),
-		size = float(info.get("size", 0.8)) * (YOUNG_SIZE if young else 1.0), act = "rest", moving = "", u = 0.0, t = into, head = Vector2(head_x, 0.35)}
+		size = float(info.get("size", 0.8)) * (YOUNG_SIZE if young else 1.0), act = "rest", moving = "", frame = "", u = 0.0, t = into, head = Vector2(head_x, 0.35)}
 	var f := float(spell.facing)
 	var start: Vector2 = spell.start
 	var end: Vector2 = spell.end
@@ -273,6 +273,15 @@ static func _gait(pose: Dictionary, style: String, gone: float, u: float, f: flo
 			pose.rot = f * TAU * 3.0 * smoothstep(0.0, 1.0, u)
 			lift = 0.05 * absf(sin(u * PI * 3.0))
 	pose.at = (pose.at as Vector2) - Vector2(0.0, lift)
+	# Which drawing: by turns its step (legs swung) and its own while it walks,
+	# waddles or swings; its step mid-hop; flying (wings out) while it flits.
+	match style:
+		"walk", "waddle", "swing":
+			pose.frame = "step" if fposmod(step, TAU) >= PI else ""
+		"hop":
+			pose.frame = "step" if lift > 0.08 else ""
+		"flit":
+			pose.frame = "fly" if lift > 0.04 or (u > 0.05 and u < 0.95) else ""
 
 
 ## Doing an act, u of the way through it (t s in).

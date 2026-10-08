@@ -49,6 +49,7 @@ func _ready() -> void:
 	_add_region_choice()
 	_add_zoom_buttons()
 	_add_field_guide_button()
+	_add_achievements_button()
 
 
 func _process(_delta: float) -> void:
@@ -388,3 +389,40 @@ func _add_field_guide_button() -> void:
 		PopupHost.find(self).close()
 		add_child(FieldGuide.new()))
 	add_child(button)
+
+
+## The achievements' trophy button, under the field guide's (see
+## AchievementsPage), and newly earned ones looked for every
+## Achievements.CHECK_S and told in the activity log.
+func _add_achievements_button() -> void:
+	var button := Button.new()
+	button.tooltip_text = "Achievements"
+	button.focus_mode = Control.FOCUS_NONE
+	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	button.offset_right = $RoutesPanel.offset_left - 10.0
+	button.offset_left = button.offset_right - FIELD_GUIDE_BUTTON
+	button.offset_top = $RoutesPanel.offset_top + FIELD_GUIDE_BUTTON + 8.0
+	button.offset_bottom = button.offset_top + FIELD_GUIDE_BUTTON
+	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	var trophy := TrophyIcon.new()
+	trophy.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
+	button.add_child(trophy)
+	button.pressed.connect(func() -> void:
+		PopupHost.find(self).close()
+		add_child(AchievementsPage.new()))
+	add_child(button)
+	var timer := Timer.new()
+	timer.wait_time = Achievements.CHECK_S
+	timer.autostart = true
+	timer.timeout.connect(_check_achievements)
+	add_child(timer)
+
+
+func _check_achievements() -> void:
+	if not GameState.in_session:
+		return
+	for news: Dictionary in Achievements.check(GameState.company):
+		var stars := int(news.stars)
+		var text := "Achievement: %s" % news.name if stars == 0 \
+			else "Achievement: %s %s (%d of 3 stars)" % [news.name, "★".repeat(stars), stars]
+		ActivityLog.add(text, ActivityLog.Kind.GOOD, AchievementsPage.GOLD)

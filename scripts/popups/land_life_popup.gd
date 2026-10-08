@@ -43,6 +43,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	super()
+	Achievements.discover(["land:" + kind])  # Seen: checked in the field guide.
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override(&"separation", 8)
 	add_child(content)

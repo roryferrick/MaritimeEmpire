@@ -50,6 +50,15 @@ const UNDER_WAY_EASE_S := 2.0
 const V_SIZE := 9
 ## About how often (s) a port's cormorants fly past (see _draw_cormorants()).
 const CORMORANT_PASS_S := 60.0
+## About how often (s) a port's migrating cranes pass over (see _draw_waders()).
+const CRANE_PASS_S := 90.0
+## A port's shore beside its marina (see _shore_spots()): how far out either
+## side it's looked for (marina radii), at how many places, and how far in
+## from the sea and out to it.
+const SHORE_REACH := 3.2
+const SHORE_SAMPLES := 24
+const SHORE_INLAND := 2.6
+const SHORE_SEAWARD := 3.0
 const SHIP_HIT_RADIUS := 6.0
 ## However small ships are drawn, a click this close (px) still picks one.
 const SHIP_HIT_MIN_PX := 7.0
@@ -532,6 +541,9 @@ var _gust_spots := {}
 var _ship_motion := {}
 ## Each cormorant species' colors for drawing it swimming (see _cormorant_swimmer()).
 var _cormorant_swimmers := {}
+## Port id -> its shore beside its marina, found once (see _shore_spots()).
+var _shores := {}
+var _shore_neighbours := {}  # Port id -> the ports near it (see _local_on_land()).
 ## Port id -> its docks' turn on screen for the current view (see _dock_point()).
 var _port_turns := {}
 ## Port id -> where it is on screen for the current view (see port_screen_position()).
@@ -642,6 +654,8 @@ var _sea_warming := true
 ## Land drawings: a texture per kind (WorldMapData.decor_kind_names), and the
 ## drawings by DECOR_BUCKET-degree cell, so only those near the view are looked at.
 static var _decor_textures: Array[Texture2D] = []
+## Land animals' other drawings by "<kind>_<frame>" (see _animal_frame()).
+static var _animal_frames := {}
 static var _decor_buckets := {}
 ## Each land drawing on the unit sphere, and its clearance (see
 ## _load_decor()) over its spot's cosh: times the zoom, its room on screen in px.
@@ -5648,7 +5662,7 @@ func _draw_fauna() -> void:
 			items.append([foot.y - 0.01, group[6], null, foot, side, info])
 		for pose: Dictionary in _land_life.poses(key, info, now):
 			var feet := home + (pose.at as Vector2) * side * fit
-			items.append([feet.y, texture, pose, feet, side, info])
+			items.append([feet.y, texture, pose, feet, side, info, group[7]])
 			var art := side * float(pose.size)
 			_fauna_hits.append([feet - Vector2(0.0, art * 0.45), maxf(art * 0.5, BIRD_HIT_MIN_PX), key, group[7]])
 	items.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
@@ -5657,8 +5671,22 @@ func _draw_fauna() -> void:
 		if item[2] == null:
 			_canvas.draw_texture_rect(item[1], Rect2(item[3] - Vector2(side / 2.0, side * LandLife.FEET), Vector2(side, side)), false)
 			continue
-		_draw_land_animal(item[1], item[2], item[3], side, item[5])
+		_draw_land_animal(_animal_frame(str(item[6]), str((item[2] as Dictionary).get("frame", "")), item[1]), item[2], item[3], side, item[5])
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## A land animal's drawing for a frame of its pose (LandLife: "step", its
+## legs swung, or "fly", wings out; art/decor/<kind>_<frame>.svg), or its
+## own (`texture`) for "" or one it hasn't. Loaded once.
+static func _animal_frame(kind_name: String, frame: String, texture: Texture2D) -> Texture2D:
+	if frame.is_empty():
+		return texture
+	var key := kind_name + "_" + frame
+	if not _animal_frames.has(key):
+		var path := DECOR_ART_DIR + key + ".svg"
+		_animal_frames[key] = load(path) if ResourceLoader.exists(path) else null
+	var found: Texture2D = _animal_frames[key]
+	return found if found != null else texture
 
 
 ## The land animal group drawn under a screen point (the nearest one in
@@ -6189,6 +6217,7 @@ func _draw_birds() -> void:
 		_draw_raptors(port_id, root, radius, now)
 		_draw_sea_ducks(port_id, root, radius, now)
 		_draw_cormorants(port_id, root, radius, now)
+		_draw_waders(port_id, root, radius, now)
 	# Round ships (gulls, and the seabirds following ships at sea).
 	var reach := view.grow(SHIP_CULL_MARGIN * scale)
 	for ship in GameState.ships:
@@ -6641,6 +6670,415 @@ func _cormorant_swimmer(info: Dictionary) -> Dictionary:
 	return _cormorant_swimmers[id]
 
 
+## A port's shore either side of its marina, found once from the land as
+## the map draws it (_on_land()): [[the water's edge, a spot a little inland
+## (or Vector2.INF where that isn't land)]] in dock units, from one side to
+## the other; or made up just off the breakwater's ends where there's none
+## (up a river, say). [] until the land's ready.
+func _shore_spots(port_id: String) -> Array:
+	if _shores.has(port_id):
+		return _shores[port_id]
+	if _land_cells.is_empty():
+		_start_land_cells()
+		return []
+	var radius := float(_port_layout(port_id).radius)
+	var out := []
+	for i in SHORE_SAMPLES:
+		var y := lerpf(-SHORE_REACH, SHORE_REACH, (i + 0.5) / SHORE_SAMPLES) * radius
+		if absf(y) < radius * 1.05:
+			continue  # The marina's own.
+		# In from out at sea to the first land, then narrowed down.
+		var sea_x := SHORE_SEAWARD * radius
+		if _local_on_land(port_id, Vector2(sea_x, y), true):
+			continue
+		var land_x := INF
+		for s in range(1, 23):
+			var x := lerpf(SHORE_SEAWARD, -SHORE_INLAND, s / 22.0) * radius
+			if _local_on_land(port_id, Vector2(x, y), true):
+				land_x = x
+				break
+			sea_x = x
+		if land_x == INF:
+			continue
+		for n in 6:
+			var mid := (sea_x + land_x) / 2.0
+			if _local_on_land(port_id, Vector2(mid, y), true):
+				land_x = mid
+			else:
+				sea_x = mid
+		if not _local_on_land(port_id, Vector2(land_x, y)):
+			continue  # (Up against a marina, not the shore.)
+		var inland := Vector2(land_x - radius * 0.9, y)
+		out.append([Vector2((sea_x + land_x) / 2.0, y), inland if _local_on_land(port_id, inland) else Vector2.INF])
+	if out.is_empty():
+		for y: float in [-1.9, -1.4, 1.4, 1.9]:
+			out.append([Vector2(radius * 0.3, y * radius), Vector2(-radius * 0.8, y * radius)])
+	_shores[port_id] = out
+	return out
+
+
+## True if a point of a port's marina (dock units) is on the land and clear
+## of every marina near it (a quay's no place for a heron); or, `blocked`,
+## if it's on the land or a marina either way (the shore's looked for from
+## the sea in to the first of either).
+func _local_on_land(port_id: String, local: Vector2, blocked := false) -> bool:
+	var screen := _dock_point(port_id, local)
+	if _is_hidden(screen):
+		return false
+	var land := _on_land(_screen_lon_lat(screen))
+	if land and blocked:
+		return true
+	if not land and not blocked:
+		return false
+	if not _shore_neighbours.has(port_id):
+		var here := GameData.port_position(port_id)
+		var near: Array[String] = [port_id]
+		for port: Dictionary in GameData.ports:
+			if port.id != port_id and GameData.port_position(port.id).distance_to(here) < 3.0:
+				near.append(port.id)
+		_shore_neighbours[port_id] = near
+	for other: String in _shore_neighbours[port_id]:
+		if _in_marina(other, screen):
+			return blocked
+	return not blocked
+
+
+## True if a screen point's on a port's marina: its cleared circle or its
+## square quay (a little grown).
+func _in_marina(port_id: String, screen: Vector2) -> bool:
+	var layout := _port_layout(port_id)
+	var angle := _port_sea_angle(port_id) + _port_turn(port_id)
+	var local := (screen - port_screen_position(port_id)).rotated(-angle) / dock_scale(port_id)
+	var clear := float(layout.radius) + JETTY_WIDTH / 2.0
+	var margin := clear * 0.1
+	return local.length() < clear + margin or (local.x <= margin and local.x >= _quay_inland(layout) - margin and absf(local.y) <= clear + margin)
+
+
+## A place along a port's shore (see _shore_spots()): `along` from 0 at one
+## end to its last spot, between spots smoothly (though not across the
+## marina); `out` dock units out from the water's edge (less: inland).
+## [the place (dock units), which way the shore runs (a unit vector)].
+static func _shore_at(shore: Array, along: float, out: float) -> Array:
+	var last := shore.size() - 1
+	along = pingpong(along, float(last)) if last > 0 else 0.0  # (Turned back at either end.)
+	var i := mini(floori(along), maxi(last - 1, 0))
+	var a: Vector2 = shore[i][0]
+	var b: Vector2 = shore[mini(i + 1, last)][0]
+	if a.distance_to(b) > absf(b.y - a.y) * 3.0 + 1.0 or (a.y < 0.0) != (b.y < 0.0):
+		b = a + Vector2(0.0, signf(b.y - a.y) if b.y != a.y else 1.0)  # (Not across the marina.)
+	var run := (b - a).normalized() if a != b else Vector2.DOWN
+	var at := a.lerp(b, along - i) if (a.y < 0.0) == (b.y < 0.0) else a
+	return [at + Vector2(out, 0.0), run]
+
+
+## The waders about a port (Birds.port_waders()), along its shore either side
+## of its marina `radius` px across, each its own way. Herons stand stock
+## still at the water's edge, neck poised, now and then taking a slow step or
+## striking (sometimes coming up with a fish), and every few minutes one
+## flaps slowly off and round; by night they stand hunched. Night herons roost
+## hunched together inland by day and come down to the water at dusk. Egrets
+## walk the shallows steadily in loose groups, stabbing as they go (little
+## and snowy egrets stirring the mud with their yellow feet, ripples round
+## them), and roost inland by night. Cattle egrets work the fields inland,
+## heads bobbing, the ones at the back hopping over to the front. The reddish
+## egret lurches and spins through the shallows with its wings held out over
+## the water. A bittern stands in the reeds at the water's edge, bill to the
+## sky, swaying with them; in spring at dawn it booms. Cranes forage over the
+## fields in family groups, and in spring pairs dance, leaping with wings
+## spread and bowing; on migration they pass high over in Vs instead.
+func _draw_waders(port_id: String, root: Vector2, radius: float, now: float) -> void:
+	var entries := Birds.shared().port_waders(port_id)
+	if entries.is_empty():
+		return
+	var shore := _shore_spots(port_id)
+	if shore.is_empty():
+		return
+	var birds := Birds.shared()
+	var dock := dock_scale(port_id)
+	var unit := radius / dock  # The marina's radius in dock units.
+	var port := GameData.get_port(port_id)
+	var unix := float(GameState.calendar_time())
+	var hour := Birds.local_hour(float(port.get("lon", 0.0)), unix)
+	var night := hour < Birds.RAPTOR_DAY.x or hour > Birds.RAPTOR_DAY.y
+	var dusk := hour > Birds.RAPTOR_DAY.y - 1.5 or hour < Birds.RAPTOR_DAY.x + 0.5
+	var month := Birds.month_of(unix)
+	var spring := month in ([2, 3, 4, 5] if float(port.get("lat", 0.0)) >= 0.0 else [8, 9, 10, 11])
+	var wind := Birds.chance([port_id, "wind"]) * TAU
+	var last := float(shore.size() - 1)
+	for entry: Dictionary in entries:
+		var id: String = entry.id
+		var info := birds.species(id)
+		var behavior := str(info.get("behavior", "stalk"))
+		var count := int(entry.count)
+		var traits := _bird_traits("waders/%s/%s" % [port_id, id], count)
+		var flock := {count = count, species = [id], key = id}
+		var span := _bird_span(info)
+		var hit := {port = port_id}
+		if bool(entry.get("moving", false)):
+			_draw_crane_pass(port_id, root, radius, now, info, count, flock)
+			continue
+		# Where along the shore this species keeps to (a group together).
+		var home := Birds.chance([port_id, id, "home"]) * last
+		for k in count:
+			var t: PackedFloat32Array = traits[k]
+			var phase := t[4] * TAU
+			var along := home
+			var out := unit * 0.06
+			var facing := 0.0  # Dock units: 0 out to sea.
+			var neck := 0.5
+			var wings := 0.0
+			var bill_up := false
+			var lift := 0.0
+			var ripple := -1.0
+			var fish := false
+			var flying := false
+			var place := Vector2.ZERO
+			match behavior:
+				"stalk", "night":
+					var roosting := behavior == "night" and not dusk and not night
+					along = home + (float(k) - (count - 1) / 2.0) * (1.6 if behavior == "stalk" else 0.25)
+					if roosting:
+						# Roosting hunched together in the trees inland.
+						out = -unit * (0.7 + 0.3 * t[2])
+						facing = PI + (t[3] - 0.5) * 2.0
+						neck = 0.0
+					else:
+						var cycle := 45.0 + 25.0 * t[2]
+						var c := fmod(now / cycle + t[0], 1.0)
+						var turn_no := floori(now / cycle + t[0])
+						var way := 1.0 if (turn_no + k) % 2 == 0 else -1.0
+						along += 0.25 * way * smoothstep(0.0, 0.12, c) - 0.125 * way
+						facing = (t[3] - 0.5) * 1.2
+						neck = 0.1 if night and behavior == "stalk" else 0.55
+						if c < 0.12:
+							facing = PI / 2.0 * way  # A slow step along the shore.
+						elif c >= 0.6 and c < 0.7 and not (night and behavior == "stalk"):
+							var s := (c - 0.6) / 0.1
+							neck = 1.0 if s < 0.12 else lerpf(1.0, 0.55, clampf((s - 0.12) / 0.2, 0.0, 1.0))
+							ripple = s * 4.0 if s < 0.25 else -1.0
+							fish = s > 0.1 and s < 0.7 and t[1] < 0.45
+						elif c >= 0.8 and turn_no % 3 == k % 3 and behavior == "stalk" and not night:
+							# Off and round over the water with slow deep beats, then back.
+							flying = true
+							var s := (c - 0.8) / 0.2
+							var edge: Array = _shore_at(shore, along, out)
+							var loop := Vector2(sin(s * PI) * unit * 1.4, (1.0 - cos(s * TAU)) * 0.5 * unit * 1.2 * way)
+							var from: Vector2 = _dock_point(port_id, (edge[0] as Vector2) + loop)
+							var next: Vector2 = _dock_point(port_id, (edge[0] as Vector2) + Vector2(sin(minf(s + 0.02, 1.0) * PI) * unit * 1.4, (1.0 - cos(minf(s + 0.02, 1.0) * TAU)) * 0.5 * unit * 1.2 * way))
+							var angle := (next - from).angle() if next != from else _dock_angle(port_id, 0.0)
+							_draw_bird(from, angle, info, 0.55 + 0.45 * absf(sin(now * 2.4 + phase)), 0.15 + 0.6 * sin(s * PI))
+							_bird_hits.append([from, maxf(span * 0.6, BIRD_HIT_MIN_PX), hit, flock])
+				"wade":
+					if night:
+						along = home + (t[1] - 0.5) * 0.6
+						out = -unit * (0.5 + 0.4 * t[2])
+						facing = t[3] * TAU
+						neck = 0.0
+					else:
+						var pace := 0.035 * (0.7 + 0.6 * t[2])
+						along = home + (t[1] - 0.5) * 1.4 + 0.45 * sin(now * pace + phase)
+						out = unit * (0.05 + 0.08 * t[3])
+						facing = PI / 2.0 if cos(now * pace + phase) >= 0.0 else -PI / 2.0
+						facing += 0.4 * sin(now * 0.7 + phase)
+						var c := fmod(now / (5.0 + 4.0 * t[3]) + t[0], 1.0)
+						neck = 1.0 if c < 0.05 else 0.6
+						ripple = c * 12.0 if c < 0.08 else -1.0
+				"graze":
+					along = home + (t[1] - 0.5) * 0.9 + 0.3 * sin(now * 0.015 + Birds.chance([port_id, id, "drift"]) * TAU)
+					out = -unit * (0.35 + 0.5 * t[2])
+					facing = PI / 2.0 if cos(now * 0.015) >= 0.0 else -PI / 2.0
+					neck = 0.0 if night else 0.35 + 0.25 * absf(sin(now * 2.2 + phase))
+					var c := fmod(now / (16.0 + 8.0 * t[3]) + t[0], 1.0)
+					if not night and c < 0.08:
+						# Hopping over the others to the front.
+						lift = sin(c / 0.08 * PI) * 0.4
+						wings = 0.8
+						along += (c / 0.08 - 0.5) * 0.4 * (1.0 if facing > 0.0 else -1.0)
+				"dance":
+					along = home + (t[1] - 0.5) * 0.8 + 0.18 * sin(now * 0.35 + phase) + 0.07 * sin(now * 1.6 + phase)
+					out = unit * (0.1 + 0.06 * sin(now * 0.5 + phase))
+					var c := fmod(now / 11.0 + t[0], 1.0)
+					facing = PI / 2.0 * signf(cos(now * 0.35 + phase)) + (c * TAU * 2.0 if c > 0.85 else 0.0)
+					if night:
+						neck = 0.0
+					else:
+						wings = 0.55 if c > 0.4 and c < 0.85 else 0.0  # Canopy: wings out as a shade.
+						neck = 1.0 if fmod(c * 5.0, 1.0) < 0.1 else 0.6
+						ripple = fmod(c * 5.0, 1.0) * 6.0 if fmod(c * 5.0, 1.0) < 0.16 else -1.0
+				"hide":
+					along = home
+					out = -unit * 0.04
+					var c := fmod(now / 40.0 + t[0], 1.0)
+					var sway := 0.12 * sin(now * 0.9 + wind)
+					facing = (t[3] - 0.5) * 0.6 + sway
+					bill_up = not (c > 0.7 and c < 0.74)  # Bill to the sky, but for the odd strike.
+					neck = 0.15 if bill_up else 0.9
+					var edge: Array = _shore_at(shore, along, out)
+					var reed_at: Vector2 = _dock_point(port_id, edge[0])
+					_draw_reeds(reed_at, span, now, wind, t[0])
+					if spring and hour > 3.5 and hour < 7.5:
+						# Booming: rings rolling out across the marsh every few seconds.
+						var b := fmod(now / 3.0 + t[1], 1.0)
+						_canvas.draw_arc(reed_at, span * (0.2 + b * 1.2), 0.0, TAU, 24, Color(1, 1, 1, 0.35 * (1.0 - b)), maxf(span * 0.02, 1.0), true)
+				"crane":
+					along = home + (t[1] - 0.5) * 1.6
+					out = -unit * (0.4 + 0.7 * t[2])
+					var drift := 0.12 * sin(now * 0.02 + phase)
+					along += drift
+					facing = PI / 2.0 * signf(cos(now * 0.02 + phase)) + 0.5 * sin(now * 0.1 + phase)
+					if night:
+						neck = 0.05
+					else:
+						neck = 0.45 + 0.4 * maxf(sin(now * 0.8 + phase), 0.0)  # Pecking about.
+						if (spring and t[3] < 0.6) or t[3] < 0.1:
+							var c := fmod(now / 12.0 + t[0], 1.0)
+							if c < 0.35:
+								# Dancing: leaps with wings spread, then a bow.
+								var s := c / 0.35
+								lift = absf(sin(s * PI * 3.0)) * 0.8 if s < 0.7 else 0.0
+								wings = 0.9 if s < 0.7 else 0.3
+								neck = 0.3 if s < 0.7 else 1.0
+								facing += sin(s * TAU) * 0.8
+			if flying:
+				continue
+			along = pingpong(along, last) if last > 0.0 else 0.0
+			var spot: Array = _shore_at(shore, along, out)
+			var local: Vector2 = spot[0]
+			if out < 0.0:
+				out = maxf(out, -unit * 0.9)
+				spot = _shore_at(shore, along, out)
+			if behavior in ["graze", "crane"] or out < 0.0:
+				# Inland: on the land behind the shore, where there is some.
+				var inland: Vector2 = shore[clampi(roundi(along), 0, shore.size() - 1)][1]
+				if inland == Vector2.INF:
+					local = (spot[0] as Vector2) + Vector2(-unit * 0.05, 0.0)
+			place = _dock_point(port_id, local)
+			var angle := _dock_angle(port_id, facing)
+			if ripple >= 0.0 and ripple <= 1.0:
+				_canvas.draw_arc(place + Vector2.from_angle(angle) * span * 0.3, span * (0.05 + 0.2 * ripple), 0.0, TAU, 12, Color(1, 1, 1, 0.55 * (1.0 - ripple)), maxf(span * 0.025, 1.0), true)
+			if (info.get("colors", {}) as Dictionary).has("feet") and behavior == "wade" and not night:
+				# Stirring the mud with its yellow feet.
+				var stir := fmod(now * 0.8 + t[2], 1.0)
+				_canvas.draw_arc(place, span * (0.04 + 0.12 * stir), 0.0, TAU, 10, Color(1, 1, 1, 0.35 * (1.0 - stir)), maxf(span * 0.02, 1.0), true)
+			draw_wader(_canvas, place, angle, info, span, neck, wings, bill_up, lift, fish)
+			_bird_hits.append([place, maxf(span * 0.45, BIRD_HIT_MIN_PX), hit, flock])
+
+
+## A port's migrating cranes passing high over (every CRANE_PASS_S or so), in
+## Vs of up to V_SIZE, necks out and legs trailing, calling as they go.
+func _draw_crane_pass(port_id: String, root: Vector2, radius: float, now: float, info: Dictionary, count: int, flock: Dictionary) -> void:
+	var id := str(info.get("latin", ""))
+	var cycle := CRANE_PASS_S * (0.8 + 0.4 * Birds.chance([port_id, id, "cycle"]))
+	var flying := fmod(now / cycle + Birds.chance([port_id, id, "pass"]), 1.0)
+	if flying > 0.45:
+		return
+	var span := _bird_span(info)
+	var way := Vector2.from_angle(Birds.chance([port_id, id, "way"]) * TAU)
+	var lead := root + way.orthogonal() * radius * (Birds.chance([port_id, id, "off"]) - 0.5) + way * radius * (14.0 * flying / 0.45 - 7.0)
+	for k in count:
+		var v := k / V_SIZE
+		var pos := _v_spot(lead - way.orthogonal() * v * span * 5.0 - way * v * span * 3.0, way, k % V_SIZE, span * 1.3)
+		_draw_bird(pos, way.angle(), info, 0.7 + 0.3 * absf(sin(now * 3.0 - k * 0.5)), 3.0)
+		_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
+
+
+## A clump of reeds (round a bittern), swaying with the wind.
+func _draw_reeds(at: Vector2, span: float, now: float, wind: float, seed: float) -> void:
+	var lean := Vector2.from_angle(wind) * span * 0.06 * (1.0 + sin(now * 0.9 + wind))
+	for i in 11:
+		var a := TAU * (i / 11.0 + seed)
+		var r := span * (0.12 + 0.22 * fmod(seed * 7.0 + i * 0.37, 1.0))
+		var base := at + Vector2.from_angle(a) * r
+		var color := Color(0.62, 0.56, 0.32) if i % 3 == 0 else Color(0.42, 0.5, 0.26)
+		_canvas.draw_line(base, base + lean + Vector2.from_angle(a + 0.6) * span * 0.1, color, maxf(span * 0.025, 1.0), true)
+		if i % 4 == 0:
+			_canvas.draw_circle(base + lean + Vector2.from_angle(a + 0.6) * span * 0.1, maxf(span * 0.022, 0.8), Color(0.45, 0.3, 0.18))
+
+
+## A wader standing or walking, seen from above, on any canvas item: its
+## shadow cast long to the side (it's tall: legs, body, neck and head), its
+## body with its wings folded over it (dark tips), its neck out ahead as far
+## as `neck` (0 drawn right in, hunched; 1 struck out full length), its head
+## (a crown, a cheek) and dagger bill (pointed at the sky, for a bittern
+## hiding: just its head showing), and its wings held out as far as `wings`
+## (a crane dancing, an egret shading the water). `lift` raises it off the
+## ground (a crane leaping, an egret hopping), its shadow further off; `fish`
+## puts a fish crosswise in its bill. Leaves the transform reset.
+static func draw_wader(canvas: CanvasItem, at: Vector2, heading: float, info: Dictionary, span: float, neck := 0.5, wings := 0.0, bill_up := false, lift := 0.0, fish := false) -> void:
+	var colors: Dictionary = info.get("colors", {})
+	var parsed: Array = colors.get("_wader", [])
+	if parsed.is_empty():
+		var mantle_color := Color.from_string(str(colors.get("mantle", "#9aa2aa")), Color.GRAY)
+		parsed = [mantle_color, Color.from_string(str(colors.get("head", "#f0f0ec")), Color.WHITE),
+			Color.from_string(str(colors.get("tip", "#2a2c30")), Color.BLACK), Color.from_string(str(colors.get("bill", "#e8c040")), Color.YELLOW),
+			Color.from_string(str(colors.get("neck", colors.get("head", ""))), Color.WHITE), Color.from_string(str(colors.get("legs", "#3a3a3a")), Color.BLACK),
+			Color.from_string(str(colors.get("crown", "")), Color.TRANSPARENT), Color.from_string(str(colors.get("cheek", "")), Color.TRANSPARENT)]
+		if not colors.is_read_only():
+			colors["_wader"] = parsed
+	var mantle: Color = parsed[0]
+	var head_color: Color = parsed[1]
+	var crane := str(info.get("kind", "")) == "Crane"
+	var fwd := Vector2.from_angle(heading)
+	var body_len := span * 0.3
+	var body_wide := span * 0.12
+	var neck_len := span * (0.02 + 0.2 * neck)
+	var upright := span * 0.22 * (1.0 - neck)  # How far up the neck stands (shows in the shadow).
+	var legs := span * (0.32 if crane else 0.26)
+	# Its shadow: legs down from the hips, then the body, neck and head, cast off to the side.
+	var cast := Vector2(0.45, 0.55).normalized()
+	var hips := at + cast * (legs + lift * span * 0.6)
+	var dark := Color(0, 0, 0, 0.18)
+	if lift < 0.05:
+		for side: float in [-1.0, 1.0]:
+			canvas.draw_line(at + fwd.orthogonal() * side * body_wide * 0.3, hips, dark, maxf(span * 0.012, 1.0), true)
+	canvas.draw_set_transform(hips, heading, Vector2.ONE)
+	canvas.draw_colored_polygon(_oval(Vector2.ZERO, Vector2(body_len * 0.5, body_wide * 0.5)), dark)
+	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+	var shadow_head := hips + fwd * (body_len * 0.45 + neck_len) + cast * upright
+	canvas.draw_line(hips + fwd * body_len * 0.4, shadow_head, dark, maxf(span * 0.022, 1.0), true)
+	canvas.draw_circle(shadow_head, span * 0.025, dark)
+	if not bill_up:
+		canvas.draw_line(shadow_head, shadow_head + fwd * span * (0.05 if crane else 0.075), dark, maxf(span * 0.012, 1.0), true)
+	# Wings held out.
+	if wings > 0.02:
+		var shape := _bird_shape(true, false)
+		canvas.draw_set_transform(at, heading, Vector2(span * 0.9, span * 0.9 * wings))
+		canvas.draw_colored_polygon(shape.wing, mantle)
+		canvas.draw_colored_polygon(shape.wing_mirrored, mantle)
+		canvas.draw_colored_polygon(shape.tip, parsed[2])
+		canvas.draw_colored_polygon(shape.tip_mirrored, parsed[2])
+	# The body, wings folded over it, their dark tips at the back (a crane's bustle).
+	canvas.draw_set_transform(at, heading, Vector2.ONE)
+	canvas.draw_colored_polygon(_oval(Vector2.ZERO, Vector2(body_len * 0.5, body_wide * 0.5)), mantle)
+	canvas.draw_colored_polygon(_oval(Vector2(-body_len * 0.38, 0.0), Vector2(body_len * (0.2 if crane else 0.14), body_wide * (0.42 if crane else 0.3))), parsed[2] if crane else mantle.darkened(0.12))
+	if colors.has("shoulder"):
+		canvas.draw_colored_polygon(_oval(Vector2(body_len * 0.1, 0.0), Vector2(body_len * 0.18, body_wide * 0.35)), Color.from_string(str(colors.shoulder), mantle))
+	# Neck and head.
+	var head := Vector2(body_len * 0.42 + neck_len, 0.0)
+	canvas.draw_line(Vector2(body_len * 0.35, 0.0), head, parsed[4], maxf(span * 0.034, 1.0), true)
+	var head_r := span * 0.032
+	canvas.draw_circle(head, head_r, head_color)
+	var cheek: Color = parsed[7]
+	if cheek.a > 0.0:
+		for side: float in [-1.0, 1.0]:
+			canvas.draw_circle(head + Vector2(-head_r * 0.2, side * head_r * 0.55), head_r * 0.45, cheek)
+	var crown: Color = parsed[6]
+	if crown.a > 0.0:
+		if str(info.get("kind", "")) == "Crane" and str(info.get("latin", "")).begins_with("Balearica"):
+			for i in 7:  # A crowned crane's golden crest, fanned out.
+				canvas.draw_line(head, head + Vector2.from_angle(PI + (i - 3) * 0.32) * head_r * 2.2, crown, maxf(span * 0.008, 0.8), true)
+		else:
+			canvas.draw_circle(head + Vector2(-head_r * 0.1, 0.0), head_r * 0.55, crown)
+	if bill_up:
+		canvas.draw_circle(head + Vector2(head_r * 0.6, 0.0), head_r * 0.35, parsed[3])
+	else:
+		var bill_end := head + Vector2(span * (0.05 if crane else 0.075), 0.0)
+		canvas.draw_line(head, bill_end, parsed[3], maxf(span * 0.014, 1.0), true)
+		if fish:
+			canvas.draw_line(bill_end + Vector2(0.0, -span * 0.03), bill_end + Vector2(0.0, span * 0.03), Color(0.78, 0.82, 0.86), maxf(span * 0.02, 1.2), true)
+	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
 ## The sea ducks off a port (Birds.port_sea_ducks()), out on the sea beyond
 ## its marina `radius` px across: each species a raft, the ducks facing into
 ## the wind and bobbing, drakes in their pattern and hens brown. Eiders dive
@@ -6843,7 +7281,8 @@ static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dic
 	var tip: Color = parsed[2]
 	var bill: Color = parsed[3]
 	var raptor := colors.has("tail")
-	var shape := _bird_shape(raptor, raptor and str(info.get("behavior", "")) == "plunge")
+	var wader := colors.has("legs")
+	var shape := _bird_shape(raptor or wader, raptor and str(info.get("behavior", "")) == "plunge")
 	# The shapes are a bird a unit across: the wings (out to their beat) drawn
 	# scaled by its span along and its span times the beat across, the rest by its span.
 	var wingspan := Vector2(span, span * wings)
@@ -6883,6 +7322,24 @@ static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dic
 		# A big head and a short hooked bill.
 		canvas.draw_circle(Vector2(0.17, 0.0), 0.065, head)
 		canvas.draw_colored_polygon(_raptor_bill, bill)
+	elif wader:
+		# Long legs trailing behind; a crane's neck stretched out ahead, a
+		# heron's (an egret's, a bittern's) drawn back in an S, its head by its
+		# shoulders and its bill out in front.
+		var legs := Color.from_string(str(colors.get("legs", "#2a2a2a")), Color.BLACK)
+		for side: float in [-1.0, 1.0]:
+			canvas.draw_line(Vector2(-0.2, side * 0.012), Vector2(-0.44, side * 0.016), legs, maxf(span * 0.012, 0.8) / span)
+		var neck := Color.from_string(str(colors.get("neck", colors.get("head", ""))), head)
+		if str(info.get("kind", "")) == "Crane":
+			canvas.draw_line(Vector2(0.12, 0.0), Vector2(0.32, 0.0), neck, 0.035)
+			canvas.draw_circle(Vector2(0.33, 0.0), 0.03, head)
+			if colors.has("crown"):
+				canvas.draw_circle(Vector2(0.33, 0.0), 0.016, Color.from_string(str(colors.crown), head))
+			canvas.draw_line(Vector2(0.36, 0.0), Vector2(0.42, 0.0), bill, maxf(span * 0.015, 1.0) / span)
+		else:
+			canvas.draw_circle(Vector2(0.15, 0.0), 0.045, neck)
+			canvas.draw_circle(Vector2(0.17, 0.0), 0.035, head)
+			canvas.draw_line(Vector2(0.2, 0.0), Vector2(0.3, 0.0), bill, maxf(span * 0.018, 1.0) / span)
 	elif str(info.get("kind", "")) == "Cormorant":
 		# A long neck stretched out ahead, a small head (a pale cheek or bright
 		# throat on some) and a thin hooked bill.

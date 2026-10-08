@@ -2,7 +2,7 @@
 class_name BirdsPopup
 extends AnchoredPopup
 ## Opened by clicking a flock of birds on the map (see Birds): what birds are
-## round what was clicked (a port, with its gulls, raptors, cormorants and
+## round what was clicked (a port, with its gulls, raptors, cormorants, waders and
 ## sea ducks; a ship; or a pod of sea animals) now, each species with its
 ## picture, name, Latin name, how many and a fact. Follows what it's about;
 ## looks again every couple of seconds (flocks come and go with the time of
@@ -66,6 +66,16 @@ func _birds_now() -> Array:
 			entries.append([entry.id, "%d about" % int(entry.count)])
 		for entry: Dictionary in birds.port_cormorants(about.port):
 			entries.append([entry.id, "%d about" % int(entry.count)])
+		for entry: Dictionary in birds.port_waders(about.port):
+			var info := birds.species(entry.id)
+			var words := "%d about" % int(entry.count)
+			if entry.moving:
+				words = "%d passing over" % int(entry.count)
+			elif str(info.get("behavior", "")) == "hide":
+				words = "hiding in the reeds"
+			elif int(entry.count) == 1:
+				words = "1 at the water's edge" if str(info.get("kind", "")) != "Crane" else "1 in the fields"
+			entries.append([entry.id, words])
 		for entry: Dictionary in birds.port_sea_ducks(about.port):
 			entries.append([entry.id, ("%d passing" if entry.moving else "a raft of %d") % int(entry.count)])
 	elif about.has("ship"):
@@ -104,6 +114,8 @@ func _refresh() -> void:
 		_list.add_child(gone)
 	for entry: Array in now[1]:
 		_list.add_child(_species_row(entry[0], entry[1]))
+	# Seen: checked in the field guide.
+	Achievements.discover((now[1] as Array).map(func(entry: Array) -> String: return "bird:" + str(entry[0])))
 	reset_size.call_deferred()
 
 

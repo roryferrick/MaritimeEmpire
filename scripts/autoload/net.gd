@@ -971,11 +971,15 @@ func _command(name: StringName, args: Array) -> void:
 			ActivityLog.Kind.INFO, ActivityLog.ship_color(result))
 
 
-## This player's own map and log settings, as Company.PREF_KEYS.
+## This player's own map and log settings, as Company.PREF_KEYS: copies (so
+## the ones last sent don't change along with the company's, and changes to
+## them are seen).
 func _prefs() -> Dictionary:
 	var out := {}
+	var data := GameState.company.to_dict()
 	for key in Company.PREF_KEYS:
-		out[key] = GameState.company.to_dict()[key]
+		var value: Variant = data[key]
+		out[key] = value.duplicate(true) if value is Array or value is Dictionary else value
 	return out
 
 

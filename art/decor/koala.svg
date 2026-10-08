@@ -1,4 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<circle cx="32" cy="40" r="17" fill="#9da3ab" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="14" cy="22" r="8" fill="#9da3ab" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="50" cy="22" r="8" fill="#9da3ab" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="14" cy="22" r="4" fill="#e8e2dc"/><circle cx="50" cy="22" r="4" fill="#e8e2dc"/><circle cx="32" cy="30" r="14" fill="#a9afb6" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="26" cy="28" r="2" fill="#2a2420"/><circle cx="38" cy="28" r="2" fill="#2a2420"/><ellipse cx="32" cy="34" rx="4" ry="5" fill="#3a3a40"/>
+<path d="M24,48 L22,57" stroke="#3a3128" stroke-width="8" stroke-linecap="round"/><path d="M24,48 L22,56" stroke="#8a8c92" stroke-width="5" stroke-linecap="round"/>
+<path d="M40,48 L42,57" stroke="#3a3128" stroke-width="8" stroke-linecap="round"/><path d="M40,48 L42,56" stroke="#8a8c92" stroke-width="5" stroke-linecap="round"/>
+<ellipse cx="32" cy="43" rx="13" ry="11" fill="#9a9ca2" stroke="#3a3128" stroke-width="2.5"/>
+<ellipse cx="32" cy="46" rx="7" ry="6" fill="#e6e4de"/>
+<path d="M21,38 Q17,44 22,50" fill="none" stroke="#3a3128" stroke-width="7" stroke-linecap="round"/><path d="M21,38 Q17,44 22,50" fill="none" stroke="#8a8c92" stroke-width="4" stroke-linecap="round"/>
+<path d="M43,38 Q47,44 42,50" fill="none" stroke="#3a3128" stroke-width="7" stroke-linecap="round"/><path d="M43,38 Q47,44 42,50" fill="none" stroke="#8a8c92" stroke-width="4" stroke-linecap="round"/>
+<circle cx="18" cy="17" r="8" fill="#9a9ca2" stroke="#3a3128" stroke-width="2.5"/><circle cx="18" cy="17" r="4.5" fill="#e6e4de"/>
+<circle cx="46" cy="17" r="8" fill="#9a9ca2" stroke="#3a3128" stroke-width="2.5"/><circle cx="46" cy="17" r="4.5" fill="#e6e4de"/>
+<circle cx="32" cy="24" r="12" fill="#9a9ca2" stroke="#3a3128" stroke-width="2.5"/>
+<ellipse cx="32" cy="27" rx="4" ry="5.5" fill="#2a2a2e"/>
+<circle cx="26" cy="22" r="1.7" fill="#2a2420"/><circle cx="38" cy="22" r="1.7" fill="#2a2420"/>
 </svg>

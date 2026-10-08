@@ -3,12 +3,15 @@ class_name FieldGuide
 extends Control
 ## The field guide (the paw button at the map's top right): every bird, sea
 ## animal and land animal in the game, a tab each. Birds (data/birds.json):
-## the gulls, the seabirds, the raptors, the cormorants and the sea ducks,
+## the gulls, the seabirds, the raptors, the cormorants, the herons, egrets,
+## bitterns and cranes, and the sea ducks,
 ## each with its picture, Latin name, where and when to see it, and a fact.
 ## Sea animals (data/sea_life.json): each with its picture, size, the
 ## waters its pods visit, and a fact. Land animals (the groups roaming the
 ## map: data/birds.json land_animals): each with its picture, where it
-## lives, its habits, and a fact. Over the map, dimming it; Esc, X or a click
+## lives, its habits, and a fact. A green check marks each one this player has
+## seen on the map (Achievements.discover()), and the header says how many.
+## Over the map, dimming it; Esc, X or a click
 ## outside closes it.
 
 const PANEL_SIZE := Vector2(820, 640)
@@ -53,6 +56,11 @@ func _ready() -> void:
 	title.text = "Field guide"
 	title.size_flags_horizontal = SIZE_EXPAND_FILL
 	header.add_child(title)
+	var seen := Label.new()
+	seen.text = "%d of %d seen" % [Achievements.seen_count(GameState.company), Achievements.animal_count()]
+	seen.tooltip_text = "Animals seen on the map (click a flock, pod or group to see what they are). A check marks each one."
+	seen.mouse_filter = MOUSE_FILTER_PASS
+	header.add_child(seen)
 	var close := Button.new()
 	close.text = "X"
 	close.flat = true
@@ -87,19 +95,22 @@ func _show(tab: int) -> void:
 			var birds := Birds.shared()
 			_heading("Gulls", "Over every port, over grain and livestock carriers, and now and then over other ships and sea animals: most at dawn and dusk, few at night, more in the breeding season and round ships loading or unloading.")
 			for id: String in birds.gulls:
-				_bird_entry(birds.gulls[id])
+				_bird_entry(id, birds.gulls[id])
 			_heading("Seabirds", "Out at sea they take up following ships for a few hours at a time, where they are that season: condors along the coasts, albatrosses and shearwaters over the open ocean, terns and pelicans nearer land.")
 			for id: String in birds.seabirds:
-				_bird_entry(birds.seabirds[id])
+				_bird_entry(id, birds.seabirds[id])
 			_heading("Eagles, hawks and the osprey", "Along the shore at ports, by day, each hunting its own way: sea eagles sit on a perch and swoop out to snatch fish off the water, the osprey hovers and plunges in feet first, golden eagles soar high and stoop, buzzards hang on the wind over the land, Harris's hawks hunt in packs, goshawks dash out from cover, and Swainson's hawks pass over in great circling kettles on their way to and from Argentina.")
 			for id: String in birds.raptors:
-				_bird_entry(birds.raptors[id])
+				_bird_entry(id, birds.raptors[id])
 			_heading("Cormorants", "About ports by day and night: standing on the breakwater (holding their wings out to dry), swimming low and diving long for fish, and flying past low over the water in Vs.")
 			for id: String in birds.cormorants:
-				_bird_entry(birds.cormorants[id])
+				_bird_entry(id, birds.cormorants[id])
+			_heading("Herons, egrets, bitterns and cranes", "Along the shore either side of ports: herons stand stock still at the water's edge waiting to strike (night herons come out at dusk), egrets stride the shallows stabbing as they go, bitterns hide in the reeds with their bills to the sky, and cranes feed over the fields in family groups, dancing in spring and passing high over in Vs on migration.")
+			for id: String in birds.waders:
+				_bird_entry(id, birds.waders[id])
 			_heading("Sea ducks", "Eiders and scoters raft on the sea off northern ports, day and night: bobbing into the wind and diving for mussels (scoters all together), now and then pattering off to settle somewhere new; eider hens lead their ducklings in high summer. On migration, in spring and autumn, they pass in long low Vs over the sea.")
 			for id: String in birds.sea_ducks:
-				_bird_entry(birds.sea_ducks[id])
+				_bird_entry(id, birds.sea_ducks[id])
 		1:
 			var sea := SeaLife.shared()
 			for id: String in sea.species:
@@ -129,17 +140,24 @@ func _text(text: String, dim := true) -> Label:
 	return label
 
 
-## An entry: a picture, then its name (and a line under it), and its lines.
-func _entry(picture: Control, name: String, subtitle: String, lines: Array[String]) -> void:
+## An entry: a picture, then its name (with a check once this player has
+## seen it on the map, see Achievements.discover()) and a line under it, and
+## its lines.
+func _entry(key: String, picture: Control, name: String, subtitle: String, lines: Array[String]) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 14)
 	picture.size_flags_vertical = SIZE_SHRINK_BEGIN
 	row.add_child(picture)
 	var text := VBoxContainer.new()
 	text.add_theme_constant_override(&"separation", 1)
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override(&"separation", 6)
 	var title := Label.new()
 	title.text = name
-	text.add_child(title)
+	name_row.add_child(title)
+	if GameState.company.discovered.has(key):
+		name_row.add_child(SeenCheck.new())
+	text.add_child(name_row)
 	if not subtitle.is_empty():
 		var sub := _text(subtitle)
 		text.add_child(sub)
@@ -149,11 +167,11 @@ func _entry(picture: Control, name: String, subtitle: String, lines: Array[Strin
 	_list.add_child(row)
 
 
-func _bird_entry(info: Dictionary) -> void:
+func _bird_entry(id: String, info: Dictionary) -> void:
 	var subtitle := str(info.get("latin", ""))
 	if info.has("kind"):
 		subtitle = "%s · %s" % [info.kind, subtitle]
-	_entry(BirdIcon.new(info, ICON_SIZE), str(info.get("name", "")), subtitle,
+	_entry("bird:" + id, BirdIcon.new(info, ICON_SIZE), str(info.get("name", "")), subtitle,
 		["Where: %s" % info.get("where", ""), str(info.get("fact", ""))])
 
 
@@ -170,7 +188,7 @@ func _sea_entry(sea: SeaLife, id: String) -> void:
 				waters.append(area_name)
 	var places := ", ".join(waters)
 	var where := "Where: %s." % (places.left(1).to_upper() + places.substr(1)) if not places.is_empty() else "Where: the open ocean."
-	_entry(_picture(MapView.SEA_ART_DIR + str(kind.get("art", id)) + ".svg", Vector2(ICON_SIZE * 1.6, ICON_SIZE * 0.6)),
+	_entry("sea:" + id, _picture(MapView.SEA_ART_DIR + str(kind.get("art", id)) + ".svg", Vector2(ICON_SIZE * 1.6, ICON_SIZE * 0.6)),
 		str(kind.get("name", id)), "Up to %s m long" % kind.get("length_m", "?"), [where, str(kind.get("fact", ""))])
 
 
@@ -183,7 +201,7 @@ func _land_entry(id: String, info: Dictionary) -> void:
 	if info.has("habits"):
 		lines.append(str(info.habits))
 	lines.append(str(info.get("fact", "")))
-	_entry(_picture(MapView.DECOR_ART_DIR + id + ".svg", Vector2.ONE * ICON_SIZE), str(info.get("name", id)), subtitle, lines)
+	_entry("land:" + id, _picture(MapView.DECOR_ART_DIR + id + ".svg", Vector2.ONE * ICON_SIZE), str(info.get("name", id)), subtitle, lines)
 
 
 static func _picture(path: String, side: Vector2) -> Control:
@@ -195,3 +213,17 @@ static func _picture(path: String, side: Vector2) -> Control:
 	if ResourceLoader.exists(path):
 		picture.texture = load(path)
 	return picture
+
+
+## A green check: an animal seen on the map.
+class SeenCheck extends Control:
+	const SIDE := 18.0
+	const GREEN := Color(0.45, 0.85, 0.45)
+
+	func _init() -> void:
+		custom_minimum_size = Vector2.ONE * SIDE
+		size_flags_vertical = SIZE_SHRINK_CENTER
+		tooltip_text = "Seen on the map"
+
+	func _draw() -> void:
+		draw_polyline(PackedVector2Array([Vector2(0.15, 0.55) * SIDE, Vector2(0.4, 0.8) * SIDE, Vector2(0.88, 0.22) * SIDE]), GREEN, 3.0, true)

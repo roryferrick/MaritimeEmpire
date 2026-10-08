@@ -58,6 +58,10 @@ var finance_window: Array = []
 var tutorials := false
 var tutorials_on := true
 var tutorial_done: Array[String] = []
+## Achievements earned (Achievements: id -> stars, 1 for a badge), and the
+## animals seen on the map (Achievements.discover(): the field guide's checks).
+var achievements := {}
+var discovered: Array[String] = []
 ## The map's Routes switch, the ship models muted in the activity log, and
 ## whether the activity log panel is folded away.
 var show_active_routes := true
@@ -126,6 +130,8 @@ func to_dict() -> Dictionary:
 		"tutorials": tutorials,
 		"tutorials_on": tutorials_on,
 		"tutorial_done": tutorial_done,
+		"achievements": achievements,
+		"discovered": discovered,
 		"show_active_routes": show_active_routes,
 		"muted_models": muted_models,
 		"activity_collapsed": activity_collapsed,
@@ -161,6 +167,9 @@ static func from_dict(data: Dictionary) -> Company:
 	company.tutorials = bool(data.get("tutorials", false))
 	company.tutorials_on = bool(data.get("tutorials_on", true))
 	company.tutorial_done.assign(data.get("tutorial_done", []))
+	for id: String in data.get("achievements", {}):
+		company.achievements[id] = int(data.achievements[id])
+	company.discovered.assign(data.get("discovered", []))
 	company.show_active_routes = bool(data.get("show_active_routes", true))
 	company.muted_models.assign(data.get("muted_models", []))
 	company.activity_collapsed = bool(data.get("activity_collapsed", false))
@@ -169,7 +178,7 @@ static func from_dict(data: Dictionary) -> Company:
 
 ## This player's own map and log settings: kept by each player's game, never
 ## overwritten by the host's copy (see apply_update()).
-const PREF_KEYS: Array[String] = ["show_active_routes", "muted_models", "activity_collapsed", "tutorials_on", "tutorial_done"]
+const PREF_KEYS: Array[String] = ["show_active_routes", "muted_models", "activity_collapsed", "tutorials_on", "tutorial_done", "achievements", "discovered"]
 
 
 ## Applies an update from the host in a multiplayer game: any of to_dict()'s
@@ -187,7 +196,7 @@ func apply_update(data: Dictionary, keep_prefs := false) -> void:
 				color = value
 			"company_xp":
 				xp = value
-			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models", "regions":
+			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models", "regions", "discovered":
 				(get(key) as Array).assign(value)
 			"hubs":
 				var kept: Array[Hub] = []
