@@ -86,6 +86,16 @@
 			"quay": "right",
 			"note": "Philadelphia: down the Delaware to the south-west"
 		},
+		"YOK": {
+			"bearing": 90.0,
+			"quay": "right",
+			"note": "Yokohama: out east across Tokyo Bay"
+		},
+		"NGB": {
+			"bearing": 112.5,
+			"quay": "right",
+			"note": "Ningbo-Zhoushan: out east by south-east, past the Zhoushan islands"
+		},
 		"TWH": {
 			"bearing": 139.0,
 			"quay": "right",
