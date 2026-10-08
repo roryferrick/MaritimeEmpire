@@ -3,13 +3,13 @@ class_name FieldGuide
 extends Control
 ## The field guide (the paw button at the map's top right): every bird, sea
 ## animal and land animal in the game, a tab each. Birds (data/birds.json):
-## the gulls, the seabirds, the raptors and the sea ducks, each with its
-## picture, Latin name, where and when to see it, and a fact. Sea animals
-## (data/sea_life.json): each with its picture, size, the waters its pods
-## visit, and a fact. Land animals (the groups roaming the map:
-## data/birds.json land_animals): each with its picture, where it lives, its
-## habits, and a fact. Over the map, dimming it; Esc, X or a click outside
-## closes it.
+## the gulls, the seabirds, the raptors, the cormorants and the sea ducks,
+## each with its picture, Latin name, where and when to see it, and a fact.
+## Sea animals (data/sea_life.json): each with its picture, size, the
+## waters its pods visit, and a fact. Land animals (the groups roaming the
+## map: data/birds.json land_animals): each with its picture, where it
+## lives, its habits, and a fact. Over the map, dimming it; Esc, X or a click
+## outside closes it.
 
 const PANEL_SIZE := Vector2(820, 640)
 const TEXT_WIDTH := 600.0
@@ -94,7 +94,10 @@ func _show(tab: int) -> void:
 			_heading("Eagles, hawks and the osprey", "Along the shore at ports, by day, each hunting its own way: sea eagles sit on a perch and swoop out to snatch fish off the water, the osprey hovers and plunges in feet first, golden eagles soar high and stoop, buzzards hang on the wind over the land, Harris's hawks hunt in packs, goshawks dash out from cover, and Swainson's hawks pass over in great circling kettles on their way to and from Argentina.")
 			for id: String in birds.raptors:
 				_bird_entry(birds.raptors[id])
-			_heading("Sea ducks", "Eiders and scoters raft on the sea off northern ports, day and night: bobbing into the wind and diving for mussels (scoters all together), now and then pattering off to settle somewhere new; eider hens lead their ducklings in high summer. On migration, in spring and autumn, they pass in long low lines over the sea.")
+			_heading("Cormorants", "About ports by day and night: standing on the breakwater (holding their wings out to dry), swimming low and diving long for fish, and flying past low over the water in Vs.")
+			for id: String in birds.cormorants:
+				_bird_entry(birds.cormorants[id])
+			_heading("Sea ducks", "Eiders and scoters raft on the sea off northern ports, day and night: bobbing into the wind and diving for mussels (scoters all together), now and then pattering off to settle somewhere new; eider hens lead their ducklings in high summer. On migration, in spring and autumn, they pass in long low Vs over the sea.")
 			for id: String in birds.sea_ducks:
 				_bird_entry(birds.sea_ducks[id])
 		1:

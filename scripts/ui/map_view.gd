@@ -46,6 +46,10 @@ const MARINA_BIRD_REACH := 0.5
 ## How long (s) a ship's birds take to go from wheeling round it to flying
 ## along with it (or back) as it gets going or stops (see _under_way()).
 const UNDER_WAY_EASE_S := 2.0
+## The most birds in one V (see _v_spot()): a bigger flock flies in several.
+const V_SIZE := 9
+## About how often (s) a port's cormorants fly past (see _draw_cormorants()).
+const CORMORANT_PASS_S := 60.0
 const SHIP_HIT_RADIUS := 6.0
 ## However small ships are drawn, a click this close (px) still picks one.
 const SHIP_HIT_MIN_PX := 7.0
@@ -505,6 +509,8 @@ var _gust_offsets := {}
 var _gust_spots := {}
 ## Each ship's last place and how much it's under way (see _under_way()).
 var _ship_motion := {}
+## Each cormorant species' colors for drawing it swimming (see _cormorant_swimmer()).
+var _cormorant_swimmers := {}
 ## Port id -> its docks' turn on screen for the current view (see _dock_point()).
 var _port_turns := {}
 ## Port id -> where it is on screen for the current view (see port_screen_position()).
@@ -5816,6 +5822,7 @@ func _draw_birds() -> void:
 		_draw_gulls(flock, root, radius * 0.35, radius * 1.15, now, {port = port_id})
 		_draw_raptors(port_id, root, radius, now)
 		_draw_sea_ducks(port_id, root, radius, now)
+		_draw_cormorants(port_id, root, radius, now)
 	# Round ships (gulls, and the seabirds following ships at sea).
 	var reach := view.grow(SHIP_CULL_MARGIN * scale)
 	for ship in GameState.ships:
@@ -5873,6 +5880,16 @@ func _under_way(ship: Ship, now: float) -> float:
 		kept[3] = now  # (Paused: as it was.)
 	kept[0] = where
 	return kept[2]
+
+
+## Where a bird of a V (pelicans, cormorants, migrating sea ducks) flies:
+## `place` 0 the leader at `lead`, then back along either arm by turns,
+## flying `way` (a unit vector), birds `span` px across.
+static func _v_spot(lead: Vector2, way: Vector2, place: int, span: float) -> Vector2:
+	var rank := (place + 1) / 2
+	var arm := 0.0 if place == 0 else (1.0 if place % 2 == 1 else -1.0)
+	var spacing := span * 0.8
+	return lead - way * rank * spacing * 0.8 + way.orthogonal() * arm * rank * spacing * 0.75
 
 
 ## A flock of gulls wheeling round a point on screen, between two radii (px),
@@ -5948,11 +5965,9 @@ func _draw_followers(ship: Ship, entry: Dictionary, at: Vector2, heading: float,
 				# and the rest back along either arm by turns; all flapping a few beats
 				# and gliding together, the flaps rippling back down the arms.
 				var flock_side := 1.0 if Birds.chance([ship.id, id, "side"]) < 0.5 else -1.0
-				var spacing := float(info.get("span", 1.7)) * BIRD_SCALE * _ship_scale() * 0.8
 				var rank := (k + 1) / 2  # (How far back along its arm.)
-				var arm := 0.0 if k == 0 else (1.0 if k % 2 == 1 else -1.0)
 				var lead := at + side * length * 1.1 * flock_side + ahead * length * 0.1 + side * sin(now * 0.4 + float(ship.id)) * length * 0.05
-				pos = lead - ahead * rank * spacing * 0.8 + side * arm * rank * spacing * 0.75
+				pos = _v_spot(lead, ahead, k, _bird_span(info))
 				var flapping := sin(now * 0.7 + float(ship.id)) > 0.4
 				wings = 0.8 + 0.2 * cos(now * 5.0 - rank * 0.7) if flapping else 1.0
 			"skim":
@@ -6178,13 +6193,95 @@ func _draw_raptors(port_id: String, root: Vector2, radius: float, now: float) ->
 			_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
 
 
+## The cormorants about a port (Birds.port_cormorants()), round its marina
+## `radius` px across: some stand on its breakwater looking out to sea, now and
+## then holding their wings out to dry; some swim low off it, making long
+## dives for fish (a ripple as each goes down and comes up); and every minute
+## or so the rest fly past low over the water in a V. By night (by the sun)
+## they all roost on the breakwater.
+func _draw_cormorants(port_id: String, root: Vector2, radius: float, now: float) -> void:
+	var entries := Birds.shared().port_cormorants(port_id)
+	if entries.is_empty():
+		return
+	var birds := Birds.shared()
+	var layout := _port_layout(port_id)
+	var sea := Vector2.from_angle(_port_sea_angle(port_id))
+	var across := sea.orthogonal()
+	var wind := Birds.chance([port_id, "wind"]) * TAU
+	var port := GameData.get_port(port_id)
+	var hour := Birds.local_hour(float(port.get("lon", 0.0)), float(GameState.calendar_time()))
+	var night := hour < Birds.RAPTOR_DAY.x or hour > Birds.RAPTOR_DAY.y
+	var gap := float(layout.gap)
+	for entry: Dictionary in entries:
+		var id: String = entry.id
+		var info := birds.species(id)
+		var count := int(entry.count)
+		var traits := _bird_traits("cormorants/%s/%s" % [port_id, id], count)
+		var flock := {count = count, species = [id], key = id}
+		var span := _bird_span(info)
+		var swimmer := _cormorant_swimmer(info)
+		# Their pass: every CORMORANT_PASS_S or so, across the sea off the port.
+		var cycle := CORMORANT_PASS_S * (0.8 + 0.4 * Birds.chance([port_id, id, "cycle"]))
+		var flying := fmod(now / cycle + Birds.chance([port_id, id, "pass"]), 1.0)
+		var way := Vector2.from_angle(Birds.chance([port_id, id, "way"]) * TAU)
+		var lead := root + sea * radius * 2.2 + way * radius * (12.0 * flying / 0.35 - 6.0)
+		var flyers := 0
+		for k in count:
+			var t: PackedFloat32Array = traits[k]
+			var phase := t[4] * TAU
+			var role := 0 if night or t[0] < 0.35 else (1 if t[0] < 0.6 else 2)  # Perched, swimming, flying past.
+			if role == 1:
+				var spot := root + sea * radius * (1.4 + 0.8 * t[2]) + across * radius * (t[1] - 0.5) * 2.2 + Vector2(sin(now * 0.2 + phase), cos(now * 0.17 + phase)) * span * 0.3
+				if not _on_sea(spot):
+					role = 0
+				else:
+					var dive := fmod(now / (25.0 + 10.0 * t[1]) + t[3], 1.0)
+					if dive > 0.5 and dive < 0.95:  # Down a long while.
+						var ripple := (dive - 0.5) / 0.45
+						for edge: float in [0.0, 1.0]:
+							var r := 1.0 - absf(ripple - edge) * 8.0
+							if r > 0.0:
+								_canvas.draw_arc(spot, span * (0.1 + 0.2 * (1.0 - r)), 0.0, TAU, 12, Color(1, 1, 1, 0.6 * r), maxf(span * 0.03, 1.0), true)
+						continue
+					draw_duck(_canvas, spot, wind + 0.3 * (t[3] - 0.5), swimmer, span * 1.2, false)
+					_bird_hits.append([spot, maxf(span * 0.5, BIRD_HIT_MIN_PX), {port = port_id}, flock])
+					continue
+			if role == 2:
+				if flying < 0.35:
+					var pos := _v_spot(lead, way, flyers, span)
+					flyers += 1
+					_draw_bird(pos, way.angle(), info, 0.75 + 0.25 * absf(sin(now * 9.0 - flyers * 0.6)), 0.5)
+					_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
+				continue
+			# On the breakwater, along either arm, looking out to sea.
+			var arm_side := 1.0 if t[3] < 0.5 else -1.0
+			var along := lerpf(gap + 0.1, PI / 2.0 - 0.05, t[1]) * arm_side
+			var perch := _dock_point(port_id, Vector2.from_angle(along) * float(layout.radius))
+			var drying := not night and sin(now * 0.12 + phase) > 0.55
+			_draw_bird(perch, _dock_angle(port_id, along) + 0.2 * (t[2] - 0.5), info, 0.7 if drying else 0.2, 0.03)
+			_bird_hits.append([perch, maxf(span * 0.5, BIRD_HIT_MIN_PX), {port = port_id}, flock])
+
+
+## A cormorant's colors for drawing it swimming low (see draw_duck()): all
+## its back's dark color, its head and bill. Made once a species.
+func _cormorant_swimmer(info: Dictionary) -> Dictionary:
+	var id := str(info.get("latin", ""))
+	if not _cormorant_swimmers.has(id):
+		var colors: Dictionary = info.get("colors", {})
+		_cormorant_swimmers[id] = {colors = {mantle = colors.get("mantle", "#1e1e1e"), sides = colors.get("mantle", "#1e1e1e"),
+			head = colors.get("head", "#141414"), cap = colors.get("head", "#141414"), bill = colors.get("bill", "#d8b040"), patch = colors.get("cheek", colors.get("throat", ""))}}
+		if str(_cormorant_swimmers[id].colors.patch).is_empty():
+			(_cormorant_swimmers[id].colors as Dictionary).erase("patch")
+	return _cormorant_swimmers[id]
+
+
 ## The sea ducks off a port (Birds.port_sea_ducks()), out on the sea beyond
 ## its marina `radius` px across: each species a raft, the ducks facing into
 ## the wind and bobbing, drakes in their pattern and hens brown. Eiders dive
 ## each in its own time for mussels, scoters all together (a ripple where
 ## each goes down and comes up); now and then the whole raft patters off the
 ## water and flies low to settle somewhere new. In high summer eider hens
-## lead their pooled ducklings. On migration they don't stop: long low lines
+## lead their pooled ducklings. On migration they don't stop: long low Vs
 ## pass over the sea, north in spring and south in autumn.
 func _draw_sea_ducks(port_id: String, root: Vector2, radius: float, now: float) -> void:
 	var birds := Birds.shared()
@@ -6213,14 +6310,17 @@ func _draw_sea_ducks(port_id: String, root: Vector2, radius: float, now: float) 
 		if home == Vector2.INF:
 			continue
 		if entry.moving:
-			# Passing on migration: a long low wavy line over the sea.
+			# Passing on migration: low over the sea in Vs of up to V_SIZE, one
+			# behind another, each a little to the side.
 			var north := month <= 6
 			var way := Vector2(0.0, -1.0 if north else 1.0).rotated(0.3 * side)
 			var s := fmod(now / 40.0 + Birds.chance([port_id, id, "pass"]), 1.0)
 			var lead := home + way * radius * (12.0 * s - 6.0)
 			for k in count:
 				var t: PackedFloat32Array = traits[k]
-				var pos := lead - way * k * span * 0.8 + way.orthogonal() * sin(k * 0.7 + now * 0.8) * span * 0.6
+				var v := k / V_SIZE
+				var v_lead := lead - way * v * span * 5.0 + way.orthogonal() * span * 2.5 * (1.0 if v % 2 == 0 else -1.0) * signf(float(v))
+				var pos := _v_spot(v_lead, way, k % V_SIZE, span) + way.orthogonal() * sin(now * 0.8 + v) * span * 0.15
 				_draw_bird(pos, way.angle(), _duck_flying(info, t[4] < 0.45), 0.7 + 0.3 * absf(sin(now * 14.0 + k)), 0.4)
 				_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
 			continue
@@ -6417,6 +6517,17 @@ static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dic
 		# A big head and a short hooked bill.
 		canvas.draw_circle(Vector2(0.17, 0.0), 0.065, head)
 		canvas.draw_colored_polygon(_raptor_bill, bill)
+	elif str(info.get("kind", "")) == "Cormorant":
+		# A long neck stretched out ahead, a small head (a pale cheek or bright
+		# throat on some) and a thin hooked bill.
+		canvas.draw_line(Vector2(0.12, 0.0), Vector2(0.3, 0.0), head, 0.05)
+		canvas.draw_circle(Vector2(0.31, 0.0), 0.04, head)
+		if colors.has("cheek"):
+			for edge: float in [-1.0, 1.0]:
+				canvas.draw_circle(Vector2(0.31, 0.022 * edge), 0.016, Color.from_string(str(colors.cheek), head))
+		if colors.has("throat"):
+			canvas.draw_circle(Vector2(0.34, 0.0), 0.018, Color.from_string(str(colors.throat), head))
+		canvas.draw_line(Vector2(0.34, 0.0), Vector2(0.42, 0.0), bill, maxf(span * 0.02, 1.0) / span)
 	else:
 		canvas.draw_circle(Vector2(0.17, 0.0), 0.055, head)
 		canvas.draw_line(Vector2(0.21, 0.0), Vector2(0.36 if long_bill else 0.27, 0.0), bill, maxf(span * 0.03, 1.0) / span)

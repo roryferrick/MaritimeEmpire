@@ -22,7 +22,10 @@ extends RefCounted
 ##
 ## Sea ducks (eiders and scoters) raft on the sea off ports where a species
 ## is that month, in stretches of sea_duck_hours, day and night; on their
-## migrations (seasons marked moving) they pass in long low lines instead.
+## migrations (seasons marked moving) they pass in long low Vs instead.
+##
+## Cormorants are about ports where a species is that month, in stretches of
+## cormorant_hours: on the breakwater, swimming and diving off it, flying past.
 
 const DATA_PATH := "res://data/birds.json"
 const MONTH_SECONDS := 86400.0
@@ -53,11 +56,13 @@ var gulls := {}
 var seabirds := {}
 var raptors := {}
 var sea_ducks := {}
+var cormorants := {}
 var land_animals := {}
 var gull_hours := 3.0
 var seabird_hours := 6.0
 var raptor_hours := 4.0
 var sea_duck_hours := 12.0
+var cormorant_hours := 6.0
 
 ## Ships loading or unloading at each port, as of _busy_time (see _busy()).
 var _busy_ports := {}
@@ -81,16 +86,18 @@ func _init() -> void:
 		seabirds = data.get("seabirds", {})
 		raptors = data.get("raptors", {})
 		sea_ducks = data.get("sea_ducks", {})
+		cormorants = data.get("cormorants", {})
 		land_animals = data.get("land_animals", {})
 		gull_hours = float(data.get("gull_follow_hours", 3.0))
 		seabird_hours = float(data.get("seabird_follow_hours", 6.0))
 		raptor_hours = float(data.get("raptor_hours", 4.0))
 		sea_duck_hours = float(data.get("sea_duck_hours", 12.0))
+		cormorant_hours = float(data.get("cormorant_hours", 6.0))
 
 
-## A species' data (gull, seabird, raptor or sea duck), or {}.
+## A species' data (gull, seabird, raptor, sea duck or cormorant), or {}.
 func species(id: String) -> Dictionary:
-	return gulls.get(id, seabirds.get(id, raptors.get(id, sea_ducks.get(id, {}))))
+	return gulls.get(id, seabirds.get(id, raptors.get(id, sea_ducks.get(id, cormorants.get(id, {})))))
 
 
 # --- Where and when -------------------------------------------------------------
@@ -386,6 +393,11 @@ func port_raptors(port_id: String) -> Array:
 	return _remembered(["raptors", port_id], _port_raptors_now.bind(port_id))
 
 
+## The cormorants about a port now (see _port_cormorants_now()).
+func port_cormorants(port_id: String) -> Array:
+	return _remembered(["cormorants", port_id], _port_cormorants_now.bind(port_id))
+
+
 ## The sea ducks off a port now (see _port_sea_ducks_now()).
 func port_sea_ducks(port_id: String) -> Array:
 	return _remembered(["ducks", port_id], _port_sea_ducks_now.bind(port_id))
@@ -403,6 +415,32 @@ func _remembered(key: Array, work: Callable) -> Variant:
 	if not _memo.has(key):
 		_memo[key] = work.call()
 	return _memo[key]
+
+
+# --- Cormorants about ports -------------------------------------------------------
+
+## The cormorants about a port now: [{id, count}], most first (see port_cormorants()).
+func _port_cormorants_now(port_id: String) -> Array:
+	var out := []
+	var unix := float(GameState.calendar_time())
+	var port := GameData.get_port(port_id)
+	var lon_lat := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+	var month := month_of(unix)
+	var stretch_s := cormorant_hours * 3600.0
+	for id: String in cormorants:
+		var info: Dictionary = cormorants[id]
+		if not is_at(info, lon_lat, month):
+			continue
+		var offset := chance([id, "offset"]) * stretch_s
+		var stretch := floori((unix + offset) / stretch_s)
+		var group: Array = info.get("group", [0.5, 3, 12])
+		if chance(["cormorants", port_id, id, stretch]) >= float(group[0]):
+			continue
+		var fewest := int(group[1])
+		var most := int(group[2])
+		out.append({id = id, count = fewest + floori(chance(["count", port_id, id, stretch]) * (most - fewest + 1))})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.count) > int(b.count))
+	return out
 
 
 # --- Words for popups -----------------------------------------------------------
