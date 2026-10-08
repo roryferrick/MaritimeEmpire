@@ -226,7 +226,7 @@ func _ask_host(go: Callable) -> void:
 	dialog.popup_centered()
 
 
-## The copyright line along the bottom of the title screen.
+## The copyright line along the bottom of the title screen, and Licences above it.
 func _add_copyright() -> void:
 	var label := Label.new()
 	label.text = COPYRIGHT
@@ -237,6 +237,18 @@ func _add_copyright() -> void:
 	label.offset_top = -30.0
 	label.offset_bottom = -8.0
 	add_child(label)
+	# The licences and credits in full (see Licences).
+	var licences := Button.new()
+	licences.text = "Licences"
+	licences.flat = true
+	licences.add_theme_font_size_override(&"font_size", 13)
+	licences.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	licences.offset_top = -64.0
+	licences.offset_bottom = -32.0
+	licences.offset_left = -60.0
+	licences.offset_right = 60.0
+	licences.pressed.connect(func() -> void: add_child(Licences.new()))
+	add_child(licences)
 
 
 ## Loads the game and new company scenes in the background, once, while the

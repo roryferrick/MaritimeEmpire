@@ -1,12 +1,13 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name EscapeMenu
 extends Control
-## Esc during a game: Continue, Save, Exit to Menu and Exit to Desktop, over
-## the dimmed game. In single player the game pauses while it's open (and
-## carries on at its speed after Continue); in multiplayer it keeps going for
-## everyone. A joined player can't save (the host's game holds every company)
-## and leaving keeps their company going; a host leaving ends the game for
-## everyone (saving first), as Leave Game does.
+## Esc during a game: Continue, Save, Exit to Menu and Exit to Desktop (and
+## the game's Licences: see Licences), over the dimmed game. In single player
+## the game pauses while it's open (and carries on at its speed after
+## Continue); in multiplayer it keeps going for everyone. A joined player
+## can't save (the host's game holds every company) and leaving keeps their
+## company going; a host leaving ends the game for everyone (saving first), as
+## Leave Game does.
 
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const BUTTON_SIZE := Vector2(300, 48)
@@ -60,6 +61,13 @@ func _ready() -> void:
 	copyright.add_theme_font_size_override(&"font_size", 12)
 	copyright.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(copyright)
+	var licences := Button.new()
+	licences.text = "Licences"
+	licences.flat = true
+	licences.size_flags_horizontal = SIZE_SHRINK_CENTER
+	licences.add_theme_font_size_override(&"font_size", 12)
+	licences.pressed.connect(func() -> void: add_child(Licences.new()))
+	box.add_child(licences)
 	if not Net.is_online() and GameState.time_speed > 0:
 		_paused_from = GameState.time_speed
 		GameState.time_speed = 0

@@ -740,7 +740,7 @@ func _load_json(path: String) -> Dictionary:
 
 
 ## What a recovery boat can carry: "Any 1 lost ship", or the biggest models it
-## can carry, e.g. "Up to Greenline 200 / Coastal size".
+## can carry, e.g. "Up to Feedermax 200 / Coastal size".
 func carries_text(model: Dictionary) -> String:
 	var carries: Array = model.get("carries", [])
 	if carries.is_empty():
