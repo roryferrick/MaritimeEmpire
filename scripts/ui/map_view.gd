@@ -3574,7 +3574,13 @@ func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: floa
 	var port := ship.to_port if arriving else ship.from_port
 	if _is_hidden(port_screen_position(port)):
 		return []
-	var harbour := _harbour_end(ship, port, arriving)
+	return _lane_curve(lane, length, arriving, reach, _harbour_end(ship, port, arriving), not arriving and _left_from_anchor(ship))
+
+
+## The curve between a lane, `reach` nm from its end (arriving) or start, and
+## a harbour pose (screen): [screen points, poses, shaped poses], or [] if
+## either end is round the far side. `loose`: leaving from a spot at anchor.
+func _lane_curve(lane, length: float, arriving: bool, reach: float, harbour: Array, loose := false) -> Array:
 	var mile := length - reach if arriving else reach
 	var sample: Array = lane.sample(clampf(mile, 0.0, length))
 	var edge := world_to_screen(sample[0])
@@ -3582,7 +3588,7 @@ func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: floa
 		return []
 	var on_lane := [edge, _heading_angle(sample[1], sample[0])]
 	var poses := [on_lane, harbour] if arriving else [harbour, on_lane]
-	var shaped := _loosen(poses, not arriving and _left_from_anchor(ship), false)
+	var shaped := _loosen(poses, loose, false)
 	return [_pose_path(shaped, HARBOUR_CURVE_HANDLE), poses, shaped]
 
 
@@ -3590,26 +3596,42 @@ func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: floa
 ## out of port: [arriving, leaving], worked out once a leg (0 for none).
 func _harbour_reaches(ship: Ship, lane, length: float) -> PackedFloat32Array:
 	var key := [ship.from_port, ship.to_port]
-	var keep := true  # (Not while a port is round the far side: worked out again when it comes round.)
 	var cached: Array = _harbour_reach_cache.get(ship, [])
 	if not cached.is_empty() and cached[0] == key:
 		return cached[1]
+	var ends := []
+	for i in 2:
+		var port := ship.to_port if i == 0 else ship.from_port
+		ends.append([] if port.is_empty() or _is_hidden(port_screen_position(port)) else _harbour_end(ship, port, i == 0))
+	var found := _lane_reaches(lane, length, ship.to_port, ship.from_port, ends, _left_from_anchor(ship))
+	if found[1]:  # (Not while a port is round the far side: worked out again when it comes round.)
+		_harbour_reach_cache[ship] = [key, found[0]]
+	return found[0]
+
+
+## How far (nm of lane) from each end of a lane the curves to its harbours
+## take, [arriving, leaving], for the harbour poses `ends` (screen; [] for
+## none): HARBOUR_REACH times the harbour's distance from its port, at least
+## HARBOUR_MIN_NM, more if the curve is longer (so it's never faster than at
+## sea), the two sharing a short lane. [reaches, true if both ports showed].
+func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends: Array, loose := false) -> Array:
 	var px_per_nm := _zoom / 60.0
 	var reaches := PackedFloat32Array([0.0, 0.0])
+	var shown := true
 	for i in 2:
 		var arriving := i == 0
-		var port := ship.to_port if arriving else ship.from_port
+		var port := to_port if arriving else from_port
 		if port.is_empty():
 			continue
-		if _is_hidden(port_screen_position(port)):
-			keep = false
+		var harbour: Array = ends[i]
+		if harbour.is_empty() or _is_hidden(port_screen_position(port)):
+			shown = false
 			continue
-		var harbour := _harbour_end(ship, port, arriving)
 		var reach := maxf((harbour[0] as Vector2).distance_to(port_screen_position(port)) / px_per_nm * HARBOUR_REACH, HARBOUR_MIN_NM)
 		# A longer curve than its stretch of lane would be faster than at sea:
 		# give it as much lane as it's long.
 		for k in 3:
-			var curve := _harbour_curve(ship, lane, length, arriving, minf(reach, length))
+			var curve := _lane_curve(lane, length, arriving, minf(reach, length), harbour, loose and not arriving)
 			if curve.is_empty():
 				break
 			var curve_nm := _path_length(curve[0]) / px_per_nm
@@ -3622,9 +3644,7 @@ func _harbour_reaches(ship: Ship, lane, length: float) -> PackedFloat32Array:
 		var fit := length / (reaches[0] + reaches[1])
 		reaches[0] *= fit
 		reaches[1] *= fit
-	if keep:
-		_harbour_reach_cache[ship] = [key, reaches]
-	return reaches
+	return [reaches, shown]
 
 
 func _draw_overlay() -> void:
@@ -3905,25 +3925,95 @@ func _draw_active_lanes() -> void:
 				key += " " + GameState.owner_of(ship).name
 			var into := lanes if mine else others
 			if not into.has(key):
-				into[key] = [leg[0], leg[1], color]
+				into[key] = [leg[0], leg[1], color, false]
+			elif into[key][0] != leg[0]:
+				into[key][3] = true  # (Sailed both ways: the way back's harbour curves too.)
 	for lane: Array in others.values() + lanes.values():
-		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH)
+		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH, lane[3])
 
 
-func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, width := 2.5) -> void:
+## A lane from one port to another as ships sail it: where a port's marina
+## shows, off the lane and round to its harbour mouth on the right-hand side
+## (the ships' own curves, see _harbour_pose()) and in through its entrance,
+## stopping there, where they part for their berths. `both_ways`: the way
+## back too, its curves only (sharing this one's middle).
+func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, width := 2.5, both_ways := false) -> void:
 	var sea_lane = GameData.lane(from_port, to_port)
 	if sea_lane == null:
 		return
-	# Its points on the sphere are worked out once; on screen, it's cut where
-	# it goes round the far side of the globe.
+	var pieces := _lane_pieces(sea_lane, from_port, to_port)
+	var line := PackedVector2Array()
+	for piece: PackedVector2Array in pieces:
+		line.append_array(piece)
+	_draw_line_runs(line, color, dashed, width)
+	if both_ways:
+		var back = GameData.lane(to_port, from_port)
+		if back != null:
+			var back_pieces := _lane_pieces(back, to_port, from_port)
+			_draw_line_runs(back_pieces[0], color, dashed, width)
+			_draw_line_runs(back_pieces[2], color, dashed, width)
+
+
+## A lane on screen in three pieces: the curve out of its first port's
+## harbour, the lane between, and the curve into its last port's (the curves
+## empty where a port's marina doesn't show, the lane then running on to it).
+func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedVector2Array]:
+	# Its points on the sphere are worked out once.
 	var units: PackedVector3Array = _lane_units.get(sea_lane, PackedVector3Array())
 	if units.is_empty():
 		for p: Vector2 in sea_lane.points:
 			units.append(_unit(p))
 		_lane_units[sea_lane] = units
-	var points := PackedVector2Array()
-	for p in units:
-		points.append(_unit_to_screen(p))
+	var length: float = sea_lane.length()
+	var near := Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)
+	var ends := []
+	var curved := false
+	for i in 2:
+		var arriving := i == 0
+		var port := to_port if arriving else from_port
+		var root := port_screen_position(port)
+		if _is_hidden(root) or not near.has_point(root) or not _marina_shown(port):
+			ends.append([])
+		else:
+			ends.append(_keep_right(port, _entrance_pose(port, false, arriving)))
+			curved = true
+	var curves: Array[PackedVector2Array] = [PackedVector2Array(), PackedVector2Array()]  # [in, out]
+	var reaches := PackedFloat32Array([0.0, 0.0])
+	if curved:
+		reaches = _lane_reaches(sea_lane, length, to_port, from_port, ends)[0]
+		for i in 2:
+			if reaches[i] <= 0.0:
+				continue
+			var curve := _lane_curve(sea_lane, length, i == 0, reaches[i], ends[i])
+			if curve.is_empty():
+				reaches[i] = 0.0
+				continue
+			curves[i] = curve[0]
+			# On in through the entrance itself (from just outside the mouth), where
+			# ships part for their berths.
+			var port := to_port if i == 0 else from_port
+			var layout := _port_layout(port)
+			var gate := _keep_right(port, _entrance_pose(port, false, i == 0, float(layout.radius) / (layout.mouth as Vector2).x))
+			if i == 0:
+				curves[i].append(gate[0])
+			else:
+				curves[i].insert(0, gate[0])
+	var middle := PackedVector2Array()
+	var start := reaches[1]
+	var stop := length - reaches[0]
+	if start > 0.0:
+		middle.append(world_to_screen(sea_lane.sample(start)[0]))
+	for k in units.size():
+		var mile: float = sea_lane.miles[k]
+		if (mile > start or start <= 0.0 and k == 0) and (mile < stop or reaches[0] <= 0.0 and k == units.size() - 1):
+			middle.append(_unit_to_screen(units[k]))
+	if reaches[0] > 0.0:
+		middle.append(world_to_screen(sea_lane.sample(stop)[0]))
+	return [curves[1], middle, curves[0]]
+
+
+## A line on screen, drawn on the near side of the globe only.
+func _draw_line_runs(points: PackedVector2Array, color: Color, dashed: bool, width: float) -> void:
 	for part in _visible_runs(points):
 		if dashed:
 			for i in range(1, part.size()):
