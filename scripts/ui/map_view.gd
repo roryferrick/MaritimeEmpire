@@ -286,6 +286,22 @@ const LABEL_CELL_DEG := 10.0
 ## Route lines are looked at in chunks of this many points, so the parts that
 ## can't be in view are skipped (see _chunk_caps()).
 const LANE_CHUNK := 32
+## Lanes bend round the harbours of ports they pass but aren't sailing to (see
+## _bent_lane()): each port's keep-out zone reaches this many times its mouth's
+## distance from it (round its marina and approach curves), filled in every
+## ZONE_STEP_DEG where a lane bends; zones checked again every ZONE_CHECK_S; a
+## ship's heading there taken over ZONE_HEADING_NM either side of it.
+const ZONE_MOUTHS := 1.8
+const ZONE_STEP_DEG := 0.04
+const ZONE_CHECK_S := 5.0
+const ZONE_HEADING_NM := 2.0
+## How far along a lane (points) how far it may bend is smoothed (see _bent_lane()).
+const ZONE_SMOOTH_POINTS := 8
+## A push this small (degrees) is let be even onto the land (see _bent_lane()).
+const ZONE_FREE_DEG := 0.08
+## The land's triangles are sorted into cells this big (projected degrees) to
+## tell if a point's on the land (see _on_land()).
+const LAND_CELL_DEG := 1.0
 ## How far (projected degrees) the view moves before route lines' harbour curves
 ## are worked out again (see _lane_pieces()): the globe's turn changes them
 ## by a hair over that.
@@ -501,6 +517,11 @@ var _drag_samples: Array = []
 var _lane_units := {}
 ## Each lane's chunks (see _chunk_caps()), worked out with its points.
 var _lane_caps := {}
+## Canals' boxes (lon, lat), where lanes don't bend (see _in_canal()).
+var _canal_boxes: Array[Rect2] = []
+## The land's triangles by cell (see _on_land()), and the task sorting them.
+static var _land_cells := {}
+static var _land_task := -1
 ## The fleet's lanes (see _active_lanes()), and when (ms) they were worked out.
 var _active_lanes_cache := []
 var _active_lanes_time := -1
@@ -969,6 +990,7 @@ func _ready() -> void:
 	_fauna_layer.draw.connect(_draw_fauna)
 	_fauna_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_load_decor()
+	_start_land_cells()  # (For bending lanes round harbours: see _bent_lane().)
 	_weather_layer.draw.connect(_draw_weather_layer)
 	_canal_layer.draw.connect(_draw_canal_layer)
 	_static_layer.draw.connect(_draw_static_layer)
@@ -1202,11 +1224,11 @@ func ship_screen_position(ship: Ship) -> Vector2:
 			return pose[0]
 		if ship.is_tug() and ship.job_phase == Ship.JOB_TOW and ship.rescuing != null:
 			# At the ship it's towing, as that's drawn (eased into its harbour near port).
-			return ship_screen_position(ship.rescuing) + Vector2.from_angle(_heading_angle(ship.heading(), ship.world_position())) * _tug_offset(ship)
+			return ship_screen_position(ship.rescuing) + Vector2.from_angle(_heading_angle(_ship_heading(ship), _ship_world(ship))) * _tug_offset(ship)
 		var harbour := _harbour_pose(ship)
 		if not harbour.is_empty():
 			return harbour[0]
-		return world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
+		return world_to_screen(_ship_world(ship)) + _canal_lane_offset(ship)
 	if docks_shown():
 		return _docked_pose(ship)[0]
 	if ship.is_tug():
@@ -1256,7 +1278,7 @@ func _screen_angle(ship: Ship) -> float:
 		var harbour := _harbour_pose(ship)
 		if not harbour.is_empty():
 			return harbour[1]
-	return _heading_angle(ship.heading(), ship.world_position())
+	return _heading_angle(_ship_heading(ship), _ship_world(ship))
 
 
 ## The on-screen angle of a heading (a direction in map coordinates, which keep
@@ -1303,10 +1325,11 @@ func _lane_angle(from_port: String, to_port: String, mile: float) -> float:
 func _turning_pose(ship: Ship) -> Array:
 	if ship.is_docked() or ship.from_port.is_empty() or not (ship.is_recovery() or ship.is_icebreaker() or ship.is_tug()):
 		return []
-	var base := world_to_screen(ship.world_position()) + _canal_lane_offset(ship)
+	var base := world_to_screen(_ship_world(ship)) + _canal_lane_offset(ship)
 	var look_rect: Rect2 = _model_look(ship.model_id)[7]
 	var radius := look_rect.size.x * TURN_RADIUS_LENGTHS * _ship_scale()
-	var lane_angle := _heading_angle(ship.lane_heading(), ship.world_position())
+	var on_lane := _ship_bent(ship)
+	var lane_angle := _heading_angle(on_lane[1], on_lane[0]) if not on_lane.is_empty() else _heading_angle(ship.lane_heading(), ship.world_position())
 	if ship.is_tug():
 		# Out at the lost ship, it turns round to face home and takes its place
 		# for the tow: ahead of the ship (the lead, on the tow line) or at its stern.
@@ -1334,7 +1357,7 @@ func _turning_pose(ship: Ship) -> Array:
 	# and sets off from there along the lane.
 	if ship.align_time < Ship.ALIGN_SECONDS + Ship.LOAD_SECONDS:
 		return [base + Vector2.from_angle(lane_angle) * _recovery_offset(ship) * _ship_scale(), lane_angle]
-	return [base, _heading_angle(ship.heading(), ship.world_position())]
+	return [base, _heading_angle(_ship_heading(ship), _ship_world(ship))]
 
 
 ## Where a tug on a tow sits (screen px along the way it's towing, from the
@@ -1473,7 +1496,7 @@ func focus_port(port_id: String) -> void:
 ## Brings a ship (its port while docked) into view, keeping the zoom: centered
 ## across, and raised_px above the middle (to leave room for its popup below).
 func focus_ship(ship: Ship, raised_px := 0.0) -> void:
-	_look_at(GameData.port_position(ship.docked_at) if ship.is_docked() else ship.world_position())
+	_look_at(GameData.port_position(ship.docked_at) if ship.is_docked() else _ship_world(ship))
 	_look_at(screen_to_world(size / 2.0 + Vector2(0.0, raised_px)))
 	_changed()
 
@@ -3783,15 +3806,16 @@ func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: floa
 	var port := ship.to_port if arriving else ship.from_port
 	if _is_hidden(port_screen_position(port)):
 		return []
-	return _lane_curve(lane, length, arriving, reach, _harbour_end(ship, port, arriving), not arriving and _left_from_anchor(ship))
+	return _lane_curve(lane, ship.from_port, ship.to_port, length, arriving, reach, _harbour_end(ship, port, arriving), not arriving and _left_from_anchor(ship))
 
 
 ## The curve between a lane, `reach` nm from its end (arriving) or start, and
-## a harbour pose (screen): [screen points, poses, shaped poses], or [] if
-## either end is round the far side. `loose`: leaving from a spot at anchor.
-func _lane_curve(lane, length: float, arriving: bool, reach: float, harbour: Array, loose := false) -> Array:
+## a harbour pose (screen), from_port and to_port the lane's ports: [screen
+## points, poses, shaped poses], or [] if either end is round the far side.
+## `loose`: leaving from a spot at anchor.
+func _lane_curve(lane, from_port: String, to_port: String, length: float, arriving: bool, reach: float, harbour: Array, loose := false) -> Array:
 	var mile := length - reach if arriving else reach
-	var sample: Array = lane.sample(clampf(mile, 0.0, length))
+	var sample: Array = _bent_sample(lane, from_port, to_port, clampf(mile, 0.0, length))  # (Bent round other harbours.)
 	var edge := world_to_screen(sample[0])
 	if _is_hidden(edge) or _is_hidden(harbour[0]):
 		return []
@@ -3840,7 +3864,7 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 		# A longer curve than its stretch of lane would be faster than at sea:
 		# give it as much lane as it's long.
 		for k in 3:
-			var curve := _lane_curve(lane, length, arriving, minf(reach, length), harbour, loose and not arriving)
+			var curve := _lane_curve(lane, from_port, to_port, length, arriving, minf(reach, length), harbour, loose and not arriving)
 			if curve.is_empty():
 				break
 			var curve_nm := _path_length(curve[0]) / px_per_nm
@@ -4282,10 +4306,13 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 ## harbour, the lane between, and the curve into its last port's (the curves
 ## empty where a port's marina doesn't show, the lane then running on to it).
 func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedVector2Array]:
-	# Its points on the sphere are worked out once.
+	# Its points (bent round other ports' harbours: see _bent_lane()) on the
+	# sphere are worked out once.
+	var bent := _bent_lane(sea_lane, from_port, to_port)
+	var lane_miles: PackedFloat64Array = bent.miles
 	var units: PackedVector3Array = _lane_units.get(sea_lane, PackedVector3Array())
 	if units.is_empty():
-		for p: Vector2 in sea_lane.points:
+		for p: Vector2 in bent.points:
 			units.append(_unit(p))
 		_lane_units[sea_lane] = units
 		_lane_caps[sea_lane] = _chunk_caps(units)
@@ -4318,7 +4345,7 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 			for i in 2:
 				if memo[0][i] <= 0.0:
 					continue
-				var curve := _lane_curve(sea_lane, length, i == 0, memo[0][i], ends[i])
+				var curve := _lane_curve(sea_lane, from_port, to_port, length, i == 0, memo[0][i], ends[i])
 				if curve.is_empty():
 					memo[0][i] = 0.0  # (Round the far side: straight in.)
 					continue
@@ -4345,7 +4372,7 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 	var start := reaches[1]
 	var stop := length - reaches[0]
 	if start > 0.0:
-		middle.append(world_to_screen(sea_lane.sample(start)[0]))
+		middle.append(world_to_screen(_bent_sample(sea_lane, from_port, to_port, start)[0]))
 	# A chunk of it that can't be in view (all of it, and the way on to the next,
 	# round the far side or off the edge) isn't worked out, just broken off.
 	if not _lane_caps.has(sea_lane):
@@ -4361,12 +4388,351 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 				middle.append(HIDDEN)
 			continue
 		for k in range(first, mini(first + LANE_CHUNK, units.size())):
-			var mile: float = sea_lane.miles[k]
+			var mile: float = lane_miles[k]
 			if (mile > start or start <= 0.0 and k == 0) and (mile < stop or reaches[0] <= 0.0 and k == units.size() - 1):
 				middle.append(_unit_to_screen(units[k]))
 	if reaches[0] > 0.0:
-		middle.append(world_to_screen(sea_lane.sample(stop)[0]))
+		middle.append(world_to_screen(_bent_sample(sea_lane, from_port, to_port, stop)[0]))
 	return [curves[1], middle, curves[0]]
+
+
+# --- Lanes bent round other ports' harbours --------------------------------------
+
+## Each port's keep-out zone (see _port_zones()) and the bent lanes made with
+## them (see _bent_lane()); and when the zones were last checked (ms).
+var _zones: Array = []
+var _zone_cells := {}
+var _bent_lanes := {}
+var _zones_checked := -1
+
+
+## Every port's keep-out zone, round its marina and its approach curves: [(lon,
+## lat), radius (degrees), port id], those of ports on a canal left out (a
+## canal's lanes stay in it). Marinas are a fixed size in the world, so the
+## zones are too; checked again every ZONE_CHECK_S, as ports grow and hubs
+## come and go, and the bent lanes made again if they've changed.
+func _port_zones() -> Array:
+	var now := Time.get_ticks_msec()
+	if _zones_checked >= 0 and now - _zones_checked < ZONE_CHECK_S * 1000.0:
+		return _zones
+	_zones_checked = now
+	var zones := []
+	for port: Dictionary in GameData.ports:
+		var port_id: String = port.id
+		if _is_canal_port(port_id):
+			continue
+		var layout := _port_layout(port_id)
+		var reach := (layout.mouth as Vector2).x * ZONE_MOUTHS / SHIP_WORLD_ZOOM
+		zones.append([Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))), reach, port_id])
+	if zones != _zones:
+		_zones = zones
+		_zone_cells.clear()
+		for i in zones.size():
+			var cell := _label_cell(zones[i][0])
+			if not _zone_cells.has(cell):
+				_zone_cells[cell] = PackedInt32Array()
+			_zone_cells[cell].append(i)
+		_bent_lanes.clear()
+		_lane_units.clear()
+		_lane_caps.clear()
+		_lane_reach_memo.clear()
+	return _zones
+
+
+## The zones near a (lon, lat) point (within a cell of it).
+func _zones_near(lon_lat: Vector2) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	var cell := _label_cell(lon_lat)
+	var columns := ceili(360.0 / LABEL_CELL_DEG)
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			out.append_array(_zone_cells.get(Vector2i(posmod(cell.x + dx, columns), cell.y + dy), PackedInt32Array()))
+	return out
+
+
+## A lane as it's drawn and sailed on the map: bent out round the harbours of
+## ports it passes but isn't sailing to, so it doesn't cut through their
+## marinas, jetties or approach curves (the ships' way in and out), pushed out
+## smoothly to the edge of each one's zone (ZONE_MOUTHS times its mouth's
+## distance from the port). Not near its own ports, nor in a canal, nor onto
+## the land (where the sea's too narrow, it doesn't bend). Its points are the
+## lane's, with more where it bends, each at the same mile along it as before,
+## so ships take just as long: {points (projected), miles, bent (1 where a
+## point was moved)}. Made once.
+func _bent_lane(sea_lane, from_port: String, to_port: String) -> Dictionary:
+	_port_zones()
+	if _bent_lanes.has(sea_lane):
+		return _bent_lanes[sea_lane]
+	var ends := []
+	for port_id: String in [from_port, to_port]:
+		var port := GameData.get_port(port_id)
+		var reach := _zone_reach(port_id)
+		ends.append([Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))), reach])
+	var points := PackedVector2Array()
+	var miles := PackedFloat64Array()
+	var bent := PackedByteArray()
+	var from_points := PackedVector2Array()  # (lon, lat): as the lane goes, and pushed out.
+	var to_points := PackedVector2Array()
+	var lane_points: PackedVector2Array = sea_lane.points
+	var lane_miles: PackedFloat64Array = sea_lane.miles
+	for i in lane_points.size():
+		# More points along a stretch passing near a zone, so it bends smoothly.
+		var steps := 1
+		if i > 0:
+			var a := Geo.unproject(lane_points[i - 1])
+			var b := Geo.unproject(lane_points[i])
+			if _near_zone(a, b, from_port, to_port):
+				steps = maxi(ceili(a.distance_to(b) / ZONE_STEP_DEG), 1)
+		for s in range(1 if i > 0 else 0, steps + 1):
+			var share := float(s) / steps
+			var at := lane_points[i] if i == 0 or s == steps else lane_points[i - 1].lerp(lane_points[i], share)
+			var mile := lane_miles[i] if i == 0 or s == steps else lerpf(lane_miles[i - 1], lane_miles[i], share)
+			var lon_lat := Geo.unproject(at)
+			from_points.append(lon_lat)
+			to_points.append(_bend(lon_lat, from_port, to_port, ends))
+			points.append(at)
+			miles.append(mile)
+	# How far each point may go before it reaches the land (the map's own land,
+	# islands and all: see _on_land()), smoothed along the lane so it bends
+	# smoothly and stays off the land: where the sea's too narrow (a strait),
+	# hardly at all. A small push is let be.
+	_land_ready()
+	var room := PackedFloat32Array()
+	for k in points.size():
+		var share := 1.0
+		if from_points[k].distance_to(to_points[k]) > ZONE_FREE_DEG and _on_land(to_points[k]):
+			var low := 0.0
+			var high := 1.0
+			for step in 5:
+				var mid := (low + high) / 2.0
+				if _on_land(from_points[k].lerp(to_points[k], mid)):
+					high = mid
+				else:
+					low = mid
+			share = low
+		room.append(share)
+	room = _smoothed(_least_near(room, ZONE_SMOOTH_POINTS / 2), ZONE_SMOOTH_POINTS)
+	for k in points.size():
+		if from_points[k] != to_points[k] and room[k] > 0.0:
+			points[k] = Geo.project(from_points[k].lerp(to_points[k], room[k]))
+			bent.append(1)
+		else:
+			bent.append(0)
+	var made := {points = points, miles = miles, bent = bent}
+	_bent_lanes[sea_lane] = made
+	return made
+
+
+## True if a (lon, lat) point is on the land, as the map draws it (islands
+## and all): in one of its land triangles, looked up by LAND_CELL_DEG cell.
+static func _on_land(lon_lat: Vector2) -> bool:
+	var p := Geo.project(Vector2(wrapf(lon_lat.x, -180.0, 180.0), lon_lat.y))
+	var triangles := GameData.world_map.land_triangles
+	for i: int in _land_cells.get(Vector2i(floori(p.x / LAND_CELL_DEG), floori(p.y / LAND_CELL_DEG)), PackedInt32Array()):
+		if Geometry2D.point_is_inside_triangle(p, triangles[i], triangles[i + 1], triangles[i + 2]):
+			return true
+	return false
+
+
+## Starts sorting the land's triangles into cells (see _on_land()) off the
+## main thread, once (it takes a moment: there are some 180,000).
+static func _start_land_cells() -> void:
+	if _land_task < 0 and _land_cells.is_empty():
+		_land_task = WorkerThreadPool.add_task(_build_land_cells, false, "Land cells")
+
+
+static func _build_land_cells() -> void:
+	var cells := {}
+	var triangles := GameData.world_map.land_triangles
+	for i in range(0, triangles.size(), 3):
+		var box := Rect2(triangles[i], Vector2.ZERO).expand(triangles[i + 1]).expand(triangles[i + 2])
+		for x in range(floori(box.position.x / LAND_CELL_DEG), floori(box.end.x / LAND_CELL_DEG) + 1):
+			for y in range(floori(box.position.y / LAND_CELL_DEG), floori(box.end.y / LAND_CELL_DEG) + 1):
+				var cell := Vector2i(x, y)
+				if not cells.has(cell):
+					cells[cell] = PackedInt32Array()
+				cells[cell].append(i)
+	_land_cells = cells
+
+
+## Waits for the land's cells (see _start_land_cells()), if they're still being made.
+static func _land_ready() -> void:
+	if _land_task < 0 and _land_cells.is_empty():
+		_start_land_cells()
+	if _land_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_land_task)
+		_land_task = -1
+
+
+## Each value as the least within `reach` places either side of it.
+static func _least_near(values: PackedFloat32Array, reach: int) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(values.size())
+	for i in values.size():
+		var least := values[i]
+		for j in range(maxi(i - reach, 0), mini(i + reach + 1, values.size())):
+			least = minf(least, values[j])
+		out[i] = least
+	return out
+
+
+## Each value as the average of those within `reach` places either side of it.
+static func _smoothed(values: PackedFloat32Array, reach: int) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(values.size())
+	for i in values.size():
+		var total := 0.0
+		var count := 0
+		for j in range(maxi(i - reach, 0), mini(i + reach + 1, values.size())):
+			total += values[j]
+			count += 1
+		out[i] = total / count
+	return out
+
+
+## A port's keep-out zone's radius (degrees), or 0 for one without (on a canal).
+func _zone_reach(port_id: String) -> float:
+	for zone: Array in _port_zones():
+		if zone[2] == port_id:
+			return zone[1]
+	return 0.0
+
+
+## True if a stretch of lane from a to b (lon, lat) comes within reach of a
+## zone it bends round.
+func _near_zone(a: Vector2, b: Vector2, from_port: String, to_port: String) -> bool:
+	var indices := _zones_near(a)
+	indices.append_array(_zones_near(b))
+	for i in indices:
+		var zone: Array = _zones[i]
+		if zone[2] == from_port or zone[2] == to_port:
+			continue
+		var center: Vector2 = zone[0]
+		var squash := cos(deg_to_rad(center.y))
+		var pa := Vector2(wrapf(a.x - center.x, -180.0, 180.0) * squash, a.y - center.y)
+		var pb := Vector2(wrapf(b.x - center.x, -180.0, 180.0) * squash, b.y - center.y)
+		if Geometry2D.get_closest_point_to_segment(Vector2.ZERO, pa, pb).length() < float(zone[1]) * 2.0 + ZONE_STEP_DEG:
+			return true
+	return false
+
+
+## A lane's (lon, lat) point bent out of the zones of the ports near it it
+## isn't sailing to (`ends`: its own two ports' [(lon, lat), zone radius]):
+## inside twice a zone's radius, pushed out from its port, by the radius right
+## at the port and less and less further out, reaching nothing at twice the
+## radius (smoothly, so the lane curves round it). The push fades out near its
+## own ports (it comes in to them as it was) and in canals.
+func _bend(lon_lat: Vector2, from_port: String, to_port: String, ends: Array) -> Vector2:
+	var out := lon_lat
+	for i in _zones_near(lon_lat):
+		var zone: Array = _zones[i]
+		if zone[2] == from_port or zone[2] == to_port:
+			continue
+		var center: Vector2 = zone[0]
+		var reach: float = zone[1]
+		var squash := maxf(cos(deg_to_rad(center.y)), 0.05)
+		var off := Vector2(wrapf(out.x - center.x, -180.0, 180.0) * squash, out.y - center.y)
+		var d := off.length()
+		if d >= reach * 2.0:
+			continue
+		var push := (reach * 2.0 - d) * (reach * 2.0 - d) / (4.0 * reach)
+		var way := off / d if d > 0.000001 else Vector2.RIGHT
+		out += Vector2(way.x * push / squash, way.y * push)
+	if out == lon_lat:
+		return lon_lat
+	# Fading out near its own ports and in canals.
+	var weight := 1.0
+	for end: Array in ends:
+		var center: Vector2 = end[0]
+		var squash := cos(deg_to_rad(center.y))
+		var d := Vector2(wrapf(lon_lat.x - center.x, -180.0, 180.0) * squash, lon_lat.y - center.y).length()
+		var own := maxf(float(end[1]), 0.05)
+		weight = minf(weight, smoothstep(own * 0.25, own * 0.6, d))
+	if weight <= 0.0 or _in_canal(lon_lat):
+		return lon_lat
+	# (Pushed away from a port on the coast, a lane goes out to sea: no check
+	# against the land, which on the coarse sea map would leave it jagged.)
+	return lon_lat.lerp(out, weight)
+
+
+## True if a (lon, lat) point is in or by a canal (its path's box, a little grown).
+func _in_canal(lon_lat: Vector2) -> bool:
+	if _canal_boxes.is_empty():
+		for canal: Dictionary in GameData.canals:
+			var path: Array = canal.get("path", [])
+			if path.is_empty():
+				continue
+			var box := Rect2(Vector2(path[0][0], path[0][1]), Vector2.ZERO)
+			for point: Array in path:
+				box = box.expand(Vector2(point[0], point[1]))
+			_canal_boxes.append(box.grow(0.5))
+	for box: Rect2 in _canal_boxes:
+		if box.has_point(lon_lat):
+			return true
+	return false
+
+
+## Where along a bent lane (_bent_lane()) a ship `mile` along it is, and which
+## way it's heading: [projected position, direction], as the lane's own
+## sample() where it isn't bent.
+func _bent_sample(sea_lane, from_port: String, to_port: String, mile: float) -> Array:
+	var made := _bent_lane(sea_lane, from_port, to_port)
+	var miles: PackedFloat64Array = made.miles
+	var points: PackedVector2Array = made.points
+	var bent: PackedByteArray = made.bent
+	mile = clampf(mile, 0.0, sea_lane.length())
+	var i := clampi(miles.bsearch(mile), 1, points.size() - 1)
+	if bent[i] == 0 and bent[i - 1] == 0:
+		return sea_lane.sample(mile)
+	var span := miles[i] - miles[i - 1]
+	var t := (mile - miles[i - 1]) / span if span > 0.0 else 1.0
+	var at := points[i - 1].lerp(points[i], t)
+	# Its heading: the way the bent lane goes a little either side of it.
+	var ahead := _bent_point(made, minf(mile + ZONE_HEADING_NM, sea_lane.length()))
+	var behind := _bent_point(made, maxf(mile - ZONE_HEADING_NM, 0.0))
+	var way := ahead - behind
+	return [at, way.normalized() if way.length() > 0.000001 else sea_lane.sample(mile)[1]]
+
+
+static func _bent_point(made: Dictionary, mile: float) -> Vector2:
+	var miles: PackedFloat64Array = made.miles
+	var points: PackedVector2Array = made.points
+	var i := clampi(miles.bsearch(mile), 1, points.size() - 1)
+	var span := miles[i] - miles[i - 1]
+	return points[i - 1].lerp(points[i], (mile - miles[i - 1]) / span if span > 0.0 else 1.0)
+
+
+## Where a ship is on the map (projected), as drawn: on its lane bent round
+## other ports' harbours (see _bent_lane()); a carried or towed one with its
+## rescuer; docked, at its port.
+func _ship_world(ship: Ship) -> Vector2:
+	if ship.is_carried() or ship.is_towed():
+		return _ship_world(ship.rescuer)
+	var here := _ship_bent(ship)
+	return here[0] if not here.is_empty() else ship.world_position()
+
+
+## Which way a ship's heading on the map (projected), as drawn: along its bent
+## lane (see _ship_world()), unless it's turning about (Ship.heading()).
+func _ship_heading(ship: Ship) -> Vector2:
+	if ship.is_carried():
+		return -_ship_heading(ship.rescuer) if ship.rescuer.carry_flipped() else _ship_heading(ship.rescuer)
+	if ship.is_towed():
+		return _ship_heading(ship.rescuer)
+	if ship.job_phase == Ship.JOB_ALIGN:
+		return ship.heading()
+	var here := _ship_bent(ship)
+	return here[1] if not here.is_empty() else ship.heading()
+
+
+## A ship's place on its bent lane ([position, direction]), or [] off a lane.
+func _ship_bent(ship: Ship) -> Array:
+	if ship.is_docked() or ship.from_port.is_empty() or ship.to_port.is_empty():
+		return []
+	var sea_lane = GameData.lane(ship.from_port, ship.to_port)
+	if sea_lane == null:
+		return []
+	return _bent_sample(sea_lane, ship.from_port, ship.to_port, ship.traveled_nm)
 
 
 ## A line's points on the sphere in chunks of LANE_CHUNK (each with the next
@@ -4688,7 +5054,7 @@ func _draw_tow_lines() -> void:
 	for tug in GameState.ships:
 		if not tug.is_tug() or not tug.tug_lead or tug.job_phase != Ship.JOB_TOW or tug.rescuing == null:
 			continue
-		var along := Vector2.from_angle(_heading_angle(tug.heading(), tug.world_position()))
+		var along := Vector2.from_angle(_heading_angle(_ship_heading(tug), _ship_world(tug)))
 		var tug_rect: Rect2 = _model_look(tug.model_id)[7]
 		var ship_rect: Rect2 = _model_look(tug.rescuing.model_id)[7]
 		var stern := ship_screen_position(tug) - along * tug_rect.size.x / 2.0 * _ship_scale()
@@ -4759,7 +5125,7 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	if not ship.is_docked() and not ship.is_service() and ship.rescuer == null and not ship.canal_state in [Ship.CANAL_ANCHORED, Ship.CANAL_CONVOY, Ship.CANAL_TOLL]:
 		# A cargo ship on its lane (most of them): where and which way from
 		# one sample of the lane.
-		var here := ship.lane_sample()
+		var here := _ship_bent(ship)
 		if here.is_empty():
 			return
 		var on_lane := world_to_screen(here[0])
@@ -5639,7 +6005,7 @@ func _track_icebreakers() -> bool:
 	for ship in GameState.ships:
 		if not ship.is_icebreaker() or ship.is_docked() or ship.from_port.is_empty():
 			continue
-		var at := ship.world_position()
+		var at := _ship_world(ship)
 		if not _in_ice(at):
 			continue
 		var track: Array = _ice_tracks.get_or_add(ship, [])
