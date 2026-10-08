@@ -3227,6 +3227,7 @@ func continue_game(slot: int) -> String:
 ## this player's company the one at `local` (the save's own if -1). Saves from
 ## before companies load as their one company.
 func load_world(data: Dictionary, local := -1) -> void:
+	data = _without_retired_ports(data)
 	companies.clear()
 	for company_data: Dictionary in data.get("companies", [data]):
 		companies.append(Company.from_dict(company_data))
@@ -3333,3 +3334,46 @@ func _begin_session() -> void:
 	in_session = true
 	icebreaking.refresh(true)
 	_autosave_timer.start()
+
+
+## A save with every port taken out of the game (GameData.RETIRED_PORTS) swapped
+## for the port that took its place, wherever it's named (ships' routes, where
+## they are and are bound, hubs, home ports...), so nothing points at a port
+## that's gone. A company left with two hubs at one port keeps its HQ (or the
+## first).
+func _without_retired_ports(data: Variant) -> Variant:
+	if data is String:
+		return GameData.RETIRED_PORTS.get(data, data)
+	if data is Array:
+		var out := []
+		for item: Variant in data:
+			out.append(_without_retired_ports(item))
+		return out
+	if data is Dictionary:
+		var out := {}
+		for key: Variant in data:
+			out[key] = _without_retired_ports(data[key])
+		# A route that now stops twice in a row at one port stops there once.
+		for key: String in ["route", "pending_route"]:
+			if out.get(key) is Array and (out[key] as Array).size() > 1:
+				var stops := []
+				for stop: Variant in out[key]:
+					if stops.is_empty() or stops[-1] != stop:
+						stops.append(stop)
+				while stops.size() > 1 and stops[0] == stops[-1]:
+					stops.pop_back()
+				out[key] = stops if stops.size() > 1 else []
+		if out.has("hubs") and out.hubs is Array:
+			var kept := []
+			var ports := {}
+			for hub: Variant in out.hubs:
+				if hub is Dictionary and ports.has(hub.get("port_id", "")):
+					if bool(hub.get("is_hq", false)):
+						kept[ports[hub.port_id]] = hub  # The HQ wins.
+					continue
+				if hub is Dictionary:
+					ports[hub.get("port_id", "")] = kept.size()
+				kept.append(hub)
+			out.hubs = kept
+		return out
+	return data

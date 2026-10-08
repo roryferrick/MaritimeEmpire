@@ -34,7 +34,7 @@
 		"CHI": {
 			"bearing": 50.0,
 			"quay": "right",
-			"note": "Chicago: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "Chicago: out over the lake, from the downtown lakefront (moved up from Calumet so a full-sized Gary and Chicago stay clear of each other)"
 		},
 		"DLH": {
 			"bearing": 70.0,
@@ -76,20 +76,15 @@
 			"quay": "right",
 			"note": "Thunder Bay: out over the lake (the coastline's guess was 180 degrees off)"
 		},
-		"IHB": {
-			"bearing": 34.0,
-			"quay": "right",
-			"note": "Indiana Harbor: out over the lake (the coastline's guess was 180 degrees off)"
-		},
-		"BUH": {
-			"bearing": 345.0,
-			"quay": "right",
-			"note": "Burns Harbor: out over the lake (the coastline's guess was 180 degrees off)"
-		},
 		"GRY": {
-			"bearing": 11.0,
+			"bearing": 1.0,
 			"quay": "right",
-			"note": "Gary: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "Gary: out over the lake, turned a little left so a full-sized Gary and Chicago stay clear of each other"
+		},
+		"PHL": {
+			"bearing": 210.0,
+			"quay": "right",
+			"note": "Philadelphia: down the Delaware to the south-west"
 		},
 		"TWH": {
 			"bearing": 139.0,
@@ -181,10 +176,6 @@
 			"bearing": 254,
 			"quay": "right"
 		},
-		"LAX": {
-			"bearing": 182,
-			"quay": "right"
-		},
 		"TNG": {
 			"bearing": 306,
 			"quay": "right"
@@ -259,10 +250,6 @@
 		},
 		"SAV": {
 			"bearing": 131,
-			"quay": "left"
-		},
-		"ALG": {
-			"bearing": 155,
 			"quay": "left"
 		},
 		"HPH": {
@@ -959,14 +946,6 @@
 		},
 		"YQT": {
 			"bearing": 286,
-			"quay": "right"
-		},
-		"IHB": {
-			"bearing": 214,
-			"quay": "right"
-		},
-		"BUH": {
-			"bearing": 165,
 			"quay": "right"
 		},
 		"GRY": {

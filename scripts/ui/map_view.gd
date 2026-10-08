@@ -1974,6 +1974,12 @@ const BERTH_OFF_WIDTHS := 1.6
 const HQ_LEVELS := 10
 const HQ_LEVEL_EVERY := 10
 const HQ_MARGIN := 0.6
+## Canal ports (_is_canal_port()): the berthless side the canal comes in by
+## (dock units), the cut through the quay (as wide), and how far along its canal
+## (degrees) to look for where it leaves.
+const CANAL_SIDE := 5.0
+const CANAL_CUT_WIDTH := 3.0
+const CANAL_EXIT_DEG := 0.25
 ## Ships keep to the right-hand side of a harbour entrance, this many widths
 ## (of the widest ship the marina takes) off its middle.
 const KEEP_RIGHT_WIDTHS := 0.6
@@ -2036,6 +2042,10 @@ var _bird_hits: Array = []
 var _bird_trait_cache := {}
 ## [marina radius, slip] -> where an HQ building may stand (see _hq_region()).
 var _hq_regions := {}
+## Canal ports: port id -> which way its canal leaves (screen, north up), and
+## -> [its layout's canal angle, the turn that lines it up] (see _canal_turn()).
+var _canal_exits := {}
+var _canal_turns := {}
 ## Port id -> the way into the wind there on screen, worked out once a frame.
 var _upwind := {}
 ## Port id -> the strongest storm's strength there, this frame (see _storm_strength_at_port()).
@@ -2057,11 +2067,99 @@ func docks_shown() -> bool:
 	return show_ships and not gray_mode
 
 
+## Which way the sea is from a port on screen (north up), turned at a canal
+## port so its canal side faces where its canal leaves (see _canal_turn()).
+func _port_sea_angle(port_id: String) -> float:
+	return _port_bearing_angle(port_id) + _canal_turn(port_id)
+
+
+## True for a port a canal runs through (data/canals.json ports: Port Said
+## and Port Tewfik on the Suez Canal, Colon and Balboa on the Panama Canal):
+## its marina has a canal side, with no berth, where the canal comes into its
+## basin through a cut in the quay (at a hub, its slip leads on into the canal).
+static func _is_canal_port(port_id: String) -> bool:
+	return not _canal_of(port_id).is_empty()
+
+
+static func _canal_of(port_id: String) -> Dictionary:
+	for canal: Dictionary in GameData.canals:
+		if (canal.get("ports", []) as Array).has(port_id):
+			return canal
+	return {}
+
+
+## Which way (on screen, north up) a canal port's canal leaves it inland:
+## along its path to the first point CANAL_EXIT_DEG away, whichever way is
+## furthest from the sea.
+func _canal_exit_angle(port_id: String) -> float:
+	if _canal_exits.has(port_id):
+		return _canal_exits[port_id]
+	var canal := _canal_of(port_id)
+	var port := GameData.get_port(port_id)
+	var at := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+	var squash := cos(deg_to_rad(at.y))
+	var screen := func(point: Array) -> Vector2: return Vector2((float(point[0]) - at.x) * squash, -(float(point[1]) - at.y))
+	var path: Array = canal.get("path", [])
+	var nearest := 0
+	for i in path.size():
+		if (screen.call(path[i]) as Vector2).length() < (screen.call(path[nearest]) as Vector2).length():
+			nearest = i
+	var sea := Vector2.from_angle(_port_bearing_angle(port_id))
+	var best := Vector2.ZERO
+	for step: int in [1, -1]:
+		var i := nearest
+		while i + step >= 0 and i + step < path.size() and (screen.call(path[i]) as Vector2).length() < CANAL_EXIT_DEG:
+			i += step
+		var way: Vector2 = screen.call(path[i])
+		if way.length() > 0.0 and (best == Vector2.ZERO or way.normalized().dot(sea) < best.normalized().dot(sea)):
+			best = way
+	_canal_exits[port_id] = best.angle() if best != Vector2.ZERO else _port_bearing_angle(port_id) + PI
+	return _canal_exits[port_id]
+
+
+## How far a canal port's marina is turned from its facing so its canal side
+## (or a hub's slip) points where its canal leaves (0 for other ports).
+func _canal_turn(port_id: String) -> float:
+	if not _is_canal_port(port_id):
+		return 0.0
+	var layout := _port_layout(port_id)
+	var cached: Array = _canal_turns.get(port_id, [])
+	if cached.is_empty() or cached[0] != layout.get("canal_angle", PI):
+		var flip := float(_dock_flips.get(port_id, 1.0))
+		var turn := wrapf(_canal_exit_angle(port_id) - _port_bearing_angle(port_id) - flip * float(layout.get("canal_angle", PI)), -PI, PI)
+		cached = [layout.get("canal_angle", PI), turn]
+		_canal_turns[port_id] = cached
+	return float(cached[1])
+
+
+## A canal port's cut through its quay (dock units): water from its basin (or
+## a hub's slip end) out past the square quay's edge where the canal goes on,
+## lined with quay edges. [] for other marinas.
+static func _canal_cut(layout: Dictionary) -> PackedVector2Array:
+	if not layout.has("canal"):
+		return PackedVector2Array()
+	var side: Array = layout.canal
+	var from: Vector2
+	var way: Vector2
+	var reach: float
+	if side.is_empty():  # A hub: on from the slip's inland end.
+		var slip: Array = layout.slip
+		from = (slip[0] as Vector2) - Vector2(float(slip[1]) - 0.5, 0.0)
+		way = Vector2.LEFT
+		reach = absf(_quay_inland(layout) - from.x) + 1.0
+	else:
+		var middle: Vector2 = ((side[0] as Vector2) + (side[1] as Vector2)) / 2.0
+		way = middle.normalized()
+		from = middle - way * 0.5
+		reach = (float(layout.radius) + JETTY_WIDTH) * 1.5
+	return _rect(from, from + way * reach, CANAL_CUT_WIDTH / 2.0)
+
+
 ## Which way the sea is from a port, as an on-screen angle with north straight
 ## up (the globe turns it: _port_turn()), and which side is its marina's +y:
 ## from data/port_facing.json, or else the average way its sea lanes head out
 ## of it.
-func _port_sea_angle(port_id: String) -> float:
+func _port_bearing_angle(port_id: String) -> float:
 	if _sea_angles.has(port_id):
 		return _sea_angles[port_id]
 	# Worked out from the coastline (data/port_facing.json; tools/port_facing.gd),
@@ -2173,8 +2271,8 @@ static func _longest_ship() -> float:
 ## corner it shares with the next berth (none at the coast) for the ships
 ## there to clear each other: a ship's width at a right angle, less the more
 ## open the corner; the ship lies against its side's coast end.
-func _marina_layout(kinds: String, hub: bool) -> Dictionary:
-	var key := [kinds, hub]
+func _marina_layout(kinds: String, hub: bool, canal := false) -> Dictionary:
+	var key := [kinds, hub, canal]
 	if _marina_layouts.has(key):
 		return _marina_layouts[key]
 	# The half-polygon's sides: [kind, the berths along it]; at a hub port, its
@@ -2185,12 +2283,19 @@ func _marina_layout(kinds: String, hub: bool) -> Dictionary:
 			(polygon[-1][1] as Array).append(i)
 		else:
 			polygon.append(["slip" if hub and kinds[i] == "B" else kinds[i], [i]])
+	# A canal port (see _is_canal_port()): a side in the middle of the land half
+	# with no berth, where the canal comes in (at a hub, its slip leads to it).
+	if canal and not hub:
+		polygon.insert(polygon.size() / 2, ["canal", []])
 	var count := polygon.size()
 	var spread := 1.0 / tan((PI - PI / count) / 2.0)  # A corner's room per width (see above).
 	var sides := PackedFloat32Array()
 	var length := 0.0
 	var width := 0.0
 	for j in count:
+		if polygon[j][0] == "canal":
+			sides.append(CANAL_SIDE)
+			continue
 		var ship := _berth_ship("B" if polygon[j][0] == "slip" else polygon[j][0])
 		length = maxf(length, ship.x)
 		width = maxf(width, ship.y)
@@ -2209,6 +2314,7 @@ func _marina_layout(kinds: String, hub: bool) -> Dictionary:
 	var berth_list := []
 	berth_list.resize(kinds.length())
 	var slip := []
+	var canal_side := []  # [corner, corner] of a canal port's canal side.
 	for j in count:
 		var a := corners[j]
 		var b := corners[j + 1]
@@ -2216,6 +2322,9 @@ func _marina_layout(kinds: String, hub: bool) -> Dictionary:
 		var middle := (a + b) / 2.0
 		var inward := -middle.normalized()
 		var berths: Array = polygon[j][1]
+		if polygon[j][0] == "canal":
+			canal_side = [a, b]
+			continue
 		if polygon[j][0] == "slip":
 			# The slip runs inland from the side's middle, a berth along each wall.
 			var slip_length := _berth_ship("B").x + SLIP_ROOM
@@ -2237,6 +2346,10 @@ func _marina_layout(kinds: String, hub: bool) -> Dictionary:
 	var gap := asin(clampf(width * ENTRANCE_WIDTHS / 2.0 / radius, 0.05, 0.6))
 	var layout := {radius = radius, inner = inner, corners = corners, berths = berth_list, slip = slip, gap = gap,
 		mouth = Vector2(radius + length * 1.2, 0.0), inside = Vector2(radius * 0.45, 0.0), length = length, width = width}
+	if canal:
+		# Where the canal comes in: its side, or a hub's slip (straight inland).
+		layout.canal = canal_side
+		layout.canal_angle = ((canal_side[0] + canal_side[1]) / 2.0).angle() if not canal_side.is_empty() else PI
 	_marina_layouts[key] = layout
 	return layout
 
@@ -2277,7 +2390,7 @@ func _port_layout(port_id: String) -> Dictionary:
 		_port_layouts_frame = frame
 		_port_layouts.clear()
 	if not _port_layouts.has(port_id):
-		_port_layouts[port_id] = _marina_layout(GameState.docks.berth_kinds(port_id), GameState.docks.has_hub(port_id))
+		_port_layouts[port_id] = _marina_layout(GameState.docks.berth_kinds(port_id), GameState.docks.has_hub(port_id), _is_canal_port(port_id))
 	return _port_layouts[port_id]
 
 
@@ -2358,6 +2471,13 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 		var wall := _marina_polygon(port_id, _rect(mouth, mouth - Vector2(slip_length, 0.0), half))
 		wall.append(wall[0])
 		_canvas.draw_polyline(wall, QUAY_EDGE, 1.0, true)
+	# A canal port's cut through the quay, where its canal comes in.
+	var cut := _canal_cut(layout)
+	if not cut.is_empty():
+		var cut_screen := _marina_polygon(port_id, cut)
+		_canvas.draw_colored_polygon(cut_screen, water)
+		_canvas.draw_line(cut_screen[0], cut_screen[1], QUAY_EDGE, 1.0, true)
+		_canvas.draw_line(cut_screen[2], cut_screen[3], QUAY_EDGE, 1.0, true)
 	var basin := PackedVector2Array(corners)
 	basin.append_array(_arc(inner, -PI / 2.0, PI / 2.0).slice(1, -1))
 	_canvas.draw_colored_polygon(_marina_polygon(port_id, basin), water)

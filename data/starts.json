@@ -56,11 +56,11 @@
 	],
 	"great_lakes": {
 		"note": "Great Lakes: Scooters pay their way on Chicago-Milwaukee and Cleveland-Toronto (through the Welland Canal), and from Calcite up to Duluth and Two Harbors; elsewhere they find little container trade. Lakers (from level 2) haul iron ore, coal and gold, and Grain Lakers (level 8) grain. Only Seaway-sized ships can reach the lakes, so bigger ships need a hub on the coast.",
-		"ports": ["CHI", "DLH", "DET", "TOR", "CLE", "YHM", "MKE", "TOL", "YQT", "IHB", "BUH", "GRY", "TWH", "MQT", "CAL", "BUF"]
+		"ports": ["CHI", "DLH", "DET", "TOR", "CLE", "YHM", "MKE", "TOL", "YQT", "GRY", "TWH", "MQT", "CAL", "BUF"]
 	},
 	"excluded": [
 		"LCH", "SGN", "SLL", "CGP", "LIM", "MEL", "MBA", "VER", "BUE", "GYE", "SAI", "JIB", "ANC", "AKL", "SJU", "WLG", "POM", "BWN", "GUM", "BGI", "PPT", "REK", "JNU", "DUT", "GOH", "GPS", "VVO", "LAD", "SSA", "ANF", "FOR", "KRS", "PKC", "FNC", "BDA", "PUQ", "GDX", "ROR", "FSP", "YDP", "NOU", "MDY", "MCM",
-		"YVR", "SEA", "PDX", "MRY", "OAK", "LAX", "LGB", "PWM", "BOS", "HOU", "MSY", "NGQ", "DUR", "MPM", "KAP", "JED", "MUN", "HZR", "KHI", "JNP", "SUB", "XCH",
+		"YVR", "SEA", "PDX", "MRY", "OAK", "LGB", "PWM", "BOS", "HOU", "MSY", "NGQ", "DUR", "MPM", "KAP", "JED", "MUN", "HZR", "KHI", "JNP", "SUB", "XCH",
 		"KGI", "PAL", "ROT", "DAV", "MAW"
 	]
 }

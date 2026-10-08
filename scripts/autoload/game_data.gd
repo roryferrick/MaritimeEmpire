@@ -662,6 +662,11 @@ func get_ship_model(id: String) -> Dictionary:
 	return _models_by_id.get(id, {})
 
 
+## Ports taken out of the game, and the nearby port that took the place of each
+## in older saves (see GameState._without_retired_ports()).
+const RETIRED_PORTS := {"LAX": "LGB", "IHB": "GRY", "BUH": "GRY", "ALG": "TNG"}
+
+
 func _load_lanes() -> void:
 	_lane_data = load(LANES_PATH)
 	if _lane_data == null:
