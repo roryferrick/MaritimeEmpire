@@ -30,6 +30,86 @@
 			"bearing": 270.0,
 			"quay": "left",
 			"note": "Dudinka: on the Yenisei's east bank"
+		},
+		"CHI": {
+			"bearing": 50.0,
+			"quay": "right",
+			"note": "Chicago: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"DLH": {
+			"bearing": 70.0,
+			"quay": "right",
+			"note": "Duluth-Superior: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"DET": {
+			"bearing": 128.0,
+			"quay": "right",
+			"note": "Detroit: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"TOR": {
+			"bearing": 153.0,
+			"quay": "left",
+			"note": "Toronto: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"CLE": {
+			"bearing": 346.0,
+			"quay": "right",
+			"note": "Cleveland: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"YHM": {
+			"bearing": 64.0,
+			"quay": "right",
+			"note": "Hamilton: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"MKE": {
+			"bearing": 79.0,
+			"quay": "right",
+			"note": "Milwaukee: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"TOL": {
+			"bearing": 51.0,
+			"quay": "right",
+			"note": "Toledo: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"YQT": {
+			"bearing": 106.0,
+			"quay": "right",
+			"note": "Thunder Bay: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"IHB": {
+			"bearing": 34.0,
+			"quay": "right",
+			"note": "Indiana Harbor: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"BUH": {
+			"bearing": 345.0,
+			"quay": "right",
+			"note": "Burns Harbor: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"GRY": {
+			"bearing": 11.0,
+			"quay": "right",
+			"note": "Gary: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"TWH": {
+			"bearing": 139.0,
+			"quay": "right",
+			"note": "Two Harbors: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"MQT": {
+			"bearing": 51.0,
+			"quay": "right",
+			"note": "Presque Isle: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"CAL": {
+			"bearing": 24.0,
+			"quay": "right",
+			"note": "Calcite: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"BUF": {
+			"bearing": 243.0,
+			"quay": "right",
+			"note": "Buffalo: out over the lake (the coastline's guess was 180 degrees off)"
 		}
 	},
 	"facing": {

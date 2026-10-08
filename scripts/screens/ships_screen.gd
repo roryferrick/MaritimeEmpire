@@ -7,7 +7,7 @@ extends Control
 ## Tiles are re-sorted when the fleet or the sort changes, not live, so they
 ## don't jump around; the filter follows each ship's status as it changes.
 
-enum Sort { NAME, STATUS, PROFIT }
+enum Sort { EARNINGS, NAME, STATUS, PROFIT }
 enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY }
 
 const COLUMNS := 8
@@ -30,7 +30,10 @@ const MEGA_COLOR := Color(1.0, 0.82, 0.3)
 ## "Upgrade all": its width, and the extra gap before it (on top of the header's own).
 const UPGRADE_ALL_WIDTH := 250.0
 const UPGRADE_ALL_GAP := 16.0
-const SORT_NAMES := {Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit"}
+const SORT_NAMES := {Sort.EARNINGS: "Earnings", Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit (all time)"}
+## Sorted by earnings, the tiles re-sort this often (s) while the tab is open,
+## and each time it opens.
+const EARNINGS_RESORT_S := 30.0
 const FILTER_NAMES := {
 	Filter.ALL: "All ships", Filter.ATTENTION: "Needs attention",
 	Filter.ACTIVE: "Running (green)", Filter.STOPPED: "Stopped (red)",
@@ -54,11 +57,16 @@ var _changed_ships := {}
 var _dirty := false
 ## The fleet changed (a ship bought or sold): rebuild the tiles when next shown.
 var _needs_rebuild := false
+## Each ship's profit over the last 10 minutes (by name: GameState.recent_finances()),
+## as of the last rebuild, and how long since it.
+var _earnings := {}
+var _resort_clock := 0.0
 
 
 func _ready() -> void:
 	for sort: Sort in SORT_NAMES:
 		%SortOption.add_item(SORT_NAMES[sort], sort)
+	%SortOption.tooltip_text = "Earnings: each ship's profit over the last 10 minutes, best first (left to right), re-sorted every 30 seconds."
 	for filter: Filter in FILTER_NAMES:
 		%FilterOption.add_item(FILTER_NAMES[filter], filter)
 	%SortOption.item_selected.connect(_rebuild.unbind(1))
@@ -67,7 +75,10 @@ func _ready() -> void:
 	GameState.ship_changed.connect(_on_ship_changed)
 	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
 	GameState.mega_upgraded.connect(func(_model_id: String) -> void: _dirty = true)
-	visibility_changed.connect(func() -> void: _dirty = true)
+	visibility_changed.connect(func() -> void:
+		_dirty = true
+		if is_visible_in_tree() and %SortOption.get_selected_id() == Sort.EARNINGS:
+			_needs_rebuild = true)
 	_upgrade_all.pressed.connect(GameState.upgrade_all)
 	_upgrade_all.custom_minimum_size.x = UPGRADE_ALL_WIDTH
 	_upgrade_all.clip_text = true  # So it never widens the header past the screen.
@@ -84,9 +95,12 @@ func _ready() -> void:
 
 ## Ship changes (and money, for the mega buttons) are only noted as they come;
 ## the tab catches up once a frame, and only while it's open.
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
+	_resort_clock += delta
+	if %SortOption.get_selected_id() == Sort.EARNINGS and _resort_clock >= EARNINGS_RESORT_S:
+		_needs_rebuild = true
 	if _needs_rebuild:
 		_rebuild()
 	elif _dirty:
@@ -114,6 +128,8 @@ func _rebuild() -> void:
 	_megas.clear()
 	_tiles.clear()
 	_needs_rebuild = false
+	_earnings = GameState.recent_finances().ships
+	_resort_clock = 0.0
 	var sorted := GameState.fleet().duplicate()
 	sorted.sort_custom(_ship_before)
 	for model: Dictionary in GameData.ship_models:
@@ -125,6 +141,7 @@ func _rebuild() -> void:
 			var tile := ShipTile.new(ship)
 			_tiles[ship] = tile
 			tile.pressed.connect(_open_ship.bind(tile))
+			tile.show_earnings(float(_earnings.get(ship.name, 0.0)))
 			grid.add_child(tile)
 	%EmptyLabel.visible = GameState.fleet().is_empty()
 	%Header.visible = not GameState.fleet().is_empty()
@@ -279,6 +296,11 @@ func _mute_button(model_id: String) -> Button:
 
 func _ship_before(a: Ship, b: Ship) -> bool:
 	match %SortOption.get_selected_id():
+		Sort.EARNINGS:
+			var earned_a := float(_earnings.get(a.name, 0.0))
+			var earned_b := float(_earnings.get(b.name, 0.0))
+			if earned_a != earned_b:
+				return earned_a > earned_b
 		Sort.STATUS:
 			if _status_rank(a) != _status_rank(b):
 				return _status_rank(a) < _status_rank(b)

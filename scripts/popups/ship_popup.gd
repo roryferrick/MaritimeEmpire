@@ -126,21 +126,80 @@ func _update_live() -> void:
 ## What's aboard: its cost and what it should sell for where it's going, at
 ## today's prices; hidden when the hold is empty (the cargo bar says so).
 func _update_cargo() -> void:
-	_set_shown(_cargo_label, not ship.is_service() and not %SkillsButton.button_pressed and not _crew_button.button_pressed and not ship.cargo_id.is_empty())
-	if ship.cargo_id.is_empty():
+	var stops := _next_stops()
+	var at: String = stops[0]
+	var after: String = stops[1]
+	_set_shown(_cargo_label, not ship.is_service() and not %SkillsButton.button_pressed and not _crew_button.button_pressed
+		and (not ship.cargo_id.is_empty() or not at.is_empty()))
+	var lines: Array[String] = []
+	var sale_worth := 0.0
+	if not ship.cargo_id.is_empty():
+		var commodity := GameData.commodity(ship.cargo_id)
+		lines.append("Carrying %s %s of %s, bought for %s at %s." % [Fmt.thousands(ship.cargo_qty), commodity.get("units", "units"),
+			commodity.get("name", ship.cargo_id), Fmt.money(ship.cargo_cost), GameData.port_name(ship.cargo_from)])
+	if at.is_empty():
+		_cargo_label.text = "\n".join(lines)
 		return
-	var commodity := GameData.commodity(ship.cargo_id)
-	var from := ship.cargo_from
-	var to := ship.to_port
+	# At its next stop: what it sells there, then what it buys there for the stop after.
+	var plan := "At %s: " % GameData.port_name(at)
+	if not ship.cargo_id.is_empty():
+		var sale := ship.cargo_qty * GameState.market.sell_price(at, ship.cargo_id)
+		sale_worth = sale + GameState.trade_bonus(ship.cargo_from, at, sale - ship.cargo_cost, ship.model_id, GameState.owner_of(ship))
+		plan += "sells for about %s" % Fmt.money(roundi(sale_worth))
+	else:
+		plan += "nothing to sell"
+	if not after.is_empty() and after != at:
+		var buy := _next_load(at, after, sale_worth)
+		if buy.is_empty():
+			plan += "; nothing there pays to carry on to %s." % GameData.port_name(after)
+		else:
+			var commodity := GameData.commodity(buy[0])
+			plan += "; then buys about %s %s of %s for about %s, for %s." % [Fmt.thousands(buy[1]), commodity.get("units", "units"),
+				commodity.get("name", buy[0]), Fmt.money(buy[2]), GameData.port_name(after)]
+	else:
+		plan += "."
+	lines.append(plan)
+	_cargo_label.text = "\n".join(lines)
+
+
+## The ship's next stop on its route (where it sells what it carries and
+## loads for the leg after), and the stop after that: [next, after], "" when
+## it has no route. In port, the next is here until it has loaded here for the
+## leg on (it has a cargo from elsewhere to sell, or is yet to load), then
+## where it sails next.
+func _next_stops() -> Array:
+	if ship.is_service() or (not ship.has_route() and ship.pending_route.is_empty()):
+		return ["", ""]
+	var at := ship.to_port
 	if ship.is_docked():
-		to = ship.docked_at if not ship.unloaded else (ship.route[ship.next_route_index()] if ship.has_route() else "")
-	var text := "Carrying %s %s of %s, bought for %s at %s" % [Fmt.thousands(ship.cargo_qty), commodity.get("units", "units"),
-		commodity.get("name", ship.cargo_id), Fmt.money(ship.cargo_cost), GameData.port_name(from)]
-	if not to.is_empty():
-		var sale := ship.cargo_qty * GameState.market.sell_price(to, ship.cargo_id)
-		var worth: float = sale + GameState.trade_bonus(from, to, sale - ship.cargo_cost, ship.model_id, GameState.owner_of(ship))
-		text += ", worth about %s at %s" % [Fmt.money(roundi(worth)), GameData.port_name(to)]
-	_cargo_label.text = text
+		var loaded_here := not ship.cargo_id.is_empty() and ship.cargo_from == ship.docked_at
+		at = ship.route[ship.next_route_index()] if loaded_here and ship.has_route() else ship.docked_at
+	# The route it'll be on from there (a new one takes over when it arrives).
+	var route: Array[String] = ship.pending_route if not ship.pending_route.is_empty() and not ship.is_docked() else ship.route
+	if at.is_empty() or route.is_empty():
+		return [at, ""]
+	var here := route.find(at)
+	return [at, route[(here + 1) % route.size()] if here >= 0 else route[0]]
+
+
+## What the ship would load at a port for the next leg, as the game would
+## pick it (GameState._load_cargo()): [commodity, quantity, cost], with the
+## money it'll have after selling there (less the fuel reserve and the bank
+## reserve), or [] if nothing pays.
+func _next_load(port_id: String, to: String, sale: float) -> Array:
+	var who := GameState.owner_of(ship)
+	var best: Array = GameState.market.best_cargo(ship.model(), port_id, to, who)
+	if str(best[0]).is_empty():
+		return []
+	var price := GameState.market.buy_price(port_id, best[0])
+	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(port_id, to, ship.model())))
+	var quantity := room
+	if not GameState.in_debt(who) and price > 0.0:
+		var spare := float(who.money) + sale - GameState.fuel_reserve(who) - who.bank_reserve
+		quantity = clampi(floori(spare / price), 0, room)
+	if quantity <= 0:
+		return []
+	return [best[0], quantity, roundi(quantity * price)]
 
 
 func _update_sell() -> void:

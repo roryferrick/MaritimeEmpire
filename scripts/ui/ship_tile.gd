@@ -3,7 +3,8 @@ class_name ShipTile
 extends Button
 ## One compact tile on the Ships screen: status dot, ship name, what it's
 ## carrying and its level (highlighted while it has skill points to spend), and
-## mini maintenance, fuel and cargo bars, with its captain's picture and name.
+## mini maintenance, fuel and cargo bars, with its captain's picture and name,
+## and what it earned in the last 10 minutes under its name.
 ## Hovering shows the full name.
 
 const THEME_TYPE := &"StatusDot"
@@ -19,6 +20,8 @@ var _dot := Control.new()
 var _info := Label.new()
 var _name := Label.new()
 var _captain := Label.new()
+## What it has earned in the last 10 minutes (see show_earnings()).
+var _earned := Label.new()
 
 
 func _init(for_ship: Ship) -> void:
@@ -57,6 +60,12 @@ func _init(for_ship: Ship) -> void:
 	_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_name.custom_minimum_size.x = 1  # Lets the name shrink (with an ellipsis) to fit the tile.
 	column.add_child(_name)
+	# What it's earned in the last 10 minutes, under its name.
+	_earned.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
+	_earned.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_earned.custom_minimum_size.x = 1
+	_earned.visible = false
+	column.add_child(_earned)
 	_info.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
 	_info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_info.custom_minimum_size.x = 1
@@ -125,3 +134,12 @@ func _draw_dot() -> void:
 	if has_theme_color(color_name, THEME_TYPE):
 		color = get_theme_color(color_name, THEME_TYPE)
 	_dot.draw_circle(_dot.size / 2.0, DOT_RADIUS, color, true, -1.0, true)
+
+
+## Shows what the ship has earned (profit) in the last 10 minutes under its
+## name, green or red; nothing for a ship that hasn't earned or spent.
+func show_earnings(amount: float) -> void:
+	_earned.visible = absf(amount) >= 1.0
+	_earned.text = "%s%s" % ["+" if amount > 0.0 else "", Fmt.money_short(roundi(amount))]
+	_earned.theme_type_variation = &"GainLabel" if amount > 0.0 else &"ErrorLabel"
+	_earned.tooltip_text = "Earned in the last 10 minutes"

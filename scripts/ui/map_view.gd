@@ -1975,6 +1975,12 @@ const KEEP_RIGHT_WIDTHS := 0.6
 ## thrusters before heading out (see _unberth_plan()).
 const UNBERTH_REVERSE_SPEED := 0.5
 const UNBERTH_TURN_S := 2.5
+## Driving off a berth, a ship is clear of the quay this many of its lengths
+## ahead, this many of its widths out from it, heading away from it at this
+## slope (see _peel_pose()).
+const PEEL_AHEAD := 0.9
+const PEEL_OUT_WIDTHS := 1.6
+const PEEL_ANGLE := 0.45
 ## At anchor in a storm, ships swing and pitch on their anchors, up to this
 ## far (radians) at full strength.
 const STORM_SWING := 0.45
@@ -2736,7 +2742,9 @@ func _docked_pose(ship: Ship) -> Array:
 		return _poses[ship]
 	var pose := _docked_screen_pose(ship)
 	_poses[ship] = pose
-	_last_spot[ship] = [ship.docked_at, _screen_unit(pose[0]), pose[1]]  # Where it sets off from when it sails (on the unit sphere), and its heading.
+	# Where it sets off from when it sails (on the unit sphere), its heading, and
+	# whether it was lying at anchor, facing the wind (not heading out already).
+	_last_spot[ship] = [ship.docked_at, _screen_unit(pose[0]), pose[1], ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE]
 	return pose
 
 
@@ -2782,30 +2790,33 @@ func _docked_screen_pose(ship: Ship) -> Array:
 					return _follow(poses, shaped, path, _timed_share(path, _path_times(path, _sea_speed_px(ship), length, length, false, true), ship.berth_time / sail), ship.berth_time / _anchor_turn(sail) if weighing else 1.0)
 				return _slide(off, at, (ship.berth_time - sail) / slide_s)
 			Ship.BERTH_OUT:
-				# Sliding off the berth; if it lies bow away from the way out (in
-				# a hub's slip), backing out stern first to the middle of the
-				# marina and turning there on its thrusters; then getting going,
-				# out at its own speed through the entrance on its right-hand side
-				# to sea (or to its spot at the anchorage, slowing to anchor).
-				if ship.berth_time < slide_s:
-					return _slide(at, off, ship.berth_time / slide_s)
+				# Driving off its berth: getting going ahead along the quay and
+				# peeling away from it in a smooth curve, as a ship would, then on
+				# round and out through the entrance on its right-hand side to sea
+				# (or to its spot at the anchorage, slowing to anchor). If it lies
+				# bow away from the way out (in a hub's slip), it first backs
+				# straight out stern first to the middle of the marina and turns
+				# there on its thrusters.
 				var total := ship.berth_duration if ship.berth_duration > 0.0 else float(settings.get("out_s", 5.0))
-				var t := ship.berth_time - slide_s
+				var t := ship.berth_time
 				var plan := _unberth_plan(ship)
-				var start := off
+				var poses := [at]
 				if plan.reverse:
 					var back := [_dock_point(port, plan.back), at[1]]
 					if t < plan.reverse_s:
 						var share := _sailed_share(t / plan.reverse_s, float(plan.reverse_units), float(plan.ease), true, true)
-						return [(off[0] as Vector2).lerp(back[0], share), at[1]]
+						return [(at[0] as Vector2).lerp(back[0], share), at[1]]
 					t -= plan.reverse_s
 					var turned := _dock_angle(port, float(plan.out_angle))
 					if t < UNBERTH_TURN_S:
 						return [back[0], lerp_angle(float(at[1]), turned, smoothstep(0.0, 1.0, t / UNBERTH_TURN_S))]
 					t -= UNBERTH_TURN_S
-					start = [back[0], turned]
+					poses = [[back[0], turned]]
+				else:
+					var peel := _peel_pose(berth, ship)
+					poses.append([_dock_point(port, peel[0]), _dock_angle(port, float(peel[1]))])
+				poses.append(_keep_right(port, _entrance_pose(port, false, false)))
 				var anchoring := ship.depart_to.is_empty()
-				var poses := [start, _keep_right(port, _entrance_pose(port, false, false))]  # (One long curve out through the mouth.)
 				if anchoring:
 					var rest := _rest_pose(ship)
 					var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * dock_scale(port) * 0.5
@@ -2814,11 +2825,10 @@ func _docked_screen_pose(ship: Ship) -> Array:
 					poses.append(rest)
 				var shaped := _loosen(poses, false, anchoring)
 				var path := _pose_path(shaped)
-				var before := slide_s + (float(plan.reverse_s) + UNBERTH_TURN_S if plan.reverse else 0.0)
-				var u := t / maxf(total - before, 0.01)
+				var before := float(plan.reverse_s) + UNBERTH_TURN_S if plan.reverse else 0.0
 				var sail_s := maxf(total - before, 0.01)
 				var turn := _anchor_turn(sail_s)
-				return _follow(poses, shaped, path, _timed_share(path, _path_times(path, _sea_speed_px(ship), length, length, true, anchoring), u), 1.0, (t - sail_s + turn) / turn if anchoring else 0.0)
+				return _follow(poses, shaped, path, _timed_share(path, _path_times(path, _sea_speed_px(ship), length, length, true, anchoring), t / sail_s), 1.0, (t - sail_s + turn) / turn if anchoring else 0.0)
 		return at
 	return _lying_pose(ship, GameState.play_time)
 
@@ -2830,9 +2840,21 @@ func _keep_right(port_id: String, pose: Array) -> Array:
 	return [(pose[0] as Vector2) + Vector2.from_angle(float(pose[1]) + PI / 2.0) * side, pose[1]]
 
 
+## Where a ship driving off its berth has got clear of the quay (dock units):
+## about a length ahead and a little out from it, angled away (see
+## _docked_screen_pose()). [point, facing].
+func _peel_pose(berth: Array, ship: Ship) -> Array:
+	var rect: Rect2 = _model_look(ship.model_id)[7]
+	var moored := _berth_pose(berth, ship)
+	var along := Vector2.from_angle(float(moored[1]))
+	var out: Vector2 = berth[2]
+	var away := (along + out * PEEL_ANGLE).normalized()
+	return [(moored[0] as Vector2) + along * rect.size.x * PEEL_AHEAD + out * rect.size.y * PEEL_OUT_WIDTHS, away.angle()]
+
+
 ## How a moored ship gets clear of its berth to head out (dock units): if it
-## lies bow away from the way out (in a hub's slip), it backs out stern first
-## from off its berth until it's abreast the middle of the marina (back), at
+## lies bow away from the way out (in a hub's slip), it backs straight out
+## stern first along its berth until it's abreast the middle of the marina (back), at
 ## UNBERTH_REVERSE_SPEED of its speed, taking reverse_s (getting going and
 ## stopping over ease), then turns there to out_angle. {reverse, back,
 ## out_angle, reverse_units, reverse_s, ease}.
@@ -2842,9 +2864,11 @@ func _unberth_plan(ship: Ship) -> Dictionary:
 	if ship.berth < 0 or ship.berth >= layout.berths.size():
 		return plan
 	var berth: Array = layout.berths[ship.berth]
+	if (layout.slip as Array).is_empty() or str(berth[5]) != "B":
+		return plan  # Only out of a slip: from any other berth it drives off ahead and round.
 	var rect: Rect2 = _model_look(ship.model_id)[7]
 	var moored := _berth_pose(berth, ship)
-	var off: Vector2 = (moored[0] as Vector2) + (berth[2] as Vector2) * rect.size.y * BERTH_OFF_WIDTHS
+	var off: Vector2 = moored[0]  # (Backing straight off the berth, along the wall.)
 	var facing := Vector2.from_angle(float(moored[1]))
 	var way_out: Vector2 = (layout.inside as Vector2) - off
 	if way_out.length() < 0.001 or facing.dot(way_out.normalized()) > -0.2:
@@ -2987,11 +3011,11 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 		return _path_times(path, speed, length, length, false, true)[-1]
 	var backing := 0.0  # Backing out and turning round first (s; see _unberth_plan()).
 	var plan := _unberth_plan(ship)
-	var start: Array = off
+	var poses := [[moored[0], float(moored[1])], _peel_pose(berth, ship)]
 	if plan.reverse:
 		backing = float(plan.reverse_s) + UNBERTH_TURN_S
-		start = [plan.back, float(plan.out_angle)]
-	var poses := [start, [layout.mouth, 0.0]]
+		poses = [[plan.back, float(plan.out_angle)]]
+	poses.append([layout.mouth, 0.0])
 	var anchoring := ship.depart_to.is_empty()
 	var anchor := _anchor_local(ship) if anchoring else Vector2(NAN, NAN)
 	if anchor.x == anchor.x:
@@ -3379,7 +3403,7 @@ func _harbour_pose(ship: Ship) -> Array:
 		var curve := _harbour_curve(ship, lane, length, arriving, reach)
 		if curve.is_empty():
 			continue
-		return _follow(curve[1], curve[2], curve[0], 1.0 - gone / reach if arriving else gone / reach, 1.0 if arriving else gone / reach / ANCHOR_TURN_SHARE)
+		return _follow(curve[1], curve[2], curve[0], 1.0 - gone / reach if arriving else gone / reach, gone / reach / ANCHOR_TURN_SHARE if not arriving and _left_from_anchor(ship) else 1.0)
 	return []
 
 
@@ -3394,6 +3418,14 @@ func _harbour_end(ship: Ship, port: String, arriving: bool) -> Array:
 		if not _is_hidden(spot):
 			return [spot, float(last[2])]
 	return _keep_right(port, _entrance_pose(port, false, false))
+
+
+## True if a ship sailing from port set off straight from its spot at the
+## anchorage (facing the wind, so it comes round as it gets going), not out
+## of its marina's mouth already heading out.
+func _left_from_anchor(ship: Ship) -> bool:
+	var last: Array = _last_spot.get(ship, [])
+	return last.size() > 3 and bool(last[3])
 
 
 ## The curve between a ship's lane, `reach` nm from a port, and that port's
@@ -3413,7 +3445,7 @@ func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: floa
 		return []
 	var on_lane := [edge, _heading_angle(sample[1], sample[0])]
 	var poses := [on_lane, harbour] if arriving else [harbour, on_lane]
-	var shaped := _loosen(poses, not arriving, false)
+	var shaped := _loosen(poses, not arriving and _left_from_anchor(ship), false)
 	return [_pose_path(shaped, HARBOUR_CURVE_HANDLE), poses, shaped]
 
 

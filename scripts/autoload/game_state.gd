@@ -1801,13 +1801,14 @@ func _pull_out(ship: Ship, to: String) -> void:
 ## How long a ship's coming alongside (or pulling out) takes, s of play: the
 ## way in through its marina (or out) at its own speed, slowing only at the
 ## end (or getting going at the start), as berth_route (the map) works it out,
-## plus docks slide_s on its thrusters; without a map, docks in_s (out_s).
+## plus, coming in, docks slide_s sliding onto its berth on its thrusters
+## (pulling out it drives off ahead); without a map, docks in_s (out_s).
 func _berth_seconds(ship: Ship, coming_in: bool) -> float:
 	var settings := Docks.settings()
 	if berth_route.is_valid():
 		var sail: float = berth_route.call(ship, coming_in)
 		if sail > 0.0:
-			return sail + float(settings.get("slide_s", 1.5))
+			return sail + (float(settings.get("slide_s", 1.5)) if coming_in else 0.0)  # (It drives off: no slide.)
 	return float(settings.get("in_s" if coming_in else "out_s", 6.0))
 
 

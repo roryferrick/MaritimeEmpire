@@ -84,6 +84,7 @@ func _ready() -> void:
 	_add_bank_row()
 	_add_loan_row()
 	_add_tabs()
+	%ShipTable.columns = COLUMNS.size()  # (One per column, however many there are.)
 	%ShipTable.draw.connect(_draw_bands)
 	visibility_changed.connect(_refresh)
 	GameState.ships_changed.connect(_refresh)
@@ -355,6 +356,8 @@ func _add_tabs() -> void:
 	var hint := Label.new()
 	hint.theme_type_variation = &"DimLabel"
 	hint.text = "Every company in this game. Operating profit is cargo sales less cargo, fuel, repairs, tolls, port fees and wages."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size.x = 160
 	box.add_child(hint)
 	_compare_grid.columns = COMPARE_COLUMNS.size()
 	_compare_grid.add_theme_constant_override(&"h_separation", 20)
@@ -413,6 +416,7 @@ func _add_bank_row() -> void:
 	var hint := Label.new()
 	hint.theme_type_variation = &"DimLabel"
 	hint.text = "Ships won't spend this on cargo (fuel and repairs still can)."
+	_wrap(hint)
 	row.add_child(hint)
 	$Scroll/Margin/Content.add_child(row)
 	$Scroll/Margin/Content.move_child(row, 0)
@@ -454,6 +458,7 @@ func _add_loan_row() -> void:
 	hint.theme_type_variation = &"DimLabel"
 	hint.text = "Up to %s, at %s%% a year, paid every %d days with the crew's wages." % [Fmt.money(int(settings.get("max", 10000000))),
 		str(snappedf(float(settings.get("yearly_interest", 0.08)) * 100.0, 0.1)).trim_suffix(".0"), int(GameData.config.get("crew", {}).get("period_days", 14))]
+	_wrap(hint)
 	row.add_child(hint)
 	$Scroll/Margin/Content.add_child(row)
 	$Scroll/Margin/Content.move_child(row, 1)
@@ -468,3 +473,12 @@ func _show_loan() -> void:
 	var repay_error := GameState.repay_loan_error()
 	_repay_button.disabled = not repay_error.is_empty()
 	_repay_button.tooltip_text = repay_error
+
+
+## A note beside a row's controls that wraps onto more lines rather than
+## widening the page (which has no sideways scrolling: it must fit beside the
+## activity log or chat).
+static func _wrap(label: Label) -> void:
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.custom_minimum_size.x = 160
