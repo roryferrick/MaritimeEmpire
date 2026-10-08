@@ -465,7 +465,7 @@ func _choose(choice: Dictionary) -> void:
 		if not error.is_empty():
 			_choose_again.rpc_id(id, error, _choice_info())
 			return
-		index = GameState.found_company(str(choice.name), str(choice.get("color", "purple")), str(choice.home_port))
+		index = GameState.found_company(str(choice.name), str(choice.get("color", "purple")), str(choice.home_port), choice.get("ceo", {}) if choice.get("ceo") is Dictionary else {})
 	players[id].company = index
 	players[id].name = GameState.companies[index].name
 	_broadcast()  # Everyone (and the baseline) up to date, then the newcomer gets the same state whole.

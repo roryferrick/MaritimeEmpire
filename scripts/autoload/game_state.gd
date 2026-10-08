@@ -3078,12 +3078,15 @@ func found_company_error(new_name: String, new_home_port: String) -> String:
 	return ""
 
 
-## Founds a company in this game (a joining player's), with the starting money
-## and its HQ at its home port. Returns its place in companies.
-func found_company(new_name: String, new_color: String, new_home_port: String) -> int:
+## Founds a company in this game (a joining player's), with the starting money,
+## its HQ at its home port and the CEO they made (Characters.clean(): a
+## random one if it won't do). Returns its place in companies.
+func found_company(new_name: String, new_color: String, new_home_port: String, new_ceo := {}) -> int:
 	var founded := Company.new(new_name.strip_edges().left(MAX_COMPANY_NAME_LENGTH), new_color, new_home_port)
 	founded.money = int(GameData.config.get("starting_money", 10000))
-	founded.ceo = Company.random_ceo()
+	founded.ceo = Characters.clean(new_ceo)
+	if founded.ceo.is_empty():
+		founded.ceo = Company.random_ceo()
 	founded.hubs.assign([Hub.new(new_home_port, true)])
 	founded.regions.assign([str(GameData.port_region(new_home_port).get("id", ""))])  # (Or every port is locked to it.)
 	if companies.is_empty():

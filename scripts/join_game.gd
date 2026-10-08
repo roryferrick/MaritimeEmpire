@@ -6,7 +6,8 @@ extends Control
 ## away); then a password if it needs one; then picking a company:
 ## taking back one of the game's companies no one is playing, or founding a
 ## new one at a home port no company has, picked on the globe like a new
-## game's (the recommended starts and the Great Lakes). Once the host lets you in, the game
+## game's (the recommended starts and the Great Lakes), then making its CEO
+## (CeoEditor) like a new game's. Once the host lets you in, the game
 ## opens (see Net).
 
 const GAME_SCENE := "res://scenes/game.tscn"
@@ -37,6 +38,11 @@ var _home_port := ""
 var _port_name := Label.new()
 var _start_note := Label.new()
 var _company_name := LineEdit.new()
+## The CEO's page, after the company's (see _show_ceo_step()); the page's scroll
+## it hides meanwhile; and the company it's for.
+var _ceo_editor := CeoEditor.new("Found Company and Join")
+var _scroll := ScrollContainer.new()
+var _ceo_for := {}
 
 
 func _ready() -> void:
@@ -45,14 +51,22 @@ func _ready() -> void:
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(scroll)
+	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
 	var center := CenterContainer.new()
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(center)
+	_scroll.add_child(center)
+	_ceo_editor.visible = false
+	_ceo_editor.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_ceo_editor.back_pressed.connect(_leave_ceo_step)
+	_ceo_editor.confirmed.connect(func(ceo: Dictionary) -> void:
+		_leave_ceo_step()
+		var choice := _ceo_for.duplicate()
+		choice.ceo = ceo.duplicate(true)
+		Net.choose_company(choice))
+	add_child(_ceo_editor)
 	_page.custom_minimum_size.x = WIDTH
 	_page.add_theme_constant_override(&"separation", 12)
 	center.add_child(_page)
@@ -275,12 +289,12 @@ func _show_choice(info: Dictionary) -> void:
 	_start_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_page.add_child(_start_note)
 	var found := Button.new()
-	found.text = "Found Company and Join"
+	found.text = "Next: Your CEO"
 	found.custom_minimum_size = Vector2(280, 44)
 	found.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	found.disabled = _home_port.is_empty()
 	found.pressed.connect(func() -> void:
-		Net.choose_company({name = _company_name.text.strip_edges(), color = _color, home_port = _home_port}))
+		_show_ceo_step({name = _company_name.text.strip_edges(), color = _color, home_port = _home_port}))
 	map.port_clicked.connect(func(port_id: String) -> void:
 		_pick_port(map, port_id)
 		found.disabled = false)
@@ -289,6 +303,23 @@ func _show_choice(info: Dictionary) -> void:
 	_status.text = note if note != "Pick your company." else ""
 	_page.add_child(_status)
 	_page.add_child(_back_button())
+
+
+## On to making the new company's CEO (CeoEditor), in place of the page;
+## founding it sends the company and its CEO to the host.
+func _show_ceo_step(choice: Dictionary) -> void:
+	if str(choice.name).is_empty():
+		_status.text = "Give your company a name."
+		return
+	_ceo_for = choice
+	_scroll.visible = false
+	_ceo_editor.visible = true
+	_ceo_editor.focus_name()
+
+
+func _leave_ceo_step() -> void:
+	_ceo_editor.visible = false
+	_scroll.visible = true
 
 
 func _swatches() -> HFlowContainer:

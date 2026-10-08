@@ -7,6 +7,9 @@ extends RefCounted
 ## is bought. A character is {name, look}, look a choice (an index into
 ## PARTS' options) for each part; Portrait draws them.
 
+## The longest a character's name can be (the CEO editor's name box too).
+const MAX_NAME_LENGTH := 32
+
 ## The parts of a look, in the order the CEO screen lists them: [key, title,
 ## option names]. Portrait draws each option.
 const PARTS := [
@@ -71,6 +74,22 @@ static func random_name(rng: RandomNumberGenerator) -> String:
 
 ## A look with every part chosen at random (the parts that can be left off,
 ## often none: NONE_CHANCES).
+## A character as sent from elsewhere (a joining player's CEO), made safe: its
+## name trimmed to MAX_NAME_LENGTH, its look's parts whole numbers within
+## their options (missing ones the first). {} if it has no name.
+static func clean(character: Dictionary) -> Dictionary:
+	var name := str(character.get("name", "")).strip_edges().left(MAX_NAME_LENGTH)
+	if name.is_empty():
+		return {}
+	var given: Variant = character.get("look", {})
+	var look := {}
+	for part: Array in PARTS:
+		var key: String = part[0]
+		var value: Variant = (given as Dictionary).get(key, 0) if given is Dictionary else 0
+		look[key] = clampi(int(value) if value is int or value is float else 0, 0, (part[2] as Array).size() - 1)
+	return {name = name, look = look}
+
+
 static func random_look(rng: RandomNumberGenerator) -> Dictionary:
 	var look := {}
 	for part: Array in PARTS:
