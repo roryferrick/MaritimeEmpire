@@ -3067,6 +3067,8 @@ func found_company_error(new_name: String, new_home_port: String) -> String:
 		return "Enter a company name."
 	if GameData.get_port(new_home_port).is_empty():
 		return "Pick a home port."
+	if GameData.start_info(new_home_port).is_empty():
+		return "Pick one of the starting ports on the globe."
 	for each in all_companies():
 		if each.home_port == new_home_port:
 			return "%s is already %s's home port: pick another." % [GameData.port_name(new_home_port), each.name]
@@ -3082,6 +3084,7 @@ func found_company(new_name: String, new_color: String, new_home_port: String) -
 	founded.money = int(GameData.config.get("starting_money", 10000))
 	founded.ceo = Company.random_ceo()
 	founded.hubs.assign([Hub.new(new_home_port, true)])
+	founded.regions.assign([str(GameData.port_region(new_home_port).get("id", ""))])  # (Or every port is locked to it.)
 	if companies.is_empty():
 		companies.assign([company])
 	companies.append(founded)

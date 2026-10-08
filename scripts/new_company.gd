@@ -1,4 +1,5 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
+class_name NewCompany
 extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
 ## to on the globe (only the recommended great and harder starts from
@@ -49,13 +50,7 @@ func _ready() -> void:
 ## (START_COLORS); every other port is a faint dot that can't be picked.
 func _add_ports() -> void:
 	var map: MapView = %MapView
-	var choices := {}
-	for kind: String in ["great", "harder"]:
-		for entry: Dictionary in GameData.starts.get(kind, []):
-			choices[entry.port] = START_COLORS[kind]
-	for port_id: String in GameData.starts.get("great_lakes", {}).get("ports", []):
-		choices[port_id] = START_COLORS.great_lakes
-	map.selectable_ports = choices
+	map.selectable_ports = start_choices()
 	map.opens_at_port = DEFAULT_HOME_PORT
 	map.opens_whole_globe = true
 	map.port_clicked.connect(_pick_port)
@@ -77,16 +72,34 @@ func _selected_port() -> String:
 
 ## What kind of start the chosen port is, and why.
 func _show_start_note() -> void:
-	var info := GameData.start_info(_selected_port())
+	%StartNote.text = start_note(_selected_port())
+
+
+## The ports a company can start at, each in its kind of start's color
+## (START_COLORS: MapView.selectable_ports), leaving out `taken` ones.
+static func start_choices(taken: Array = []) -> Dictionary:
+	var choices := {}
+	for kind: String in ["great", "harder"]:
+		for entry: Dictionary in GameData.starts.get(kind, []):
+			choices[entry.port] = START_COLORS[kind]
+	for port_id: String in GameData.starts.get("great_lakes", {}).get("ports", []):
+		choices[port_id] = START_COLORS.great_lakes
+	for port_id: Variant in taken:
+		choices.erase(port_id)
+	return choices
+
+
+## "Great start: ..." (what kind of start a port is, and why), or "".
+static func start_note(port_id: String) -> String:
+	var info := GameData.start_info(port_id)
 	match info.get("kind", ""):
 		"great":
-			%StartNote.text = "Great start: %s" % info.note
+			return "Great start: %s" % info.note
 		"harder":
-			%StartNote.text = "Harder start: %s" % info.note
+			return "Harder start: %s" % info.note
 		"great_lakes":
-			%StartNote.text = info.note
-		_:
-			%StartNote.text = ""
+			return str(info.note)
+	return ""
 
 
 ## One swatch per company color; the chosen one gets a white border (dark on

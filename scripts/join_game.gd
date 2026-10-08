@@ -5,13 +5,16 @@ extends Control
 ## password), or one at an address (a Steam invite joins its game straight
 ## away); then a password if it needs one; then picking a company:
 ## taking back one of the game's companies no one is playing, or founding a
-## new one at a home port no company has. Once the host lets you in, the game
+## new one at a home port no company has, picked on the globe like a new
+## game's (the recommended starts and the Great Lakes). Once the host lets you in, the game
 ## opens (see Net).
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const WIDTH := 640.0
 const SWATCH_SIZE := Vector2(34, 26)
+## The globe a new company's home port is picked on.
+const MAP_SIZE := Vector2(640, 400)
 
 ## The player's name, kept between visits (also their new company's name).
 static var player_name := ""
@@ -29,7 +32,10 @@ var _password_edit := LineEdit.new()
 var _asking := {}
 ## Picking a company (see _show_choice()).
 var _color := "red"
-var _port_picker := OptionButton.new()
+## The home port picked on the globe, its name and what kind of start it is.
+var _home_port := ""
+var _port_name := Label.new()
+var _start_note := Label.new()
 var _company_name := LineEdit.new()
 
 
@@ -75,9 +81,22 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Net.stop_browsing()
+	for node: Node in _kept():
+		if node.get_parent() == null:
+			node.free()  # (Off every page just now: nothing else frees it.)
 
 
+## The fields and labels kept from page to page (see _clear()).
+func _kept() -> Array[Node]:
+	return [_status, _games, _name_edit, _address_edit, _port_edit, _company_name, _port_name, _start_note]
+
+
+## Empties the page for the next: the kept fields and labels are only taken
+## off it (wherever they are on it), the rest freed.
 func _clear() -> void:
+	for node: Node in _kept():
+		if node.get_parent() != null and _page.is_ancestor_of(node):
+			node.get_parent().remove_child(node)
 	for child in _page.get_children():
 		_page.remove_child(child)
 		child.queue_free()
@@ -230,31 +249,42 @@ func _show_choice(info: Dictionary) -> void:
 	_company_name.max_length = GameState.MAX_COMPANY_NAME_LENGTH
 	_company_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_child(_company_name)
-	grid.add_child(_dim("Home port", false))
-	_port_picker.clear()
-	var taken: Array = info.get("taken_ports", [])
-	for port in GameData.ports_by_name():
-		if not taken.has(port.id):
-			_port_picker.add_item("%s, %s" % [port.name, port.get("country", "")])
-			_port_picker.set_item_metadata(_port_picker.item_count - 1, port.id)
-	# Start on the first recommended start no one has (see data/starts.json).
-	for entry: Dictionary in GameData.starts.get("great", []):
-		var at := _find_port(entry.port)
-		if at >= 0:
-			_port_picker.select(at)
-			break
-	_port_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_child(_port_picker)
 	grid.add_child(_dim("Color", false))
 	grid.add_child(_swatches())
 	_page.add_child(grid)
+	# The home port (its HQ), picked on the globe like a new game's: the
+	# recommended starts and the Great Lakes ports no company has.
+	_page.add_child(_dim("Click your HQ's port on the globe (drag to turn it, scroll to zoom):"))
+	var choices := NewCompany.start_choices(info.get("taken_ports", []))
+	var map := MapView.new()
+	map.custom_minimum_size = MAP_SIZE
+	_page.add_child(map)
+	map.selectable_ports = choices
+	map.opens_whole_globe = true
+	_home_port = ""
+	for entry: Dictionary in GameData.starts.get("great", []):  # Start on the first recommended start no one has.
+		if choices.has(entry.port):
+			_home_port = entry.port
+			break
+	if _home_port.is_empty() and not choices.is_empty():
+		_home_port = choices.keys()[0]
+	map.opens_at_port = _home_port
+	_port_name.add_theme_font_size_override(&"font_size", 20)
+	_page.add_child(_port_name)
+	_start_note.theme_type_variation = &"DimLabel"
+	_start_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_page.add_child(_start_note)
 	var found := Button.new()
 	found.text = "Found Company and Join"
 	found.custom_minimum_size = Vector2(280, 44)
 	found.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	found.disabled = _home_port.is_empty()
 	found.pressed.connect(func() -> void:
-		Net.choose_company({name = _company_name.text.strip_edges(), color = _color,
-			home_port = str(_port_picker.get_item_metadata(_port_picker.selected))}))
+		Net.choose_company({name = _company_name.text.strip_edges(), color = _color, home_port = _home_port}))
+	map.port_clicked.connect(func(port_id: String) -> void:
+		_pick_port(map, port_id)
+		found.disabled = false)
+	_pick_port(map, _home_port)
 	_page.add_child(found)
 	_status.text = note if note != "Pick your company." else ""
 	_page.add_child(_status)
@@ -286,9 +316,14 @@ func _swatches() -> HFlowContainer:
 	return row
 
 
-## Where a port is in the home port picker, or -1 if it isn't there (taken).
-func _find_port(port_id: String) -> int:
-	for i in _port_picker.item_count:
-		if _port_picker.get_item_metadata(i) == port_id:
-			return i
-	return -1
+## Picks a new company's home port on the globe.
+func _pick_port(map: MapView, port_id: String) -> void:
+	_home_port = port_id
+	map.selected_port = port_id
+	if port_id.is_empty():
+		_port_name.text = "Every starting port is taken."
+		_start_note.text = ""
+		return
+	var port := GameData.get_port(port_id)
+	_port_name.text = "%s, %s" % [port.name, port.get("country", "")]
+	_start_note.text = NewCompany.start_note(port_id)

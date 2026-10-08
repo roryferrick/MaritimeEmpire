@@ -893,6 +893,10 @@ func _ready() -> void:
 	GameState.ships_changed.connect(_dock_layer.queue_redraw)
 	# Ship art is drawn well below its size at most zooms: mipmaps keep it smooth.
 	_overlay.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Already its size (made in code with a minimum size, say): it won't be
+	# resized, so fit the view now (once whoever made it has set it up).
+	if size.x > 0.0 and size.y > 0.0:
+		_on_resized.call_deferred()
 
 
 func _process(delta: float) -> void:
@@ -1919,6 +1923,11 @@ const ROPE_COLOR := Color(0.95, 0.9, 0.74)
 ## Coming in, how far off the berth (ship widths) a ship lies before it slides
 ## in sideways on its thrusters (and pulling out, slides off to).
 const BERTH_OFF_WIDTHS := 1.6
+## HQ buildings (_draw_hq_building()): how many levels, one more every this
+## many company levels, and how far (dock units) they stand back from the quay's edges.
+const HQ_LEVELS := 10
+const HQ_LEVEL_EVERY := 10
+const HQ_MARGIN := 0.6
 ## Ships keep to the right-hand side of a harbour entrance, this many widths
 ## (of the widest ship the marina takes) off its middle.
 const KEEP_RIGHT_WIDTHS := 0.6
@@ -1963,6 +1972,8 @@ var _dock_seen := {}
 var _last_spot := {}
 ## Ship -> [its leg, how far it curves in and out of port] (see _harbour_reaches()).
 var _harbour_reach_cache := {}
+## [marina radius, slip] -> where an HQ building may stand (see _hq_region()).
+var _hq_regions := {}
 ## Port id -> the way into the wind there on screen, worked out once a frame.
 var _upwind := {}
 ## Port id -> the strongest storm's strength there, this frame (see _storm_strength_at_port()).
@@ -2273,7 +2284,7 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	# water and the slip dug out of it.
 	var clear := radius + JETTY_WIDTH / 2.0
 	_canvas.draw_colored_polygon(_marina_polygon(port_id, _arc(clear, -PI, PI).slice(0, -1)), water)
-	var quay := PackedVector2Array([Vector2(0.0, clear), Vector2(-clear, clear), Vector2(-clear, -clear), Vector2(0.0, -clear)])
+	var quay := PackedVector2Array([Vector2(0.0, clear), Vector2(_quay_inland(layout), clear), Vector2(_quay_inland(layout), -clear), Vector2(0.0, -clear)])
 	_canvas.draw_colored_polygon(_marina_polygon(port_id, quay), QUAY_COLOR)
 	if not layout.slip.is_empty():
 		var slip: Array = layout.slip
@@ -2292,6 +2303,7 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	var edge := _marina_polygon(port_id, corners)
 	_canvas.draw_polyline(edge, QUAY_EDGE, 1.0, true)
 	_canvas.draw_polyline(_marina_polygon(port_id, quay), QUAY_EDGE, 1.0, true)
+	_draw_hq_building(port_id, layout)
 	# The jetty: round the sea half, each side of the entrance, lit at its ends.
 	var gap: float = layout.gap
 	for side: float in [-1.0, 1.0]:
@@ -2307,6 +2319,288 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	for berth: Array in layout.berths:
 		for post in _bollards(berth):
 			_canvas.draw_circle(_dock_point(port_id, post), bollard, BOLLARD_COLOR)
+
+
+## How far inland (dock units, -x) a marina's square quay reaches: its cleared
+## circle's edge, or past the inland end of a hub's slip.
+static func _quay_inland(layout: Dictionary) -> float:
+	var inland := -(float(layout.radius) + JETTY_WIDTH / 2.0)
+	var slip: Array = layout.slip
+	if not slip.is_empty():
+		inland = minf(inland, (slip[0] as Vector2).x - float(slip[1]) - QUAY_WIDTH * 2.0)
+	return inland
+
+
+# --- HQ buildings ---------------------------------------------------------------
+
+## A company's HQ building's level (1 to HQ_LEVELS): one more every
+## HQ_LEVEL_EVERY company levels.
+static func hq_level(company: Company) -> int:
+	return clampi(1 + company.level() / HQ_LEVEL_EVERY, 1, HQ_LEVELS)
+
+
+## Where an HQ's building may stand (dock units): the square quay's corner on
+## one side of its slip, from the slip's wall to the square's edge and from its
+## inland end round to the marina's basin, which its front follows. [] for a
+## marina without a slip.
+func _hq_region(layout: Dictionary) -> PackedVector2Array:
+	var key := [layout.radius, layout.slip]
+	if _hq_regions.has(key):
+		return _hq_regions[key]
+	var region := PackedVector2Array()
+	var slip: Array = layout.slip
+	if not slip.is_empty():
+		var clear := float(layout.radius) + JETTY_WIDTH / 2.0
+		var low := (slip[0] as Vector2).y + float(slip[2]) / 2.0 + QUAY_WIDTH + HQ_MARGIN
+		var inland := _quay_inland(layout) + HQ_MARGIN
+		var corner := PackedVector2Array([Vector2(inland, low), Vector2(-HQ_MARGIN, low), Vector2(-HQ_MARGIN, clear - HQ_MARGIN), Vector2(inland, clear - HQ_MARGIN)])
+		var basin := _arc(float(layout.inner) + QUAY_WIDTH + HQ_MARGIN, 0.0, TAU).slice(0, -1)
+		for piece in Geometry2D.clip_polygons(corner, basin):
+			if absf(_area(piece)) > absf(_area(region)):
+				region = piece
+	_hq_regions[key] = region
+	return region
+
+
+static func _area(points: PackedVector2Array) -> float:
+	var total := 0.0
+	for i in points.size():
+		total += points[i].cross(points[(i + 1) % points.size()])
+	return total / 2.0
+
+
+static func _rect_points(rect: Rect2) -> PackedVector2Array:
+	return PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
+
+
+static func _bounds(points: PackedVector2Array) -> Rect2:
+	var box := Rect2(points[0], Vector2.ZERO)
+	for p in points:
+		box = box.expand(p)
+	return box
+
+
+## The biggest piece of a polygon inside another (dock units), or [].
+static func _clip_inside(shape: PackedVector2Array, within: PackedVector2Array) -> PackedVector2Array:
+	var best := PackedVector2Array()
+	for piece in Geometry2D.intersect_polygons(shape, within):
+		if absf(_area(piece)) > absf(_area(best)):
+			best = piece
+	return best
+
+
+## A polygon (dock units) pulled in towards its middle by about `by`.
+static func _shrink(points: PackedVector2Array, by: float) -> PackedVector2Array:
+	var best := PackedVector2Array()
+	for piece in Geometry2D.offset_polygon(points, -by):
+		if absf(_area(piece)) > absf(_area(best)):
+			best = piece
+	return best
+
+
+## The company's HQ building beside its port's slip, growing with it through
+## HQ_LEVELS levels (see hq_level()), seen from above: from a little wooden
+## hut with its company's flag (1) through a wooden house, a stone lodge, a
+## brick office and concrete offices with roof gardens, to glass offices with
+## roof terraces, and a tech campus filling its corner (10), its front curving
+## round the basin, a terrace on its roof and a helicopter pad.
+func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
+	var owner: Company = null
+	for each in GameState.all_companies():
+		var hub := each.hub_at(port_id)
+		if hub != null and hub.is_hq:
+			owner = each
+			break
+	var region := _hq_region(layout)
+	if owner == null or region.size() < 3:
+		return
+	var level := hq_level(owner)
+	var tint := GameState.company_color_value(owner.color)
+	var area := _bounds(region)
+	# Its footprint: from the corner furthest inland and from the slip, growing
+	# towards the basin; all of its corner at the top level.
+	var foot := region
+	if level < HQ_LEVELS:
+		var share := lerpf(0.22, 0.92, pow(float(level - 1) / float(HQ_LEVELS - 2), 1.1))
+		var size := area.size * share
+		foot = _clip_inside(_rect_points(Rect2(Vector2(area.position.x, area.end.y - size.y), size)), region)
+	if foot.size() < 3:
+		return
+	var box := _bounds(foot)
+	# Its shadow, the taller the longer.
+	var height := 0.3 + 0.22 * level
+	var shadow := _marina_polygon(port_id, foot)
+	for i in shadow.size():
+		shadow[i] += Vector2(0.7, 0.7) * height * dock_scale(port_id)
+	_canvas.draw_colored_polygon(shadow, Color(0, 0, 0, 0.28))
+	if level <= 3:
+		_draw_hq_house(port_id, level, box, tint)
+	else:
+		_draw_hq_block(port_id, level, foot, box, tint)
+
+
+## Levels 1 to 3: a wooden hut, a wooden house and a stone lodge, pitched roofs
+## with their ridge along the long side, the company's flag at a corner (and
+## its color along the eaves from level 2).
+func _draw_hq_house(port_id: String, level: int, box: Rect2, tint: Color) -> void:
+	var roofs: Array = [[Color("#9a6a3c"), Color("#7d5330")], [Color("#8a5a32"), Color("#6c4426")], [Color("#77726c"), Color("#5f5b56")]]
+	var light: Color = roofs[level - 1][0]
+	var dark: Color = roofs[level - 1][1]
+	var along := box.size.x >= box.size.y
+	var first := Rect2(box.position, Vector2(box.size.x, box.size.y / 2.0) if along else Vector2(box.size.x / 2.0, box.size.y))
+	var second := Rect2(box.position + (Vector2(0, box.size.y / 2.0) if along else Vector2(box.size.x / 2.0, 0)), first.size)
+	_hq_poly(port_id, _rect_points(first), light)
+	_hq_poly(port_id, _rect_points(second), dark)
+	# Shingles (planks, on the hut) running along the ridge, and the ridge.
+	var lines := Color(0, 0, 0, 0.18)
+	var step := 0.45
+	var ridge := dark.darkened(0.4) if level > 1 else tint
+	if along:
+		var y := box.position.y + step
+		while y < box.end.y - 0.05:
+			_hq_line(port_id, Vector2(box.position.x, y), Vector2(box.end.x, y), lines, 0.06)
+			y += step
+		_hq_line(port_id, Vector2(box.position.x, box.get_center().y), Vector2(box.end.x, box.get_center().y), ridge, 0.14)
+	else:
+		var x := box.position.x + step
+		while x < box.end.x - 0.05:
+			_hq_line(port_id, Vector2(x, box.position.y), Vector2(x, box.end.y), lines, 0.06)
+			x += step
+		_hq_line(port_id, Vector2(box.get_center().x, box.position.y), Vector2(box.get_center().x, box.end.y), ridge, 0.14)
+	if level >= 2:
+		_hq_outline(port_id, _rect_points(box), tint, 0.16)  # Painted eaves.
+		_hq_poly(port_id, _rect_points(Rect2(box.position + box.size * Vector2(0.72, 0.18), Vector2.ONE * minf(box.size.x, box.size.y) * 0.14)), Color("#4a3a32"))  # The chimney.
+	if level == 3:
+		# A flat-roofed annex beside it.
+		var annex := Rect2(Vector2(box.end.x + 0.2, box.position.y + box.size.y * 0.35), Vector2(box.size.x * 0.35, box.size.y * 0.65))
+		_hq_poly(port_id, _rect_points(annex), Color("#8d8a84"))
+		_hq_outline(port_id, _rect_points(annex), tint, 0.12)
+	# The flag at its corner nearest the slip and the sea: a pole and its pennant.
+	var pole := Vector2(box.end.x + 0.35, box.position.y - 0.35)
+	_hq_dot(port_id, pole, 0.12, Color("#2a2a2a"))
+	_hq_poly(port_id, PackedVector2Array([pole, pole + Vector2(0.9, -0.25), pole + Vector2(0.15, -0.55)]), tint)
+
+
+## Levels 4 to 10: flat-roofed offices, brick, then concrete, then glass, each
+## with its company's sign along the front; roof gear, then planters, then a
+## deck with sunshades, a lawn, solar panels and a pool, and at the top level
+## a helicopter pad.
+func _draw_hq_block(port_id: String, level: int, foot: PackedVector2Array, box: Rect2, tint: Color) -> void:
+	var wall := Color("#9c4a3a")
+	var roof := Color("#5f5a55")  # (Tar and gravel: darker than the quay.)
+	if level >= 5 and level <= 6:
+		wall = Color("#c3c0b8")
+		roof = Color("#dcd8ce")
+	elif level >= 7:
+		wall = Color("#5d9cc4").lerp(tint, 0.12)
+		roof = Color("#c9ccd0")
+	_hq_poly(port_id, foot, wall)
+	# The roof inside its parapet (a glass curtain wall shows as a band round it).
+	var inset := 0.35 if level < 7 else 0.55
+	var top := _shrink(foot, inset)
+	if top.size() < 3:
+		return
+	_hq_poly(port_id, top, roof)
+	if level >= 7:
+		_hq_outline(port_id, top, Color(1, 1, 1, 0.35), 0.05)
+		# Mullions in the glass band along the front and back.
+		var x := box.position.x + 0.8
+		while x < box.end.x:
+			for edge: Array in [[box.position.y, box.position.y + inset], [box.end.y - inset, box.end.y]]:
+				var from := Vector2(x, edge[0])
+				var to := Vector2(x, edge[1])
+				if Geometry2D.is_point_in_polygon((from + to) / 2.0, foot) and not Geometry2D.is_point_in_polygon((from + to) / 2.0, top):
+					_hq_line(port_id, from, to, Color(1, 1, 1, 0.35), 0.05)
+			x += 0.8
+	var roof_box := _bounds(top)
+	# The company's sign along the front (the side facing the slip).
+	_hq_poly(port_id, _clip_inside(_rect_points(Rect2(box.position + Vector2(box.size.x * 0.2, -0.05), Vector2(box.size.x * 0.6, 0.3))), foot), tint)
+	# Roof gear on the lower levels.
+	if level <= 6:
+		for k in 3:
+			var at := roof_box.position + roof_box.size * Vector2(0.12 + 0.12 * k, 0.62)
+			_hq_poly(port_id, _clip_inside(_rect_points(Rect2(at, Vector2(0.6, 0.45))), top), Color("#7a7c80"))
+	# Solar panels from level 8, in rows at the inland end.
+	if level >= 8:
+		var panels := Rect2(roof_box.position + Vector2(0.3, roof_box.size.y * 0.55), Vector2(roof_box.size.x * 0.3, roof_box.size.y * 0.38))
+		var y := panels.position.y
+		while y < panels.end.y - 0.3:
+			_hq_poly(port_id, _clip_inside(_rect_points(Rect2(Vector2(panels.position.x, y), Vector2(panels.size.x, 0.35))), top), Color("#2c3e66"))
+			y += 0.55
+	# The roof terrace: planters from level 5, a deck with sunshades from 6, a
+	# lawn from 7 and a pool from 9, growing towards the water.
+	if level >= 5:
+		var deck_share := clampf(0.18 + 0.07 * (level - 5), 0.18, 0.5)
+		if level >= 6:
+			var deck := _clip_inside(_rect_points(Rect2(Vector2(roof_box.end.x - roof_box.size.x * deck_share - 0.2, roof_box.position.y + 0.3), Vector2(roof_box.size.x * deck_share, roof_box.size.y * 0.6))), top)
+			if deck.size() >= 3:
+				_hq_poly(port_id, deck, Color("#c79a66"))
+				var deck_box := _bounds(deck)
+				var shades := clampi(level - 4, 2, 6)
+				for k in shades:
+					var at := deck_box.position + deck_box.size * Vector2((k + 0.5) / shades, 0.3 + 0.35 * (k % 2))
+					if Geometry2D.is_point_in_polygon(at, deck):
+						_draw_sunshade(port_id, at, 0.42, tint)
+		if level >= 7:
+			_hq_poly(port_id, _clip_inside(_rect_points(Rect2(roof_box.position + roof_box.size * Vector2(0.38, 0.55), roof_box.size * Vector2(0.3, 0.35))), top), Color("#6aa84f"))
+		if level >= 9:
+			var water := _clip_inside(_rect_points(Rect2(roof_box.position + roof_box.size * Vector2(0.4, 0.1), roof_box.size * Vector2(0.18, 0.3))), top)
+			if water.size() >= 3:
+				_hq_poly(port_id, water, Color("#7fd3e8"))
+				_hq_outline(port_id, water, Color.WHITE, 0.08)
+		var planters := 4 + level
+		for k in planters:
+			var at := Vector2(lerpf(roof_box.position.x + 0.3, roof_box.end.x - 0.3, float(k) / maxf(planters - 1, 1)), roof_box.position.y + 0.2)
+			if Geometry2D.is_point_in_polygon(at, top):
+				_hq_dot(port_id, at, 0.16, Color("#3f8a3f"))
+	# The company's logo on the roof; at the top level, by its helicopter pad.
+	var spot := roof_box.position + roof_box.size * Vector2(0.18, 0.3)
+	if level >= 6 and level < HQ_LEVELS:
+		_hq_dot(port_id, spot, minf(roof_box.size.x, roof_box.size.y) * 0.12, tint)
+	if level >= HQ_LEVELS:
+		var pad_r := minf(roof_box.size.x, roof_box.size.y) * 0.17
+		_hq_dot(port_id, spot, pad_r, Color("#3a3d42"))
+		_hq_ring(port_id, spot, pad_r * 0.82, Color("#f2c230"), pad_r * 0.08)
+		var h := pad_r * 0.38
+		for x: float in [-h * 0.6, h * 0.6]:
+			_hq_line(port_id, spot + Vector2(x, -h), spot + Vector2(x, h), Color.WHITE, pad_r * 0.12)
+		_hq_line(port_id, spot + Vector2(-h * 0.6, 0), spot + Vector2(h * 0.6, 0), Color.WHITE, pad_r * 0.12)
+		_hq_dot(port_id, spot + Vector2(pad_r * 1.6, 0), pad_r * 0.35, tint)
+
+
+## A round sunshade in the company's color seen from above, with its ribs.
+func _draw_sunshade(port_id: String, at: Vector2, radius: float, tint: Color) -> void:
+	_hq_dot(port_id, at + Vector2(0.12, 0.12), radius, Color(0, 0, 0, 0.2))
+	_hq_dot(port_id, at, radius, tint)
+	for k in 4:
+		var way := Vector2.from_angle(PI / 4.0 + k * PI / 2.0) * radius
+		_hq_line(port_id, at - way, at + way, tint.darkened(0.3), 0.04)
+	_hq_dot(port_id, at, radius * 0.18, Color.WHITE)
+
+
+func _hq_poly(port_id: String, points: PackedVector2Array, color: Color) -> void:
+	if points.size() >= 3:
+		_canvas.draw_colored_polygon(_marina_polygon(port_id, points), color)
+
+
+func _hq_outline(port_id: String, points: PackedVector2Array, color: Color, width: float) -> void:
+	if points.size() < 2:
+		return
+	var screen := _marina_polygon(port_id, points)
+	screen.append(screen[0])
+	_canvas.draw_polyline(screen, color, maxf(width * dock_scale(port_id), 1.0), true)
+
+
+func _hq_line(port_id: String, from: Vector2, to: Vector2, color: Color, width: float) -> void:
+	_canvas.draw_line(_dock_point(port_id, from), _dock_point(port_id, to), color, maxf(width * dock_scale(port_id), 1.0), true)
+
+
+func _hq_dot(port_id: String, at: Vector2, radius: float, color: Color) -> void:
+	_canvas.draw_circle(_dock_point(port_id, at), maxf(radius * dock_scale(port_id), 0.8), color, true, -1.0, true)
+
+
+func _hq_ring(port_id: String, at: Vector2, radius: float, color: Color, width: float) -> void:
+	_canvas.draw_arc(_dock_point(port_id, at), radius * dock_scale(port_id), 0.0, TAU, 32, color, maxf(width * dock_scale(port_id), 1.0), true)
 
 
 ## Points round a circle (dock units) from one angle to another.
@@ -3318,12 +3612,13 @@ func _draw_ports(labels: Array) -> void:
 		if not hub_ports.has(port.id):
 			draw_port.call(port.id)
 	# The HQ and hubs go on top of the other ports, each with a ring in its
-	# company's color (heavier for an HQ); companies sharing a port ring it in turn.
+	# company's color (heavier for an HQ); companies sharing a port ring it in
+	# turn. Not once its marina shows: that has its slip (and an HQ building).
 	for port_id: String in hub_ports:
 		draw_port.call(port_id)
-		var radius := _port_radius(port_id) + 1.0
 		if _marina_shown(port_id):
-			radius = (float(_port_layout(port_id).radius) + JETTY_WIDTH) * _ship_scale() + 1.0  # Round its marina.
+			continue
+		var radius := _port_radius(port_id) + 1.0
 		for entry: Array in hub_ports[port_id]:
 			var width := HQ_RING_WIDTH if entry[0].is_hq else HUB_RING_WIDTH
 			_canvas.draw_arc(port_screen_position(port_id), radius + width / 2.0, 0.0, TAU, clampi(int(radius), 32, 128), entry[1], width, true)
