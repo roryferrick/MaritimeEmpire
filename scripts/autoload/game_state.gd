@@ -87,6 +87,15 @@ const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls"
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The hidden gem (click the company name): money it gives, once per company.
 const HIDDEN_GEM_MONEY := 10000000
+## Each commodity's industry building, built on a hub's plots (see
+## build_industry(); its art is art/industry/<commodity>.svg).
+const INDUSTRY_NAMES := {
+	toys = "Toy factory", clothing = "Textile mill", furniture = "Furniture works", coffee = "Coffee roastery",
+	oil = "Oil refinery", gas = "Gas terminal", iron = "Steel mill", coal = "Coal power station", gold = "Gold refinery",
+	wheat = "Flour mill", corn = "Corn mill", soybeans = "Soybean crushing plant", rice = "Rice mill", barley = "Malting house",
+	cows = "Cattle ranch", sheep = "Wool mill", pigs = "Pig farm",
+	cars = "Car plant", trucks = "Truck plant", boats = "Boatyard",
+}
 ## How often (game seconds) a ship waiting in port for a full load looks again
 ## (it also looks as soon as the money reaches what it needed).
 const LOAD_RECHECK_S := 2.0
@@ -1023,6 +1032,92 @@ func upgrade_hub(hub: Hub, path: String) -> void:
 	hubs_changed.emit()
 
 
+## Why a building for a commodity can't go on a hub's industry plot right
+## now, or "".
+func build_industry_error(hub: Hub, slot: int, commodity_id: String) -> String:
+	if slot < 0 or slot >= Hub.INDUSTRY_SLOTS:
+		return "No such plot."
+	if hub.level < Hub.industry_slot_level(slot):
+		return "Opens at hub level %d." % Hub.industry_slot_level(slot)
+	if not hub.industries[slot].is_empty():
+		return "Something's built there already."
+	if GameData.commodity(commodity_id).is_empty():
+		return "No such commodity."
+	if hub.has_industry(commodity_id):
+		return "This hub has a %s building already." % GameData.commodity(commodity_id).get("name", commodity_id)
+	var price := industry_price()
+	if money < price:
+		return "Costs %s." % Fmt.money(price)
+	return ""
+
+
+## What a building costs (hubs.industry.price), and what demolishing one
+## gives back.
+func industry_price() -> int:
+	return int(Hub.industry_settings().get("price", 15000000))
+
+
+func industry_refund() -> int:
+	return roundi(industry_price() * float(Hub.industry_settings().get("refund", 0.5)))
+
+
+## Builds a commodity's building on one of a hub's industry plots, for its price.
+func build_industry(hub: Hub, slot: int, commodity_id: String) -> void:
+	if not build_industry_error(hub, slot, commodity_id).is_empty():
+		return
+	if Net.command(&"build_industry", [hub, slot, commodity_id]):
+		return
+	var price := industry_price()
+	money -= price
+	_record(null, "hubs", price)
+	hub.industries[slot] = commodity_id
+	ActivityLog.add("Built a %s at %s" % [industry_name(commodity_id), hub.title()], ActivityLog.Kind.GOOD)
+	hubs_changed.emit()
+
+
+## Pulls down the building on one of a hub's industry plots, for some of its price back.
+func demolish_industry(hub: Hub, slot: int) -> void:
+	if slot < 0 or slot >= Hub.INDUSTRY_SLOTS or hub.industries[slot].is_empty():
+		return
+	if Net.command(&"demolish_industry", [hub, slot]):
+		return
+	var refund := industry_refund()
+	money += refund
+	_record(null, "hubs", -refund)
+	ActivityLog.add("Pulled down the %s at %s" % [industry_name(hub.industries[slot]), hub.title()], ActivityLog.Kind.INFO)
+	hub.industries[slot] = ""
+	hubs_changed.emit()
+
+
+## A commodity's industry building's name ("Coffee roastery").
+static func industry_name(commodity_id: String) -> String:
+	return str(INDUSTRY_NAMES.get(commodity_id, "%s works" % GameData.commodity(commodity_id).get("name", commodity_id)))
+
+
+## A commodity's price for a company at a port: the market's, less (buying)
+## or more (selling) by its building for it there, if it has a hub there with
+## one (see Hub.industry_bonus()).
+func company_buy_price(port_id: String, commodity_id: String, of: Company = null) -> float:
+	var hub := hub_at(port_id, of)
+	return market.buy_price(port_id, commodity_id) * (1.0 - (hub.industry_bonus(commodity_id, "buy") if hub else 0.0))
+
+
+func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
+	var hub := hub_at(port_id, of)
+	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(commodity_id, "sell") if hub else 0.0))
+
+
+## Extra XP (e.g. 0.5 for +50%) a delivery of a commodity earns from a
+## company's buildings for it where it was loaded and where it's unloaded.
+func industry_xp_bonus(commodity_id: String, from_port: String, to_port: String, of: Company = null) -> float:
+	var bonus := 0.0
+	for port_id in [from_port, to_port]:
+		var hub := hub_at(port_id, of) if not port_id.is_empty() else null
+		if hub:
+			bonus += hub.industry_bonus(commodity_id, "xp")
+	return bonus
+
+
 ## Spreads recovery boats evenly across the HQ and hubs, model by model: each
 ## port gets its share (the ports with the most boats already keep any extra
 ## one), boats already at a port within its share stay, and the rest are
@@ -1688,7 +1783,7 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	ship.cargo_payment = 0
 	ship.cargo_leg_nm = 0.0
 	if not ship.cargo_id.is_empty():
-		var sale := ship.cargo_qty * market.sell_price(port, ship.cargo_id)
+		var sale := ship.cargo_qty * company_sell_price(port, ship.cargo_id, owner_of(ship))
 		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost, ship.model_id, owner_of(ship)))
 		ship.cargo_leg_nm = GameData.distance_nm(ship.from_port, port) if paid and ship.from_port != port else 0.0
 	ship.unloaded = ship.is_service()
@@ -1855,8 +1950,9 @@ func _sell_cargo(ship: Ship) -> void:
 			var stats: Dictionary = who.canal_stats.get_or_add(canal_id, {crossings = 0, tolls = 0.0, xp = 0.0})
 			stats.xp = float(stats.xp) + xp * bonus
 	ship.delivery_canals.clear()
-	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus,
-		1.0 + (hub.company_xp_bonus() if hub else 0.0) + canal_bonus)
+	var industry := industry_xp_bonus(ship.cargo_id, ship.cargo_from, ship.docked_at, who)
+	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus + industry,
+		1.0 + (hub.company_xp_bonus() if hub else 0.0) + canal_bonus + industry)
 	if hub:
 		hub.deliveries += 1
 		hub.income += ship.cargo_payment
@@ -1881,7 +1977,7 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	var best := market.best_cargo(ship.model(), ship.docked_at, to, who)
 	if best[0] == "":
 		return ""
-	var price := market.buy_price(ship.docked_at, best[0])
+	var price := company_buy_price(ship.docked_at, best[0], who)
 	var reserve := fuel_reserve(who)
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
 	var quantity := mini(room, floori((float(who.money) - ship.bill - reserve - who.bank_reserve) / price))
@@ -2031,7 +2127,7 @@ func _anchored_call(ship: Ship, to: String) -> bool:
 		if not best.is_empty():
 			if ship.full_loads and not in_debt(who):
 				var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
-				ship.load_need = roundi(room * market.buy_price(ship.docked_at, best) + ship.bill + fuel_reserve(who) + who.bank_reserve)
+				ship.load_need = roundi(room * company_buy_price(ship.docked_at, best, who) + ship.bill + fuel_reserve(who) + who.bank_reserve)
 				if who.money < ship.load_need:
 					ship.load_check_time = play_time + LOAD_RECHECK_S
 					_set_hold(ship, "")

@@ -23,6 +23,8 @@ signal birds_clicked(about: Dictionary, flock: Dictionary)
 ## A group of land animals was clicked: its patch's key and species (see
 ## LandLife and _draw_fauna()).
 signal animals_clicked(key: String, kind: String)
+## One of this player's hubs' industry plots was clicked (see _industry_plots()).
+signal industry_clicked(port_id: String, slot: int)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 ## While choosing a region to unlock (choosing_region): a locked region's
@@ -191,6 +193,8 @@ const SHIP_SIZE := 0.35
 ## for categories whose cargo shows, <category>_cargo.svg. Categories without
 ## art are drawn as plain shapes. The art is SHIP_ART_WIDTH wide, bow to the right.
 const SHIP_ART_DIR := "res://art/ships/"
+## Each commodity's industry building (see _draw_industry()).
+const INDUSTRY_ART_DIR := "res://art/industry/"
 const SHIP_ART_WIDTH := 180.0
 ## Where the cargo sits along the art (x from the stern, in art units). It
 ## fills from the stern forward in CARGO_STEPS steps, so part loads show.
@@ -694,6 +698,8 @@ var _sea_warming := true
 static var _decor_textures: Array[Texture2D] = []
 ## Land animals' other drawings by "<kind>_<frame>" (see _animal_frame()).
 static var _animal_frames := {}
+## Industry buildings' art by commodity (see _industry_texture()).
+static var _industry_art := {}
 static var _decor_buckets := {}
 ## Each land drawing on the unit sphere, and its clearance (see
 ## _load_decor()) over its spot's cosh: times the zoom, its room on screen in px.
@@ -2259,6 +2265,9 @@ func _click(screen_pos: Vector2) -> void:
 	elif not _animals_at(screen_pos).is_empty():
 		var group := _animals_at(screen_pos)
 		animals_clicked.emit(group[0], group[1])
+	elif not _industry_at(screen_pos).is_empty():
+		var plot := _industry_at(screen_pos)
+		industry_clicked.emit(plot[0], plot[1])
 	elif not marina_port.is_empty():
 		port_clicked.emit(marina_port)  # Anywhere on its marina.
 	elif show_ships and _pod_at(screen_pos) >= 0:
@@ -3218,12 +3227,155 @@ func _record_marina(port_id: String, item: Control) -> void:
 	_canvas = canvas
 
 
-## What a port's HQ building looks like ([] for none): its owner's name, color and HQ level.
+## What a port's HQ building and industry look like ([] for none): its HQ
+## owner's name, color and HQ level, and its industry hub's buildings and open
+## plots (see _industry_hub()).
 func _hq_look(port_id: String) -> Array:
+	var look := []
 	for each in GameState.all_companies():
 		var hub := each.hub_at(port_id)
 		if hub != null and hub.is_hq:
-			return [each.name, each.color, hq_level(each)]
+			look = [each.name, each.color, hq_level(each)]
+			break
+	var industry := _industry_hub(port_id)
+	if industry != null:
+		look.append_array([industry.industries.duplicate(), industry.industry_slots(), industry == GameState.hub_at(port_id)])
+	return look
+
+
+# --- Industry -------------------------------------------------------------------
+
+## The hub whose industry a port's marina shows: this player's there if they
+## have one, else the first company's with any buildings; or null.
+static func _industry_hub(port_id: String) -> Hub:
+	var mine := GameState.hub_at(port_id)
+	if mine != null:
+		return mine
+	for each in GameState.all_companies():
+		var hub := each.hub_at(port_id)
+		if hub != null and hub.industries.any(func(id: String) -> bool: return not id.is_empty()):
+			return hub
+	return null
+
+
+## Where a hub's industry buildings stand (dock units): Hub.INDUSTRY_SLOTS
+## plots on the quay corner the other side of its slip from the HQ's (see
+## _hq_region()), equal squares as big as all of them fit. [Rect2...], or []
+## for a marina without a slip.
+func _industry_plots(layout: Dictionary) -> Array:
+	var key := [layout.radius, layout.slip, "industry"]
+	if _hq_regions.has(key):
+		return _hq_regions[key]
+	var plots := []
+	var slip: Array = layout.slip
+	if not slip.is_empty():
+		var clear := float(layout.radius) + JETTY_WIDTH / 2.0
+		var high := (slip[0] as Vector2).y - float(slip[2]) / 2.0 - QUAY_WIDTH - HQ_MARGIN
+		var inland := _quay_inland(layout) + HQ_MARGIN
+		var corner := PackedVector2Array([Vector2(inland, high), Vector2(-HQ_MARGIN, high), Vector2(-HQ_MARGIN, -clear + HQ_MARGIN), Vector2(inland, -clear + HQ_MARGIN)])
+		var basin := _arc(float(layout.inner) + QUAY_WIDTH + HQ_MARGIN, 0.0, TAU).slice(0, -1)
+		var region := PackedVector2Array()
+		for piece in Geometry2D.clip_polygons(corner, basin):
+			if absf(_area(piece)) > absf(_area(region)):
+				region = piece
+		if region.size() >= 3:
+			# The biggest squares, all the same, that fit Hub.INDUSTRY_SLOTS of on the
+			# quay without touching: tried from as big as could be down, each placed
+			# as far inland and from the slip as it'll go (so they line up).
+			var area := _bounds(region)
+			var side := minf(maxf(area.size.x, area.size.y) / Hub.INDUSTRY_SLOTS, minf(area.size.x, area.size.y)) * 0.95
+			var gap := HQ_MARGIN * 0.6
+			var fits := func(square: Rect2) -> bool:
+				return Array(_rect_points(square)).all(func(p: Vector2) -> bool: return Geometry2D.is_point_in_polygon(p, region))
+			while side > 0.5 and plots.size() < Hub.INDUSTRY_SLOTS:
+				plots.clear()
+				var step := side * 0.2
+				var y := area.position.y
+				while y + side <= area.end.y + 0.001 and plots.size() < Hub.INDUSTRY_SLOTS:
+					var x := area.position.x
+					while x + side <= area.end.x + 0.001 and plots.size() < Hub.INDUSTRY_SLOTS:
+						var square := Rect2(Vector2(x, y), Vector2.ONE * side)
+						if fits.call(square) and plots.all(func(other: Rect2) -> bool: return not other.grow(gap).intersects(square)):
+							plots.append(square)
+							x += side + gap
+						else:
+							x += step
+					y += step
+				side *= 0.92
+			if plots.size() < Hub.INDUSTRY_SLOTS:
+				plots.clear()
+	_hq_regions[key] = plots
+	return plots
+
+
+## A hub's industry on its marina's quay (see _industry_plots()): each
+## building's art on its plot with its shadow; an open plot with nothing on it
+## yet marked out (dashed, for this player's own hub), a closed one bare.
+func _draw_industry(port_id: String, layout: Dictionary) -> void:
+	var hub := _industry_hub(port_id)
+	if hub == null:
+		return
+	var plots := _industry_plots(layout)
+	var mine := hub == GameState.hub_at(port_id)
+	var scale := dock_scale(port_id)
+	var flip := float(_dock_flips.get(port_id, 1.0))
+	var turn := 0.0 if port_id == _recording_marina else _port_sea_angle(port_id) + _port_turn(port_id)
+	for slot in mini(plots.size(), Hub.INDUSTRY_SLOTS):
+		var plot: Rect2 = plots[slot]
+		var commodity: String = hub.industries[slot]
+		if commodity.is_empty():
+			if mine and slot < hub.industry_slots():
+				var corners := _marina_polygon(port_id, _rect_points(plot.grow(-plot.size.x * 0.06)))
+				corners.append(corners[0])
+				for i in 4:
+					_dashed_line(corners[i], corners[i + 1], Color(1, 1, 1, 0.55), maxf(0.12 * scale, 1.0), maxf(0.5 * scale, 3.0))
+			continue
+		var texture := _industry_texture(commodity)
+		if texture == null:
+			continue
+		var shadow := _marina_polygon(port_id, _rect_points(plot.grow(-plot.size.x * 0.04)))
+		var drop := Vector2(0.5, 0.5) * scale
+		if port_id == _recording_marina:
+			drop = drop.rotated(-(_port_sea_angle(port_id) + _port_turn(port_id)))
+		for i in shadow.size():
+			shadow[i] += drop
+		_canvas.draw_colored_polygon(shadow, Color(0, 0, 0, 0.22))
+		_canvas.draw_set_transform(_dock_point(port_id, plot.get_center()), turn, Vector2(scale, scale * flip))
+		_canvas.draw_texture_rect(texture, Rect2(-plot.size / 2.0, plot.size), false)
+		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## A dashed line between two screen points.
+func _dashed_line(from: Vector2, to: Vector2, color: Color, width: float, dash: float) -> void:
+	var length := from.distance_to(to)
+	var steps := maxi(floori(length / (dash * 2.0)), 1)
+	for i in steps:
+		var a := from.lerp(to, float(i * 2) / (steps * 2))
+		var b := from.lerp(to, float(i * 2 + 1) / (steps * 2))
+		_canvas.draw_line(a, b, color, width, true)
+
+
+## A commodity's industry building's art (art/industry/<commodity>.svg), loaded once.
+static func _industry_texture(commodity_id: String) -> Texture2D:
+	if not _industry_art.has(commodity_id):
+		var path := INDUSTRY_ART_DIR + commodity_id + ".svg"
+		_industry_art[commodity_id] = load(path) if ResourceLoader.exists(path) else null
+	return _industry_art[commodity_id]
+
+
+## The industry plot under a screen point at a hub of this player's: [port id,
+## slot], or [].
+func _industry_at(screen_pos: Vector2) -> Array:
+	if not docks_shown():
+		return []
+	for hub in GameState.hubs:
+		if not _marina_shown(hub.port_id):
+			continue
+		var local: Vector2 = _screen_to_local(hub.port_id, [screen_pos, 0.0])[0]
+		var plots := _industry_plots(_port_layout(hub.port_id))
+		for slot in plots.size():
+			if (plots[slot] as Rect2).has_point(local):
+				return [hub.port_id, slot]
 	return []
 
 
@@ -3265,6 +3417,7 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	_canvas.draw_polyline(edge, QUAY_EDGE, 1.0, true)
 	_canvas.draw_polyline(_marina_polygon(port_id, quay), QUAY_EDGE, 1.0, true)
 	_draw_hq_building(port_id, layout)
+	_draw_industry(port_id, layout)
 	# The jetty: round the sea half, each side of the entrance, lit at its ends.
 	var gap: float = layout.gap
 	for side: float in [-1.0, 1.0]:

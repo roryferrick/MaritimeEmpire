@@ -256,8 +256,7 @@ func _trade_text(from_port: String, to_port: String) -> String:
 			return "nothing to trade: sails empty"
 		return "nothing to trade: sails empty, about -%s in fuel and repairs" % Fmt.money(roundi(cost))
 	var quantity := floori(_ship.capacity() * (1.0 - GameData.leg_lightening(from_port, to_port, model)))
-	var market := GameState.market
-	var margin: float = (market.sell_price(to_port, best[0]) - market.buy_price(from_port, best[0])) * quantity
+	var margin: float = (GameState.company_sell_price(to_port, best[0], GameState.owner_of(_ship)) - GameState.company_buy_price(from_port, best[0], GameState.owner_of(_ship))) * quantity
 	var fee := GameState.port_fee(to_port, margin)
 	return "loads %s: about +%s%s" % [GameData.commodity(best[0]).get("name", best[0]), Fmt.money(roundi(best[1] * quantity - fee)),
 		" after a %s port fee" % Fmt.money(fee) if fee > 0 else ""]

@@ -170,7 +170,7 @@ func _update_cargo() -> void:
 	# At its next stop: what it sells there, then what it buys there for the stop after.
 	var plan := "At %s: " % GameData.port_name(at)
 	if not ship.cargo_id.is_empty():
-		var sale := ship.cargo_qty * GameState.market.sell_price(at, ship.cargo_id)
+		var sale := ship.cargo_qty * GameState.company_sell_price(at, ship.cargo_id, GameState.owner_of(ship))
 		sale_worth = sale + GameState.trade_bonus(ship.cargo_from, at, sale - ship.cargo_cost, ship.model_id, GameState.owner_of(ship))
 		plan += "sells for about %s" % Fmt.money(roundi(sale_worth))
 	else:
@@ -218,7 +218,7 @@ func _next_load(port_id: String, to: String, sale: float) -> Array:
 	var best: Array = GameState.market.best_cargo(ship.model(), port_id, to, who)
 	if str(best[0]).is_empty():
 		return []
-	var price := GameState.market.buy_price(port_id, best[0])
+	var price := GameState.company_buy_price(port_id, best[0], who)
 	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(port_id, to, ship.model())))
 	var quantity := room
 	if not GameState.in_debt(who) and price > 0.0:

@@ -93,6 +93,9 @@ func _hub_card(hub: Hub) -> Control:
 	box.add_child(HubTree.new(hub))
 
 	box.add_child(HSeparator.new())
+	box.add_child(IndustryPanel.new(hub))
+
+	box.add_child(HSeparator.new())
 	var traffic := Label.new()
 	traffic.theme_type_variation = &"DimLabel"
 	traffic.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

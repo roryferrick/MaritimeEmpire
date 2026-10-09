@@ -40,6 +40,7 @@ func _ready() -> void:
 	_map.pod_clicked.connect(_open_pod_popup)
 	_map.birds_clicked.connect(_open_birds_popup)
 	_map.animals_clicked.connect(_open_animals_popup)
+	_map.industry_clicked.connect(_open_industry_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -426,3 +427,20 @@ func _check_achievements() -> void:
 		var text := "Achievement: %s" % news.name if stars == 0 \
 			else "Achievement: %s %s (%d of 3 stars)" % [news.name, "★".repeat(stars), stars]
 		ActivityLog.add(text, ActivityLog.Kind.GOOD, AchievementsPage.GOLD)
+
+
+## A hub's industry, from clicking one of its plots on the map (see IndustryPopup).
+func _open_industry_popup(port_id: String, slot: int) -> void:
+	var hub := GameState.hub_at(port_id)
+	if hub == null:
+		return
+	var popup := IndustryPopup.new()
+	popup.hub = hub
+	popup.slot = slot
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at := _map.port_screen_position(port_id)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)

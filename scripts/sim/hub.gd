@@ -25,6 +25,12 @@ var upgrades := {"xp": 0, "costs": 0, "speed": 0, "pay": 0}
 ## Traffic: deliveries unloaded here and the pay they brought in.
 var deliveries := 0
 var income := 0.0
+## Its industry: a building on each plot beside the marina (a commodity id,
+## or "" for an empty plot), INDUSTRY_SLOTS of them, each opening at one of
+## hubs.industry.slot_levels (see industry_slots()).
+var industries := ["", "", ""]
+
+const INDUSTRY_SLOTS := 3
 
 
 func _init(port := "", headquarters := false) -> void:
@@ -71,9 +77,46 @@ func bonus(path: String) -> float:
 	return int(upgrades.get(path, 0)) * step * multiplier
 
 
+## The industry settings (game_config hubs.industry).
+static func industry_settings() -> Dictionary:
+	return settings().get("industry", {})
+
+
+## The hub level each industry plot opens at.
+static func industry_slot_level(slot: int) -> int:
+	var levels: Array = industry_settings().get("slot_levels", [10, 20, 30])
+	return int(levels[slot]) if slot < levels.size() else 999
+
+
+## How many of its industry plots are open (by its level).
+func industry_slots() -> int:
+	var open := 0
+	for slot in INDUSTRY_SLOTS:
+		if level >= Hub.industry_slot_level(slot):
+			open += 1
+	return open
+
+
+## True if it has a building for a commodity.
+func has_industry(commodity_id: String) -> bool:
+	return not commodity_id.is_empty() and industries.has(commodity_id)
+
+
+## What its building for a commodity gives (0 without one): "buy" (its buy
+## price here that much cheaper, e.g. 0.2), "sell" (its sell price here that
+## much dearer) or "xp" (that much more XP for deliveries of it to or from
+## here), the HQ's hq_multiplier times a hub's.
+func industry_bonus(commodity_id: String, kind: String) -> float:
+	if not has_industry(commodity_id):
+		return 0.0
+	var key: String = {buy = "buy_discount", sell = "sell_bonus", xp = "xp_bonus"}.get(kind, "")
+	var value := float(Hub.industry_settings().get(key, 0.0))
+	return value * (float(Hub.settings().get("hq_multiplier", 1.5)) if is_hq else 1.0)
+
+
 func to_dict() -> Dictionary:
 	return {"port_id": port_id, "is_hq": is_hq, "level": level, "xp": xp, "upgrades": upgrades,
-		"deliveries": deliveries, "income": income}
+		"deliveries": deliveries, "income": income, "industries": industries}
 
 
 static func from_dict(data: Dictionary) -> Hub:
@@ -85,6 +128,9 @@ static func from_dict(data: Dictionary) -> Hub:
 	var saved: Dictionary = data.get("upgrades", {})
 	for path: String in hub.upgrades:
 		hub.upgrades[path] = int(saved.get(path, 0))
+	var built: Array = data.get("industries", [])
+	for slot in INDUSTRY_SLOTS:
+		hub.industries[slot] = str(built[slot]) if slot < built.size() else ""
 	return hub
 
 

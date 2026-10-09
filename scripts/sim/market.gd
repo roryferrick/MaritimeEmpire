@@ -88,8 +88,8 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 	var best_profit := 0.0
 	var toll_share := GameData.leg_toll_share(from_port, to_port)
 	for commodity_id: String in model.get("cargo", []):
-		var sell := sell_price(to_port, commodity_id)
-		var margin := sell - buy_price(from_port, commodity_id)
+		var sell: float = _state.company_sell_price(to_port, commodity_id, of)
+		var margin: float = sell - _state.company_buy_price(from_port, commodity_id, of)
 		var profit: float = margin + _state.trade_bonus(from_port, to_port, margin, str(model.get("id", "")), of) - sell * toll_share
 		if profit > best_profit:
 			best = commodity_id
