@@ -258,6 +258,11 @@ const TUG_BACK_SHARE := 0.35
 const TUG_HULL_GAP := 0.3
 const TUG_PUSH_STATION := 0.3
 const TUG_TWO_PUSHES_TUGS := 2.5
+## A lone tug pushing a ship in comes in on a slant (see _plan_tug_work()):
+## how far ahead of the other its end comes in through a push (a share of the
+## way in), and how far ahead its end is left after a first push of two.
+const LONE_PUSH_LEAD := 0.35
+const LONE_PUSH_SLANT := 0.55
 ## Tugs moor along the inside of their marina's breakwater (see _jetty_pose()):
 ## the first this far (radians) round from where it meets the quay, each the
 ## next this far (dock units) on from the last.
@@ -1499,7 +1504,8 @@ func _local_to_screen(port_id: String, pose: Array) -> Array:
 ## {total (s), team, ship: its segments, tugs: each tug's segments, finish:
 ## each tug's way off when it lets go}, or {} if there's nothing to work out.
 ## Each segment is {kind, t0, t1, ...}: "path" (along points, as timed),
-## "hold" (a pose), "slide" (from one pose to another), "follow" (pulling,
+## "hold" (a pose), "slide" (pushed in, bow and stern each from one share of
+## the way to another), "follow" (pulling,
 ## `ahead` along the ship's path, `side` out from it, peeling off to `side_to`
 ## `past` along from where it stops), "attached" (pushing:
 ## at `x` along the ship and `out` from it, facing in) and "reverse" (backing
@@ -1579,7 +1585,7 @@ func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, lay
 	elif length >= tug_length * TUG_TWO_PUSHES_TUGS:
 		pushes = [[0.55, [station]], [1.0, [-station]]]
 	else:
-		pushes = [[1.0, [0.0]]]
+		pushes = [[1.0, [station * 0.5]]]  # A little to the bow, so it comes in bow first.
 	var open_side := signf(out.dot(Vector2.from_angle(float(end_pose[1]) + PI / 2.0)))
 	var tug_segments: Array = []
 	for i in team.size():
@@ -1606,44 +1612,58 @@ func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, lay
 	ship_segments.append({kind = "hold", t0 = pulled, t1 = arrived, pose = end_pose})
 	t = arrived
 	# Pushing it on (and, a lone tug on a long ship, coming round between pushes).
+	# A lone tug brings in its end of the ship first, so it comes in on a slant
+	# (pushed at its bow half, it's left lying slanted till the stern half's
+	# pushed). Each push takes its two ends, bow and stern, from how far in
+	# they are (shares of the way) to how far in after it (see "slide").
 	var push_speed := tug_speed * TUG_PUSH_SHARE
 	var back_speed := tug_speed * TUG_BACK_SHARE
-	var from_pose: Array = end_pose
-	var gone := 0.0
 	var back_by := tug_length * TUG_TURN_TUGS * 2.0
+	var ends_in := [0.0, 0.0]
+	var gone := 0.0
 	for p in pushes.size():
 		var share: float = pushes[p][0]
-		var to_pose := [(end_pose[0] as Vector2).lerp(moored[0], share), moored[1]]
+		var to_in := [share, share]
+		var leading := 0.0  # Which end the tug's on, and comes in first: 1 the bow, -1 the stern.
+		if team.size() == 1:
+			leading = signf(float(pushes[p][1][0]))
+			if share < 1.0:
+				to_in = [share + (1.0 - share) * LONE_PUSH_SLANT, share - (1.0 - share) * LONE_PUSH_SLANT]
+				if leading < 0.0:
+					to_in.reverse()
 		var push_s := maxf((share - gone) * width * BERTH_OFF_WIDTHS / push_speed * 1.5, 0.5)
-		ship_segments.append({kind = "slide", t0 = t, t1 = t + push_s, from = from_pose, to = to_pose})
+		ship_segments.append({kind = "slide", t0 = t, t1 = t + push_s, from_pose = end_pose, to_pose = moored, length = length, ends_from = ends_in.duplicate(), ends_to = to_in, lead = leading})
 		for i in team.size():
-			tug_segments[i].append({kind = "attached", t0 = t, t1 = t + push_s, x = pushes[p][1][i], out = out, stand = stand})
+			tug_segments[i].append({kind = "attached", t0 = t, t1 = t + push_s, x = pushes[p][1][i], out = out, stand = stand, angle = float(moored[1])})
 		t += push_s
-		# Backing off it.
+		# Backing off it, square to it however it lies.
+		var lying := _work_pose(work, ship_segments, t)
+		var ship_at: Vector2 = lying[0]
+		var along_ship := Vector2.from_angle(float(lying[1]))
+		var out_now := out.rotated(angle_difference(float(moored[1]), float(lying[1])))
 		var back_s := back_by / back_speed * 1.4
 		for i in team.size():
-			var at: Vector2 = (to_pose[0] as Vector2) + Vector2.from_angle(float(to_pose[1])) * float(pushes[p][1][i]) + out * stand
-			tug_segments[i].append({kind = "reverse", t0 = t, t1 = t + back_s, from = at, to = at + out * back_by, angle = (-out).angle()})
-		ship_segments.append({kind = "hold", t0 = t, t1 = t + back_s, pose = to_pose})
+			var at: Vector2 = ship_at + along_ship * float(pushes[p][1][i]) + out_now * stand
+			tug_segments[i].append({kind = "reverse", t0 = t, t1 = t + back_s, from = at, to = at + out_now * back_by, angle = (-out_now).angle()})
+		ship_segments.append({kind = "hold", t0 = t, t1 = t + back_s, pose = lying})
 		t += back_s
 		if p + 1 < pushes.size():
 			# A lone tug: forward and round along the ship to its next station (the
 			# stern half), turning in there.
-			var along := forward * signf(float(pushes[p + 1][1][0]) - float(pushes[p][1][0]))
+			var along := along_ship * signf(float(pushes[p + 1][1][0]) - float(pushes[p][1][0]))
 			var backed: Vector2 = (tug_segments[0][-1] as Dictionary).to
 			var next_x: float = pushes[p + 1][1][0]
-			var ship_at: Vector2 = to_pose[0]
-			var way := [[backed, (-out).angle()], [backed - out * radius + along * radius, along.angle()]]
-			var run := ship_at + forward * next_x - along * radius + out * (stand + radius)
+			var way := [[backed, (-out_now).angle()], [backed - out_now * radius + along * radius, along.angle()]]
+			var run := ship_at + along_ship * next_x - along * radius + out_now * (stand + radius)
 			if (run - (way[1][0] as Vector2)).dot(along) > tug_length * 0.5:
 				way.append([run, along.angle()])
-			way.append([ship_at + forward * next_x + out * stand, (-out).angle()])
+			way.append([ship_at + along_ship * next_x + out_now * stand, (-out_now).angle()])
 			var round_path := _pose_path(way)
 			var round_times := _path_times(round_path, harbour_speed, tug_length, tug_length, true, true)
-			tug_segments[0].append({kind = "path", t0 = t, t1 = t + round_times[-1], points = round_path, times = round_times, start = (-out).angle(), end = (-out).angle()})
-			ship_segments.append({kind = "hold", t0 = t, t1 = t + round_times[-1], pose = to_pose})
+			tug_segments[0].append({kind = "path", t0 = t, t1 = t + round_times[-1], points = round_path, times = round_times, start = (-out_now).angle(), end = (-out_now).angle()})
+			ship_segments.append({kind = "hold", t0 = t, t1 = t + round_times[-1], pose = lying})
 			t += round_times[-1]
-		from_pose = to_pose
+		ends_in = to_in
 		gone = share
 	work.total = t
 	# Letting go: backed off, they turn away (towards the harbour mouth) and go.
@@ -1693,8 +1713,19 @@ func _work_pose(work: Dictionary, segments: Array, t: float) -> Array:
 		"hold":
 			return segment.pose
 		"slide":
-			var s := smoothstep(0.0, 1.0, u)
-			return [(segment.from[0] as Vector2).lerp(segment.to[0], s), lerp_angle(float(segment.from[1]), float(segment.to[1]), s)]
+			# Pushed in: its bow and stern each from how far in they were to how far
+			# in they'll be (shares of the way from from_pose to to_pose), the end
+			# that `lead`s (1 the bow, -1 the stern) coming first, so it slants.
+			var timing := func(end: float) -> float:
+				var first := float(segment.lead) * end > 0.0
+				var last := float(segment.lead) * end < 0.0
+				return smoothstep(LONE_PUSH_LEAD if last else 0.0, 1.0 - LONE_PUSH_LEAD if first else 1.0, u)
+			var from_pose: Array = segment.from_pose
+			var way: Vector2 = (segment.to_pose[0] as Vector2) - (from_pose[0] as Vector2)
+			var half := Vector2.from_angle(float(from_pose[1])) * float(segment.length) / 2.0
+			var bow: Vector2 = (from_pose[0] as Vector2) + half + way * lerpf(segment.ends_from[0], segment.ends_to[0], timing.call(1.0))
+			var stern: Vector2 = (from_pose[0] as Vector2) - half + way * lerpf(segment.ends_from[1], segment.ends_to[1], timing.call(-1.0))
+			return [(bow + stern) / 2.0, (bow - stern).angle()]
 		"reverse":
 			return [(segment.from as Vector2).lerp(segment.to, smoothstep(0.0, 1.0, u)), float(segment.angle)]
 		"follow":
@@ -1717,8 +1748,9 @@ func _work_pose(work: Dictionary, segments: Array, t: float) -> Array:
 			return [at, (next - at).angle()]
 		"attached":
 			# Its bow on the hull at its station, pushing: going with the ship.
+			# (Square to the hull however it's slanting.)
 			var at := _work_pose(work, work.ship, t)
-			var outward: Vector2 = segment.out
+			var outward: Vector2 = (segment.out as Vector2).rotated(angle_difference(float(segment.angle), float(at[1])))
 			return [(at[0] as Vector2) + Vector2.from_angle(float(at[1])) * float(segment.x) + outward * float(segment.stand), (-outward).angle()]
 	return [Vector2.ZERO, 0.0]
 
