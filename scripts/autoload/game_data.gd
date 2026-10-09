@@ -33,8 +33,11 @@ var canals: Array[Dictionary] = []
 ## Commodities, regions and prices from data/markets.json.
 var markets: Dictionary = {}
 var commodities: Array[Dictionary] = []
-## Recommended HQ ports from data/starts.json: {great: [{port, note}], harder: [...]}.
+## Recommended HQ ports from data/starts.json: {excellent: [{port, note}],
+## great, fair, hard: [...], great_lakes: {note, ports}}.
 var starts: Dictionary = {}
+## The kinds of recommended start in data/starts.json, best first.
+const START_KINDS := ["excellent", "great", "fair", "hard"]
 
 var _ports_by_id: Dictionary = {}
 var _port_positions: Dictionary = {}  # id -> projected Vector2
@@ -153,10 +156,10 @@ func ports_by_name() -> Array[Dictionary]:
 	return sorted
 
 
-## A port's place in data/starts.json: {kind ("great", "harder" or
+## A port's place in data/starts.json: {kind (one of START_KINDS or
 ## "great_lakes"), note}, or {} if it isn't a recommended or lake HQ.
 func start_info(port_id: String) -> Dictionary:
-	for kind: String in ["great", "harder"]:
+	for kind: String in START_KINDS:
 		for entry: Dictionary in starts.get(kind, []):
 			if entry.port == port_id:
 				return {kind = kind, note = entry.get("note", "")}

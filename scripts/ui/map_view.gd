@@ -181,6 +181,8 @@ const GUST_STRENGTH := Vector2(0.25, 1.0)
 const GUST_LENGTH_PX := Vector2(10.0, 36.0)
 const GUST_ALPHA := 0.55
 const SELECTED_RING := Color(1.0, 0.8, 0.25)
+## A shining port's glow (see shining_ports): rings round it, [px out, alpha].
+const SHINE_RINGS := [[12.0, 0.1], [8.0, 0.18], [4.0, 0.32]]
 const PORT_FONT_SIZE := 15
 const COUNTRY_FONT_SIZE := 13
 const LABEL_PADDING := 3.0
@@ -513,6 +515,12 @@ var selectable_ports: Dictionary = {}:
 		selectable_ports = value
 		_regions_key = []
 		_labels_key = []
+		_static_layer.queue_redraw()
+## Picking a port: the choices (port id -> true) that shine, with a soft glow
+## of their color round them and a glint (the excellent starts).
+var shining_ports: Dictionary = {}:
+	set(value):
+		shining_ports = value
 		_static_layer.queue_redraw()
 var selected_port := "":
 	set(value):
@@ -5026,8 +5034,14 @@ func _draw_ports(labels: Array) -> void:
 		if selectable_ports.get(port_id) is Color:
 			port_fill = selectable_ports[port_id]
 		var radius := _port_radius(port_id)
+		var shining := shining_ports.has(port_id)
+		if shining:
+			for ring in SHINE_RINGS:
+				_canvas.draw_circle(pos, radius + float(ring[0]), Color(port_fill, float(ring[1])))
 		_canvas.draw_circle(pos, radius, dimmed if dimmed_ports.has(port_id) else port_fill)
 		_canvas.draw_arc(pos, radius, 0.0, TAU, 24, outline, 1.5, true)
+		if shining:
+			_canvas.draw_circle(pos + Vector2(-0.35, -0.35) * radius, radius * 0.3, Color(1.0, 1.0, 1.0, 0.85))
 		if port_id == selected_port:
 			_canvas.draw_arc(pos, radius + 4.0, 0.0, TAU, 32, SELECTED_RING, 3.0, true)
 	# Every company's HQ and hubs (other players' too, in multiplayer; none while

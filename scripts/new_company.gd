@@ -2,8 +2,9 @@
 class_name NewCompany
 extends Control
 ## New game setup: name the company, pick the home port new ships are delivered
-## to on the globe (only the recommended great and harder starts from
-## data/starts.json and the Great Lakes ports, colored by kind), choose the
+## to on the globe (only the recommended starts from data/starts.json,
+## excellent, great, fair and hard, and the Great Lakes ports, colored by kind,
+## the excellent ones shining; the Great Lakes come with a warning), choose the
 ## company's color, its fastest game speed, its storms (none, moderate or
 ## harsh), and whether to have seasonal closures and the tutorial; then make
 ## the CEO: their name and looks (Characters), part by part or at random.
@@ -14,8 +15,12 @@ const DEFAULT_HOME_PORT := "ROM"
 const DEFAULT_COLOR := "purple"
 const DEFAULT_STORMS := "moderate"
 const SWATCH_SIZE := Vector2(56, 36)
-## The starting ports' colors on the map, by kind of start.
-const START_COLORS := {great = Color(0.35, 0.85, 0.4), harder = Color(1.0, 0.75, 0.25), great_lakes = Color(0.45, 0.75, 1.0)}
+## The starting ports' colors on the map (and their notes'), by kind of start:
+## excellent a bright green (shining on the map), great green, fair yellow,
+## hard red, the Great Lakes blue.
+const START_COLORS := {excellent = Color(0.3, 1.0, 0.45), great = Color(0.3, 0.75, 0.35), fair = Color(1.0, 0.85, 0.25), hard = Color(0.95, 0.35, 0.3), great_lakes = Color(0.45, 0.75, 1.0)}
+## What each kind of start is called in its note.
+const START_TITLES := {excellent = "Excellent start", great = "Great start", fair = "Fair start", hard = "Hard start", great_lakes = "Great Lakes"}
 
 var _home_port := DEFAULT_HOME_PORT
 var _color := DEFAULT_COLOR
@@ -41,12 +46,13 @@ func _ready() -> void:
 	_validate()
 
 
-## The starting ports on the map: the recommended starts (great and harder,
-## from data/starts.json) and the Great Lakes ports, each in its kind's color
+## The starting ports on the map: the recommended starts (from
+## data/starts.json) and the Great Lakes ports, each in its kind's color
 ## (START_COLORS); every other port is a faint dot that can't be picked.
 func _add_ports() -> void:
 	var map: MapView = %MapView
 	map.selectable_ports = start_choices()
+	map.shining_ports = shining_choices()
 	map.opens_at_port = DEFAULT_HOME_PORT
 	map.opens_whole_globe = true
 	map.port_clicked.connect(_pick_port)
@@ -69,13 +75,14 @@ func _selected_port() -> String:
 ## What kind of start the chosen port is, and why.
 func _show_start_note() -> void:
 	%StartNote.text = start_note(_selected_port())
+	%StartNote.add_theme_color_override(&"font_color", start_note_color(_selected_port()))
 
 
 ## The ports a company can start at, each in its kind of start's color
 ## (START_COLORS: MapView.selectable_ports), leaving out `taken` ones.
 static func start_choices(taken: Array = []) -> Dictionary:
 	var choices := {}
-	for kind: String in ["great", "harder"]:
+	for kind: String in GameData.START_KINDS:
 		for entry: Dictionary in GameData.starts.get(kind, []):
 			choices[entry.port] = START_COLORS[kind]
 	for port_id: String in GameData.starts.get("great_lakes", {}).get("ports", []):
@@ -85,17 +92,26 @@ static func start_choices(taken: Array = []) -> Dictionary:
 	return choices
 
 
+## The excellent starts, which shine on the map (MapView.shining_ports).
+static func shining_choices() -> Dictionary:
+	var shining := {}
+	for entry: Dictionary in GameData.starts.get("excellent", []):
+		shining[entry.port] = true
+	return shining
+
+
 ## "Great start: ..." (what kind of start a port is, and why), or "".
 static func start_note(port_id: String) -> String:
 	var info := GameData.start_info(port_id)
-	match info.get("kind", ""):
-		"great":
-			return "Great start: %s" % info.note
-		"harder":
-			return "Harder start: %s" % info.note
-		"great_lakes":
-			return str(info.note)
-	return ""
+	if info.is_empty():
+		return ""
+	return "%s: %s" % [START_TITLES.get(info.kind, ""), info.note]
+
+
+## The color of a port's start note: its kind's, lightened to read on the card.
+static func start_note_color(port_id: String) -> Color:
+	var kind: String = GameData.start_info(port_id).get("kind", "")
+	return (START_COLORS[kind] as Color).lerp(Color.WHITE, 0.25) if START_COLORS.has(kind) else Color(0.75, 0.78, 0.82)
 
 
 ## One swatch per company color; the chosen one gets a white border (dark on

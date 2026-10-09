@@ -274,14 +274,12 @@ func _show_choice(info: Dictionary) -> void:
 	map.custom_minimum_size = MAP_SIZE
 	_page.add_child(map)
 	map.selectable_ports = choices
+	map.shining_ports = NewCompany.shining_choices()
 	map.opens_whole_globe = true
 	_home_port = ""
-	for entry: Dictionary in GameData.starts.get("great", []):  # Start on the first recommended start no one has.
-		if choices.has(entry.port):
-			_home_port = entry.port
-			break
-	if _home_port.is_empty() and not choices.is_empty():
-		_home_port = choices.keys()[0]
+	for port_id: String in choices:  # Start on the best recommended start no one has (they come best first).
+		_home_port = port_id
+		break
 	map.opens_at_port = _home_port
 	_port_name.add_theme_font_size_override(&"font_size", 20)
 	_page.add_child(_port_name)
@@ -358,3 +356,4 @@ func _pick_port(map: MapView, port_id: String) -> void:
 	var port := GameData.get_port(port_id)
 	_port_name.text = "%s, %s" % [port.name, port.get("country", "")]
 	_start_note.text = NewCompany.start_note(port_id)
+	_start_note.add_theme_color_override(&"font_color", NewCompany.start_note_color(port_id))
