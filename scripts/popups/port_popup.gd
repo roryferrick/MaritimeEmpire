@@ -285,6 +285,7 @@ func _add_market_cell(text: String, variation: StringName) -> void:
 	%MarketGrid.add_child(label)
 
 
-## "Gulls: Herring Gull, Yellow-legged Gull (lots)": the flock over the port now.
+## "Gulls: Herring Gull (16), Yellow-legged Gull (8)": the gulls living at the port now.
 func _update_birds() -> void:
-	_birds_label.text = "Gulls: %s" % Birds.shared().flock_text(Birds.shared().port_flock(port_id))
+	var gulls := Wildlife.shared().birds_at(port_id, "gulls", float(GameState.calendar_time()))
+	_birds_label.text = "Gulls: %s" % Birds.shared().counts_text(gulls) if not gulls.is_empty() else ""

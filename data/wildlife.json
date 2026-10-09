@@ -1,0 +1,43 @@
+{
+	"_comment": "The wildlife as individuals (scripts/sim/wildlife.gd): every land animal and bird has a home and goes about its life there, drawn top-down at its size in the world (exaggerated so it reads, like the ships). land: for each land animal (data/birds.json land_animals has their names, groups and facts): km (its length in the world), home (what it lives in, drawn on the map: rookery, snow_den, cave, den, burrow, tree, tree_nest, leaf_nest, waterhole, wallow, pride_rock; none for one that just roams), active (day, night or dusk: when it's up and about; otherwise it's at its home, or bedded down where it is), groups (how many groups live round each of the map's spots for it), spread_km (how far round the spot), roam_km (how far from its home a group ranges), kmh (its walking speed), hibernate (months a whole group sleeps in its den), den_young (a mother with young keeps to the den in hibernate months), migrate ({months: when it's away, to: [lon, lat] degrees from its home}: the herd walks there over migrate_days at the start of them, and back at the end). birds: each class's home (where its birds roost and nest: a gull colony on the shore near its port, a raptor's eyrie, a cormorant colony, a heronry, a seabird colony), species homes for the ones that differ (bitterns in the reeds, cranes on the ground), each class's numbers at a port (gulls by the port's size band; the others as birds.json's own [chance, fewest, most]), how far (km) seabirds range from their colony to forage and follow ships, and how far gulls follow ships out from port. Birds whose range only covers a port some months spend the rest at the nearest port it covers then, flying between them over migrate_days at the start of each stay. km: birds' and homes' sizes in the world.",
+	"migrate_days": 10,
+	"land": {
+		"penguin": {"km": 4.5, "home": "rookery", "active": "day", "groups": 4, "spread_km": 300, "roam_km": 18, "kmh": 1.5},
+		"polar_bear": {"km": 10.5, "home": "snow_den", "active": "day", "groups": 3, "spread_km": 400, "roam_km": 70, "kmh": 5.0, "hibernate": [12, 1, 2], "den_young": true},
+		"camel": {"km": 10.5, "home": "none", "active": "day", "groups": 4, "spread_km": 450, "roam_km": 60, "kmh": 4.0},
+		"elephant": {"km": 13.5, "home": "waterhole", "active": "day", "groups": 4, "spread_km": 300, "roam_km": 45, "kmh": 4.0},
+		"giraffe": {"km": 13.5, "home": "none", "active": "day", "groups": 3, "spread_km": 300, "roam_km": 35, "kmh": 3.5},
+		"lion": {"km": 9.0, "home": "pride_rock", "active": "night", "groups": 3, "spread_km": 250, "roam_km": 30, "kmh": 4.0},
+		"zebra": {"km": 9.0, "home": "none", "active": "day", "groups": 5, "spread_km": 250, "roam_km": 35, "kmh": 4.5, "migrate": {"months": [7, 8, 9, 10], "to": [0.4, 1.9]}},
+		"kangaroo": {"km": 9.0, "home": "none", "active": "dusk", "groups": 5, "spread_km": 500, "roam_km": 30, "kmh": 6.0},
+		"koala": {"km": 4.5, "home": "tree", "active": "night", "groups": 4, "spread_km": 250, "roam_km": 4, "kmh": 0.8},
+		"panda": {"km": 9.0, "home": "den", "active": "day", "groups": 3, "spread_km": 150, "roam_km": 10, "kmh": 1.5},
+		"tiger": {"km": 10.5, "home": "cave", "active": "night", "groups": 3, "spread_km": 300, "roam_km": 40, "kmh": 4.0},
+		"bison": {"km": 12.0, "home": "wallow", "active": "day", "groups": 4, "spread_km": 300, "roam_km": 50, "kmh": 4.0},
+		"moose": {"km": 12.0, "home": "none", "active": "dusk", "groups": 4, "spread_km": 400, "roam_km": 25, "kmh": 3.5},
+		"brown_bear": {"km": 10.5, "home": "cave", "active": "day", "groups": 4, "spread_km": 400, "roam_km": 40, "kmh": 4.0, "hibernate": [12, 1, 2, 3]},
+		"reindeer": {"km": 9.0, "home": "none", "active": "day", "groups": 5, "spread_km": 400, "roam_km": 50, "kmh": 5.0, "migrate": {"months": [11, 12, 1, 2, 3, 4], "to": [0.0, -4.0]}},
+		"llama": {"km": 9.0, "home": "none", "active": "day", "groups": 4, "spread_km": 250, "roam_km": 25, "kmh": 3.0},
+		"toucan": {"km": 4.5, "home": "tree_nest", "active": "day", "groups": 5, "spread_km": 400, "roam_km": 12, "kmh": 15.0},
+		"gorilla": {"km": 9.0, "home": "leaf_nest", "active": "day", "groups": 3, "spread_km": 150, "roam_km": 10, "kmh": 1.5},
+		"orangutan": {"km": 7.5, "home": "leaf_nest", "active": "day", "groups": 3, "spread_km": 200, "roam_km": 8, "kmh": 1.5},
+		"kiwi": {"km": 4.5, "home": "burrow", "active": "night", "groups": 4, "spread_km": 150, "roam_km": 5, "kmh": 1.5},
+		"lemur": {"km": 6.0, "home": "tree", "active": "day", "groups": 4, "spread_km": 300, "roam_km": 8, "kmh": 3.0},
+		"quetzal": {"km": 4.5, "home": "tree_nest", "active": "day", "groups": 3, "spread_km": 120, "roam_km": 8, "kmh": 15.0},
+		"water_buffalo": {"km": 12.0, "home": "wallow", "active": "day", "groups": 4, "spread_km": 200, "roam_km": 25, "kmh": 3.0}
+	},
+	"birds": {
+		"homes": {"gulls": "gull_colony", "raptors": "eyrie", "cormorants": "cormorant_colony", "waders": "heronry", "sea_ducks": "duck_nest", "seabirds": "seabird_colony"},
+		"species_homes": {"eurasian_bittern": "reed_nest", "american_bittern": "reed_nest", "least_bittern": "reed_nest", "australasian_bittern": "reed_nest",
+			"common_crane": "ground_nest", "sandhill_crane": "ground_nest", "red_crowned_crane": "ground_nest", "whooping_crane": "ground_nest", "grey_crowned_crane": "ground_nest", "sarus_crane": "ground_nest", "brolga": "ground_nest",
+			"andean_condor": "eyrie", "california_condor": "eyrie", "sooty_shearwater": "burrow", "manx_shearwater": "burrow"},
+		"gull_numbers": {"small": 8, "medium": 12, "large": 16, "giant": 20},
+		"hub_gulls": 4,
+		"seabird_colony_chance": 0.3,
+		"seabird_colony_size": 3,
+		"seabird_range_km": {"Albatross": 2500, "Shearwater": 1800, "Tern": 350, "Pelican": 150, "Condor": 300},
+		"gull_follow_km": 220,
+		"home_km": 5.0,
+		"km": 2.6
+	}
+}

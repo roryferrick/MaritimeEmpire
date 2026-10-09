@@ -13,6 +13,8 @@ extends SceneTree
 ##   Godot --headless --path . -s tools/build_map_data.gd
 ## "-- --biomes-only" redraws just the biome patches into the existing
 ## data/world_map.res (after changing BIOME_SIMPLIFY, say), in about a minute.
+## "-- --decor-only" rebuilds just the land drawings (and their clearance) in
+## the existing map, from the biomes worked out again.
 ## "-- --animals-only" puts the animals (ANIMALS) into the existing map's
 ## land drawings again and works out every drawing's clearance (in seconds);
 ## add "--nudge" to have it suggest a spot further inland for any animal too
@@ -72,17 +74,20 @@ const BOREAL_LAT := 52.0
 const TUNDRA_LAT := 62.0
 ## Each majority pass's radius (cells), widest first, so specks go and edges settle.
 const BIOME_SMOOTHING_RADII: Array[int] = [2, 2, 1, 1]
-## Land drawings (see _add_decor()): each tier's spacing in projected degrees,
-## coarsest first (the map shows a tier once its spacing is far enough apart
-## on screen).
-const DECOR_TIER_SPACING: Array[float] = [12.0, 6.0, 3.0, 1.5, 0.75]
+## Land drawings (see _add_decor()): the land's cover is placed on a grid this
+## far apart (real degrees, jittered), each spot its biome's drawing (or none).
+const VEGETATION_SPACING := 0.2
+## The mountains along the ranges, this far apart (real degrees), so their
+## peaks (MapView DECOR_KM) overlap into ridges; and the ranges that are
+## snow-capped all along, whatever their latitude (Natural Earth names).
+const MOUNTAIN_SPACING := 0.42
+const SNOWY_RANGES := ["HIMALAYAS", "ANDES", "ALPS", "KARAKORAM RANGE", "HINDU KUSH", "PAMIRS", "TIAN SHAN", "KUNLUN MOUNTAINS", "CAUCASUS", "ROCKY MOUNTAINS", "SIERRA NEVADA", "CASCADE RANGE", "ALASKA RANGE", "SOUTHERN ALPS", "ZAGROS MOUNTAINS", "PYRENEES"]
 ## Waves dot the sea beyond this latitude, north and south (the Southern
-## Ocean's rough seas, game_config rough_seas, start at 60°S), at this share
-## of the spots a tier tries.
+## Ocean's rough seas, game_config rough_seas, start at 60°S), this far apart
+## (real degrees), at this share of the spots.
 const WAVES_LAT := 60.0
 const WAVES_CHANCE := 0.6
-## Only the coarsest tiers get waves, so they dot the sea rather than fill it.
-const WAVES_TIERS := 3
+const WAVES_SPACING := 2.2
 ## Animals where they live: [art name, lon, lat, tier].
 const ANIMALS := [
 	["penguin", 42.39, -69.57, 1], ["penguin", -60.29, -64.16, 2], ["penguin", 170.80, -76.60, 2], ["penguin", -69.01, -52.42, 3], ["penguin", 18.62, -34.23, 3],
@@ -284,6 +289,10 @@ func _init() -> void:
 		_replace_animals("--nudge" in args)
 		quit()
 		return
+	if "--decor-only" in args:
+		_rebuild_decor()
+		quit()
+		return
 	if "--biomes-only" in args:
 		_rebuild_biomes("--dry" in args)
 		quit()
@@ -402,7 +411,7 @@ func _replace_animals(nudge: bool) -> void:
 	var animal_names := {}
 	for animal: Array in ANIMALS:
 		animal_names[animal[0]] = true
-	var plants := ["acacia", "cactus", "conifer", "deciduous", "dunes", "grass", "mountain", "mountain_snow", "palm", "rainforest", "red_rock", "shrub", "waves"]
+	var plants := ["acacia", "cactus", "conifer", "deciduous", "dunes", "grass", "mountain", "mountain_b", "mountain_c", "mountain_snow", "mountain_snow_b", "mountain_snow_c", "palm", "rainforest", "red_rock", "shrub", "waves"]
 	while count < map.decor_positions.size() and not plants.has(map.decor_kind_names[map.decor_kinds[count]]) and not animal_names.has(map.decor_kind_names[map.decor_kinds[count]]):
 		print("  Dropped a %s" % map.decor_kind_names[map.decor_kinds[count]])
 		map.decor_positions.remove_at(count)
@@ -750,21 +759,27 @@ static func _biome_neighbors(i: int, radius := 1) -> PackedInt32Array:
 	return out
 
 
-## Little drawings on the land for the map (art/decor): first the animals
-## (ANIMALS) where they live, then, tier by tier (DECOR_TIER_SPACING, coarsest
-## first), a spot about every spacing in each direction (jittered), kept only
-## on land, outside the big lakes and clear of every spot already placed. Each
-## spot's drawing comes from where it is: a mountain in a mountain range
-## (snow-capped ones in cold places), otherwise its biome's (see
-## _decor_for_biome()), or nothing.
+## Drawings on the land for the map (art/decor), each a fixed size in the
+## world (MapView DECOR_KM): first the animals (ANIMALS) where they live (the
+## wildlife's home ranges: see Wildlife), then the mountains along the real
+## ranges (MOUNTAIN_SPACING apart, overlapping into ridges; snow-capped in cold
+## places and on the great snowy ranges, SNOWY_RANGES), then the land's cover
+## by biome on a grid VEGETATION_SPACING apart (in real degrees, so it's as
+## dense near the poles as at the equator), jittered: dense stands of trees in
+## the forests, scattered grass, acacias and scrub on grassland, savanna and
+## tundra, and cacti, red rock or dunes in the deserts (see
+## _decor_for_biome()); kept only on land outside the big lakes. Each gets a
+## tier 0-3 at random: zoomed out, where they'd be tiny, the map thins them
+## out by it. Then waves on the rough polar seas.
 func _add_decor(map: WorldMapData, biomes: PackedByteArray) -> void:
-	var ranges := []  # [bounds, polygons (lon/lat outlines)]
+	var ranges := []  # [bounds, polygon (lon/lat outline), snowy]
 	for feature: Dictionary in _read_geojson(REGIONS_PATH):
 		if str(feature.properties.get("FEATURECLA", "")) != "Range/mtn":
 			continue
+		var snowy := SNOWY_RANGES.has(str(feature.properties.get("NAME", "")).to_upper())
 		for polygon: Array in _feature_polygons(feature):
 			var outline := _to_points(polygon[0])
-			ranges.append([_bounds(outline), outline])
+			ranges.append([_bounds(outline), outline, snowy])
 	var lakes := []
 	for feature: Dictionary in _read_geojson(LAKES_PATH):
 		if float(feature.properties.get("scalerank", 99)) > 2.0:
@@ -780,108 +795,119 @@ func _add_decor(map: WorldMapData, biomes: PackedByteArray) -> void:
 		map.decor_positions.append(Geo.project(lon_lat))
 		map.decor_kinds.append(kinds[name])
 		map.decor_tiers.append(tier)
-	map.decor_tier_spacing = PackedFloat32Array(DECOR_TIER_SPACING)
+	map.decor_tier_spacing = PackedFloat32Array([VEGETATION_SPACING])
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 20240611
+	rng.seed = 20261009
 	for animal: Array in ANIMALS:
 		add.call(animal[0], Vector2(animal[1], animal[2]), int(animal[3]))
-	var top := Geo.project(Vector2(0.0, 80.0)).y
-	var bottom := Geo.project(Vector2(0.0, -80.0)).y
-	for tier in DECOR_TIER_SPACING.size():
-		var spacing: float = DECOR_TIER_SPACING[tier]
-		# Spots already placed, by cell of this tier's spacing, for the clearance check.
-		var taken := {}
-		for p in map.decor_positions:
-			taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
-		var y := bottom
-		while y < top:
-			var x := -180.0
-			while x < 180.0:
-				var p := Vector2(x, y) + Vector2(rng.randf(), rng.randf()) * spacing
-				x += spacing
-				if p.x >= 180.0 or not _decor_clear(taken, p, spacing):
-					continue
-				var lon_lat := Geo.unproject(p)
-				var biome := _biome_at(biomes, lon_lat)
-				if biome == BIOME_SEA or _in_any(lakes, lon_lat):
-					continue
-				var kind := ""
-				if _in_any(ranges, lon_lat) and rng.randf() < 0.9:
-					kind = "mountain_snow" if absf(lon_lat.y) > 42.0 or biome == BIOME_ICE or biome == BIOME_TUNDRA else "mountain"
-				else:
-					kind = _decor_for_biome(biome, lon_lat, rng)
-				if kind.is_empty():
-					continue
-				add.call(kind, lon_lat, tier)
-				taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
-			y += spacing
+	# The mountains, along the ranges.
+	var lat := -60.0
+	while lat < 80.0:
+		var step := MOUNTAIN_SPACING / maxf(cos(deg_to_rad(lat)), 0.15)
+		var lon := -180.0
+		while lon < 180.0:
+			var spot := Vector2(lon, lat) + Vector2(rng.randf_range(-0.35, 0.35) * step, rng.randf_range(-0.35, 0.35) * MOUNTAIN_SPACING)
+			lon += step
+			var range_item := _range_at(ranges, spot)
+			if range_item.is_empty() or rng.randf() > 0.92:
+				continue
+			var biome := _biome_at(biomes, spot)
+			if biome == BIOME_SEA or _in_any(lakes, spot):
+				continue
+			var snow: bool = range_item[2] or absf(spot.y) > 42.0 or biome == BIOME_ICE or biome == BIOME_TUNDRA
+			add.call(("mountain_snow" if snow else "mountain") + ["", "_b", "_c"][rng.randi() % 3], spot, rng.randi() % 4)
+		lat += MOUNTAIN_SPACING
+	# The land's cover.
+	lat = -60.0
+	while lat < 80.0:
+		var step := VEGETATION_SPACING / maxf(cos(deg_to_rad(lat)), 0.15)
+		var lon := -180.0
+		while lon < 180.0:
+			var spot := Vector2(lon, lat) + Vector2(rng.randf_range(-0.45, 0.45) * step, rng.randf_range(-0.45, 0.45) * VEGETATION_SPACING)
+			lon += step
+			var biome := _biome_at(biomes, spot)
+			if biome == BIOME_SEA or biome == BIOME_ICE or _in_any(lakes, spot):
+				continue
+			if not _range_at(ranges, spot).is_empty() and rng.randf() < 0.8:
+				continue  # The mountains have it.
+			var kind := _decor_for_biome(biome, spot, rng)
+			if not kind.is_empty():
+				add.call(kind, spot, rng.randi() % 4)
+		lat += VEGETATION_SPACING
 	_add_polar_waves(map, biomes, add)
 	print("Decor: %d drawings of %d kinds" % [map.decor_positions.size(), map.decor_kind_names.size()])
 
 
+## The range ([bounds, outline, snowy]) a (lon, lat) is in, or [].
+static func _range_at(ranges: Array, lon_lat: Vector2) -> Array:
+	for item: Array in ranges:
+		if (item[0] as Rect2).has_point(lon_lat) and Geometry2D.is_point_in_polygon(lon_lat, item[1]):
+			return item
+	return []
+
+
 ## Waves on the sea beyond WAVES_LAT north and south (the rough polar waters),
-## in the coarsest WAVES_TIERS tiers like the land drawings, but in a pass of
-## their own (their own random numbers and spacing checks), so the land
-## drawings stay where they were.
-func _add_polar_waves(map: WorldMapData, biomes: PackedByteArray, add: Callable) -> void:
+## WAVES_SPACING apart (in real degrees), at WAVES_CHANCE of the spots.
+func _add_polar_waves(_map: WorldMapData, biomes: PackedByteArray, add: Callable) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261006
-	var placed: Array[Vector2] = []
-	var top := Geo.project(Vector2(0.0, 80.0)).y
-	var bottom := Geo.project(Vector2(0.0, -80.0)).y
-	for tier in WAVES_TIERS:
-		var spacing: float = DECOR_TIER_SPACING[tier]
-		var taken := {}
-		for p in placed:
-			taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
-		for band: Array in [[Geo.project(Vector2(0.0, WAVES_LAT)).y, top], [bottom, Geo.project(Vector2(0.0, -WAVES_LAT)).y]]:
-			var y: float = band[0]
-			while y < band[1]:
-				var x := -180.0
-				while x < 180.0:
-					var p := Vector2(x, y) + Vector2(rng.randf(), rng.randf()) * spacing
-					x += spacing
-					if p.x >= 180.0 or rng.randf() >= WAVES_CHANCE or not _decor_clear(taken, p, spacing):
-						continue
-					var lon_lat := Geo.unproject(p)
-					if absf(lon_lat.y) < WAVES_LAT or _biome_at(biomes, lon_lat) != BIOME_SEA:
-						continue
-					add.call("waves", lon_lat, tier)
-					placed.append(p)
-					taken.get_or_add(Vector2i(floori(p.x / spacing), floori(p.y / spacing)), []).append(p)
-				y += spacing
+	for band: Vector2 in [Vector2(WAVES_LAT, 80.0), Vector2(-80.0, -WAVES_LAT)]:
+		var lat := band.x
+		while lat < band.y:
+			var step := WAVES_SPACING / maxf(cos(deg_to_rad(lat)), 0.15)
+			var lon := -180.0
+			while lon < 180.0:
+				var spot := Vector2(lon, lat) + Vector2(rng.randf_range(-0.4, 0.4) * step, rng.randf_range(-0.4, 0.4) * WAVES_SPACING)
+				lon += step
+				if rng.randf() < WAVES_CHANCE and _biome_at(biomes, spot) == BIOME_SEA:
+					add.call("waves", spot, rng.randi() % 4)
+			lat += WAVES_SPACING
 
 
-## The drawing for a spot in a biome (or "" for none, to keep the map from
-## crowding): conifers in the boreal forest, round trees in temperate ones,
-## big leafy ones (and palms) in the rainforest, grass tufts on grassland,
-## acacias on the savanna, little shrubs on the tundra, and in the deserts
-## cacti in the Americas, red rock in Australia and dunes elsewhere.
+## The drawing for a spot in a biome (or "" for none): a stand of conifers in
+## the boreal forest (and some in temperate ones), of round trees in temperate
+## forests, of big leafy trees (and palms) in the rainforest; grass on the
+## grassland; acacias and grass on the savanna; scrub on the tundra; and in the
+## deserts cacti in the Americas (not in cold deserts), red rock in Australia
+## and dunes elsewhere. Forests are nearly every spot; open country a few.
 static func _decor_for_biome(biome: int, lon_lat: Vector2, rng: RandomNumberGenerator) -> String:
 	var roll := rng.randf()
 	match biome:
 		BIOME_BOREAL:
-			return "conifer" if roll < 0.85 else ""
+			return "conifer" if roll < 0.9 else ""
 		BIOME_TEMPERATE:
-			return "deciduous" if roll < 0.55 else ("conifer" if roll < 0.72 else "")
+			return "deciduous" if roll < 0.58 else ("conifer" if roll < 0.85 else "")
 		BIOME_RAINFOREST:
-			return "rainforest" if roll < 0.75 else ("palm" if roll < 0.88 else "")
+			return "rainforest" if roll < 0.82 else ("palm" if roll < 0.95 else "")
 		BIOME_GRASSLAND:
-			return "grass" if roll < 0.4 else ""
+			return "grass" if roll < 0.22 else ("shrub" if roll < 0.27 else "")
 		BIOME_SAVANNA:
-			return "acacia" if roll < 0.45 else ("grass" if roll < 0.6 else "")
+			return "acacia" if roll < 0.2 else ("grass" if roll < 0.32 else "")
 		BIOME_TUNDRA:
-			return "shrub" if roll < 0.3 else ""
+			return "shrub" if roll < 0.16 else ""
 		BIOME_DESERT:
 			if lon_lat.x < -30.0 and absf(lon_lat.y) > 45.0:
 				return ""  # A cold desert (Greenland, Patagonia's south): no cacti.
 			if lon_lat.x < -30.0:
-				return "cactus" if roll < 0.5 else ""
+				return "cactus" if roll < 0.1 else ""
 			if lon_lat.x > 110.0 and lon_lat.y < -10.0:
-				return "red_rock" if roll < 0.4 else ""
-			return "dunes" if roll < 0.45 else ""
+				return "red_rock" if roll < 0.08 else ""
+			return "dunes" if roll < 0.07 else ""
 	return ""
 
+
+## Rebuilds just the land drawings (see _add_decor()) and their clearance in
+## the existing map (--decor-only), from the biomes worked out again.
+func _rebuild_decor() -> void:
+	var map: WorldMapData = load(MAP_OUT)
+	map.decor_kind_names = PackedStringArray()
+	map.decor_positions = PackedVector2Array()
+	map.decor_kinds = PackedByteArray()
+	map.decor_tiers = PackedByteArray()
+	_add_decor(map, _build_biomes())
+	_add_decor_clearance(map)
+	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 
 ## True if no spot already placed is within 0.7 spacings of a point.
 static func _decor_clear(taken: Dictionary, p: Vector2, spacing: float) -> bool:

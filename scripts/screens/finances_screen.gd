@@ -395,7 +395,7 @@ func _fill_comparison() -> void:
 		face.custom_minimum_size = Vector2.ONE * CEO_FACE_SIZE
 		face.tooltip_text = str(each.ceo.get("name", ""))
 		cell.add_child(face)
-		var name := _add_label(cell, each.name + ("  (you)" if each == GameState.company else ""))
+		var name := _add_label(cell, each.name + ("  (you)" if each == GameState.company else "  (AI · %s)" % RivalAI.LEVEL_NAMES.get(each.ai, "") if each.is_ai() else ""))
 		name.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		name.add_theme_color_override(&"font_color", GameState.company_color_value(each.color))
 		_add_label(_compare_grid, str(each.level()))

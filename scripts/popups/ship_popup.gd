@@ -106,14 +106,11 @@ func _process(delta: float) -> void:
 		_update_birds()
 
 
-## "Gulls: Herring Gull (a flock) · Following: Wandering Albatross (2)", or
+## "Following: Herring Gull (3), Wandering Albatross (2)" (BirdLife), or
 ## hidden when there are none.
 func _update_birds() -> void:
 	var parts := PackedStringArray()
-	var gulls := Birds.shared().flock_text(Birds.shared().ship_flock(ship))
-	if not gulls.is_empty():
-		parts.append("Gulls: %s" % gulls)
-	var following := Birds.shared().followers_text(Birds.shared().followers(ship))
+	var following := Birds.shared().counts_text(BirdLife.shared().following(ship))
 	if not following.is_empty():
 		parts.append("Following: %s" % following)
 	_birds_label.text = " · ".join(parts)

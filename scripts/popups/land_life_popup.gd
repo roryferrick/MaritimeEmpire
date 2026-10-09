@@ -1,40 +1,28 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name LandLifePopup
 extends AnchoredPopup
-## Opened by clicking a group of land animals on the map (see LandLife): the
-## species with its picture, its group (how many, and how many young), what
-## they're up to right now (napping, on the move, rubbing its back on its
-## tree...), where they live, their habits and a fact. Follows the group;
-## looks again a few times a second.
+## Opened by clicking a land animal on the map (see Wildlife): its species
+## with its picture, its group (how many, and how many young), what they're up
+## to now (on the move, grazing, asleep at their den, hibernating...), their
+## home, where they live, their habits and a fact. Follows the group; looks
+## again a few times a second.
 
 const REFRESH_SECONDS := 0.5
 const FONT_SIZE := 14
 const LABEL_WIDTH := 64.0
 const VALUE_WIDTH := 360.0
 const PICTURE_SIZE := 56.0
-## What each act (LandLife) looks like in words.
-const DOING := {rest = "resting", chew = "chewing", nod = "nodding off", groom = "grooming", graze = "grazing", peck = "pecking about",
-	rear = "up on its hind legs, sniffing the air", rub = "rubbing its back on its tree", sprawl = "sprawled out flat", nap = "napping",
-	sleep = "fast asleep", wriggle = "rolling on its back", wallow = "wallowing in the dust", roll = "rolling over", spray = "spraying water over its back",
-	dust = "tossing dust over its back", browse = "stretching up to browse", splay = "splaying its legs to drink", roar = "roaring", kick = "kicking up its heels",
-	box = "boxing", scratch = "having a scratch", kneel = "kneeling down", toss = "tossing its head", spit = "spitting", chest = "beating its chest",
-	sit = "sitting about", hang = "hanging about", sunbathe = "sunbathing", flap = "flapping its flippers", stretch = "having a stretch", hop = "hopping about",
-	preen = "preening"}
-## How each way of getting about looks in words.
-const MOVING := {walk = "on the move", hop = "bounding along", waddle = "waddling along", flit = "flitting about", swing = "swinging through the trees",
-	slide = "tobogganing on its belly", roll = "rolling over and over"}
-
 ## One of each kind of young.
 const ONE_YOUNG := {cubs = "cub", calves = "calf", joeys = "joey", chicks = "chick", babies = "baby", foals = "foal", crias = "cria"}
 
-## Set before adding to the tree: the patch's key and species (see MapView.animals_clicked).
+## Set before adding to the tree: the group (its index in Wildlife.groups, as
+## text) and its species (see MapView.animals_clicked).
 var key := ""
 var kind := ""
 
 var _title := Label.new()
 var _rows := GridContainer.new()
 var _clock := 0.0
-var _life := LandLife.new()
 
 
 func _init() -> void:
@@ -50,8 +38,7 @@ func _ready() -> void:
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override(&"separation", 10)
 	content.add_child(header)
-	var picture := FieldGuide._picture(MapView.DECOR_ART_DIR + kind + ".svg", Vector2.ONE * PICTURE_SIZE)
-	header.add_child(picture)
+	header.add_child(FieldGuide._picture(MapView.WILDLIFE_ART_DIR + kind + ".svg", Vector2.ONE * PICTURE_SIZE))
 	_title.theme_type_variation = &"HeaderLabel"
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(_title)
@@ -77,14 +64,19 @@ func _process(delta: float) -> void:
 
 
 func _refresh() -> void:
-	var info: Dictionary = Birds.shared().land_animals.get(kind, {})
+	var wildlife := Wildlife.shared()
+	var index := int(key)
+	if index < 0 or index >= wildlife.groups.size():
+		return
+	var group: Dictionary = wildlife.groups[index]
+	var info: Dictionary = wildlife.land.get(kind, {})
 	for child in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
 	_title.text = str(info.get("name", kind))
-	_row("Group", group_text(key, info))
-	var poses := _life.poses(key, info, Time.get_ticks_msec() / 1000.0)
-	_row("Now", now_text(poses, int(LandLife.group_size(key, info)) > 1))
+	_row("Group", group_text(group, info))
+	_row("Now", wildlife.group_doing(group, float(GameState.calendar_time())))
+	_row("Home", home_text(group, info))
 	_row("Where", str(info.get("where", "")))
 	if info.has("habits"):
 		_row("Habits", str(info.habits))
@@ -93,12 +85,9 @@ func _refresh() -> void:
 
 
 ## "A pride of 6 with 2 cubs", "A mother with 2 cubs", "On its own".
-static func group_text(key: String, info: Dictionary) -> String:
-	var count := LandLife.group_size(key, info)
-	var young := 0
-	for member in count:
-		if LandLife.is_young(key, info, member):
-			young += 1
+static func group_text(group: Dictionary, info: Dictionary) -> String:
+	var count := int(group.members)
+	var young := int(group.young)
 	var young_word := str(info.get("young_word", "young"))
 	var young_text := "%d %s" % [young, young_word] if young != 1 else "a " + str(ONE_YOUNG.get(young_word, young_word))
 	if count == 1:
@@ -113,24 +102,16 @@ static func group_text(key: String, info: Dictionary) -> String:
 	return text
 
 
-## What a group's doing now, most first: "3 grazing, 2 on the move, 1 kicking
-## up its heels" (or for one, just what it's doing).
-static func now_text(poses: Array, many: bool) -> String:
-	var counts := {}
-	var order: Array[String] = []
-	for pose: Dictionary in poses:
-		var doing := str(MOVING.get(str(pose.moving), "on the move")) if not str(pose.moving).is_empty() else str(DOING.get(str(pose.act), "resting"))
-		if not counts.has(doing):
-			order.append(doing)
-		counts[doing] = int(counts.get(doing, 0)) + 1
-	if not many:
-		var only := order[0] if not order.is_empty() else "resting"
-		return only.left(1).to_upper() + only.substr(1)
-	order.sort_custom(func(a: String, b: String) -> bool: return int(counts[a]) > int(counts[b]))
-	var parts := PackedStringArray()
-	for doing in order:
-		parts.append("%d %s" % [counts[doing], doing])
-	return ", ".join(parts)
+## Its home, and when it's there: "A cave: home at night", "None: they roam
+## and bed down where they are", plus winter sleep and migration.
+static func home_text(group: Dictionary, info: Dictionary) -> String:
+	var when: String = {day = "back by night", night = "back by day", dusk = "back in the middle of the day and night"}.get(str(info.get("active", "day")), "")
+	var text := "None: they roam and bed down where they are" if group.home_kind == "none" else "A %s, %s" % [Wildlife.home_name(group.home_kind), when]
+	if info.has("hibernate"):
+		text += "; they sleep the winter away in it" if not info.get("den_young", false) else "; a mother and her young keep to it through the winter"
+	if info.has("migrate"):
+		text += "; they migrate with the seasons"
+	return text
 
 
 func _row(label_text: String, text: String, variation := &"") -> void:

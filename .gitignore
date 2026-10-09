@@ -12,3 +12,9 @@
 
 # Godot's copies of GDExtension libraries (made so the editor can reload them)
 /addons/**/~*
+
+# Native (C++) build folders (see native/README.md)
+/native/build*/
+/addons/maritime_native/bin/*.pdb
+/addons/maritime_native/bin/*.exp
+/addons/maritime_native/bin/*.lib

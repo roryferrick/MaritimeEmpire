@@ -11,6 +11,9 @@ extends Control
 ## map: data/birds.json land_animals): each with its picture, where it
 ## lives, its habits, and a fact. A green check marks each one this player has
 ## seen on the map (Achievements.discover()), and the header says how many.
+## Wonders (data/wonders.json): the wonders of the world on the map, man-made,
+## lost ancient and natural, each with its picture, country, when and a fact,
+## checked once clicked on the map.
 ## Over the map, dimming it; Esc, X or a click
 ## outside closes it.
 
@@ -18,7 +21,7 @@ const PANEL_SIZE := Vector2(820, 640)
 const TEXT_WIDTH := 600.0
 const SMALL_FONT := 14
 const ICON_SIZE := 56.0
-const TABS := ["Birds", "Sea animals", "Land animals"]
+const TABS := ["Birds", "Sea animals", "Land animals", "Wonders"]
 
 var _tabs := TabBar.new()
 var _list := VBoxContainer.new()
@@ -57,8 +60,9 @@ func _ready() -> void:
 	title.size_flags_horizontal = SIZE_EXPAND_FILL
 	header.add_child(title)
 	var seen := Label.new()
-	seen.text = "%d of %d seen" % [Achievements.seen_count(GameState.company), Achievements.animal_count()]
-	seen.tooltip_text = "Animals seen on the map (click a flock, pod or group to see what they are). A check marks each one."
+	seen.text = "%d of %d animals · %d of %d wonders seen" % [Achievements.seen_count(GameState.company), Achievements.animal_count(),
+		Achievements.wonders_seen(GameState.company), GameData.wonders.size()]
+	seen.tooltip_text = "Animals and wonders seen on the map (click a flock, pod, group or wonder to see what it is). A check marks each one."
 	seen.mouse_filter = MOUSE_FILTER_PASS
 	header.add_child(seen)
 	var close := Button.new()
@@ -119,6 +123,14 @@ func _show(tab: int) -> void:
 			var land: Dictionary = Birds.shared().land_animals
 			for id: String in land:
 				_land_entry(id, land[id])
+		3:
+			for group: Array in [["Man-made wonders", "man_made", "The New 7 Wonders of the World, the Great Pyramid of Giza and other world-famous landmarks."],
+					["Lost wonders of the ancient world", "ancient", "Six of the Seven Wonders of the Ancient World are long gone: drawn on the map as they were, faded, where they stood."],
+					["Natural wonders", "natural", "The Seven Natural Wonders of the World, the New 7 Wonders of Nature and other famous sights."]]:
+				_heading(group[0], group[2])
+				for item: Dictionary in GameData.wonders:
+					if item.get("kind", "") == group[1]:
+						_wonder_entry(item)
 
 
 func _heading(text: String, note: String) -> void:
@@ -201,7 +213,15 @@ func _land_entry(id: String, info: Dictionary) -> void:
 	if info.has("habits"):
 		lines.append(str(info.habits))
 	lines.append(str(info.get("fact", "")))
-	_entry("land:" + id, _picture(MapView.DECOR_ART_DIR + id + ".svg", Vector2.ONE * ICON_SIZE), str(info.get("name", id)), subtitle, lines)
+	_entry("land:" + id, _picture(MapView.WILDLIFE_ART_DIR + id + ".svg", Vector2.ONE * ICON_SIZE), str(info.get("name", id)), subtitle, lines)
+
+
+func _wonder_entry(item: Dictionary) -> void:
+	var picture := _picture(MapView.WONDER_ART_DIR + str(item.id) + ".svg", Vector2.ONE * ICON_SIZE)
+	if item.get("kind", "") == "ancient":
+		picture.modulate.a = MapView.WONDER_LOST_ALPHA
+	var lines: Array[String] = [str(item.get("when", "")), str(item.get("fact", ""))]
+	_entry("wonder:" + str(item.id), picture, str(item.get("name", item.id)), str(item.get("country", "")), lines)
 
 
 static func _picture(path: String, side: Vector2) -> Control:

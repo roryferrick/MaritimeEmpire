@@ -1,13 +1,13 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name BirdsPopup
 extends AnchoredPopup
-## Opened by clicking a flock of birds on the map (see Birds): what birds are
-## round what was clicked (a port, with its gulls, raptors, cormorants, waders and
-## sea ducks; a ship; or a pod of sea animals) now, each species with its
-## picture, name, Latin name and how many (its fact on hovering), in a list
-## that scrolls once it's long. Follows what it's about;
-## looks again every couple of seconds (flocks come and go with the time of
-## day, and seabirds, raptors, cormorants and sea ducks with the hours).
+## Opened by clicking a bird on the map (see BirdLife): what birds are round
+## what was clicked (a port, with its gulls, raptors, cormorants, waders and
+## sea ducks; a ship, with those following it; or a colony, where it lives or
+## on the wing between its homes) and what they're doing now, each species
+## with its picture, name, Latin name and how many (its fact on hovering), in
+## a list that scrolls once it's long. Follows what it's about; looks again
+## every couple of seconds.
 
 const REFRESH_SECONDS := 2.0
 const ICON_SIZE := 32.0
@@ -16,8 +16,12 @@ const NAME_FONT_SIZE := 15
 const MAX_LIST_HEIGHT := 340.0
 const SCROLLBAR_ROOM := 14.0
 const FONT_SIZE := 12
+## How wide (px) the line of what a species is doing is, before it wraps.
+const DOING_WIDTH := 260.0
+## The classes of birds that live round ports, in the order they're listed.
+const CLASSES := ["gulls", "raptors", "cormorants", "waders", "sea_ducks"]
 
-## Set before adding to the tree: {port}, {ship} or {pod} (see MapView.birds_clicked).
+## Set before adding to the tree: {port}, {ship} or {colony} (see MapView.birds_clicked).
 var about: Dictionary
 
 var _title := Label.new()
@@ -64,46 +68,41 @@ func _process(delta: float) -> void:
 ## [title, [[species id, how many (words)], ...]] for what it's about now.
 func _birds_now() -> Array:
 	var birds := Birds.shared()
+	var life := BirdLife.shared()
+	var wildlife := Wildlife.shared()
+	var cal := float(GameState.calendar_time())
 	var entries := []
 	var title := "Birds"
-	var flock := {}
 	if about.has("port"):
 		title = "Birds at %s" % GameData.port_name(about.port)
-		flock = birds.port_flock(about.port)
-		for entry: Dictionary in birds.port_raptors(about.port):
-			entries.append([entry.id, "%d about" % int(entry.count)])
-		for entry: Dictionary in birds.port_cormorants(about.port):
-			entries.append([entry.id, "%d about" % int(entry.count)])
-		for entry: Dictionary in birds.port_waders(about.port):
-			var info := birds.species(entry.id)
-			var words := "%d about" % int(entry.count)
-			if entry.moving:
-				words = "%d passing over" % int(entry.count)
-			elif str(info.get("behavior", "")) == "hide":
-				words = "hiding in the reeds"
-			elif int(entry.count) == 1:
-				words = "1 at the water's edge" if str(info.get("kind", "")) != "Crane" else "1 in the fields"
-			entries.append([entry.id, words])
-		for entry: Dictionary in birds.port_sea_ducks(about.port):
-			entries.append([entry.id, ("%d passing" if entry.moving else "a raft of %d") % int(entry.count)])
+		for cls: String in CLASSES:
+			for entry: Dictionary in wildlife.birds_at(about.port, cls, cal):
+				entries.append([entry.id, _doing(int(entry.colony), cal)])
 	elif about.has("ship"):
 		var ship: Ship = about.ship
 		title = "Birds round %s" % ship.name
-		flock = birds.ship_flock(ship)
-		for entry: Dictionary in birds.followers(ship):
+		for entry: Dictionary in life.following(ship):
 			entries.append([entry.id, "%d following" % int(entry.count)])
-	elif about.has("pod"):
-		var sea := SeaLife.shared()
-		var pod: Dictionary = sea.pods[int(about.pod)]
-		title = "Gulls over the %s" % str(sea.species[pod.species].get("plural", "animals")).to_lower()
-		flock = birds.pod_flock(int(about.pod), sea.state(int(about.pod), float(GameState.calendar_time())).pos)
-	if not flock.is_empty():
-		var words := Birds.how_many(int(flock.count))
-		var gulls := []
-		for id: String in flock.species:
-			gulls.append([id, words])
-		entries = gulls + entries
+	elif about.has("colony"):
+		var colony: Dictionary = wildlife.colonies[int(about.colony)]
+		var name := str(birds.species(colony.species).get("name", colony.species))
+		var where := wildlife.colony_where(colony, cal)
+		var count := int(colony.count)
+		if where[0] == "to_away" or where[0] == "to_home":
+			var bound: String = colony.port if where[0] == "to_home" else colony.away_port
+			title = "%s on the wing" % name
+			entries.append([colony.species, "%d flying to %s" % [count, GameData.port_name(bound) if not bound.is_empty() else "their winter grounds"]])
+		else:
+			var port: String = colony.away_port if where[0] == "away" else colony.port
+			title = "%s at %s" % [name, GameData.port_name(port)] if not port.is_empty() else "%s at sea" % name
+			entries.append([colony.species, _doing(int(about.colony), cal)])
 	return [title, entries]
+
+
+## "12: 5 circling the port, 4 perched, 3 asleep at home" (a colony's birds now).
+func _doing(colony_index: int, cal: float) -> String:
+	var colony: Dictionary = Wildlife.shared().colonies[colony_index]
+	return "%d: %s" % [int(colony.count), ", ".join(BirdLife.shared().doing_text(colony_index, Wildlife.shared().bird_time, cal))]
 
 
 func _refresh() -> void:
@@ -144,13 +143,22 @@ static func _species_row(id: String, count: String) -> Control:
 	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var name := Label.new()
 	name.add_theme_font_size_override(&"font_size", NAME_FONT_SIZE)
-	name.text = "%s · %s" % [info.get("name", id), count]
+	# "12: 5 circling the port, 4 perched": how many by the name, what they're doing under it.
+	var parts := count.split(": ", true, 1)
+	name.text = "%s · %s" % [info.get("name", id), parts[0]]
 	text.add_child(name)
 	var latin := Label.new()
 	latin.theme_type_variation = &"DimLabel"
 	latin.add_theme_font_size_override(&"font_size", FONT_SIZE)
 	latin.text = str(info.get("latin", ""))
 	text.add_child(latin)
+	if parts.size() > 1:
+		var doing := Label.new()
+		doing.add_theme_font_size_override(&"font_size", FONT_SIZE)
+		doing.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		doing.custom_minimum_size.x = DOING_WIDTH
+		doing.text = parts[1]
+		text.add_child(doing)
 	row.add_child(text)
 	return row
 

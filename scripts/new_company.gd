@@ -6,7 +6,8 @@ extends Control
 ## excellent, great, fair and hard, and the Great Lakes ports, colored by kind,
 ## the excellent ones shining; the Great Lakes come with a warning), choose the
 ## company's color, its fastest game speed, its storms (none, moderate or
-## harsh), and whether to have seasonal closures and the tutorial; then make
+## harsh), how many AI rivals (and how well they play: see RivalAI), and
+## whether to have seasonal closures and the tutorial; then make
 ## the CEO: their name and looks (Characters), part by part or at random.
 
 const GAME_SCENE := "res://scenes/game.tscn"
@@ -26,6 +27,9 @@ var _home_port := DEFAULT_HOME_PORT
 var _color := DEFAULT_COLOR
 var _max_speed: int = GameState.TIME_SPEEDS[-1]
 var _storms := DEFAULT_STORMS
+## How many AI rivals the game starts with, and how well they play (see RivalAI).
+var _rivals := 0
+var _rival_level := "normal"
 ## The CEO's page (see _add_ceo_page()).
 var _ceo_page := CeoEditor.new()
 
@@ -36,6 +40,7 @@ func _ready() -> void:
 	_add_color_swatches()
 	_add_speed_choices()
 	_add_storm_choices()
+	_add_rival_choices()
 	%NameEdit.text_changed.connect(_validate.unbind(1))
 	%NameEdit.text_submitted.connect(_start.unbind(1))
 	%StartButton.pressed.connect(_start)
@@ -171,6 +176,51 @@ func _add_storm_choices() -> void:
 		%StormRow.add_child(button)
 
 
+## The AI rivals row (under Storms): how many (none to RivalAI.MAX_RIVALS, in a
+## drop-down) and how well they play (Easy, Normal or Hard; greyed with none).
+func _add_rival_choices() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var label := Label.new()
+	label.text = "AI rivals"
+	label.theme_type_variation = &"DimLabel"
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.mouse_filter = Control.MOUSE_FILTER_PASS
+	label.tooltip_text = "Computer-run shipping companies that trade, grow and compete with you by the same rules, each in its own color."
+	row.add_child(label)
+	var count := OptionButton.new()
+	count.custom_minimum_size = Vector2(0, 40)
+	count.tooltip_text = label.tooltip_text
+	count.add_item("None", 0)
+	for n in range(1, RivalAI.MAX_RIVALS + 1):
+		count.add_item(str(n), n)
+	row.add_child(count)
+	var group := ButtonGroup.new()
+	var buttons: Array[Button] = []
+	var tips := {
+		easy = "Easy: slow to act, settles for so-so trades and keeps plenty of money back. Starts at a fair or hard port.",
+		normal = "Normal: plays like a decent player. Starts at a great or fair port.",
+		hard = "Hard: picks the best trades, expands fast, upgrades eagerly and borrows to grow. Starts at an excellent or great port.",
+	}
+	for level: String in RivalAI.LEVELS:
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.custom_minimum_size = Vector2(0, 40)
+		button.text = " %s " % RivalAI.LEVEL_NAMES[level]
+		button.tooltip_text = tips[level]
+		button.button_pressed = level == _rival_level
+		button.disabled = true
+		button.pressed.connect(func() -> void: _rival_level = level)
+		row.add_child(button)
+		buttons.append(button)
+	count.item_selected.connect(func(index: int) -> void:
+		_rivals = count.get_item_id(index)
+		for button in buttons:
+			button.disabled = _rivals == 0)
+	%StormRow.add_sibling(row)
+
+
 static func _swatch_style(color: Color, chosen: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
@@ -216,6 +266,8 @@ func _found() -> void:
 		tutorials = %TutorialToggle.button_pressed,
 		max_time_speed = _max_speed,
 		storms = _storms,
+		rivals = _rivals,
+		rival_level = _rival_level,
 		seasons = %SeasonsToggle.button_pressed,
 		ceo = _ceo_page.ceo.duplicate(true),
 	})

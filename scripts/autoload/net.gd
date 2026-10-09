@@ -435,7 +435,7 @@ func _choice_info() -> Dictionary:
 	for i in GameState.companies.size():
 		var each: Company = GameState.companies[i]
 		list.append({index = i, name = each.name, color = each.color, home_port = each.home_port,
-			money = each.money, level = each.level(), taken = taken.has(i)})
+			money = each.money, level = each.level(), taken = taken.has(i) or each.is_ai(), ai = each.ai})
 	return {companies = list, taken_ports = GameState.companies.map(func(each: Company) -> String: return each.home_port),
 		storms = GameState.storms, seasons = GameState.seasons, max_time_speed = GameState.max_time_speed, name = game_name}
 
@@ -453,7 +453,7 @@ func _choose(choice: Dictionary) -> void:
 	var index := -1
 	if choice.has("company"):
 		index = int(choice.company)
-		var free := index >= 0 and index < GameState.companies.size() and index != GameState.companies.find(GameState.company)
+		var free := index >= 0 and index < GameState.companies.size() and index != GameState.companies.find(GameState.company) and not GameState.companies[index].is_ai()
 		for other: int in players:
 			if other != id and int(players[other].company) == index:
 				free = false

@@ -6,6 +6,7 @@ extends RefCounted
 ## STAR_UNITS by its unit), one for the fleet (ships owned, tugs not counted),
 ## one for the company level, one for money in the bank, and one for the field
 ## guide (the animals seen: a flock, pod or group clicked on the map, see
+## discover()), one for the wonders of the world seen (clicked on the map, see
 ## discover()). Badges for firsts and other milestones (BADGES).
 ##
 ## A company's Company.achievements: id -> stars earned (1 for a badge). Once
@@ -13,7 +14,8 @@ extends RefCounted
 ## Each player's game works out its own (check(), every CHECK_S), and they're
 ## one of a company's own settings (Company.PREF_KEYS), so a joined player's
 ## are sent to the host and kept in its save, as are the animals they've seen
-## (Company.discovered: "bird:<id>", "sea:<id>", "land:<id>").
+## and wonders (Company.discovered: "bird:<id>", "sea:<id>", "land:<id>",
+## "wonder:<id>").
 
 const CHECK_S := 1.0
 ## Units delivered for each star, by commodity unit (markets.json): a few
@@ -31,6 +33,8 @@ const MONEY_STARS := [10000000, 500000000, 5000000000]
 ## Shares of all the animals in the field guide seen, for each star: a
 ## third, two thirds and all of them (counted, not shown as percentages).
 const ANIMAL_STARS := [1.0 / 3.0, 2.0 / 3.0, 1.0]
+## Wonders of the world seen for each star: 10, 25 and all of them (0: all).
+const WONDER_STARS := [10, 25, 0]
 ## The ship lines owning one of each counts for the Full house badge.
 const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "tanker", "vehicles"]
 ## Badges: [id, name, what it takes].
@@ -64,6 +68,7 @@ static func lines() -> Array:
 	out.append({id = "level", name = "Company level", unit = "levels reached", stars = LEVEL_STARS})
 	out.append({id = "money", name = "Money in the bank", unit = "in the bank", stars = MONEY_STARS})
 	out.append({id = "animals", name = "Field guide", unit = "animals seen", stars = ANIMAL_STARS.map(func(share: float) -> int: return roundi(share * animal_count()))})
+	out.append({id = "wonders", name = "Wonders of the world", unit = "wonders seen", stars = WONDER_STARS.map(func(need: int) -> int: return need if need > 0 else GameData.wonders.size())})
 	return out
 
 
@@ -82,6 +87,8 @@ static func progress(company: Company, line_id: String) -> int:
 			return company.level()
 		"money":
 			return company.money
+		"wonders":
+			return wonders_seen(company)
 		"animals":
 			return seen_count(company)
 	return 0
@@ -201,3 +208,22 @@ static func discover(keys: Array) -> void:
 	for key: String in keys:
 		if not GameState.company.discovered.has(key):
 			GameState.company.discovered.append(key)
+
+
+# --- Wonders seen (the field guide's Wonders tab) --------------------------------
+
+## Every wonder of the world on the map: its key ("wonder:<id>").
+static func wonder_keys() -> Array[String]:
+	var out: Array[String] = []
+	for item: Dictionary in GameData.wonders:
+		out.append("wonder:" + str(item.id))
+	return out
+
+
+## How many of the wonders a company has seen (clicked on the map).
+static func wonders_seen(company: Company) -> int:
+	var count := 0
+	for key in company.discovered:
+		if key.begins_with("wonder:") and not GameData.wonder(key.trim_prefix("wonder:")).is_empty():
+			count += 1
+	return count

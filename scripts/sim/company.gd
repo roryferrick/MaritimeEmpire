@@ -15,6 +15,9 @@ var name := ""
 ## The company's color id (see game_config company_colors): its name in the
 ## top bar and the rings around its HQ and hubs.
 var color := "purple"
+## "" for a company a person plays; for an AI rival (see RivalAI), how well
+## it plays: "easy", "normal" or "hard".
+var ai := ""
 ## New ships are delivered here; the HQ.
 var home_port := ""
 var money := 0
@@ -82,6 +85,11 @@ func _init(company_name := "", company_color := "purple", home := "") -> void:
 	home_port = home
 
 
+## True for an AI rival (see RivalAI).
+func is_ai() -> bool:
+	return not ai.is_empty()
+
+
 ## Its company level, worked out again only when its XP changes (it walks
 ## the level costs, and the sim asks often).
 func level() -> int:
@@ -111,6 +119,7 @@ func to_dict() -> Dictionary:
 	return {
 		"company_name": name,
 		"company_color": color,
+		"ai": ai,
 		"home_port": home_port,
 		"money": money,
 		"company_xp": xp,
@@ -140,6 +149,7 @@ func to_dict() -> Dictionary:
 
 static func from_dict(data: Dictionary) -> Company:
 	var company := Company.new(str(data.get("company_name", "")), str(data.get("company_color", "purple")), str(data.get("home_port", "")))
+	company.ai = str(data.get("ai", ""))
 	company.money = int(data.get("money", 0))
 	company.xp = float(data.get("company_xp", 0.0))
 	for commodity_id: String in data.get("delivered", {}):

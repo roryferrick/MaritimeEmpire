@@ -281,6 +281,15 @@ var icebreaking := Icebreaking.new(self)
 var port_sizes := PortSizes.new(self)
 ## Every port's berths and queue (see Docks).
 var docks := Docks.new(self)
+## The AI rivals: each thinks for itself, now and then (see RivalAI).
+var rivals := RivalAI.new(self)
+## Each step's ships, natively where the native library's there (ShipStepper:
+## see native/README.md), and whether to use it (tests compare the two).
+var _ship_stepper: Object = null
+var use_ship_stepper := true
+## The AI rival acting just now (meanwhile it's `company`; its actions
+## don't go in this player's activity log and nothing saves), or null.
+var ai_acting: Company = null
 
 
 func _ready() -> void:
@@ -315,9 +324,17 @@ func _step(delta: float) -> void:
 	weather.step(delta)
 	_check_payday()
 	icebreaking.refresh()
-	for ship in ships:
-		_advance(ship, delta)
+	if _ship_stepper == null and ClassDB.class_exists(&"ShipStepper"):
+		_ship_stepper = ClassDB.instantiate(&"ShipStepper")
+		_ship_stepper.setup(self, {open_sea_zone = Ship.OPEN_SEA_ZONE, min_recovery_speed = MIN_RECOVERY_SPEED_FACTOR,
+			kind_icebreaker = Ship.KIND_ICEBREAKER, kind_cargo = Ship.KIND_CARGO, kind_recovery = Ship.KIND_RECOVERY, kind_tug = Ship.KIND_TUG, at_risk_check_s = AT_RISK_CHECK_S})
+	if _ship_stepper != null and use_ship_stepper:
+		_ship_stepper.advance(ships, delta)  # (The same as the loop below, the plain sailing worked out natively.)
+	else:
+		for ship in ships:
+			_advance(ship, delta)
 	_roll_breakdowns(delta)
+	rivals.step(delta)
 	_storm_warning_clock += delta
 	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
 		_storm_warning_clock = 0.0
@@ -587,10 +604,12 @@ func company_level() -> int:
 
 ## The highest company level in the game: when the world's own features
 ## (storms, seasonal closures) start (in single player, the company's level).
+## AI rivals don't count: the world's features follow the people playing.
 func world_level() -> int:
 	var best := company.level()
 	for other in companies:
-		best = maxi(best, other.level())
+		if not other.is_ai():
+			best = maxi(best, other.level())
 	return best
 
 
@@ -1423,13 +1442,14 @@ func _advance(ship: Ship, delta: float) -> void:
 		return
 	# Working, so its crew is paid this period (see _pay_wages()): sailing, on a
 	# job, or doing a stop in port.
-	if not ship.worked and (not ship.is_docked() and not ship.is_lost() or ship.is_on_job() or ship.is_docking()):
+	var on_job := ship.is_on_job()  # (Asked once: this runs for every ship, every step.)
+	if not ship.worked and (not ship.is_docked() and not ship.is_lost() or on_job or ship.is_docking()):
 		ship.worked = true
 	if ship.is_icebreaker():
 		_advance_icebreaker(ship, delta)
-	elif ship.is_tug() and ship.is_on_job():
+	elif on_job and ship.is_tug():
 		_advance_tug_job(ship, delta)
-	elif ship.is_on_job():
+	elif on_job:
 		_advance_job(ship, delta)
 	elif ship.is_docked():
 		_advance_docked(ship, delta)
@@ -1455,7 +1475,8 @@ func _sail(ship: Ship, delta: float) -> bool:
 	var zone := ship.zone_at(ship.traveled_nm)
 	var storm := _storm_factors(ship)
 	var speed := ship.speed()
-	if ship.is_service():
+	var service := ship.is_service()
+	if service:
 		speed = maxf(speed, ship.top_speed() * MIN_RECOVERY_SPEED_FACTOR)
 	speed *= float(zone[1]) * float(storm[0])
 	var target := ship.traveled_nm + speed * delta
@@ -1468,13 +1489,13 @@ func _sail(ship: Ship, delta: float) -> bool:
 	if icebreaking.any_open_closure() or not ship.ice_wait.is_empty():
 		target = _ice_hold(ship, target)
 	var effort := clampf((target - ship.traveled_nm) / (speed * delta), 0.0, 1.0) if speed * delta > 0.0 else 1.0
-	if ship.is_running() or ship.is_service():
+	if service or ship.is_running():
 		ship.maintenance = maxf(ship.maintenance - ship.wear_per_s() * float(zone[2]) * float(storm[1]) * delta * effort, 0.0)
 	# A storm costs time, not fuel per mile: the engines make less way, so the
 	# fuel a ship set off with still covers the leg.
 	ship.fuel = maxf(ship.fuel - ship.fuel_per_s() * float(storm[0]) * delta * effort, 0.0)
 	ship.traveled_nm = target
-	if not ship.is_service():
+	if not service:
 		ship.sea_time += delta * effort
 		if ship.fuel <= 0.0:
 			_lose(ship, "out of fuel")
@@ -2784,9 +2805,14 @@ func _release_tugs(lead: Ship, team: Array[Ship]) -> void:
 func trade_bonus(from_port: String, to_port: String, profit: float, model_id := "", of: Company = null) -> float:
 	if profit <= 0.0:
 		return 0.0
+	return profit * (trade_bonus_factor(from_port, to_port, model_id, of) - 1.0)
+
+
+## What a leg's bonuses multiply a profitable trade's profit by (see trade_bonus()).
+func trade_bonus_factor(from_port: String, to_port: String, model_id := "", of: Company = null) -> float:
 	var who := of if of != null else company
 	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("profit_bonus", 0.5)) if who.has_mega(model_id) else 0.0)
-	return profit * (GameData.sale_factor(from_port, to_port) * (1.0 + who.hub_bonus(to_port, "pay")) * mega - 1.0)
+	return GameData.sale_factor(from_port, to_port) * (1.0 + who.hub_bonus(to_port, "pay")) * mega
 
 
 ## Money cargo purchases leave alone so no ship is stranded for fuel: what
@@ -3332,7 +3358,8 @@ func _migrate_legacy_save() -> void:
 
 ## Starts a new company in save_slot, replacing any save there. options (all
 ## optional): tutorials (bool), max_time_speed (one of TIME_SPEEDS), storms
-## (one of Weather.LEVELS) and seasons (bool: seasonal closures).
+## (one of Weather.LEVELS), seasons (bool: seasonal closures), rivals (how
+## many AI rivals) and rival_level (how well they play: RivalAI.LEVELS).
 func new_game(new_company_name: String, new_home_port: String, new_color := "purple", options := {}) -> void:
 	company = Company.new(new_company_name.strip_edges(), new_color, new_home_port)
 	company.money = int(GameData.config.get("starting_money", 10000))
@@ -3352,6 +3379,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	storms = str(options.get("storms", "none"))
 	seasons = bool(options.get("seasons", false))
 	weather.clear()
+	rivals.reset()
+	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
 	_begin_session()
 	save_game()
@@ -3378,6 +3407,7 @@ func continue_game(slot: int) -> String:
 ## before companies load as their one company.
 func load_world(data: Dictionary, local := -1) -> void:
 	data = _without_retired_ports(data)
+	rivals.reset()
 	companies.clear()
 	for company_data: Dictionary in data.get("companies", [data]):
 		companies.append(Company.from_dict(company_data))
@@ -3435,8 +3465,8 @@ func _fit_ports_to_routes() -> void:
 
 
 func save_game() -> void:
-	if not in_session or Net.is_client():
-		return  # A joined player's game is the host's to save.
+	if not in_session or Net.is_client() or ai_acting != null:
+		return  # A joined player's game is the host's to save (and an AI rival's moves wait for the next).
 	var file := FileAccess.open(save_path(save_slot), FileAccess.WRITE)
 	if file == null:
 		push_error("GameState: could not write save (%s)" % error_string(FileAccess.get_open_error()))

@@ -41,6 +41,8 @@ func _ready() -> void:
 	_map.birds_clicked.connect(_open_birds_popup)
 	_map.animals_clicked.connect(_open_animals_popup)
 	_map.industry_clicked.connect(_open_industry_popup)
+	_map.wonder_clicked.connect(_open_wonder_popup)
+	_map.home_clicked.connect(_open_home_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
 	%RoutesToggle.toggled.connect(_on_routes_toggled)
@@ -365,6 +367,8 @@ func _open_birds_popup(about: Dictionary, _flock: Dictionary) -> void:
 			at = _map.ship_screen_position(about.ship)
 		elif about.has("pod"):
 			at = _map.pod_screen_position(int(about.pod))
+		elif about.has("colony"):
+			at = _map.colony_screen_position(int(about.colony))
 		if at != Vector2.INF:
 			last[0] = _map.get_global_transform() * at
 		return last[0]
@@ -440,6 +444,33 @@ func _open_industry_popup(port_id: String, slot: int) -> void:
 	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
 	popup.follow = func() -> Vector2:
 		var at := _map.port_screen_position(port_id)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)
+
+
+## A wonder of the world clicked on the map: its popup, following it.
+func _open_wonder_popup(id: String) -> void:
+	var popup := WonderPopup.new()
+	popup.id = id
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at := _map.wonder_screen_position(id)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)
+
+
+## A home of the wildlife clicked on the map: its popup, following it.
+func _open_home_popup(kind: String, index: int) -> void:
+	var popup := HomePopup.new()
+	popup.kind = kind
+	popup.index = index
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at := _map.home_screen_position(kind, index)
 		if at != Vector2.INF:
 			last[0] = _map.get_global_transform() * at
 		return last[0]

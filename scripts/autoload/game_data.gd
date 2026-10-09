@@ -15,6 +15,7 @@ const WORLD_MAP_PATH := "res://data/world_map.res"
 const CANALS_PATH := "res://data/canals.json"
 const MARKETS_PATH := "res://data/markets.json"
 const STARTS_PATH := "res://data/starts.json"
+const WONDERS_PATH := "res://data/wonders.json"
 ## How close (in projected degrees) a lane must pass a lock chamber to go through it.
 const CHAMBER_ON_LANE := 0.002
 const _NO_LANE := 1 << 30
@@ -36,6 +37,10 @@ var commodities: Array[Dictionary] = []
 ## Recommended HQ ports from data/starts.json: {excellent: [{port, note}],
 ## great, fair, hard: [...], great_lakes: {note, ports}}.
 var starts: Dictionary = {}
+## The wonders of the world on the map (data/wonders.json): {id, name, kind
+## (natural, man_made or ancient), country, lon, lat, tier, when, fact}.
+var wonders: Array[Dictionary] = []
+var _wonders_by_id := {}
 ## The kinds of recommended start in data/starts.json, best first.
 const START_KINDS := ["excellent", "great", "fair", "hard"]
 
@@ -50,6 +55,9 @@ var _lane_cache: Dictionary = {}  # "FROM-TO" -> SeaLane, built on first use
 var _crossing_cache: Dictionary = {}  # "FROM-TO" -> canal_crossings()
 var _chambers_cache: Dictionary = {}  # "FROM-TO" -> lane_chambers()
 var _zones_cache: Dictionary = {}  # "FROM-TO" -> lane_zones()
+## Lanes, their zones and canal crossings worked out natively (LaneMath: the
+## same numbers, to the last bit) when the native library's there.
+var native_lanes := ClassDB.class_exists(&"LaneMath")
 var _commodities_by_id: Dictionary = {}
 var _port_regions: Dictionary = {}  # port id -> region
 var _base_prices: Dictionary = {}  # "PORT/commodity" -> base_price()
@@ -136,6 +144,9 @@ func _ready() -> void:
 	_load_canals()
 	_load_markets()
 	starts = _load_json(STARTS_PATH)
+	for item: Dictionary in _load_json(WONDERS_PATH).get("wonders", []):
+		wonders.append(item)
+		_wonders_by_id[item.id] = item
 	# The map's land colors take a while to decode: start on them now, so
 	# they're ready by the time a map shows (see MapView.land_colors()).
 	ResourceLoader.load_threaded_request("res://data/land_colors.webp")
@@ -197,6 +208,16 @@ func lane(from_port: String, to_port: String) -> SeaLane:
 	var index: int = _lane_index[key]
 	var stored := index if index >= 0 else -index - 1
 	var sea_lane := SeaLane.new()
+	if native_lanes:
+		var made: Array = LaneMath.lane_points(_lane_data.points.slice(_lane_data.starts[stored], _lane_data.starts[stored + 1]))
+		sea_lane.points = made[0]
+		sea_lane.miles = made[1]
+		if index < 0:
+			sea_lane = sea_lane.reversed()
+		sea_lane._bounds = LaneMath.lane_bounds(sea_lane.points)
+		sea_lane._has_bounds = true
+		_lane_cache[key] = sea_lane
+		return sea_lane
 	var previous := Vector2.ZERO
 	var miles := 0.0
 	for i in range(_lane_data.starts[stored], _lane_data.starts[stored + 1]):
@@ -234,7 +255,7 @@ func canal_crossings(from_port: String, to_port: String) -> Array:
 	var sea_lane := lane(from_port, to_port)
 	if sea_lane != null:
 		for canal in canals:
-			var crossing := _crossing(sea_lane, canal)
+			var crossing := LaneMath.crossing(sea_lane.points, sea_lane.miles, sea_lane.bounds(), canal, CHAMBER_ON_LANE) if native_lanes else _crossing(sea_lane, canal)
 			if not crossing.is_empty():
 				crossings.append(crossing)
 		crossings.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.start_nm < b.start_nm)
@@ -447,19 +468,24 @@ func lane_zones(from_port: String, to_port: String) -> Array:
 	var rough: Dictionary = config.get("rough_seas", {})
 	var rough_lat := float(rough.get("lat", -90.0))
 	var rough_wear := float(rough.get("wear_factor", 1.0))
+	var slow := []
+	for crossing: Dictionary in canal_crossings(from_port, to_port):
+		var factor := float(crossing.canal.get("speed_factor", 1.0))
+		if factor != 1.0:
+			slow.append([crossing.start_nm, crossing.end_nm, factor])
+	if native_lanes:
+		zones = LaneMath.zones(sea_lane.points, sea_lane.miles, slow, rough_lat, rough_wear)
+		_zones_cache[key] = zones
+		return zones
 	var breaks := PackedFloat64Array([sea_lane.length()])
 	for i in range(1, sea_lane.points.size()):
 		var a := Geo.unproject(sea_lane.points[i - 1]).y < rough_lat
 		var b := Geo.unproject(sea_lane.points[i]).y < rough_lat
 		if a != b:
 			breaks.append(lerpf(sea_lane.miles[i - 1], sea_lane.miles[i], 0.5))
-	var slow := []
-	for crossing: Dictionary in canal_crossings(from_port, to_port):
-		var factor := float(crossing.canal.get("speed_factor", 1.0))
-		if factor != 1.0:
-			slow.append([crossing.start_nm, crossing.end_nm, factor])
-			breaks.append(crossing.start_nm)
-			breaks.append(crossing.end_nm)
+	for stretch: Array in slow:
+		breaks.append(stretch[0])
+		breaks.append(stretch[1])
 	breaks.sort()
 	var previous := 0.0
 	for mile in breaks:
@@ -756,3 +782,8 @@ func carries_text(model: Dictionary) -> String:
 		if float(get_ship_model(id).get("map_size", [0])[0]) == longest:
 			names.append(get_ship_model(id).get("name", id))
 	return "Up to %s size" % " / ".join(names)
+
+
+## A wonder of the world by id (see wonders), or {}.
+func wonder(id: String) -> Dictionary:
+	return _wonders_by_id.get(id, {})

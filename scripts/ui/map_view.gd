@@ -20,11 +20,16 @@ signal pod_clicked(pod_index: int)
 ## A flock of birds was clicked: what it's round ({port}, {ship} or {pod}) and
 ## the flock ({count, species}: see Birds).
 signal birds_clicked(about: Dictionary, flock: Dictionary)
-## A group of land animals was clicked: its patch's key and species (see
-## LandLife and _draw_fauna()).
+## A group of land animals was clicked: its group (Wildlife.groups, its index as
+## text) and species (see _draw_wildlife()).
 signal animals_clicked(key: String, kind: String)
+## A home was clicked: "colony" (a bird colony's, Wildlife.colonies) or "home"
+## (a land group's, Wildlife.groups), and its index (see _draw_wildlife()).
+signal home_clicked(kind: String, index: int)
 ## One of this player's hubs' industry plots was clicked (see _industry_plots()).
 signal industry_clicked(port_id: String, slot: int)
+## A wonder of the world clicked (see _draw_wonders()).
+signal wonder_clicked(id: String)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 ## While choosing a region to unlock (choosing_region): a locked region's
@@ -45,15 +50,6 @@ const PORT_HIT_RADIUS := 14.0
 ## it only when clicked right on (this share of their usual reach).
 const MARINA_HIT_RADII := 1.45
 const MARINA_BIRD_REACH := 0.5
-## How long (s) a ship's birds take to go from wheeling round it to flying
-## along with it (or back) as it gets going or stops (see _under_way()).
-const UNDER_WAY_EASE_S := 2.0
-## The most birds in one V (see _v_spot()): a bigger flock flies in several.
-const V_SIZE := 9
-## About how often (s) a port's cormorants fly past (see _draw_cormorants()).
-const CORMORANT_PASS_S := 60.0
-## About how often (s) a port's migrating cranes pass over (see _draw_waders()).
-const CRANE_PASS_S := 90.0
 ## A port's shore beside its marina (see _shore_spots()): how far out either
 ## side it's looked for (marina radii), at how many places, and how far in
 ## from the sea and out to it.
@@ -101,21 +97,51 @@ const ICE_COLOR := Color(0.86, 0.95, 1.0)
 const ICE_CANAL_WIDTH := 5.0
 const ICE_RING_GAP := 5.0
 ## Land drawings (see _draw_decor()): where their art is, the bucket size
-## (degrees) they're sorted into, how far apart on screen a tier must be to
-## show, their sizes on screen ([plants and rocks, mountains, animals and waves] px at the
-## reference zoom), and how much they grow or shrink with the zoom.
+## (degrees) they're sorted into, and each kind's size in the world (km
+## across, exaggerated so they read): they grow and shrink with the map like
+## the land. A drawing shows once it's DECOR_MIN_PX across; below
+## DECOR_FULL_PX only some of them (by tier), so the land thins out zoomed out
+## rather than turning to noise. The animals are the wildlife's (Wildlife:
+## their spots are its home ranges) and the pizza on Albuquerque is a
+## close-up secret, small as it is.
 const DECOR_ART_DIR := "res://art/decor/"
-const DECOR_BUCKET := 10.0
-const DECOR_MIN_SPACING_PX := 32.0
-const DECOR_SIZE_PX := Vector3(20.0, 34.0, 28.0)
-const DECOR_ZOOM_REFERENCE := 30.0
-const DECOR_SCALE_RANGE := Vector2(0.9, 1.5)
+const DECOR_BUCKET := 2.5
+const DECOR_KM := {conifer = 17.0, deciduous = 17.0, rainforest = 19.0, palm = 14.0, acacia = 15.0, grass = 9.0, shrub = 10.0,
+	cactus = 9.0, dunes = 30.0, red_rock = 26.0, waves = 60.0, pizza = 7.0,
+	mountain = 82.0, mountain_b = 74.0, mountain_c = 88.0, mountain_snow = 86.0, mountain_snow_b = 78.0, mountain_snow_c = 92.0}
+const DECOR_MIN_PX := 5.0
+const DECOR_FULL_PX := 16.0
 const DECOR_ANIMALS: Array[String] = ["penguin", "polar_bear", "camel", "elephant", "giraffe", "lion", "zebra", "kangaroo", "koala",
 	"panda", "tiger", "bison", "moose", "brown_bear", "reindeer", "llama", "toucan", "gorilla", "orangutan", "kiwi", "lemur",
-	"quetzal", "water_buffalo", "pizza"]
-## Kinds of drawing hidden until the map is zoomed in this far (px per projected
-## degree), whatever their tier: the pizza on Albuquerque is a close-up secret.
-const DECOR_MIN_ZOOM := {pizza = 250.0}
+	"quetzal", "water_buffalo"]
+## The wildlife (see _draw_wildlife()): where its art is (each drawing 64
+## units across), the smallest an animal or home is drawn (px), the biggest
+## animal (km, so the map knows when none would show), and how long (life
+## seconds: Wildlife) a walking animal's stride takes.
+const WILDLIFE_ART_DIR := "res://art/wildlife/"
+const WILDLIFE_MIN_PX := 3.0
+const WILDLIFE_HOME_MIN_PX := 5.0
+const WILDLIFE_LARGEST_KM := 13.5
+const WILDLIFE_STRIDE_S := 500.0
+## Kilometers in a degree of the globe's surface (px per km = _zoom / this).
+const KM_PER_DEGREE := 111.32
+## Wonders of the world (data/wonders.json, see _draw_wonders()): where their
+## art is; how big (px) one must be to show, and for its name to show; how
+## faded the lost ancient ones are; their names' size; how far (km) they're
+## kept clear of a port's marina; and, for the ones along a course, the
+## Great Wall's watchtowers' spacing, the Barrier Reef's reefs' spacing, the
+## Northern Lights' height, and how long a stretch they count as for their
+## names to show (all in km).
+const WONDER_ART_DIR := "res://art/wonders/"
+const WONDER_MIN_PX := 5.0
+const WONDER_LABEL_PX := 42.0
+const WONDER_LOST_ALPHA := 0.62
+const WONDER_FONT_SIZE := 12
+const WONDER_PORT_GAP_KM := 4.0
+const WALL_TOWER_KM := 40.0
+const REEF_SPACING_KM := 45.0
+const AURORA_HEIGHT_KM := 260.0
+const WONDER_LINE_LABEL_KM := 120.0
 ## Docked ships are small dots in their model's color, in rings around their
 ## port: the first ring DOCK_FIRST_RING_GAP outside the port's dot, each next
 ## ring DOCK_RING_GAP further, with dots about DOCK_DOT_SPACING apart (so outer
@@ -552,6 +578,10 @@ var _regions_key := []
 ## Each land drawing's region (index + 1; 0 until the region map is ready), so
 ## those in locked regions are left out.
 var _decor_regions := PackedByteArray()
+## The land drawings picked and drawn natively (DecorSim), when the library's
+## there, and whether it has their regions yet.
+static var _decor_native: Object = null
+static var _decor_regions_native := false
 
 ## The globe: the (lon, lat) at the middle of the view, that map point
 ## (projected), and the view's axes on the unit sphere (see _orient()): right
@@ -585,6 +615,8 @@ var _lane_caps := {}
 var _canal_boxes: Array[Rect2] = []
 ## The land's triangles by cell (see _on_land()), and the task sorting them.
 static var _land_cells := {}
+## The same land test natively (LandTest), when the library's there (see _on_land()).
+static var _land_test: Object = null
 static var _land_task := -1
 ## The fleet's lanes (see _active_lanes()), and when (ms) they were worked out.
 var _active_lanes_cache := []
@@ -592,13 +624,15 @@ var _active_lanes_time := -1
 ## Gust cells' steady offsets and their spots this cycle (see _draw_gusts()).
 var _gust_offsets := {}
 var _gust_spots := {}
-## Each ship's last place and how much it's under way (see _under_way()).
-var _ship_motion := {}
 ## Each cormorant species' colors for drawing it swimming (see _cormorant_swimmer()).
 var _cormorant_swimmers := {}
 ## Port id -> its shore beside its marina, found once (see _shore_spots()).
 var _shores := {}
 var _shore_neighbours := {}  # Port id -> the ports near it (see _local_on_land()).
+## Port ids by 3-degree cell of the map (see _local_on_land()).
+static var _port_grid := {}
+## Tests: work the shore out in GDScript even with the native library there.
+var native_shores_off := false
 ## Port id -> its docks' turn on screen for the current view (see _dock_point()).
 var _port_turns := {}
 ## Port id -> where it is on screen for the current view (see port_screen_position()).
@@ -629,6 +663,12 @@ var _feature_labels := []
 var _feature_order := PackedInt32Array()
 var _feature_fonts := {}
 var _labels_key := []
+## The ports' dots drawn natively (PortPainter), when the library's there, and
+## what their looks were last worked out for (see _update_port_styles()).
+var _port_painter: Object = null
+var _port_styles_key := []
+var _port_styles_sizes := []
+var _port_styles_time := -1000000
 ## Label text sizes, measured once (see _label_size()).
 var _label_sizes := {}
 ## Country and feature labels' spots on the unit sphere, worked out once.
@@ -679,15 +719,25 @@ var _lake_cells := {}
 ## hubs or prices (ports, labels, route lanes; see STATIC_REFRESH_S), and ships
 ## (every frame). _canvas is the layer being drawn, which the draw helpers use.
 var _decor_layer := Control.new()
-## The land animals roaming over the land drawings (every frame while any show;
-## see _draw_fauna()), the groups _draw_decor() found in view: [patch key,
-## art, its spot on screen, art side (px), how much of its patch fits on land,
-## species info, tree art, species], and their goings on.
+## The wildlife over the land drawings (see _draw_wildlife(): every frame while
+## any shows), and whether any did.
 var _fauna_layer := Control.new()
-var _fauna := []
-var _land_life := LandLife.new()
-## Where each land animal was last drawn, for clicking: [screen point, reach
-## (px), patch key, species].
+## The wonders of the world (see _draw_wonders()), over the land animals, and
+## their art (in GameData.wonders order).
+var _wonder_layer := Control.new()
+static var _wonder_textures: Array[Texture2D] = []
+## Each wonder's spot (see _wonder_spot()), by index, and the marinas they were worked out for.
+var _wonder_spots := {}
+var _wonder_spots_key := -1
+## Where each wonder was drawn: [middle, reach (px), id, course (screen points, for one along a course)].
+var _wonder_hits := []
+## Wonders along a course: their boxes of (lon, lat) (see _wonder_line_box()).
+var _wonder_line_boxes := {}
+var _wildlife_shown := false
+## The land animals worked out and drawn natively (LandSim), when the library's there.
+var _land_sim: Object = null
+## What wildlife was drawn where, for clicking: [screen point, reach (px),
+## "group", "colony" or "home", index]. And its art by name.
 var _fauna_hits := []
 ## Route lines' curves' reaches along their lanes (see _lane_pieces()), for one zoom.
 var _lane_reach_memo := {}
@@ -704,13 +754,24 @@ var _hovered_pod := -1
 var _sea_art := {}
 var _pod_angles := {}
 var _pod_hits: Array = []
+## Pod -> the box (lon, lat) it keeps to till it leaves its area, and when (see _draw_sea_life()).
+var _pod_bounds := {}
+## Each sea animal's breach or surfacing this slot: [pod, animal, what, slot] -> when it starts, or NAN for none (see _sea_event()).
+static var _sea_events := {}
+## The wind's gusts drawn natively (GustPainter), when the library's there.
+var _gust_painter: Object = null
+## The sea animals drawn natively (SeaPainter), when the library's there, and their
+## species as it draws them (see _sea_kind_index()).
+var _sea_painter: Object = null
+var _sea_kinds := []
+var _sea_kind_indices := {}
+const NO_POD_BOUND := [Rect2(), -INF]
 ## Until the sea animals' migration paths are all found (see SeaLife.start_warm_up()).
 var _sea_warming := true
 ## Land drawings: a texture per kind (WorldMapData.decor_kind_names), and the
 ## drawings by DECOR_BUCKET-degree cell, so only those near the view are looked at.
 static var _decor_textures: Array[Texture2D] = []
-## Land animals' other drawings by "<kind>_<frame>" (see _animal_frame()).
-static var _animal_frames := {}
+static var _wildlife_art := {}
 ## Industry buildings' art by commodity (see _industry_texture()).
 static var _industry_art := {}
 static var _decor_buckets := {}
@@ -729,6 +790,14 @@ var _static_layer := Control.new()
 ## round their ports, tugs as ticks) instead. Redrawn when the view changes, a
 ## ship docks or leaves, and with the ports' slow size changes.
 var _dock_layer := Control.new()
+## Birds keeping still a while (see _draw_still_birds()), under the ships and
+## the birds on the move; which birds it shows, where they were drawn (for
+## clicks), when it's to be drawn again (bird time), and Wildlife.where_changes then.
+var _still_birds := Control.new()
+var _still_drawn := {}
+var _still_hits: Array = []
+var _still_redraw_at := -INF
+var _still_epoch := -1
 var _overlay := Control.new()
 var _canvas: Control = _overlay
 var _static_clock := 0.0
@@ -736,7 +805,6 @@ var _ports_by_rank: Array = []  # Label priority order, sorted on first draw.
 ## The ports in label order with the HQ, hubs and picked port first, and those ports.
 var _ranked_ports: Array = []
 var _ranked_ports_key := {"": false}
-
 
 ## Land, coastline, borders and the equator, in projected map coordinates.
 ## Drawn once and cached; turning and zooming the globe only changes the
@@ -781,7 +849,6 @@ class WorldArt:
 	func land_tint() -> Color:
 		return view._color(&"land") if view.gray_mode else Color.WHITE
 
-
 ## The land in its biome colors (see MapView.LAND_COLORS) or flat gray, over
 ## the sea and its ice. On the full-color map its child, the biomes
 ## (BiomeArt), are drawn over it, cut to the land.
@@ -795,7 +862,6 @@ class LandArt:
 		draw_mesh(art.land_mesh, art.land_texture(), Transform2D.IDENTITY, art.land_tint())
 		draw_mesh(art.south_cap_mesh, art.white, Transform2D.IDENTITY, view._color(&"land") if view.gray_mode else ANTARCTIC_ICE)
 
-
 ## The whole globe again, over the rest of the art, drawn by the regions'
 ## overlay (MapView._globe_regions): locked regions shaded, and while choosing
 ## one, the regions outlined and the hovered one lit up.
@@ -807,7 +873,6 @@ class RegionShade:
 	func _draw() -> void:
 		draw_mesh(art.sea_mesh, art.white)
 
-
 ## The whole globe once more, over the marinas, as the sky (MapView._globe_sky):
 ## clouds that clear as the map zooms in, and the storms. Only on the World map.
 class SkyArt:
@@ -818,7 +883,6 @@ class SkyArt:
 	func _draw() -> void:
 		draw_mesh(art.sea_mesh, art.white)
 
-
 ## The land in plain white, into the land mask (MapView._land_mask) the
 ## biomes are cut to.
 class LandMask:
@@ -828,7 +892,6 @@ class LandMask:
 
 	func _draw() -> void:
 		draw_mesh(art.land_mesh, art.white)
-
 
 ## The biomes as flat-colored, straight-edged patches (WorldMapData
 ## biome_triangles), cut to the land by the land mask (MapView._land_mask:
@@ -844,7 +907,6 @@ class BiomeArt:
 		if not view.gray_mode:
 			draw_mesh(art.biome_mesh, art.white)
 
-
 ## Over the land: inland seas, and the lakes in their simplified real colors
 ## (plain water on the gray map).
 class WaterArt:
@@ -858,7 +920,6 @@ class WaterArt:
 		for i in art.lake_meshes.size():
 			if art.lake_meshes[i] != null:
 				draw_mesh(art.lake_meshes[i], art.white, Transform2D.IDENTITY, view._color(&"ocean") if view.gray_mode else art.lake_colors[i])
-
 
 ## Over the land, lakes and lake ice: the lakes' islands, the borders, the
 ## coast, and the equator, faint.
@@ -875,7 +936,6 @@ class TopArt:
 		draw_multiline(data.coast_segments, view._color(&"coast"), -1.0)
 		draw_polyline(art.equator, view._color(&"equator"), -1.0)
 
-
 ## Winter sea ice (see MapView._ice_circles and
 ## _ice_tracks): a solid sheet of white-blue ice with a soft edge and faint
 ## cracks over each frozen stretch of sea, cut by the channels icebreakers
@@ -890,7 +950,6 @@ class IceArt:
 	func _draw() -> void:
 		view._draw_ice_sheet(self)
 
-
 ## Lake ice: the bits of lake inside the frozen circles (MapView._lake_ice,
 ## picked out triangle by triangle when the ice changes), in the ice's color.
 class LakeIce:
@@ -902,7 +961,6 @@ class LakeIce:
 	func _draw() -> void:
 		if view._lake_ice != null:
 			draw_mesh(view._lake_ice, art.white, Transform2D.IDENTITY, ICE_SHEET)
-
 
 ## One zoom tier of rivers, shown once the view is
 ## zoomed in to its min_zoom (see _update_rivers()).
@@ -916,13 +974,11 @@ class RiverTier:
 	func _draw() -> void:
 		draw_multiline(segments, view._color(&"river"), -1.0)
 
-
 func _exit_tree() -> void:
 	if GameState.anchor_route.get_object() == self:
 		GameState.anchor_route = Callable()
 	if GameState.berth_route.get_object() == self:
 		GameState.berth_route = Callable()
-
 
 func _ready() -> void:
 	clip_contents = true
@@ -1045,7 +1101,7 @@ func _ready() -> void:
 	RenderingServer.canvas_item_set_custom_rect(_land_mask_art.get_canvas_item(), true, NEVER_CULLED)
 	_land_mask.add_child(_land_mask_art)
 
-	for layer: Control in [_decor_layer, _fauna_layer, _dock_layer]:
+	for layer: Control in [_decor_layer, _fauna_layer, _wonder_layer, _dock_layer]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
@@ -1056,20 +1112,23 @@ func _ready() -> void:
 	_sky.material = _globe_sky
 	RenderingServer.canvas_item_set_custom_rect(_sky.get_canvas_item(), true, NEVER_CULLED)
 	add_child(_sky)
-	for layer: Control in [_weather_layer, _canal_layer, _static_layer, _overlay]:
+	for layer: Control in [_weather_layer, _canal_layer, _static_layer, _still_birds, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
 	_decor_layer.draw.connect(_draw_decor)
 	_decor_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_fauna_layer.draw.connect(_draw_fauna)
+	_fauna_layer.draw.connect(_draw_wildlife)
 	_fauna_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_wonder_layer.draw.connect(_draw_wonders)
+	_wonder_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_load_decor()
 	_start_land_cells()  # (For bending lanes round harbours: see _bent_lane().)
 	_weather_layer.draw.connect(_draw_weather_layer)
 	_canal_layer.draw.connect(_draw_canal_layer)
 	_static_layer.draw.connect(_draw_static_layer)
 	_overlay.draw.connect(_draw_overlay)
+	_still_birds.draw.connect(_draw_still_birds)
 	_dock_layer.draw.connect(_draw_dock_layer)
 	_dock_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# Docked ships are drawn on the dock layer only on the gray map (as dots): redraw it for them only there.
@@ -1084,7 +1143,6 @@ func _ready() -> void:
 	if size.x > 0.0 and size.y > 0.0:
 		_on_resized.call_deferred()
 
-
 func _process(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
@@ -1093,8 +1151,9 @@ func _process(delta: float) -> void:
 	_update_sky()
 	if _layers_stale:
 		_flush_layers()  # (After the view eased: see _redraw_layers().)
-	if not _fauna.is_empty():
-		_fauna_layer.queue_redraw()  # The land animals going about their day.
+	Wildlife.shared().step(delta)
+	if _wildlife_shown:
+		_fauna_layer.queue_redraw()  # The wildlife going about its life.
 	if not show_ships:
 		return
 	_weather_layer.queue_redraw()
@@ -1118,7 +1177,6 @@ func _process(delta: float) -> void:
 		_static_layer.queue_redraw()
 		_dock_layer.queue_redraw()  # Ports grow and shrink, and their rings with them.
 		_update_marinas()
-
 
 ## The world art's meshes, made once and shared by every map (the World map's
 ## and the route screen's): {sea (the whole sphere), south_cap, land, biome,
@@ -1153,7 +1211,6 @@ static func _world_meshes() -> Dictionary:
 	}
 	return _shared_meshes
 
-
 ## A mesh of map triangles (already small enough to curve round the globe:
 ## see Geo.tessellate()), and their colors if any. Their place on LAND_COLORS
 ## (their UV) is worked out by the globe's shader from where they are.
@@ -1168,7 +1225,6 @@ static func _triangle_mesh(triangles: PackedVector2Array, colors := PackedColorA
 		arrays[Mesh.ARRAY_COLOR] = colors
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
-
 
 ## Triangles (projected) covering the globe between two latitudes, all the way
 ## round, in BAND_STEP-degree cells; the poles themselves are just short of
@@ -1186,20 +1242,17 @@ static func _lat_band(from_lat: float, to_lat: float) -> PackedVector2Array:
 			out.append_array([Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y0), Vector2(x1, y1), Vector2(x0, y1)])
 	return out
 
-
 ## Web Mercator's northing (projected degrees) for a latitude, right up to
 ## (just short of) the poles, unlike Geo.project().
 static func _mercator_y(lat: float) -> float:
 	lat = deg_to_rad(clampf(lat, -89.99, 89.99))
 	return rad_to_deg(log(tan(PI / 4.0 + lat / 2.0)))
 
-
 ## The sea's color for a depth band: 0 is the shallowest (the continental
 ## shelf, the view's background), then each of WorldMapData.depth_levels, darker
 ## by DEPTH_SHADES towards ocean_deep.
 func _depth_color(band: int) -> Color:
 	return _color(&"ocean").lerp(_color(&"ocean_deep"), DEPTH_SHADES[mini(band, DEPTH_SHADES.size() - 1)])
-
 
 # --- View ----------------------------------------------------------------
 
@@ -1208,24 +1261,20 @@ func _depth_color(band: int) -> Color:
 func world_to_screen(world: Vector2) -> Vector2:
 	return _unit_to_screen(_unit(world))
 
-
 func _unit_to_screen(p: Vector3) -> Vector2:
 	if p.dot(_toward) < 0.0:
 		return HIDDEN
 	return size / 2.0 + Vector2(p.dot(_right), -p.dot(_up)) * _radius()
 
-
 ## The map point under a screen point (off the globe: the nearest point on its edge).
 func screen_to_world(screen: Vector2) -> Vector2:
 	return Geo.project(_screen_lon_lat(screen))
-
 
 ## The (lon, lat) under a screen point, poles and all (off the globe: the
 ## nearest point on its edge).
 func _screen_lon_lat(screen: Vector2) -> Vector2:
 	var p := _screen_unit(screen)
 	return Vector2(rad_to_deg(atan2(p.y, p.x)), rad_to_deg(asin(clampf(p.z, -1.0, 1.0))))
-
 
 ## The point on the unit sphere (see _unit()) under a screen point (off the
 ## globe: the nearest point on its edge). Cheaper than screen_to_world().
@@ -1238,7 +1287,6 @@ func _screen_unit(screen: Vector2) -> Vector3:
 		d = 1.0
 	return _right * q.x + _up * q.y + _toward * sqrt(1.0 - d)
 
-
 ## A map point (projected) on the unit sphere: x through (0, 0), z the north pole.
 static func _unit(world: Vector2) -> Vector3:
 	var lon := deg_to_rad(world.x)
@@ -1246,11 +1294,9 @@ static func _unit(world: Vector2) -> Vector3:
 	var c := 1.0 / cosh(m)  # Web Mercator's northing back to the latitude's cos and sin.
 	return Vector3(c * cos(lon), c * sin(lon), tanh(m))
 
-
 ## The globe's radius on screen (px): _zoom is px per degree of its surface.
 func _radius() -> float:
 	return _zoom * 180.0 / PI
-
 
 ## Pixels per projected degree at a map point (sizes in projected degrees, like
 ## the canals' widths, are drawn this big there): fewer towards the poles, which
@@ -1258,11 +1304,9 @@ func _radius() -> float:
 func _local_zoom(world: Vector2) -> float:
 	return _zoom / cosh(deg_to_rad(world.y))
 
-
 ## True if a screen point is round the far side of the globe (see world_to_screen()).
 static func _is_hidden(screen: Vector2) -> bool:
 	return screen.x <= HIDDEN.x / 2.0
-
 
 ## The view's axes on the unit sphere, from its middle's (lon, lat): right (east
 ## there), up (north there) and out towards the viewer.
@@ -1273,7 +1317,6 @@ func _orient() -> void:
 	_right = Vector3(-sin(lon), cos(lon), 0.0)
 	_up = Vector3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat))
 
-
 func port_screen_position(port_id: String) -> Vector2:
 	# Asked for very often (every port, marina and docked ship, every frame), and
 	# ports only move on screen when the view does: kept until it changes.
@@ -1282,7 +1325,6 @@ func port_screen_position(port_id: String) -> Vector2:
 			_port_units[port_id] = _unit(GameData.port_position(port_id))  # (Worked out once: ports don't move.)
 		_port_screens[port_id] = _unit_to_screen(_port_units[port_id])
 	return _port_screens[port_id]
-
 
 ## Docked ships are dots spread in rings around their port, in fleet order,
 ## so they don't cover it or each other.
@@ -1319,7 +1361,6 @@ func ship_screen_position(ship: Ship) -> Vector2:
 	var angle := -PI / 2.0 + TAU * slot / per_ring
 	return port_screen_position(ship.docked_at) + Vector2.from_angle(angle) * radius
 
-
 ## A carried ship rides on its recovery boat's work deck (CARRY_DECK_X), behind
 ## the boat's middle, so the wheelhouse stays in view. Being floated off at
 ## port, it slides back off the stern (see Ship.float_progress()).
@@ -1331,12 +1372,10 @@ func _carried_screen_position(ship: Ship) -> Vector2:
 		along -= rect.size.x * RECOVERY_SLIDE * maxf(boat.float_progress(), 0.0)
 	return ship_screen_position(boat) + Vector2(along, 0.0).rotated(_screen_angle(boat)) * _ship_scale()
 
-
 ## Where a recovery boat's work deck is, ahead of its middle (negative: behind),
 ## in its art's units.
 func _deck_along(rect: Rect2) -> float:
 	return rect.position.x + rect.size.x * CARRY_DECK_X / SHIP_ART_WIDTH
-
 
 ## A ship's heading as an on-screen angle (0 when docked). A carried ship faces
 ## the way its recovery boat does, and a recovery boat or icebreaker that's
@@ -1357,7 +1396,6 @@ func _screen_angle(ship: Ship) -> float:
 		return harbour[1]
 	return _heading_angle(_ship_heading(ship), _ship_world(ship))
 
-
 ## Where a tug on a tow job and the ship it's towing are drawn, and which way
 ## they face, [screen point, angle], or [] for any other ship (or off the
 ## map): heading out (stopping short ahead of the lost ship, see
@@ -1377,7 +1415,6 @@ func _towing_pose(ship: Ship) -> Array:
 			return _tug_work_pose(ship)
 	return []
 
-
 ## The on-screen angle of a heading (a direction in map coordinates, which keep
 ## compass angles) at a map point: turned with the globe's north there, and
 ## foreshortened towards its edge.
@@ -1387,7 +1424,6 @@ func _heading_angle(direction: Vector2, at: Vector2) -> float:
 	var way := _screen_way(at, direction.normalized())
 	return way.angle() if way != Vector2.ZERO else Vector2(direction.x, -direction.y).angle()
 
-
 ## Which way on screen (unscaled) a direction (east, north) at a map point goes.
 func _screen_way(at: Vector2, direction: Vector2) -> Vector2:
 	var p := _unit(at)
@@ -1396,12 +1432,10 @@ func _screen_way(at: Vector2, direction: Vector2) -> Vector2:
 	var along := east * direction.x + p.cross(east) * direction.y
 	return Vector2(along.dot(_right), -along.dot(_up))
 
-
 ## How much the globe turns things drawn at a map point (radians): the screen
 ## angle of east there (0 at the view's middle, where north is straight up).
 func _turn_at(at: Vector2) -> float:
 	return _screen_way(at, Vector2.RIGHT).angle()
-
 
 ## The on-screen angle of a lane's heading `mile` along it.
 func _lane_angle(from_port: String, to_port: String, mile: float) -> float:
@@ -1410,7 +1444,6 @@ func _lane_angle(from_port: String, to_port: String, mile: float) -> float:
 		return 0.0
 	var sample: Array = lane.sample(mile)
 	return _heading_angle(sample[1], sample[0])
-
 
 ## Where a recovery boat or icebreaker is drawn, and which way it faces,
 ## while it's maneuvering ([screen position, angle]), or [] when it's just
@@ -1459,7 +1492,6 @@ func _turning_pose(ship: Ship) -> Array:
 		return [base + Vector2.from_angle(lane_angle) * _recovery_offset(ship) * _ship_scale(), lane_angle]
 	return [base, _heading_angle(_ship_heading(ship), _ship_world(ship))]
 
-
 # --- Tugs working a ship in at port ------------------------------------------------
 
 ## The lead tug working a ship in at port (bringing it alongside its berth, or
@@ -1467,7 +1499,6 @@ func _turning_pose(ship: Ship) -> Array:
 static func _assist_lead(ship: Ship) -> Ship:
 	var lead := ship.rescuer
 	return lead if lead != null and lead.is_tug() and lead.job_phase == Ship.JOB_BERTH else null
-
 
 ## How far (s) into working their ship in a tug's team is: as far as the ship
 ## is through coming alongside, or (taking it to the anchorage) the tug's own
@@ -1478,7 +1509,6 @@ static func _work_time(tug: Ship) -> float:
 		return ship.berth_time
 	return tug.align_time
 
-
 ## A screen pose ([point, angle]) as its port's marina's dock units, and back.
 func _screen_to_local(port_id: String, pose: Array) -> Array:
 	var turn := _port_sea_angle(port_id) + _port_turn(port_id)
@@ -1487,10 +1517,8 @@ func _screen_to_local(port_id: String, pose: Array) -> Array:
 	local.y *= flip
 	return [local, (float(pose[1]) - turn) * flip]
 
-
 func _local_to_screen(port_id: String, pose: Array) -> Array:
 	return [_dock_point(port_id, pose[0]), _dock_angle(port_id, float(pose[1]))]
-
 
 ## How a team of tugs works the ship they towed in at port, in their marina's
 ## dock units, worked out once (and again if the ship's berth or spot changes).
@@ -1539,7 +1567,6 @@ func _tug_work(tug: Ship) -> Dictionary:
 	for i in team.size():
 		_tug_finish[team[i]] = [port, work.finish[i]] if not work.is_empty() else []
 	return work
-
 
 func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, layout: Dictionary, anchoring: bool) -> Dictionary:
 	var look: Rect2 = _model_look(ship.model_id)[7]
@@ -1681,7 +1708,6 @@ func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, lay
 		work.finish.append([[backed, (-out).angle()], [backed - out * radius + away * radius, away.angle()]])
 	return work
 
-
 ## A tug's point pulling a ship in (see "follow" in _work_pose()), `d` along
 ## the ship's way in (a path of `length`, straight on past its end), out to its
 ## side as far as it's peeling off by then.
@@ -1698,7 +1724,6 @@ static func _follow_point(points: PackedVector2Array, length: float, pulled: Dic
 	var side := lerpf(float(segment.side), float(segment.side_to), peel)
 	return (pose[0] as Vector2) + Vector2.from_angle(float(pose[1]) + PI / 2.0) * side
 
-
 ## The segment of a tug's (or the ship's) work going on at a time (the last
 ## once it's all done).
 static func _work_segment(segments: Array, t: float) -> Dictionary:
@@ -1706,7 +1731,6 @@ static func _work_segment(segments: Array, t: float) -> Dictionary:
 		if t < float(segment.t1):
 			return segment
 	return segments[-1]
-
 
 ## Where the ship or a tug (its segments) is at a time in its team's work,
 ## in dock units: [point, angle].
@@ -1762,7 +1786,6 @@ func _work_pose(work: Dictionary, segments: Array, t: float) -> Array:
 			return [(at[0] as Vector2) + Vector2.from_angle(float(at[1])) * float(segment.x) + outward * float(segment.stand), (-outward).angle()]
 	return [Vector2.ZERO, 0.0]
 
-
 ## Where a tug working its ship in at port is drawn, [screen point, angle]
 ## (at the port, when its marina isn't shown).
 func _tug_work_pose(tug: Ship) -> Array:
@@ -1773,7 +1796,6 @@ func _tug_work_pose(tug: Ship) -> Array:
 		return []
 	var index: int = (work.team as Array).find(tug)
 	return _local_to_screen(tug.tow_port, _work_pose(work, work.tugs[index], minf(_work_time(tug), float(work.total))))
-
 
 ## Where a ship tugs are working in at port is drawn, [screen point, angle],
 ## or [] if none are.
@@ -1786,7 +1808,6 @@ func _worked_pose(ship: Ship) -> Array:
 		return []
 	return _local_to_screen(ship.docked_at, _work_pose(work, work.ship, minf(_work_time(lead), float(work.total))))
 
-
 ## How long (s of play) a team of tugs takes to work its ship in (see
 ## _tug_work()), for GameState: coming alongside (less its slide, which
 ## GameState adds), or to its spot at the anchorage.
@@ -1797,7 +1818,6 @@ func _tug_work_seconds(ship: Ship) -> float:
 	var work := _tug_work(lead)
 	return float(work.get("total", 0.0))
 
-
 ## GameState.anchor_route: how long tugs stay with a ship that has to wait at
 ## the anchorage (s of play): none, they cast off at the harbour mouth.
 func anchor_tow_seconds(ship: Ship) -> float:
@@ -1805,7 +1825,6 @@ func anchor_tow_seconds(ship: Ship) -> float:
 	if _assist_lead(ship) == null or _tug_work(_assist_lead(ship)).is_empty():
 		return GameState.TUG_ANCHOR_S
 	return _tug_work_seconds(ship)  # (They cast off at the mouth: see _tug_work().)
-
 
 # --- Tugs towing at sea -------------------------------------------------------
 
@@ -1870,7 +1889,6 @@ func _tow_track(lead: Ship, back: float, ahead: float) -> Array:
 	var i := clampi(floori(k), 0, points.size() - 2)
 	return [points, angles, along, lerpf(along[i], along[i + 1], clampf(k - i, 0.0, 1.0))]
 
-
 ## The pose [screen point, angle] a distance (px; negative: behind) along a
 ## tow's track (_tow_track()) from its ship.
 static func _on_track(track: Array, distance: float) -> Array:
@@ -1883,14 +1901,12 @@ static func _on_track(track: Array, distance: float) -> Array:
 	var t := (d - along[i - 1]) / span if span > 0.0 else 1.0
 	return [points[i - 1].lerp(points[i], t), lerp_angle(angles[i - 1], angles[i], t)]
 
-
 ## How far ahead of its ship's middle (px) a tug on its tow pulls: past the
 ## bow, its tow line and half itself.
 func _tow_ahead(tug: Ship) -> float:
 	var ship_rect: Rect2 = _model_look(tug.rescuing.model_id)[7]
 	var tug_rect: Rect2 = _model_look(tug.model_id)[7]
 	return (ship_rect.size.x / 2.0 + tug_rect.size.x * (TOW_LINE_TUGS + 0.5)) * _ship_scale()
-
 
 ## Where a tug pulls its ship from on a tow (and turns round to take it in
 ## tow), [screen point, angle]: ahead of its bow on its tow line, along the
@@ -1911,7 +1927,6 @@ func _tow_place(tug: Ship) -> Array:
 		place[0] = (place[0] as Vector2) + Vector2.from_angle(float(place[1]) + PI / 2.0) * width * side
 	return place
 
-
 ## Where a ship being towed in at sea is, [screen point, angle]: on its tow's
 ## track, coming round from the way it lay to the way it's towed over the
 ## first TOW_SWING_NM. [] off the map.
@@ -1927,7 +1942,6 @@ func _towed_pose(ship: Ship) -> Array:
 	if swing < 1.0 and not own.is_empty():
 		pose[1] = lerp_angle(_heading_angle(own[1], own[0]), float(pose[1]), swing)
 	return pose
-
 
 ## Where a tug heading out to a lost ship is drawn on its lane: as it sails,
 ## but stopping short of the ship, ahead of its bow, so it turns round there
@@ -1947,7 +1961,6 @@ func _tug_out_pose(tug: Ship) -> Array:
 		pose = [world_to_screen(here[0]), _heading_angle(here[1], here[0])] if not here.is_empty() else []
 	tug.traveled_nm = sailed
 	return pose
-
 
 ## A point t (0 to 1) along a smooth turn from one screen pose (a, facing
 ## angle_a) to another (b, angle_b), as [position, facing angle], like a ship
@@ -1974,7 +1987,6 @@ static func _turn_pose(a: Vector2, angle_a: float, b: Vector2, angle_b: float, r
 	var facing := tangent.angle() if tangent.length() > 0.001 else angle_a + turn * t
 	return [point, facing]
 
-
 static func _bezier(points: Array, u: float) -> Vector2:
 	var p0: Vector2 = points[0]
 	var p1: Vector2 = points[1]
@@ -1982,7 +1994,6 @@ static func _bezier(points: Array, u: float) -> Vector2:
 	var p3: Vector2 = points[3]
 	var v := 1.0 - u
 	return p0 * v * v * v + p1 * 3.0 * v * v * u + p2 * 3.0 * v * u * u + p3 * u * u * u
-
 
 ## How far ahead of the lost ship (in art units, along the boat's heading) a
 ## recovery boat is drawn while it takes the ship aboard, like a real
@@ -2012,7 +2023,6 @@ func _recovery_offset(boat: Ship) -> float:
 		return lerpf(ahead, under, smoothstep(0.0, 1.0, (t - third) / third))
 	return lerpf(under, 0.0, smoothstep(0.0, 1.0, (t - third * 2.0) / third))
 
-
 ## A recovery boat ballasted down (Ship.submerged()): the sea over its work
 ## deck, with a few ripples, the wheelhouse still above water. Drawn in the
 ## boat's own (art) coordinates.
@@ -2032,7 +2042,6 @@ func _draw_ballast(boat: Ship, rect: Rect2) -> void:
 			var x := deck.position.x + deck.size.x * step / 8.0
 			points.append(Vector2(x, y + sin(step * 1.6 + phase + row) * deck.size.y * 0.06))
 		_canvas.draw_polyline(points, ripple, 0.8, true)
-
 
 ## A docked ship's place in its port's rings: how many of the fleet before it are
 ## docked there. Worked out for the whole fleet once a frame.
@@ -2054,7 +2063,6 @@ func _dock_slot(ship: Ship) -> int:
 				counts[other.docked_at] = count + 1
 	return _dock_slots.get(ship, 0)
 
-
 ## A docked tug's tick across the top of its port's outline: [lower end,
 ## upper end] on screen. Tugs at a port stand upright side by side,
 ## TUG_TICK_GAP apart, each crossing the outline where it is.
@@ -2071,14 +2079,12 @@ func focus_port(port_id: String) -> void:
 	_look_at(GameData.port_position(port_id))
 	_changed()
 
-
 ## Brings a ship (its port while docked) into view, keeping the zoom: centered
 ## across, and raised_px above the middle (to leave room for its popup below).
 func focus_ship(ship: Ship, raised_px := 0.0) -> void:
 	_look_at(GameData.port_position(ship.docked_at) if ship.is_docked() else _ship_world(ship))
 	_look_at(screen_to_world(size / 2.0 + Vector2(0.0, raised_px)))
 	_changed()
-
 
 ## Centers on a port (by default the company's home port), showing
 ## game_config.json's initial_view_width_deg degrees of the globe across.
@@ -2091,7 +2097,6 @@ func reset_view(center_port := "") -> void:
 	_zoom_goal = _zoom
 	_changed()
 
-
 ## Turns the globe so a map point is in the middle of the view.
 func _look_at(world: Vector2) -> void:
 	var lon_lat := Geo.unproject(world)
@@ -2100,12 +2105,10 @@ func _look_at(world: Vector2) -> void:
 	_fling = Vector2.ZERO
 	_orient()
 
-
 ## Zoomed right out, the whole globe fits the view (GLOBE_FIT of its height
 ## or width across, whichever is less).
 func _min_zoom() -> float:
 	return minf(size.x, size.y) * GLOBE_FIT / 2.0 * PI / 180.0
-
 
 func _on_resized() -> void:
 	if not _has_fit and size.x > 0 and size.y > 0:
@@ -2120,7 +2123,6 @@ func _on_resized() -> void:
 		_zoom_goal = maxf(_zoom_goal, _min_zoom())
 		_changed()
 
-
 ## Zooms in (factor above 1) or out about a point on screen (the middle by
 ## default), easing there like the wheel.
 func zoom_by(factor: float, about := Vector2(-1.0, -1.0)) -> void:
@@ -2129,7 +2131,6 @@ func zoom_by(factor: float, about := Vector2(-1.0, -1.0)) -> void:
 	_zoom_goal = clampf(_zoom_goal * factor, _min_zoom(), MAX_ZOOM)
 	_zoom_about = about if about.x >= 0.0 else size / 2.0
 	_fling = Vector2.ZERO
-
 
 ## The + and - keys zoom about the middle (for trackpads without gestures).
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -2145,7 +2146,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_MINUS, KEY_KP_SUBTRACT:
 			zoom_by(1.0 / (ZOOM_STEP * ZOOM_STEP))
 			get_viewport().set_input_as_handled()
-
 
 ## Drag to turn the globe (the map follows the mouse; let go while moving and
 ## it keeps turning, slowing to a stop), wheel to zoom in and out about the
@@ -2210,7 +2210,6 @@ func _gui_input(event: InputEvent) -> void:
 		var pod := _pod_at(motion.position) if show_ships else -1
 		_hover(pod, _storm_at(motion.position) if show_ships and pod < 0 else "")
 
-
 ## How far (lon, lat degrees) to turn the globe so the map under the mouse
 ## follows it as it moves by `moved` to `at`: up and down by the globe's
 ## radius, across by the size of the circle of latitude under the mouse
@@ -2221,7 +2220,6 @@ func _drag_turn(at: Vector2, moved: Vector2) -> Vector2:
 	if (at - size / 2.0).length() < _radius():
 		lat = _screen_lon_lat(at).y
 	return Vector2(-moved.x * degrees / maxf(cos(deg_to_rad(lat)), 0.2), moved.y * degrees)
-
 
 ## How fast to keep the globe turning as a drag lets go ((lon, lat) degrees
 ## a second): as fast as the drag turned it over its last FLING_WINDOW_S, or
@@ -2240,12 +2238,10 @@ func _drag_fling() -> Vector2:
 	var speed: Vector2 = (_drag_turned - (from[1] as Vector2)) / seconds
 	return speed.limit_length(MAX_FLING_PX / _zoom)
 
-
 func _turn_by(turn: Vector2) -> void:
 	_view_lon = wrapf(_view_lon + turn.x, -180.0, 180.0)
 	_view_lat = clampf(_view_lat + turn.y, -MAX_VIEW_LAT, MAX_VIEW_LAT)
 	_orient()
-
 
 ## The sea animals' pod or storm under the mouse: a pod's route shows, a
 ## storm's track and edges show stronger, and the pointer shows either can be clicked.
@@ -2254,11 +2250,9 @@ func _hover(pod: int, storm_key: String) -> void:
 	_hovered_storm = storm_key
 	mouse_default_cursor_shape = CURSOR_POINTING_HAND if pod >= 0 or not storm_key.is_empty() else CURSOR_ARROW
 
-
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_MOUSE_EXIT:
 		_hover(-1, "")
-
 
 ## Picks whichever port or ship is closest to the click, within its hit radius,
 ## or else a canal lock under it, or else a storm (see _storm_at()).
@@ -2302,9 +2296,14 @@ func _click(screen_pos: Vector2) -> void:
 		# (Over a marina, only right on a bird: its gulls are always there.)
 		var birds := _birds_at(screen_pos, 1.0 if marina_port.is_empty() else MARINA_BIRD_REACH)
 		birds_clicked.emit(birds[0], birds[1])
+	elif not _wonder_at(screen_pos).is_empty():
+		wonder_clicked.emit(_wonder_at(screen_pos))
 	elif not _animals_at(screen_pos).is_empty():
 		var group := _animals_at(screen_pos)
 		animals_clicked.emit(group[0], group[1])
+	elif not _home_at(screen_pos).is_empty():
+		var home := _home_at(screen_pos)
+		home_clicked.emit(home[0], home[1])
 	elif not _industry_at(screen_pos).is_empty():
 		var plot := _industry_at(screen_pos)
 		industry_clicked.emit(plot[0], plot[1])
@@ -2316,7 +2315,6 @@ func _click(screen_pos: Vector2) -> void:
 		storm_clicked.emit(_storm_at(screen_pos))
 	else:
 		empty_clicked.emit()
-
 
 ## Zooms by a factor, keeping the map point under a screen point there (if
 ## it's on the globe; else about the middle).
@@ -2331,7 +2329,6 @@ func _zoom_at(screen_pos: Vector2, factor: float) -> void:
 			_turn_by(Vector2(wrapf(anchor.x - now.x, -180.0, 180.0), anchor.y - now.y))
 	_changed()
 
-
 ## Shows each river tier once the view is zoomed in to its min_zoom (in
 ## web-map zoom levels, like the country names).
 func _update_rivers() -> void:
@@ -2339,11 +2336,9 @@ func _update_rivers() -> void:
 	for tier in _river_tiers:
 		tier.visible = web_zoom >= tier.min_zoom
 
-
 ## The view's zoom as a web-map zoom level (0 = whole world in 256 px).
 func _web_zoom() -> float:
 	return log(_zoom * Geo.WORLD_WIDTH / 256.0) / log(2.0)
-
 
 func _changed() -> void:
 	_view_lon = wrapf(_view_lon, -180.0, 180.0)
@@ -2373,7 +2368,6 @@ func _changed() -> void:
 	_redraw_layers()
 	view_changed.emit()
 
-
 ## Eases the zoom towards the wheel's goal, and keeps a flung globe turning,
 ## slowing to a stop.
 func _ease_view(delta: float) -> void:
@@ -2388,7 +2382,6 @@ func _ease_view(delta: float) -> void:
 		if _fling.length() * _zoom < 10.0:  # Under about 10 px a second: stopped.
 			_fling = Vector2.ZERO
 		_changed()
-
 
 ## The sky (World map only): its clouds fade out as the map zooms in from
 ## CLOUD_ZOOM.x to .y px a degree, so ships show, and the storms thin to
@@ -2418,7 +2411,6 @@ func _update_sky() -> void:
 	_globe_sky.set_shader_parameter(&"storm_a", shapes)
 	_globe_sky.set_shader_parameter(&"storm_b", looks)
 
-
 ## Keeps the regions' overlay in step with the unlocked regions (which a
 ## joined player's game hears of from the host), and with choosing one; when
 ## they change, the ports, docks and land drawings are redrawn too.
@@ -2440,14 +2432,12 @@ func _update_regions() -> void:
 	_labels_key = []
 	_redraw_layers()
 
-
 ## True if a port's region is locked (it can't be clicked, and its name is
 ## dimmed; its marina shows like any other).
 func _port_locked(port_id: String) -> bool:
 	if not selectable_ports.is_empty():
 		return not selectable_ports.has(port_id)
 	return not GameState.is_port_unlocked(port_id)
-
 
 ## The locked region at a screen point (its id), or "" (unlocked, or off the globe).
 func _locked_region_at(screen_pos: Vector2) -> String:
@@ -2456,13 +2446,11 @@ func _locked_region_at(screen_pos: Vector2) -> String:
 	var region := RegionMap.region_id(RegionMap.region_at(_screen_lon_lat(screen_pos)))
 	return region if not region.is_empty() and not GameState.is_region_unlocked(region) else ""
 
-
 ## Where a region's unlock button goes on screen (HIDDEN round the far side,
 ## or until the regions are worked out).
 func region_screen_position(region_id: String) -> Vector2:
 	var middle := RegionMap.center(RegionMap.index_of(region_id))
 	return world_to_screen(Geo.project(middle)) if middle != Vector2.INF else HIDDEN
-
 
 ## True if a land drawing is in a locked region.
 func _decor_locked(index: int) -> bool:
@@ -2475,11 +2463,9 @@ func _decor_locked(index: int) -> bool:
 			_decor_regions[i] = RegionMap.region_at(Geo.unproject(data.decor_positions[i])) + 1
 	return not GameState.is_region_unlocked(RegionMap.region_id(_decor_regions[index] - 1))
 
-
 ## True while the wheel's zoom is still easing to its goal.
 func _zooming() -> bool:
 	return absf(log(_zoom_goal / _zoom)) > 0.001
-
 
 func _color(color_name: StringName) -> Color:
 	var gray_name := StringName(color_name + "_gray")
@@ -2488,7 +2474,6 @@ func _color(color_name: StringName) -> Color:
 	if has_theme_color(color_name, THEME_TYPE):
 		return get_theme_color(color_name, THEME_TYPE)
 	return FALLBACK_COLORS.get(color_name, Color.MAGENTA)
-
 
 # --- Drawing -------------------------------------------------------------
 
@@ -2507,7 +2492,6 @@ func _draw() -> void:
 		draw_colored_polygon(_circle_points(middle, radius * reach).slice(0, -1), Color(glow, glow.a * 0.09))
 	draw_colored_polygon(_circle_points(middle, radius).slice(0, -1), _color(&"ocean"))
 
-
 ## Has every layer drawn again (the view's moved, say): in this frame's
 ## _process(), so a layer queued again there (the ships, the weather...) still
 ## draws once a frame. Asked for straight away, from input, a layer would draw
@@ -2515,18 +2499,18 @@ func _draw() -> void:
 func _redraw_layers() -> void:
 	_layers_stale = true
 
-
 func _flush_layers() -> void:
 	_layers_stale = false
 	_update_marinas()
 	_decor_layer.queue_redraw()
 	_fauna_layer.queue_redraw()
+	_wonder_layer.queue_redraw()
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_static_layer.queue_redraw()
 	_dock_layer.queue_redraw()
+	_still_birds.queue_redraw()
 	_overlay.queue_redraw()
-
 
 func _draw_weather_layer() -> void:
 	_canvas = _weather_layer
@@ -2537,7 +2521,6 @@ func _draw_weather_layer() -> void:
 		_draw_storms()
 		_draw_gusts()
 
-
 ## Gusts of wind (see Wind): short pale streaks blowing the way the wind does
 ## there, each drifting along and fading in and out over GUST_CYCLE_S of play,
 ## one now and then in each GUST_CELL_PX cell of the screen (somewhere new
@@ -2547,6 +2530,17 @@ func _draw_gusts() -> void:
 	if gray_mode:
 		return
 	var t := GameState.play_time
+	if _gust_painter == null and ClassDB.class_exists(&"GustPainter"):
+		_gust_painter = ClassDB.instantiate(&"GustPainter")
+	if _gust_painter != null:
+		# Natively (GustPainter: the same gusts), the storms' winds asked of Wind where they reach.
+		var reaches := []
+		for storm: Dictionary in GameState.weather.storms:
+			reaches.append([float(storm.lon), float(storm.lat), float(storm.radius_nm)])
+		_gust_painter.draw(_canvas.get_canvas_item(), {size = size, right = _right, up = _up, toward = _toward, radius = _radius(),
+			play_time = t, noise = Wind._shared_noise(), storms = reaches, storm_wind = _gust_storm_wind, cell_px = GUST_CELL_PX,
+			cycle_s = GUST_CYCLE_S, strength = GUST_STRENGTH, length_px = GUST_LENGTH_PX, alpha = GUST_ALPHA})
+		return
 	var storms := GameState.weather.storms
 	var middle := size / 2.0
 	var reach := _radius() * 0.97
@@ -2570,6 +2564,10 @@ func _draw_gusts() -> void:
 			_canvas.draw_polyline_colors(PackedVector2Array([head - way * length, head - way * length * 0.4, head]),
 				PackedColorArray([Color(1, 1, 1, 0.0), Color(1, 1, 1, alpha * 0.6), Color(1, 1, 1, alpha)]), 1.5, true)
 
+## For the native gusts: what a storm (by its place in the weather's) adds to the wind at a (lon, lat).
+func _gust_storm_wind(index: int, lon_lat: Vector2) -> Vector2:
+	var storms := GameState.weather.storms
+	return Wind.storm_wind(storms[index], lon_lat) if index < storms.size() else Vector2.ZERO
 
 ## A gust cell's steady offset into the gust cycle (0..1), worked out once.
 func _gust_offset(col: int, row: int) -> float:
@@ -2579,7 +2577,6 @@ func _gust_offset(col: int, row: int) -> float:
 		rng.seed = hash([col, row])
 		_gust_offsets[cell] = rng.randf()
 	return _gust_offsets[cell]
-
 
 ## Where in its cell (x, y: 0..1) a gust cell's gust is in a cycle, and the roll
 ## (z) against its chance of blowing; kept till its next cycle.
@@ -2595,12 +2592,10 @@ func _gust_spot(col: int, row: int, cycle: int) -> Vector3:
 		_gust_spots[cell] = kept
 	return kept[1]
 
-
 func _draw_canal_layer() -> void:
 	_canvas = _canal_layer
 	_draw_canals()
 	_draw_ice_canals()
-
 
 func _draw_static_layer() -> void:
 	_canvas = _static_layer
@@ -2619,7 +2614,6 @@ func _draw_static_layer() -> void:
 	_draw_route()
 	_draw_ports(_port_labels)
 
-
 func _draw_dock_layer() -> void:
 	if not show_ships:
 		return
@@ -2629,7 +2623,6 @@ func _draw_dock_layer() -> void:
 		if ship.is_docked() and not docks_shown():  # (Shown, docked ships are drawn with the others: see _draw_ships().)
 			_draw_ship(ship, outline)
 	_canvas = _overlay
-
 
 # --- Marinas -------------------------------------------------------------------------
 
@@ -2740,12 +2733,34 @@ const UNBERTH_TURN_S := 2.5
 const PEEL_AHEAD := 0.9
 const PEEL_OUT_WIDTHS := 1.6
 const PEEL_ANGLE := 0.45
-## Birds show once a gull's wings would be this many px across (and never draw
-## smaller), and a click this near one picks its flock.
-const BIRD_MIN_PX := 5.0
+## A click this near a bird picks it (its colony).
 const BIRD_HIT_MIN_PX := 6.0
 ## Birds are drawn this many times their span (in dock units), to read clearly.
 const BIRD_SCALE := 1.4
+## The smallest bird's span (dock units: a sandpiper's), and how wide (px) a
+## bird has to be to show as a dot, and to be drawn (smaller, it's a dot).
+const BIRD_SMALLEST_SPAN := 0.6
+const BIRD_DOT_PX := 1.6
+const BIRD_FULL_PX := 4.0
+## Birds' meshes are made for wings out in steps this big, at sizes this many
+## times apart, and this many kept (see _draw_bird_mesh()).
+const BIRD_WING_STEP := 0.05
+const BIRD_SIZE_STEP := 1.12
+const BIRD_MESHES_KEPT := 3000
+const BIRD_SIZE_LOG := 1.0 / log(BIRD_SIZE_STEP)
+## A bird's modes in the air (see BirdLife.bird_state()).
+const FLYING_MODES := {fly = true, circle = true, soar = true, glide = true, hunt = true, follow = true}
+## How far (km) a colony's birds ever get from it (gulls following ships
+## furthest), and how far past the screen's edge (px) birds are looked for:
+## colonies further off aren't worked out at all.
+const BIRD_REACH_KM := {gulls = 80.0, other = 60.0}
+const BIRD_VIEW_MARGIN_PX := 60.0
+## Birds keeping still at least this long (s) are drawn on their own layer,
+## drawn again this long before the first of them moves (see _draw_birds()).
+const STILL_LAYER_S := 4.0
+const STILL_LAYER_MARGIN_S := 0.5
+## How many points along each screen edge _screen_lon_lat_box() traces.
+const SCREEN_BOX_STEPS := 6
 ## At anchor in a storm, ships swing and pitch on their anchors, up to this
 ## far (radians) at full strength.
 const STORM_SWING := 0.45
@@ -2784,8 +2799,24 @@ var _last_spot := {}
 var _harbour_reach_cache := {}
 ## Birds drawn this frame, for clicks: [screen point, reach, what they're round, flock] (see _draw_birds()).
 var _bird_hits: Array = []
-## Flock key -> each bird's steady numbers (see _bird_traits()).
-var _bird_trait_cache := {}
+## Species name -> its color as a dot (see _bird_dot_color()).
+var _bird_dot_colors := {}
+## Each bird's and swimming duck's mesh as made (see _draw_bird_mesh()), and
+## each sea duck's colors for flying.
+var _bird_meshes := {}
+var _duck_flyers := {}
+var _bird_mesh_ids := 0
+## The meshes made for the native birds (see _native_bird_mesh()), kept alive.
+var _native_meshes: Array[ArrayMesh] = []
+var _bucket_span := -1.0
+var _bucket := 0
+var _bucket_made := 1.0
+## Bird index -> the box (lon, lat) it can be in till its spell ends, till when,
+## and Wildlife.where_changes then (see _draw_birds()); a bird with no
+## telling is anywhere for a second at a time.
+const NO_BIRD_BOUND := [Rect2(), -INF, -1]
+const EVERYWHERE := Rect2(-1.0e9, -1.0e9, 2.0e9, 2.0e9)
+var _bird_bounds := {}
 ## [marina radius, slip] -> where an HQ building may stand (see _hq_region()).
 var _hq_regions := {}
 ## Each port's marina's canvas item (see _update_marinas()), and the port
@@ -2829,16 +2860,13 @@ var _marinas_shown := {}
 var _marinas_shown_frame := -1
 var _upwind_frame := -1
 
-
 func docks_shown() -> bool:
 	return show_ships and not gray_mode
-
 
 ## Which way the sea is from a port on screen (north up), turned at a canal
 ## port so its canal side faces where its canal leaves (see _canal_turn()).
 func _port_sea_angle(port_id: String) -> float:
 	return _port_bearing_angle(port_id) + _canal_turn(port_id)
-
 
 ## True for a port a canal runs through (data/canals.json ports: Port Said
 ## and Port Tewfik on the Suez Canal, Colon and Balboa on the Panama Canal):
@@ -2847,13 +2875,11 @@ func _port_sea_angle(port_id: String) -> float:
 static func _is_canal_port(port_id: String) -> bool:
 	return not _canal_of(port_id).is_empty()
 
-
 static func _canal_of(port_id: String) -> Dictionary:
 	for canal: Dictionary in GameData.canals:
 		if (canal.get("ports", []) as Array).has(port_id):
 			return canal
 	return {}
-
 
 ## Which way (on screen, north up) a canal port's canal leaves it inland:
 ## along its path to the first point CANAL_EXIT_DEG away, whichever way is
@@ -2883,7 +2909,6 @@ func _canal_exit_angle(port_id: String) -> float:
 	_canal_exits[port_id] = best.angle() if best != Vector2.ZERO else _port_bearing_angle(port_id) + PI
 	return _canal_exits[port_id]
 
-
 ## How far a canal port's marina is turned from its facing so its canal side
 ## (or a hub's slip) points where its canal leaves (0 for other ports).
 func _canal_turn(port_id: String) -> float:
@@ -2897,7 +2922,6 @@ func _canal_turn(port_id: String) -> float:
 		cached = [layout.get("canal_angle", PI), turn]
 		_canal_turns[port_id] = cached
 	return float(cached[1])
-
 
 ## A canal port's cut through its quay (dock units): water from its basin (or
 ## a hub's slip end) out past the square quay's edge where the canal goes on,
@@ -2920,7 +2944,6 @@ static func _canal_cut(layout: Dictionary) -> PackedVector2Array:
 		from = middle - way * 0.5
 		reach = (float(layout.radius) + JETTY_WIDTH) * 1.5
 	return _rect(from, from + way * reach, CANAL_CUT_WIDTH / 2.0)
-
 
 ## Which way the sea is from a port, as an on-screen angle with north straight
 ## up (the globe turns it: _port_turn()), and which side is its marina's +y:
@@ -2979,11 +3002,9 @@ func _port_bearing_angle(port_id: String) -> float:
 	_dock_flips[port_id] = 1.0
 	return angle
 
-
 ## A (lon, lat) point moved by degrees east and north (east scaled for the latitude).
 static func _lon_lat_offset(at: Vector2, degrees: Vector2) -> Vector2:
 	return at + Vector2(degrees.x / maxf(cos(deg_to_rad(at.y)), 0.1), degrees.y)
-
 
 ## The longest ship (dock units, bow included) that can dock at ports of a band,
 ## and the widest that can dock there (only cargo ships moor at berths).
@@ -2998,7 +3019,6 @@ static func _band_ship_length(band: String) -> float:
 		longest = maxf(longest, _model_length(model))
 	return longest
 
-
 static func _widest_ship(band: String) -> float:
 	var widest := 0.0
 	for model: Dictionary in GameData.ship_models:
@@ -3009,12 +3029,10 @@ static func _widest_ship(band: String) -> float:
 		widest = maxf(widest, float(model.get("map_size", [14, 6])[1]) * SHIP_SIZE)
 	return widest
 
-
 ## A model's length and width in dock units (bow included).
 static func _model_length(model: Dictionary) -> float:
 	var dims: Array = model.get("map_size", [14, 6])
 	return (float(dims[0]) + float(dims[1]) * BOW_LENGTH_FACTOR) * SHIP_SIZE
-
 
 ## The longest ship of any kind (dock units): what an anchorage leaves room to swing.
 static func _longest_ship() -> float:
@@ -3022,7 +3040,6 @@ static func _longest_ship() -> float:
 	for model: Dictionary in GameData.ship_models:
 		longest = maxf(longest, _model_length(model))
 	return longest
-
 
 ## A marina's layout in dock units, the port at (0, 0) and the sea along +x,
 ## for its berths' kinds (Docks.berth_kinds()): {radius (the circle: the
@@ -3120,13 +3137,11 @@ func _marina_layout(kinds: String, hub: bool, canal := false) -> Dictionary:
 	_marina_layouts[key] = layout
 	return layout
 
-
 ## The longest and widest cargo ship (dock units) a berth of a kind takes (see
 ## Docks.berth_kinds()): the Small ports' ships, the Medium's, or the biggest.
 static func _berth_ship(kind: String) -> Vector2:
 	var band := "large" if kind == "B" else ("medium" if kind == "m" else "small")
 	return Vector2(_band_ship_length(band), _widest_ship(band))
-
 
 ## The radius of the circle a run of chords (side lengths) spans exactly half
 ## of, round the land side.
@@ -3147,7 +3162,6 @@ static func _inscribed_radius(sides: PackedFloat32Array) -> float:
 			high = r
 	return high
 
-
 ## A port's marina as it is now (its berths, and whether it's a hub port).
 func _port_layout(port_id: String) -> Dictionary:
 	# Asked for very often (every port and docked ship, every frame): worked out
@@ -3160,14 +3174,12 @@ func _port_layout(port_id: String) -> Dictionary:
 		_port_layouts[port_id] = _marina_layout(GameState.docks.berth_kinds(port_id), GameState.docks.has_hub(port_id), _is_canal_port(port_id))
 	return _port_layouts[port_id]
 
-
 ## A point of a port's marina (dock units) on screen.
 func _dock_point(port_id: String, local: Vector2) -> Vector2:
 	if port_id == _recording_marina:
 		return Vector2(local.x, local.y * float(_dock_flips.get(port_id, 1.0))) * dock_scale(port_id)  # (Into its own item: see _record_marina().)
 	var angle := _port_sea_angle(port_id) + _port_turn(port_id)  # (Works out the flip too.)
 	return port_screen_position(port_id) + Vector2(local.x, local.y * float(_dock_flips.get(port_id, 1.0))).rotated(angle) * dock_scale(port_id)
-
 
 ## How much the globe turns a port's marina on screen (see _turn_at()),
 ## worked out once per view.
@@ -3176,21 +3188,23 @@ func _port_turn(port_id: String) -> float:
 		_port_turns[port_id] = _turn_at(GameData.port_position(port_id))
 	return _port_turns[port_id]
 
-
 ## A dock-units facing on screen (mirrored with its port's layout).
 func _dock_angle(port_id: String, facing: float) -> float:
 	return _port_sea_angle(port_id) + _port_turn(port_id) + facing * float(_dock_flips.get(port_id, 1.0))
-
 
 ## How big a port's marina (and the ships moored and anchored there) is drawn:
 ## always just like the ships at sea, so a ship keeps its size as it docks.
 func dock_scale(_port_id: String) -> float:
 	return _ship_scale()
 
-
 ## True if a port's marina is big enough on screen to draw (instead of its dot).
+## False while the map's zoomed too far out for any port's marina to show (even
+## the biggest marina's reach smaller than the smallest dot): nothing to look at.
+func _any_marina_shown() -> bool:
+	return MARINA_MAX_REACH * _ship_scale() >= PORT_RADIUS_MIN + MARINA_OVER_DOT_PX
+
 func _marina_shown(port_id: String) -> bool:
-	if not docks_shown():
+	if not docks_shown() or not _any_marina_shown():
 		return false
 	var frame := Engine.get_process_frames()
 	if frame != _marinas_shown_frame:  # Asked for every ship there, every frame.
@@ -3200,7 +3214,6 @@ func _marina_shown(port_id: String) -> bool:
 		_marinas_shown[port_id] = float(_port_layout(port_id).radius) * _ship_scale() >= _port_radius(port_id) + MARINA_OVER_DOT_PX
 	return _marinas_shown[port_id]
 
-
 ## Every port's marina in view (see the section's description). Each is drawn
 ## once into its own canvas item (_marina_items), in dock units at the zoom
 ## it's drawn at, and then only moved and turned with the view: dragging the
@@ -3208,10 +3221,13 @@ func _marina_shown(port_id: String) -> bool:
 ## a port changing size or becoming a hub, or its HQ building growing.
 func _update_marinas() -> void:
 	var shown := {}
-	if show_ships and docks_shown():
+	if show_ships and docks_shown() and _any_marina_shown():
 		var view := Rect2(Vector2.ZERO, size)
 		var near := view.grow(MARINA_MAX_REACH * _ship_scale())
-		for i in _ports_near_view():
+		# (Natively narrowed to the ports whose marinas may show, once the dots' looks are known.)
+		var ports: PackedInt32Array = _port_painter.marinas(_ports_near_view(), {right = _right, up = _up, toward = _toward, radius = _radius(),
+			middle = size / 2.0, near = near, scale = _ship_scale(), over_dot_px = MARINA_OVER_DOT_PX}) if _port_painter != null and not _port_styles_key.is_empty() else _ports_near_view()
+		for i in ports:
 			var port_id: String = GameData.ports[i].id
 			var root := port_screen_position(port_id)
 			if not near.has_point(root) or not _marina_shown(port_id):
@@ -3227,12 +3243,21 @@ func _update_marinas() -> void:
 				item.set_meta(&"layout", layout)
 				item.set_meta(&"key", key)
 				item.queue_redraw()
-			item.position = root
-			item.rotation = _port_sea_angle(port_id) + _port_turn(port_id)
-			item.visible = true
+			var pivot := item.get_parent() as Node2D  # (Moved and turned, not the item: a Control turned draws again.)
+			pivot.position = root
+			pivot.rotation = _port_sea_angle(port_id) + _port_turn(port_id)
+			_show_marina_item(item, true)
 	for port_id: String in _marina_items:
 		if not shown.has(port_id):
-			(_marina_items[port_id] as Control).visible = false
+			_show_marina_item(_marina_items[port_id], false)
+
+## Shows or hides a marina's canvas item as the view moves. (Through the
+## rendering server: hiding a Control and showing it again draws it again,
+## and its drawing hasn't changed.)
+func _show_marina_item(item: Control, shown: bool) -> void:
+	if bool(item.get_meta(&"shown", true)) != shown:
+		item.set_meta(&"shown", shown)
+		RenderingServer.canvas_item_set_visible(item.get_canvas_item(), shown)
 
 
 ## A port's marina's canvas item (see _update_marinas()), made the first time,
@@ -3242,7 +3267,6 @@ func _marina_item(port_id: String, order: int) -> Control:
 		return _marina_items[port_id]
 	var item := Control.new()
 	item.mouse_filter = MOUSE_FILTER_IGNORE
-	item.set_meta(&"order", order)
 	item.set_meta(&"layout", {})
 	item.set_meta(&"key", [])
 	item.draw.connect(_record_marina.bind(port_id, item))
@@ -3250,11 +3274,15 @@ func _marina_item(port_id: String, order: int) -> Control:
 	for child in _dock_layer.get_children():
 		if int(child.get_meta(&"order", -1)) < order:
 			at += 1
-	_dock_layer.add_child(item)
-	_dock_layer.move_child(item, at)
+	# On a Node2D that moves and turns it with the view (see _update_marinas()),
+	# among the others in the ports' order.
+	var pivot := Node2D.new()
+	pivot.set_meta(&"order", order)
+	pivot.add_child(item)
+	_dock_layer.add_child(pivot)
+	_dock_layer.move_child(pivot, at)
 	_marina_items[port_id] = item
 	return item
-
 
 ## Draws a port's marina into its canvas item, in dock units (mirrored with its
 ## layout) at the zoom now, unturned: the item turns and moves it into place.
@@ -3265,7 +3293,6 @@ func _record_marina(port_id: String, item: Control) -> void:
 	_draw_marina(port_id, _port_layout(port_id))
 	_recording_marina = ""
 	_canvas = canvas
-
 
 ## What a port's HQ building and industry look like ([] for none): its HQ
 ## owner's name, color and HQ level, and its industry hub's buildings and open
@@ -3282,7 +3309,6 @@ func _hq_look(port_id: String) -> Array:
 		look.append_array([industry.industries.duplicate(), industry.industry_slots(), industry == GameState.hub_at(port_id)])
 	return look
 
-
 # --- Industry -------------------------------------------------------------------
 
 ## The hub whose industry a port's marina shows: this player's there if they
@@ -3296,7 +3322,6 @@ static func _industry_hub(port_id: String) -> Hub:
 		if hub != null and hub.industries.any(func(id: String) -> bool: return not id.is_empty()):
 			return hub
 	return null
-
 
 ## Where a hub's industry buildings stand (dock units): Hub.INDUSTRY_SLOTS
 ## plots on the quay corner the other side of its slip from the HQ's (see
@@ -3347,7 +3372,6 @@ func _industry_plots(layout: Dictionary) -> Array:
 	_hq_regions[key] = plots
 	return plots
 
-
 ## A hub's industry on its marina's quay (see _industry_plots()): each
 ## building's art on its plot with its shadow; an open plot with nothing on it
 ## yet marked out (dashed, for this player's own hub), a closed one bare.
@@ -3384,7 +3408,6 @@ func _draw_industry(port_id: String, layout: Dictionary) -> void:
 		_canvas.draw_texture_rect(texture, Rect2(-plot.size / 2.0, plot.size), false)
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
-
 ## A dashed line between two screen points.
 func _dashed_line(from: Vector2, to: Vector2, color: Color, width: float, dash: float) -> void:
 	var length := from.distance_to(to)
@@ -3394,14 +3417,12 @@ func _dashed_line(from: Vector2, to: Vector2, color: Color, width: float, dash: 
 		var b := from.lerp(to, float(i * 2 + 1) / (steps * 2))
 		_canvas.draw_line(a, b, color, width, true)
 
-
 ## A commodity's industry building's art (art/industry/<commodity>.svg), loaded once.
 static func _industry_texture(commodity_id: String) -> Texture2D:
 	if not _industry_art.has(commodity_id):
 		var path := INDUSTRY_ART_DIR + commodity_id + ".svg"
 		_industry_art[commodity_id] = load(path) if ResourceLoader.exists(path) else null
 	return _industry_art[commodity_id]
-
 
 ## The industry plot under a screen point at a hub of this player's: [port id,
 ## slot], or [].
@@ -3417,7 +3438,6 @@ func _industry_at(screen_pos: Vector2) -> Array:
 			if (plots[slot] as Rect2).has_point(local):
 				return [hub.port_id, slot]
 	return []
-
 
 func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	var radius: float = layout.radius
@@ -3474,7 +3494,6 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 		for post in _bollards(berth):
 			_canvas.draw_circle(_dock_point(port_id, post), bollard, BOLLARD_COLOR)
 
-
 ## How far inland (dock units, -x) a marina's square quay reaches: its cleared
 ## circle's edge, or past the inland end of a hub's slip.
 static func _quay_inland(layout: Dictionary) -> float:
@@ -3484,14 +3503,12 @@ static func _quay_inland(layout: Dictionary) -> float:
 		inland = minf(inland, (slip[0] as Vector2).x - float(slip[1]) - QUAY_WIDTH * 2.0)
 	return inland
 
-
 # --- HQ buildings ---------------------------------------------------------------
 
 ## A company's HQ building's level (1 to HQ_LEVELS): one more every
 ## HQ_LEVEL_EVERY company levels.
 static func hq_level(company: Company) -> int:
 	return clampi(1 + company.level() / HQ_LEVEL_EVERY, 1, HQ_LEVELS)
-
 
 ## Where an HQ's building may stand (dock units): the square quay's corner on
 ## one side of its slip, from the slip's wall to the square's edge and from its
@@ -3515,24 +3532,20 @@ func _hq_region(layout: Dictionary) -> PackedVector2Array:
 	_hq_regions[key] = region
 	return region
 
-
 static func _area(points: PackedVector2Array) -> float:
 	var total := 0.0
 	for i in points.size():
 		total += points[i].cross(points[(i + 1) % points.size()])
 	return total / 2.0
 
-
 static func _rect_points(rect: Rect2) -> PackedVector2Array:
 	return PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
-
 
 static func _bounds(points: PackedVector2Array) -> Rect2:
 	var box := Rect2(points[0], Vector2.ZERO)
 	for p in points:
 		box = box.expand(p)
 	return box
-
 
 ## The biggest piece of a polygon inside another (dock units), or [].
 static func _clip_inside(shape: PackedVector2Array, within: PackedVector2Array) -> PackedVector2Array:
@@ -3542,7 +3555,6 @@ static func _clip_inside(shape: PackedVector2Array, within: PackedVector2Array) 
 			best = piece
 	return best
 
-
 ## A polygon (dock units) pulled in towards its middle by about `by`.
 static func _shrink(points: PackedVector2Array, by: float) -> PackedVector2Array:
 	var best := PackedVector2Array()
@@ -3550,7 +3562,6 @@ static func _shrink(points: PackedVector2Array, by: float) -> PackedVector2Array
 		if absf(_area(piece)) > absf(_area(best)):
 			best = piece
 	return best
-
 
 ## The company's HQ building beside its port's slip, growing with it through
 ## HQ_LEVELS levels (see hq_level()), seen from above: from a little wooden
@@ -3595,7 +3606,6 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 	else:
 		_draw_hq_block(port_id, level, foot, box, tint)
 
-
 ## Levels 1 to 3: a wooden hut, a wooden house and a stone lodge, pitched roofs
 ## with their ridge along the long side, the company's flag at a corner (and
 ## its color along the eaves from level 2).
@@ -3636,7 +3646,6 @@ func _draw_hq_house(port_id: String, level: int, box: Rect2, tint: Color) -> voi
 	var pole := Vector2(box.end.x + 0.35, box.position.y - 0.35)
 	_hq_dot(port_id, pole, 0.12, Color("#2a2a2a"))
 	_hq_poly(port_id, PackedVector2Array([pole, pole + Vector2(0.9, -0.25), pole + Vector2(0.15, -0.55)]), tint)
-
 
 ## Levels 4 to 10: flat-roofed offices, brick, then concrete, then glass, each
 ## with its company's sign along the front; roof gear, then planters, then a
@@ -3724,7 +3733,6 @@ func _draw_hq_block(port_id: String, level: int, foot: PackedVector2Array, box: 
 		_hq_line(port_id, spot + Vector2(-h * 0.6, 0), spot + Vector2(h * 0.6, 0), Color.WHITE, pad_r * 0.12)
 		_hq_dot(port_id, spot + Vector2(pad_r * 1.6, 0), pad_r * 0.35, tint)
 
-
 ## A round sunshade in the company's color seen from above, with its ribs.
 func _draw_sunshade(port_id: String, at: Vector2, radius: float, tint: Color) -> void:
 	_hq_dot(port_id, at + Vector2(0.12, 0.12), radius, Color(0, 0, 0, 0.2))
@@ -3734,11 +3742,9 @@ func _draw_sunshade(port_id: String, at: Vector2, radius: float, tint: Color) ->
 		_hq_line(port_id, at - way, at + way, tint.darkened(0.3), 0.04)
 	_hq_dot(port_id, at, radius * 0.18, Color.WHITE)
 
-
 func _hq_poly(port_id: String, points: PackedVector2Array, color: Color) -> void:
 	if points.size() >= 3:
 		_canvas.draw_colored_polygon(_marina_polygon(port_id, points), color)
-
 
 func _hq_outline(port_id: String, points: PackedVector2Array, color: Color, width: float) -> void:
 	if points.size() < 2:
@@ -3747,18 +3753,14 @@ func _hq_outline(port_id: String, points: PackedVector2Array, color: Color, widt
 	screen.append(screen[0])
 	_canvas.draw_polyline(screen, color, maxf(width * dock_scale(port_id), 1.0), true)
 
-
 func _hq_line(port_id: String, from: Vector2, to: Vector2, color: Color, width: float) -> void:
 	_canvas.draw_line(_dock_point(port_id, from), _dock_point(port_id, to), color, maxf(width * dock_scale(port_id), 1.0), true)
-
 
 func _hq_dot(port_id: String, at: Vector2, radius: float, color: Color) -> void:
 	_canvas.draw_circle(_dock_point(port_id, at), maxf(radius * dock_scale(port_id), 0.8), color, true, -1.0, true)
 
-
 func _hq_ring(port_id: String, at: Vector2, radius: float, color: Color, width: float) -> void:
 	_canvas.draw_arc(_dock_point(port_id, at), radius * dock_scale(port_id), 0.0, TAU, 32, color, maxf(width * dock_scale(port_id), 1.0), true)
-
 
 ## Points round a circle (dock units) from one angle to another.
 static func _arc(radius: float, from: float, to: float) -> PackedVector2Array:
@@ -3768,19 +3770,16 @@ static func _arc(radius: float, from: float, to: float) -> PackedVector2Array:
 		points.append(Vector2.from_angle(lerpf(from, to, float(i) / steps)) * radius)
 	return points
 
-
 ## A rectangle (dock units) along x from one point to another, half_width either side.
 static func _rect(from: Vector2, to: Vector2, half_width: float) -> PackedVector2Array:
 	var across := (to - from).normalized().orthogonal() * half_width
 	return PackedVector2Array([from - across, to - across, to + across, from + across])
-
 
 func _marina_polygon(port_id: String, local: PackedVector2Array) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for p in local:
 		points.append(_dock_point(port_id, p))
 	return points
-
 
 ## A berth's bollards (dock units): every BOLLARD_STEP along its quay edge,
 ## BOLLARD_INSET back on the quay.
@@ -3796,14 +3795,12 @@ static func _bollards(berth: Array) -> PackedVector2Array:
 		s += BOLLARD_STEP
 	return posts
 
-
 ## Where a ship moored at a berth lies (dock units): [its middle, facing],
 ## alongside the quay, in the middle of the berth (or its end of a shared one).
 func _berth_pose(berth: Array, ship: Ship) -> Array:
 	var width := (_model_look(ship.model_id)[7] as Rect2).size.y
 	var along: Vector2 = berth[1]
 	return [_berth_spot(berth, ship) + (berth[2] as Vector2) * (width / 2.0 + BERTH_GAP), along.angle()]
-
 
 ## Where the middle of a ship moored at a berth is on the quay's edge (dock
 ## units): the berth's middle, or sharing a big berth with another smaller ship
@@ -3813,7 +3810,6 @@ func _berth_spot(berth: Array, ship: Ship) -> Vector2:
 		return berth[0]
 	var shift := (_berth_ship("B").x - (_model_look(ship.model_id)[7] as Rect2).size.x) / 2.0
 	return (berth[0] as Vector2) + (berth[1] as Vector2) * shift * (-1.0 if ship.berth_half == 0 else 1.0)
-
 
 ## A moored ship's ropes to the bollards on its quay: bow and stern lines out
 ## ahead and astern, and two springs crossing back along its side.
@@ -3840,7 +3836,6 @@ func _draw_mooring_ropes(ship: Ship) -> void:
 		var post := quay + along * (-half_berth + BOLLARD_STEP * (0.5 + mark)) - inward * BOLLARD_INSET
 		_canvas.draw_line(_dock_point(port, hull), _dock_point(port, post), ROPE_COLOR, width, true)
 
-
 ## Where a docked ship is on screen and which way it faces: moored at its
 ## berth, coming in and alongside, pulling out, lying at the anchorage (or a
 ## recovery boat in its hub's slip), or gliding out to it.
@@ -3858,7 +3853,6 @@ func _docked_pose(ship: Ship) -> Array:
 	# whether it was lying at anchor, facing the wind (not heading out already).
 	_last_spot[ship] = [ship.docked_at, _screen_unit(pose[0]), pose[1], ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE]
 	return pose
-
 
 func _docked_screen_pose(ship: Ship) -> Array:
 	var port := ship.docked_at
@@ -3946,13 +3940,11 @@ func _docked_screen_pose(ship: Ship) -> Array:
 		return at
 	return _lying_pose(ship, GameState.play_time)
 
-
 ## A pose (screen) moved over to its right-hand side of its port's harbour
 ## entrance, as ships keep to starboard: in and out pass each other.
 func _keep_right(port_id: String, pose: Array) -> Array:
 	var side := float(_port_layout(port_id).width) * KEEP_RIGHT_WIDTHS * dock_scale(port_id)
 	return [(pose[0] as Vector2) + Vector2.from_angle(float(pose[1]) + PI / 2.0) * side, pose[1]]
-
 
 ## Where a ship driving off its berth has got clear of the quay (dock units):
 ## about a length ahead and a little out from it, angled away (see
@@ -3964,7 +3956,6 @@ func _peel_pose(berth: Array, ship: Ship) -> Array:
 	var out: Vector2 = berth[2]
 	var away := (along + out * PEEL_ANGLE).normalized()
 	return [(moored[0] as Vector2) + along * rect.size.x * PEEL_AHEAD + out * rect.size.y * PEEL_OUT_WIDTHS, away.angle()]
-
 
 ## How a moored ship gets clear of its berth to head out (dock units): if it
 ## lies bow away from the way out (in a hub's slip), it backs straight out
@@ -3997,12 +3988,10 @@ func _unberth_plan(ship: Ship) -> Dictionary:
 	plan.reverse_s = (units + 2.0 * plan.ease) / speed
 	return plan
 
-
 ## Sliding sideways (on its thrusters) from one screen pose to another, eased.
 static func _slide(from: Array, to: Array, t: float) -> Array:
 	t = smoothstep(0.0, 1.0, t)
 	return [(from[0] as Vector2).lerp(to[0], t), lerp_angle(float(from[1]), float(to[1]), t)]
-
 
 ## The entrance of a port's marina as a screen pose: just outside it (or just
 ## inside), facing in (or out); `out` pushes the outside point further out
@@ -4011,7 +4000,6 @@ func _entrance_pose(port_id: String, inside: bool, facing_in: bool, out := 1.0) 
 	var layout := _port_layout(port_id)
 	var local: Vector2 = layout.inside if inside else (layout.mouth as Vector2) * out
 	return [_dock_point(port_id, local), _dock_angle(port_id, PI if facing_in else 0.0)]
-
 
 ## Where a ship lying in port is at a play time (screen pose): sailing on in
 ## from the harbour mouth, the way it came, at its own speed after it got
@@ -4042,18 +4030,15 @@ func _lying_pose(ship: Ship, at_time: float) -> Array:
 		return rest
 	return _follow(poses, shaped, path, _sailed_share(clampf(elapsed / takes, 0.0, 1.0), distance, length, false, true))
 
-
 ## A ship's speed at sea on screen (px per s of play), as it's drawn sailing.
 func _sea_speed_px(ship: Ship) -> float:
 	return maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0 * _ship_scale()
-
 
 static func _path_length(points: PackedVector2Array) -> float:
 	var total := 0.0
 	for i in range(1, points.size()):
 		total += points[i - 1].distance_to(points[i])
 	return total
-
 
 ## How far along (a share) a ship sailing a path of a length at a steady speed
 ## is, a share t of the way through the time it takes: getting going over the
@@ -4077,7 +4062,6 @@ static func _sailed_share(t: float, length: float, ease: float, start: bool, sto
 		var late := time - 2.0 * speeding - cruise
 		gone = speeding + cruise + late - late * late / (4.0 * slowing)
 	return clampf(gone / length, 0.0, 1.0)
-
 
 ## How long (s of play) a ship takes to sail into its berth (coming_in) from
 ## where it lies, or out of it to sea or its spot at the anchorage, at its
@@ -4133,7 +4117,6 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 	var path := _pose_path(_loosen(poses, false, anchoring and anchor.x == anchor.x, length * ANCHOR_TURN_LENGTHS))
 	return backing + _path_times(path, speed, length, length, true, anchoring)[-1]
 
-
 ## Every ship's spot in port as things are now (one may only just have
 ## started pulling out to anchor, or been brought in by tugs).
 func _refresh_spots() -> void:
@@ -4141,7 +4124,6 @@ func _refresh_spots() -> void:
 		_spots_dirty = true
 		_spots_frame = Engine.get_process_frames() - 1
 	_update_spots()
-
 
 ## A ship's anchor at its port's anchorage in its marina's dock units, or NAN
 ## if it has no spot there (yet).
@@ -4161,7 +4143,6 @@ func _anchor_local(ship: Ship) -> Vector2:
 	local.y *= float(_dock_flips.get(port, 1.0))
 	return local
 
-
 ## A lying ship's own spot (screen pose): its anchor at the anchorage, the
 ## ship swung round it to face into the wind, its bow at the anchor (and in a
 ## storm, swinging and pitching about it).
@@ -4180,7 +4161,6 @@ func _rest_pose(ship: Ship) -> Array:
 		facing += (sin(t * 1.7 + ship.id * 1.3) * 0.7 + sin(t * 3.3 + ship.id * 0.7) * 0.3) * STORM_SWING * storm
 	return [anchor - Vector2.from_angle(facing) * half * _ship_scale(), facing]
 
-
 ## Where a tug moors in its port (dock units, [middle, facing]): alongside
 ## the inside of its marina's breakwater, by its slot (the first free one,
 ## kept till it leaves: see _update_spots()), the arms taken by turns, from
@@ -4196,7 +4176,6 @@ func _jetty_pose(port_id: String, slot: int, tug: Ship) -> Array:
 	var at := Vector2.from_angle(along * side) * off
 	return [at, along * side - side * PI / 2.0]
 
-
 ## A port's slot-th anchor on screen, in one of its two anchorages (see
 ## _anchor_spots()), or if there are too few, one further out to sea past the
 ## mouth.
@@ -4208,7 +4187,6 @@ func _anchor_screen(port_id: String, pool: String, slot: int) -> Vector2:
 	var spacing := _anchor_length(pool) * 1.1
 	var extra := slot - spots.size()
 	return _dock_point(port_id, Vector2(float(layout.radius) + spacing * (2 + extra / 3), spacing * (extra % 3 - 1)))
-
 
 ## A ship's anchor on screen (see _anchor_screen()): its point on the globe is
 ## kept until its spot (or its port's marina) changes, so only the turn of the
@@ -4225,7 +4203,6 @@ func _anchor_screen_cached(ship: Ship, port_id: String, pool: String, slot: int)
 		_anchor_units[ship] = cached
 	return _unit_to_screen(cached[4])
 
-
 ## Which of a port's anchorages (data/anchorages.json) a ship lies in: "small",
 ## closer in and denser, for ships up to its small_length; "all" (room for the
 ## longest ship) for the rest.
@@ -4237,17 +4214,14 @@ func _anchor_pool(ship: Ship) -> String:
 		_anchor_pools[ship.model_id] = "small" if (_model_look(ship.model_id)[7] as Rect2).size.x <= _anchor_length("small") else "all"
 	return _anchor_pools[ship.model_id]
 
-
 ## The longest ship an anchorage has room to swing (dock units).
 func _anchor_length(pool: String) -> float:
 	return float(_anchorages.get("small_length", 9.0)) if pool == "small" else _longest_ship()
-
 
 func _load_anchorages() -> void:
 	if _anchorages.is_empty():
 		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(ANCHORAGES_PATH)) if FileAccess.file_exists(ANCHORAGES_PATH) else null
 		_anchorages = data if data is Dictionary else {ports = {}}
-
 
 ## A port's anchor points (lon, lat) in an anchorage ("all" or "small"),
 ## nearest the sea first, leaving out those whose ships could swing into its
@@ -4271,7 +4245,6 @@ func _anchor_spots(port_id: String, pool: String) -> PackedVector2Array:
 	_spot_cache[key] = [layout.radius, spots]
 	return spots
 
-
 ## The way into the wind at a port, on screen (ships at anchor face it).
 func _upwind_angle(port_id: String) -> float:
 	var frame := Engine.get_process_frames()
@@ -4286,7 +4259,6 @@ func _upwind_angle(port_id: String) -> float:
 		_upwind[port_id] = _heading_angle(-wind if wind.length() > 0.001 else Vector2.LEFT, GameData.port_position(port_id))
 	return _upwind[port_id]
 
-
 ## The strongest storm's strength at a port (0..1).
 func _storm_strength_at_port(port_id: String) -> float:
 	if GameState.weather.storms.is_empty():
@@ -4296,7 +4268,6 @@ func _storm_strength_at_port(port_id: String) -> float:
 		var port := GameData.get_port(port_id)
 		_port_storms[port_id] = float(GameState.weather.strongest_at(Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))))[1])
 	return _port_storms[port_id]
-
 
 ## A smooth path through screen poses ([point, facing]): a curve from each to
 ## the next, leaving and arriving along their facings (handle: how hard, a
@@ -4311,7 +4282,6 @@ static func _pose_path(poses: Array, handle := 0.4) -> PackedVector2Array:
 		for k in range(0 if i == 1 else 1, POSE_PATH_STEPS + 1):
 			points.append(_bezier(curve, float(k) / POSE_PATH_STEPS))
 	return points
-
 
 ## The point a share u (0..1) of the way along a path, and which way it heads
 ## there: [point, angle]. The heading turns smoothly through the path's
@@ -4340,7 +4310,6 @@ static func _along_path(points: PackedVector2Array, u: float, start_angle := NAN
 			return [points[i - 1].lerp(points[i], t), angle]
 		goal -= step
 	return [points[0], _piece_angle(points, 1)]
-
 
 ## How long (cumulative, from the start, at each point) a ship takes along a
 ## path: `speed` (path units a second) on the straight, slower round any bend
@@ -4381,7 +4350,6 @@ static func _path_times(points: PackedVector2Array, speed: float, ship_length: f
 		gone += step
 	return times
 
-
 ## The share of a path's length a ship has gone (see _path_times()) a share t
 ## of the way through the time it takes.
 static func _timed_share(points: PackedVector2Array, times: PackedFloat32Array, t: float) -> float:
@@ -4401,7 +4369,6 @@ static func _timed_share(points: PackedVector2Array, times: PackedFloat32Array, 
 			break
 		gone += step
 	return gone / total if total > 0.0 else 1.0
-
 
 ## Poses for _pose_path() with a ship at anchor (facing the wind) at its
 ## start (weighing anchor) or end (coming to anchor): it keeps the way it
@@ -4426,7 +4393,6 @@ static func _loosen(poses: Array, loose_start: bool, loose_end: bool, radius := 
 		shaped = shaped.slice(0, -1) + back.map(func(pose: Array) -> Array: return [pose[0], float(pose[1]) + PI]) + [last]
 	return shaped
 
-
 ## The poses round a turning circle (`radius`) from a pose to heading for a
 ## point: a quarter turn apart at most, so the path through them stays round.
 ## [] if it heads near enough that way already.
@@ -4447,14 +4413,12 @@ static func _turning_round(pose: Array, toward: Vector2, radius: float) -> Array
 		out.append([center + Vector2.from_angle(facing - side * PI / 2.0 + side * swung) * radius, facing + side * swung])
 	return out
 
-
 ## A ship a share of the way (by distance) along a path through poses
 ## (shaped by _loosen()): [point, heading], facing the way the path goes (it
 ## starts and ends on the shaped poses' facings, which _loosen() keeps the
 ## ship's own).
 static func _follow(_poses: Array, shaped: Array, path: PackedVector2Array, share: float, _weighed := 1.0, _anchoring := 0.0) -> Array:
 	return _along_path(path, share, float(shaped[0][1]), float(shaped[-1][1]))
-
 
 ## An angle a share w of the way from one to another, turning the way nearest
 ## `hint` (a signed turn from `from`): round the long way if that's the side
@@ -4464,8 +4428,6 @@ static func _turn_toward(from: float, to: float, w: float, hint: float) -> float
 	if absf(turn - hint) > PI:
 		turn += TAU if turn < hint else -TAU
 	return from + turn * w
-
-
 
 ## Which way a path's piece (from point i - 1 to i) heads; for one too short to
 ## say, the nearest piece that isn't (before it first).
@@ -4477,7 +4439,6 @@ static func _piece_angle(points: PackedVector2Array, i: int) -> float:
 				if way.length_squared() > 0.000001:
 					return way.angle()
 	return 0.0
-
 
 ## Once a frame: every docked ship's spot in its port. A ship lying at the
 ## anchorage (or about to: coming in, or pulling out to anchor) keeps the anchor
@@ -4524,7 +4485,6 @@ func _update_spots() -> void:
 		if not alive.has(ship):
 			_dock_seen.erase(ship)
 
-
 ## The anchor a ship dropping anchor at a port takes (a slot in its
 ## anchorage, see _anchor_spots(); `taken`: those lain at now): the first
 ## free one out of the shipping lanes drawn now (see _anchors_in_lanes()),
@@ -4538,7 +4498,6 @@ func _free_anchor(port_id: String, pool: String, taken: Dictionary) -> int:
 	while taken.has(slot):
 		slot += 1
 	return slot
-
 
 ## Which of a port's anchor points (_anchor_spots()) are in the shipping
 ## lanes: 1 for each one a lane the map draws (_active_lanes(): every
@@ -4591,14 +4550,12 @@ func _anchors_in_lanes(port_id: String, pool: String) -> PackedByteArray:
 	_anchor_lanes[port_id + pool] = [key, flags]
 	return flags
 
-
 func _free_spot(ship: Ship) -> void:
 	var taken: Dictionary = _spot_tables.get(_spot_keys.get(ship, []), {})
 	taken.erase(_spot_slots[ship])
 	_spot_slots.erase(ship)
 	_spot_keys.erase(ship)
 	_anchor_units.erase(ship)
-
 
 ## A ship sailing near a port it's making for (or leaving) sails a curve
 ## between its lane and the harbour: leaving its lane along the lane's heading
@@ -4629,7 +4586,6 @@ func _harbour_pose(ship: Ship) -> Array:
 		return _follow(curve[1], curve[2], curve[0], 1.0 - gone / reach if arriving else gone / reach)
 	return []
 
-
 ## Where a ship near a port lay, or will come in: the harbour mouth heading in
 ## (arriving), or its spot at the anchorage or the mouth heading out (leaving).
 func _harbour_end(ship: Ship, port: String, arriving: bool) -> Array:
@@ -4642,14 +4598,12 @@ func _harbour_end(ship: Ship, port: String, arriving: bool) -> Array:
 			return [spot, float(last[2])]
 	return _keep_right(port, _entrance_pose(port, false, false))
 
-
 ## True if a ship sailing from port set off straight from its spot (at the
 ## anchorage, facing the wind; a tug from its moorings on the jetty), not
 ## out of its marina's mouth already heading out.
 func _left_from_anchor(ship: Ship) -> bool:
 	var last: Array = _last_spot.get(ship, [])
 	return last.size() > 3 and bool(last[3])
-
 
 ## How tight (screen px, a radius) a ship sailing from port comes round from
 ## facing where it lay to its way out (see _loosen()), or 0 if it came out of
@@ -4659,7 +4613,6 @@ func _leaving_turn(ship: Ship) -> float:
 		return 0.0
 	return (_model_look(ship.model_id)[7] as Rect2).size.x * _ship_scale() * ANCHOR_TURN_LENGTHS
 
-
 ## The poses a ship sailing from port goes through between where it lay and
 ## its lane: for a tug from its moorings on the jetty, out through its
 ## marina's mouth (on its right-hand side, heading out).
@@ -4667,7 +4620,6 @@ func _leaving_via(ship: Ship) -> Array:
 	if not ship.is_tug() or not _left_from_anchor(ship) or ship.from_port.is_empty():
 		return []
 	return [_keep_right(ship.from_port, _entrance_pose(ship.from_port, false, false))]
-
 
 ## The curve between a ship's lane, `reach` nm from a port, and that port's
 ## harbour (see _harbour_pose()), from the lane in arriving and from the
@@ -4679,7 +4631,6 @@ func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: floa
 	if _is_hidden(port_screen_position(port)):
 		return []
 	return _lane_curve(lane, ship.from_port, ship.to_port, length, arriving, reach, _harbour_end(ship, port, arriving), 0.0 if arriving else _leaving_turn(ship), [] if arriving else _leaving_via(ship))
-
 
 ## The curve between a lane, `reach` nm from its end (arriving) or start, and
 ## a harbour pose (screen), from_port and to_port the lane's ports: [screen
@@ -4697,7 +4648,6 @@ func _lane_curve(lane, from_port: String, to_port: String, length: float, arrivi
 	var shaped := _loosen(poses, turn > 0.0, false, turn)
 	return [_pose_path(shaped, HARBOUR_CURVE_HANDLE), poses, shaped]
 
-
 ## How far (nm of lane) from each end of its leg a ship sails its curve in or
 ## out of port: [arriving, leaving], worked out once a leg (0 for none).
 func _harbour_reaches(ship: Ship, lane, length: float) -> PackedFloat32Array:
@@ -4713,7 +4663,6 @@ func _harbour_reaches(ship: Ship, lane, length: float) -> PackedFloat32Array:
 	if found[1]:  # (Not while a port is round the far side: worked out again when it comes round.)
 		_harbour_reach_cache[ship] = [key, found[0]]
 	return found[0]
-
 
 ## How far (nm of lane) from each end of a lane the curves to its harbours
 ## take, [arriving, leaving], for the harbour poses `ends` (screen; [] for
@@ -4752,14 +4701,12 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 		reaches[1] *= fit
 	return [reaches, shown]
 
-
 func _draw_overlay() -> void:
 	_canvas = _overlay
 	if show_ships:
 		_draw_ships()
 		_draw_birds()
 		_draw_hub_alerts()
-
 
 ## Port labels, the HQ's and hubs' first and then in rank order, skipping any
 ## that would overlap one already placed.
@@ -4804,7 +4751,6 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 		labels.append([port.id, rect])
 	return labels
 
-
 ## The ports near enough the view to show there (a port, its label, its
 ## marina or its birds): their places in GameData.ports, in order. Worked out
 ## once a view, so the loops over the ports each frame skip the rest of the
@@ -4824,11 +4770,9 @@ func _ports_near_view() -> PackedInt32Array:
 	_near_ports_valid = true
 	return _near_ports
 
-
 ## A (lon, lat) point's cell of the globe, LABEL_CELL_DEG square (see _ranks_near_view()).
 static func _label_cell(lon_lat: Vector2) -> Vector2i:
 	return Vector2i(floori((lon_lat.x + 180.0) / LABEL_CELL_DEG), floori((lon_lat.y + 90.0) / LABEL_CELL_DEG))
-
 
 ## Everything in the cells of the globe (see _label_cell()) that can be in
 ## view, or within margin_px of it (for a label, LABEL_REACH_PX): all of them zoomed
@@ -4850,7 +4794,6 @@ func _ranks_near_view(cells: Dictionary, margin_px := LABEL_REACH_PX) -> PackedI
 			out.append_array(cells.get(Vector2i(posmod(column, columns), row), PackedInt32Array()))
 	return out
 
-
 ## How big a label's text is (px) in a font at a size, measured once (shaping
 ## text is slow, and labels are placed again every frame the view moves).
 func _label_size(font: Font, text: String, font_size: int) -> Vector2:
@@ -4858,7 +4801,6 @@ func _label_size(font: Font, text: String, font_size: int) -> Vector2:
 	if not _label_sizes.has(key):
 		_label_sizes[key] = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	return _label_sizes[key]
-
 
 ## Country names that fit around the port labels already placed: [text, rect] pairs.
 func _place_country_labels(placed: Array[Rect2]) -> Array:
@@ -4885,7 +4827,6 @@ func _place_country_labels(placed: Array[Rect2]) -> Array:
 		placed.append(rect.grow(LABEL_PADDING))
 		labels.append([text, rect])
 	return labels
-
 
 ## Named geography labels that fit around the ones already placed, most
 ## important kind first (FEATURE_PRIORITY): [index, rect] pairs. Each shows
@@ -4949,7 +4890,6 @@ func _place_feature_labels(placed: Array[Rect2]) -> Array:
 				break
 	return labels
 
-
 func _draw_feature_labels() -> void:
 	var data := GameData.world_map
 	for label: Array in _feature_labels:
@@ -4965,7 +4905,6 @@ func _draw_feature_labels() -> void:
 				_color(&"sea_label_outline"))
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, style[0], _color(style[1]))
 
-
 ## The theme font, slanted (water, like an atlas) and letter-spaced as the
 ## kind's style says.
 func _feature_font(kind: int) -> Font:
@@ -4979,7 +4918,6 @@ func _feature_font(kind: int) -> Font:
 		_feature_fonts[kind] = font
 	return _feature_fonts[kind]
 
-
 func _draw_country_labels() -> void:
 	var font := get_theme_default_font()
 	var color := _color(&"country_label")
@@ -4988,13 +4926,11 @@ func _draw_country_labels() -> void:
 		var rect: Rect2 = label[1]
 		_canvas.draw_string(font, rect.position + Vector2(0, ascent), label[0], HORIZONTAL_ALIGNMENT_LEFT, -1, COUNTRY_FONT_SIZE, color)
 
-
 func _overlaps(rect: Rect2, placed: Array[Rect2]) -> bool:
 	for other in placed:
 		if rect.intersects(other):
 			return true
 	return false
-
 
 ## A port's color for price_commodity: green at half its world average price
 ## or less, white at the average, red at twice it or more.
@@ -5003,13 +4939,11 @@ func _price_color(port_id: String) -> Color:
 	var t := clampf(log(ratio) / log(2.0), -1.0, 1.0)
 	return Color.WHITE.lerp(PRICE_CHEAP if t < 0.0 else PRICE_EXPENSIVE, absf(t))
 
-
 func _port_radius(port_id: String) -> float:
 	var port_size: float = GameState.port_sizes.size(port_id)
 	if port_size <= PORT_RADIUS_SIZE:
 		return lerpf(PORT_RADIUS_MIN, PORT_RADIUS, (port_size - 1.0) / (PORT_RADIUS_SIZE - 1.0))
 	return lerpf(PORT_RADIUS, PORT_RADIUS_MAX, (port_size - PORT_RADIUS_SIZE) / (100.0 - PORT_RADIUS_SIZE))
-
 
 func _draw_ports(labels: Array) -> void:
 	var font := get_theme_default_font()
@@ -5051,10 +4985,24 @@ func _draw_ports(labels: Array) -> void:
 		var each_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value(each.color)
 		for hub in each.hubs:
 			(hub_ports.get_or_add(hub.port_id, []) as Array).append([hub, each_color])
-	for i in _ports_near_view():
-		var port: Dictionary = GameData.ports[i]
-		if not hub_ports.has(port.id):
-			draw_port.call(port.id)
+	if _port_painter == null and ClassDB.class_exists(&"PortPainter"):
+		_port_painter = ClassDB.instantiate(&"PortPainter")
+		var units := PackedVector3Array()
+		for port: Dictionary in GameData.ports:
+			units.append(_unit(GameData.port_position(port.id)))
+		_port_painter.set_units(units)
+	if _port_painter != null:
+		# The others natively (PortPainter: the same dots), their looks kept till they change.
+		_update_port_styles(hub_ports, fill, dimmed, locked_fill)
+		_port_painter.draw(_canvas.get_canvas_item(), _ports_near_view(), {right = _right, up = _up, toward = _toward,
+			radius = _radius(), middle = size / 2.0, area = visible_area, outline = outline, locked_fill = locked_fill, dimmed = dimmed,
+			locked_radius = PORT_RADIUS_MIN, shine = SHINE_RINGS, selected = GameData.ports.find(GameData.get_port(selected_port)) if not selected_port.is_empty() else -1,
+			selected_ring = SELECTED_RING, docks = docks_shown() and _any_marina_shown(), scale = _ship_scale(), over_dot_px = MARINA_OVER_DOT_PX})
+	else:
+		for i in _ports_near_view():
+			var port: Dictionary = GameData.ports[i]
+			if not hub_ports.has(port.id):
+				draw_port.call(port.id)
 	# The HQ and hubs go on top of the other ports, each with a ring in its
 	# company's color (heavier for an HQ); companies sharing a port ring it in
 	# turn. Not once its marina shows: that has its slip (and an HQ building).
@@ -5074,6 +5022,42 @@ func _draw_ports(labels: Array) -> void:
 		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
 		_canvas.draw_string(font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
+
+## Works out every port's look for the native dots (PortPainter) again when
+## anything that sets it has changed: the prices shown (every STATIC_REFRESH_S,
+## as they drift), a port picked, dimmed or shining, the regions open, the
+## hubs, the ports' sizes, the colors. Dragging the map doesn't change them.
+func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, locked_fill: Color) -> void:
+	var key := [price_commodity, selectable_ports, dimmed_ports, shining_ports, GameState.regions.duplicate(), hub_ports.keys(), fill, dimmed, locked_fill]
+	var sizes: Array = GameState.port_sizes._sizes.values() if Time.get_ticks_msec() - _port_styles_time >= STATIC_REFRESH_S * 1000.0 else _port_styles_sizes
+	var now := Time.get_ticks_msec()
+	# (Prices drift and ports grow a little all the time: looked at again as often as the ports are drawn when the view's still.)
+	var due := now - _port_styles_time >= STATIC_REFRESH_S * 1000.0
+	var prices_due := due and not price_commodity.is_empty()
+	if key == _port_styles_key and (not due or sizes == _port_styles_sizes) and not prices_due:
+		return
+	_port_styles_key = key
+	_port_styles_sizes = sizes
+	_port_styles_time = now
+	var count := GameData.ports.size()
+	var radii := PackedFloat32Array()
+	var layout_radii := PackedFloat32Array()
+	var fills := PackedColorArray()
+	var flags := PackedByteArray()
+	radii.resize(count)
+	layout_radii.resize(count)
+	fills.resize(count)
+	flags.resize(count)
+	for i in count:
+		var port_id: String = GameData.ports[i].id
+		radii[i] = _port_radius(port_id)
+		layout_radii[i] = float(_port_layout(port_id).radius)
+		var port_fill := fill if price_commodity.is_empty() else _price_color(port_id)
+		if selectable_ports.get(port_id) is Color:
+			port_fill = selectable_ports[port_id]
+		fills[i] = port_fill
+		flags[i] = (1 if _port_locked(port_id) else 0) | (2 if shining_ports.has(port_id) else 0) | (4 if hub_ports.has(port_id) else 0) | (8 if dimmed_ports.has(port_id) else 0)
+	_port_painter.set_styles(radii, layout_radii, fills, flags)
 
 
 ## Legs follow their sea lanes; the leg closing the loop is dashed. Stop
@@ -5101,7 +5085,6 @@ func _draw_route() -> void:
 		_canvas.draw_string(font, pos + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 		_canvas.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 
-
 ## Every lane the fleet sails: each cargo ship's route loop, any route waiting
 ## to replace it, and the leg it's on now. A lane shared by several ships is
 ## drawn once, in the first one's color (see ORE_LANE_WHITEN). In multiplayer,
@@ -5110,7 +5093,6 @@ func _draw_route() -> void:
 func _draw_active_lanes() -> void:
 	for lane: Array in _active_lanes():
 		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH, lane[3])
-
 
 ## The lanes _draw_active_lanes() draws: [from, to, color, sailed both ways],
 ## other players' first. Kept for half a STATIC_REFRESH_S (so each redraw while
@@ -5158,7 +5140,6 @@ func _active_lanes() -> Array:
 	_active_lanes_cache = others.values() + lanes.values()
 	return _active_lanes_cache
 
-
 ## A lane from one port to another as ships sail it: where a port's marina
 ## shows, off the lane and round to its harbour mouth on the right-hand side
 ## (the ships' own curves, see _harbour_pose()) and in through its entrance,
@@ -5179,7 +5160,6 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 			var back_pieces := _lane_pieces(back, to_port, from_port)
 			_draw_line_runs(back_pieces[0], color, dashed, width)
 			_draw_line_runs(back_pieces[2], color, dashed, width)
-
 
 ## A lane on screen in three pieces: the curve out of its first port's
 ## harbour, the lane between, and the curve into its last port's (the curves
@@ -5274,7 +5254,6 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 		middle.append(world_to_screen(_bent_sample(sea_lane, from_port, to_port, stop)[0]))
 	return [curves[1], middle, curves[0]]
 
-
 # --- Lanes bent round other ports' harbours --------------------------------------
 
 ## Each port's keep-out zone (see _port_zones()) and the bent lanes made with
@@ -5283,7 +5262,6 @@ var _zones: Array = []
 var _zone_cells := {}
 var _bent_lanes := {}
 var _zones_checked := -1
-
 
 ## Every port's keep-out zone, round its marina and its approach curves: [(lon,
 ## lat), radius (degrees), port id], those of ports on a canal left out (a
@@ -5317,7 +5295,6 @@ func _port_zones() -> Array:
 		_lane_reach_memo.clear()
 	return _zones
 
-
 ## The zones near a (lon, lat) point (within a cell of it).
 func _zones_near(lon_lat: Vector2) -> PackedInt32Array:
 	var out := PackedInt32Array()
@@ -5327,7 +5304,6 @@ func _zones_near(lon_lat: Vector2) -> PackedInt32Array:
 		for dy in range(-1, 2):
 			out.append_array(_zone_cells.get(Vector2i(posmod(cell.x + dx, columns), cell.y + dy), PackedInt32Array()))
 	return out
-
 
 ## A lane as it's drawn and sailed on the map: bent out round the harbours of
 ## ports it passes but isn't sailing to, so it doesn't cut through their
@@ -5401,17 +5377,17 @@ func _bent_lane(sea_lane, from_port: String, to_port: String) -> Dictionary:
 	_bent_lanes[sea_lane] = made
 	return made
 
-
 ## True if a (lon, lat) point is on the land, as the map draws it (islands
 ## and all): in one of its land triangles, looked up by LAND_CELL_DEG cell.
 static func _on_land(lon_lat: Vector2) -> bool:
 	var p := Geo.project(Vector2(wrapf(lon_lat.x, -180.0, 180.0), lon_lat.y))
+	if _land_test != null:
+		return _land_test.contains(p)  # (The same test, natively.)
 	var triangles := GameData.world_map.land_triangles
 	for i: int in _land_cells.get(Vector2i(floori(p.x / LAND_CELL_DEG), floori(p.y / LAND_CELL_DEG)), PackedInt32Array()):
 		if Geometry2D.point_is_inside_triangle(p, triangles[i], triangles[i + 1], triangles[i + 2]):
 			return true
 	return false
-
 
 ## Starts sorting the land's triangles into cells (see _on_land()) off the
 ## main thread, once (it takes a moment: there are some 180,000).
@@ -5419,8 +5395,11 @@ static func _start_land_cells() -> void:
 	if _land_task < 0 and _land_cells.is_empty():
 		_land_task = WorkerThreadPool.add_task(_build_land_cells, false, "Land cells")
 
-
 static func _build_land_cells() -> void:
+	if ClassDB.class_exists(&"LandTest"):
+		var mask: Object = ClassDB.instantiate(&"LandTest")
+		mask.build(GameData.world_map.land_triangles, LAND_CELL_DEG)
+		_land_test = mask
 	var cells := {}
 	var triangles := GameData.world_map.land_triangles
 	for i in range(0, triangles.size(), 3):
@@ -5433,7 +5412,6 @@ static func _build_land_cells() -> void:
 				cells[cell].append(i)
 	_land_cells = cells
 
-
 ## Waits for the land's cells (see _start_land_cells()), if they're still being made.
 static func _land_ready() -> void:
 	if _land_task < 0 and _land_cells.is_empty():
@@ -5441,7 +5419,6 @@ static func _land_ready() -> void:
 	if _land_task >= 0:
 		WorkerThreadPool.wait_for_task_completion(_land_task)
 		_land_task = -1
-
 
 ## Each value as the least within `reach` places either side of it.
 static func _least_near(values: PackedFloat32Array, reach: int) -> PackedFloat32Array:
@@ -5453,7 +5430,6 @@ static func _least_near(values: PackedFloat32Array, reach: int) -> PackedFloat32
 			least = minf(least, values[j])
 		out[i] = least
 	return out
-
 
 ## Each value as the average of those within `reach` places either side of it.
 static func _smoothed(values: PackedFloat32Array, reach: int) -> PackedFloat32Array:
@@ -5468,14 +5444,12 @@ static func _smoothed(values: PackedFloat32Array, reach: int) -> PackedFloat32Ar
 		out[i] = total / count
 	return out
 
-
 ## A port's keep-out zone's radius (degrees), or 0 for one without (on a canal).
 func _zone_reach(port_id: String) -> float:
 	for zone: Array in _port_zones():
 		if zone[2] == port_id:
 			return zone[1]
 	return 0.0
-
 
 ## True if a stretch of lane from a to b (lon, lat) comes within reach of a
 ## zone it bends round.
@@ -5493,7 +5467,6 @@ func _near_zone(a: Vector2, b: Vector2, from_port: String, to_port: String) -> b
 		if Geometry2D.get_closest_point_to_segment(Vector2.ZERO, pa, pb).length() < float(zone[1]) * 2.0 + ZONE_STEP_DEG:
 			return true
 	return false
-
 
 ## A lane's (lon, lat) point bent out of the zones of the ports near it it
 ## isn't sailing to (`ends`: its own two ports' [(lon, lat), zone radius]):
@@ -5533,7 +5506,6 @@ func _bend(lon_lat: Vector2, from_port: String, to_port: String, ends: Array) ->
 	# against the land, which on the coarse sea map would leave it jagged.)
 	return lon_lat.lerp(out, weight)
 
-
 ## True if a (lon, lat) point is in or by a canal (its path's box, a little grown).
 func _in_canal(lon_lat: Vector2) -> bool:
 	if _canal_boxes.is_empty():
@@ -5549,7 +5521,6 @@ func _in_canal(lon_lat: Vector2) -> bool:
 		if box.has_point(lon_lat):
 			return true
 	return false
-
 
 ## Where along a bent lane (_bent_lane()) a ship `mile` along it is, and which
 ## way it's heading: [projected position, direction], as the lane's own
@@ -5572,14 +5543,12 @@ func _bent_sample(sea_lane, from_port: String, to_port: String, mile: float) -> 
 	var way := ahead - behind
 	return [at, way.normalized() if way.length() > 0.000001 else sea_lane.sample(mile)[1]]
 
-
 static func _bent_point(made: Dictionary, mile: float) -> Vector2:
 	var miles: PackedFloat64Array = made.miles
 	var points: PackedVector2Array = made.points
 	var i := clampi(miles.bsearch(mile), 1, points.size() - 1)
 	var span := miles[i] - miles[i - 1]
 	return points[i - 1].lerp(points[i], (mile - miles[i - 1]) / span if span > 0.0 else 1.0)
-
 
 ## Where a ship is on the map (projected), as drawn: on its lane bent round
 ## other ports' harbours (see _bent_lane()); a carried or towed one with its
@@ -5589,7 +5558,6 @@ func _ship_world(ship: Ship) -> Vector2:
 		return _ship_world(ship.rescuer)
 	var here := _ship_bent(ship)
 	return here[0] if not here.is_empty() else ship.world_position()
-
 
 ## Which way a ship's heading on the map (projected), as drawn: along its bent
 ## lane (see _ship_world()), unless it's turning about (Ship.heading()).
@@ -5603,7 +5571,6 @@ func _ship_heading(ship: Ship) -> Vector2:
 	var here := _ship_bent(ship)
 	return here[1] if not here.is_empty() else ship.heading()
 
-
 ## A ship's place on its bent lane ([position, direction]), or [] off a lane.
 func _ship_bent(ship: Ship) -> Array:
 	if ship.is_docked() or ship.from_port.is_empty() or ship.to_port.is_empty():
@@ -5612,7 +5579,6 @@ func _ship_bent(ship: Ship) -> Array:
 	if sea_lane == null:
 		return []
 	return _bent_sample(sea_lane, ship.from_port, ship.to_port, ship.traveled_nm)
-
 
 ## A line's points on the sphere in chunks of LANE_CHUNK (each with the next
 ## chunk's first point too, so it covers the way on): [each chunk's middle,
@@ -5633,7 +5599,6 @@ static func _chunk_caps(units: PackedVector3Array) -> Array:
 		spans.append(furthest)
 	return [centers, spans]
 
-
 ## A line on screen, drawn on the near side of the globe only.
 func _draw_line_runs(points: PackedVector2Array, color: Color, dashed: bool, width: float) -> void:
 	for part in _visible_runs(points):
@@ -5642,7 +5607,6 @@ func _draw_line_runs(points: PackedVector2Array, color: Color, dashed: bool, wid
 				_canvas.draw_dashed_line(part[i - 1], part[i], color, width, 8.0)
 		else:
 			_canvas.draw_polyline(part, color, width, true)
-
 
 ## A line's points on screen cut into the runs on the near side of the globe
 ## (each at least two points long), leaving out the HIDDEN ones.
@@ -5659,7 +5623,6 @@ static func _visible_runs(points: PackedVector2Array) -> Array[PackedVector2Arra
 	if run.size() >= 2:
 		runs.append(run)
 	return runs
-
 
 ## Each canal as a water channel across the land (a convoy canal doubled where
 ## it has two channels). Zoomed in, lock chambers too (one lane per slot, the
@@ -5696,7 +5659,6 @@ func _draw_canals() -> void:
 		elif _web_zoom() >= CANAL_LABEL_WEB_ZOOM:
 			_draw_canal_label(canal.name, points[floori(points.size() / 2.0)] + Vector2(8.0, 4.0))
 
-
 ## A convoy canal's channel: one line in the single-lane stretches, two side by
 ## side (DOUBLE_CHANNEL_GAP apart) in the doubled ones.
 func _draw_convoy_channel(canal: Dictionary, points: PackedVector2Array, width: float) -> void:
@@ -5717,12 +5679,10 @@ func _draw_convoy_channel(canal: Dictionary, points: PackedVector2Array, width: 
 	if previous < points.size() - 1:
 		_canvas.draw_polyline(points.slice(previous), water, width, true)
 
-
 ## Unit vector to the right of a path at point k (on screen).
 static func _path_normal(points: PackedVector2Array, k: int) -> Vector2:
 	var along := (points[mini(k + 1, points.size() - 1)] - points[maxi(k - 1, 0)]).normalized()
 	return Vector2(-along.y, along.x)
-
 
 ## "Port Said anchorage · next convoy 45 s" by each anchorage.
 func _draw_anchorage_labels(canal: Dictionary) -> void:
@@ -5732,11 +5692,9 @@ func _draw_anchorage_labels(canal: Dictionary) -> void:
 		var at := _anchorage_screen_position(canal, i == 0)
 		_draw_canal_label("%s · next convoy %s" % [names[i] if i < names.size() else "Anchorage", next], at + Vector2(14.0, -10.0))
 
-
 func _anchorage_screen_position(canal: Dictionary, forward: bool) -> Vector2:
 	var point: Array = canal.anchorages[0 if forward else 1]
 	return world_to_screen(Geo.project(Vector2(point[0], point[1])))
-
 
 ## A canal's path on screen, or none while any of it is round the far side of
 ## the globe (canals are short: it's only ever just at the edge).
@@ -5749,12 +5707,10 @@ func _canal_screen_path(canal: Dictionary) -> PackedVector2Array:
 		points.append(at)
 	return points
 
-
 ## Pixels per projected degree where a canal is (its widths and locks are
 ## sized in projected degrees).
 func _canal_zoom(canal: Dictionary) -> float:
 	return _local_zoom((canal.projected_path as PackedVector2Array)[0])
-
 
 ## One lock chamber: a lane per slot side by side (with a lane each way, ships
 ## keep right; shared chambers are one lane each), walled, with gates at both ends.
@@ -5789,12 +5745,10 @@ func _draw_chamber(canal: Dictionary, chamber: Dictionary, points: PackedVector2
 	for end: Vector2 in [center - half, center + half]:
 		_canvas.draw_line(end - outer, end + outer, gate, 2.0, true)
 
-
 func _draw_canal_label(text: String, at: Vector2) -> void:
 	var font := get_theme_default_font()
 	_canvas.draw_string(font, at + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label_shadow"))
 	_canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, CANAL_FONT_SIZE, _color(&"label"))
-
 
 ## The middle of a lock's chambers on screen.
 func lock_screen_position(canal_id: String, lock_index: int) -> Vector2:
@@ -5809,12 +5763,10 @@ func lock_screen_position(canal_id: String, lock_index: int) -> Vector2:
 			count += 1
 	return total / count if count > 0 else Vector2.ZERO
 
-
 ## Where a convoy canal's popup sits: the middle of its path.
 func canal_screen_position(canal_id: String) -> Vector2:
 	var points := _canal_screen_path(GameData.get_canal(canal_id))
 	return points[floori(points.size() / 2.0)] if not points.is_empty() else HIDDEN
-
 
 ## [canal id, lock index] of the lock under a screen point, or [] (only once
 ## the chambers are drawn).
@@ -5833,7 +5785,6 @@ func _lock_at(screen_pos: Vector2) -> Array:
 				return [canal.id, lock_index]
 	return []
 
-
 ## The convoy canal whose channel or anchorages are under a screen point, or "".
 func _convoy_canal_at(screen_pos: Vector2) -> String:
 	for canal in GameData.canals:
@@ -5849,7 +5800,6 @@ func _convoy_canal_at(screen_pos: Vector2) -> String:
 				return canal.id
 	return ""
 
-
 ## Ships waiting for a convoy sit in a cluster round their anchorage, in rings.
 func _anchorage_slot_position(ship: Ship, crossing: Dictionary) -> Vector2:
 	var traffic := GameState.canal_traffic
@@ -5863,7 +5813,6 @@ func _anchorage_slot_position(ship: Ship, crossing: Dictionary) -> Vector2:
 		per_ring += 6
 	var angle := TAU * slot / per_ring
 	return _anchorage_screen_position(crossing.canal, crossing.forward) + Vector2.from_angle(angle) * radius
-
 
 ## How far a ship in a canal sits to the side of the path: in the right-hand
 ## lane of each-way locks and doubled convoy channels, in its own chamber of
@@ -5893,7 +5842,6 @@ func _canal_lane_offset(ship: Ship) -> Vector2:
 		return right * (offset if chamber.forward else -offset)
 	return right * CHAMBER_LANE_WIDTH * _canal_zoom(canal) / 2.0
 
-
 ## A red dot (like the nav tabs') by each HQ or hub with an upgrade that can be
 ## bought now. Drawn after the ships so docked ships don't hide it.
 func _draw_hub_alerts() -> void:
@@ -5902,7 +5850,6 @@ func _draw_hub_alerts() -> void:
 			var dot := port_screen_position(hub.port_id) + HUB_ALERT_OFFSET
 			_canvas.draw_circle(dot, HUB_ALERT_RADIUS + 1.0, _color(&"hub_alert_outline"), true, -1.0, true)
 			_canvas.draw_circle(dot, HUB_ALERT_RADIUS, _color(&"hub_alert"), true, -1.0, true)
-
 
 ## Ships at sea are rectangles with a pointed bow; docked ships are small dots.
 ## Smaller ships are drawn over bigger ones.
@@ -5927,7 +5874,6 @@ func _draw_ships() -> void:
 		elif ship.at_risk:
 			_draw_marker(ship_screen_position(ship), _color(&"at_risk_marker"))
 
-
 ## The tow lines from each tug pulling a ship (at sea, or in to its berth) to
 ## the ship's bow: two in a Y.
 func _draw_tow_lines() -> void:
@@ -5940,7 +5886,6 @@ func _draw_tow_lines() -> void:
 		var stern := ship_screen_position(tug) - Vector2.from_angle(_screen_angle(tug)) * tug_rect.size.x / 2.0 * _ship_scale()
 		var bow := ship_screen_position(ship) + Vector2.from_angle(_screen_angle(ship)) * ship_rect.size.x / 2.0 * _ship_scale()
 		_canvas.draw_line(stern, bow, TOW_LINE_COLOR, maxf(0.25 * _ship_scale(), 1.0), true)
-
 
 ## True if a tug has its ship on its tow line now: towing it at sea, or
 ## pulling it in through its harbour (see _tug_work()).
@@ -5962,7 +5907,6 @@ func _ships_topmost_first() -> Array[Ship]:
 	order.reverse()
 	return order
 
-
 ## Ships in drawing order: biggest (by map length) first, so smaller ships are
 ## drawn on top of bigger ones; same-sized ships keep their fleet order. Kept
 ## until the fleet changes.
@@ -5980,7 +5924,6 @@ func _ships_biggest_first() -> Array[Ship]:
 		return length_a > length_b if length_a != length_b else index[a] < index[b])
 	_draw_order = order
 	return order
-
 
 func _draw_ship(ship: Ship, outline: Color) -> void:
 	var look := _model_look(ship.model_id)
@@ -6063,13 +6006,11 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	_canvas.draw_primitive(look[4], colors, PackedVector2Array())
 	_canvas.draw_polyline(look[5], outline, 1.0)
 
-
 ## A ship too small on screen to make out (see TINY_SHIP_PX): a dot in its color.
 func _draw_tiny_ship(at: Vector2, color: Color) -> void:
 	if Rect2(Vector2.ZERO, size).has_point(at):
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		_canvas.draw_rect(Rect2(at - Vector2.ONE, Vector2.ONE * 2.0), color)
-
 
 ## The hull in the model's color, the cargo (cut off behind how full the hold
 ## is, in CARGO_STEPS steps, any cargo showing at least one) and the details.
@@ -6090,7 +6031,6 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 		return
 	_canvas.draw_texture_rect(art.details, rect, false, fade)
 
-
 ## How far open a bulk carrier's hatches are (0 shut to 1 open): moored for
 ## its stop, they fold open over its first HATCH_S and shut over its last
 ## (a fifth of a short stop each), shut otherwise.
@@ -6102,7 +6042,6 @@ static func _hatch_open(ship: Ship) -> float:
 	if takes <= 0.0:
 		return 0.0
 	return minf(smoothstep(0.0, takes, ship.dock_time), smoothstep(0.0, takes, stop - ship.dock_time))
-
 
 ## A bulk carrier's hatches `open` of the way open (see HATCHES), on its art
 ## (`rect`): each hold, its cargo showing as full as it is (dark empty), and
@@ -6147,19 +6086,16 @@ func _draw_hatches(ship: Ship, hatches: Dictionary, rect: Rect2, open: float, fa
 				var to := Vector2(box.end.x, mid.y) if along_y else Vector2(mid.x, box.end.y)
 				_canvas.draw_line(from, to, edge, line * 0.8)
 
-
 ## How many times its map_size a ship (and its docks) is drawn at this zoom:
 ## in step with the map, so a ship keeps its size in the world.
 func _ship_scale() -> float:
 	return _zoom / SHIP_WORLD_ZOOM
-
 
 ## How many times its length_px a sea animal is drawn: sized in the world like
 ## the ships (smaller zoomed out, bigger zoomed in), length_px at
 ## ANIMAL_WORLD_ZOOM px a degree.
 func _animal_scale() -> float:
 	return _zoom / ANIMAL_WORLD_ZOOM
-
 
 ## A model category's art ({hull, details} plus {cargo, zone} if its cargo
 ## shows), or {} if it has none.
@@ -6185,7 +6121,6 @@ static func load_ship_art(category: String) -> Dictionary:
 						art.skins[commodity] = load(skin)
 	return art
 
-
 ## A white circle image for docked-ship dots: filled (ring_width 0) or just its
 ## outline, antialiased, 2 x DOCK_DOT_IMAGE_RADIUS across, and drawn
 ## at 4x resolution for smooth edges when scaled down.
@@ -6201,7 +6136,6 @@ static func _dot_image(ring_width: float) -> ImageTexture:
 				else clampf(ring_width / 2.0 + 0.5 - absf(d - DOCK_DOT_RADIUS), 0.0, 1.0)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return ImageTexture.create_from_image(image)
-
 
 ## A model's look, worked out once: [map color, length, width, hull quad, bow
 ## triangle, closed outline, art (see load_ship_art()), art rect], the shapes
@@ -6228,14 +6162,12 @@ func _model_look(model_id: String) -> Array:
 			Rect2(back, -width / 2.0, length + bow, width)]
 	return _model_looks[model_id]
 
-
 func _draw_marker(at: Vector2, color: Color) -> void:
 	var font := get_theme_default_font()
 	var baseline := at + Vector2(-LOST_MARKER_SIZE * 0.15, -LOST_MARKER_OFFSET)
 	_canvas.draw_string_outline(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, 4,
 		_color(&"lost_marker_outline"))
 	_canvas.draw_string(font, baseline, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, LOST_MARKER_SIZE, color)
-
 
 # --- Storms --------------------------------------------------------------
 
@@ -6263,13 +6195,11 @@ func _draw_storms() -> void:
 			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, 4, Color(0, 0, 0, 0.6 * alpha))
 			_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, Color(1, 1, 1, 0.9 * alpha))
 
-
 ## A storm's center on screen and its radius there (px): [center, radius].
 func _storm_circle(storm: Dictionary) -> Array:
 	# A degree of the globe's surface is 60 nm.
 	var radius: float = float(storm.radius_nm) / 60.0 * _zoom
 	return [world_to_screen(Geo.project(Vector2(storm.lon, storm.lat))), radius]
-
 
 ## The storm with the given key, or {} if it has blown out.
 static func storm_by_key(storm_key: String) -> Dictionary:
@@ -6278,13 +6208,11 @@ static func storm_by_key(storm_key: String) -> Dictionary:
 			return storm
 	return {}
 
-
 ## Where a storm's center is on screen (local to this control), or
 ## Vector2.INF if it has blown out.
 func storm_screen_position(storm_key: String) -> Vector2:
 	var storm := storm_by_key(storm_key)
 	return _storm_circle(storm)[0] if not storm.is_empty() else Vector2.INF
-
 
 ## The storm under a screen point (within STORM_HIT_SHARE of its radius, or
 ## STORM_HIT_MIN_PX of its center), the nearest if several: its key, or "".
@@ -6299,7 +6227,6 @@ func _storm_at(screen_pos: Vector2) -> String:
 			best_share = distance / reach
 			best = Weather.key(storm)
 	return best
-
 
 ## Every storm's track: where it has been and where it will go (it keeps a
 ## fixed course; see Weather.track_ahead()), as one thick grey dashed line.
@@ -6326,7 +6253,6 @@ func _draw_storm_tracks() -> void:
 			for share: float in [1.0, Weather.CORE]:
 				_draw_dashed_path(_circle_points(circle[0], float(circle[1]) * share), color, 2.0)
 
-
 ## A track's points (lon, lat) on screen (HIDDEN round the far side of the globe).
 func _track_on_screen(points: PackedVector2Array) -> PackedVector2Array:
 	var out := PackedVector2Array()
@@ -6334,14 +6260,12 @@ func _track_on_screen(points: PackedVector2Array) -> PackedVector2Array:
 		out.append(world_to_screen(Geo.project(p)))
 	return out
 
-
 static func _circle_points(center: Vector2, radius: float) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	var steps := clampi(int(radius / 4.0), 24, 160)
 	for i in steps + 1:
 		out.append(center + Vector2.from_angle(TAU * i / steps) * radius)
 	return out
-
 
 ## A line through points, dashed along its whole length (STORM_TRACK_DASH:
 ## [dash, gap] px), each dash one polyline so its joins don't overlap.
@@ -6370,7 +6294,6 @@ func _draw_dashed_path(points: PackedVector2Array, color: Color, width: float) -
 				left = STORM_TRACK_DASH.x if on else STORM_TRACK_DASH.y
 	if on and dash.size() >= 2:
 		_canvas.draw_polyline(dash, color, width, true)
-
 
 ## Lightning in a tropical storm's bands (gales have little): every
 ## LIGHTNING_SLOT_S of play time, each of LIGHTNING_CELLS spots may flash, more
@@ -6408,7 +6331,6 @@ func _draw_lightning(storm: Dictionary, center: Vector2, radius: float, strength
 			_canvas.draw_polyline(line, Color(LIGHTNING_GLOW, 0.35 * fade), 6.0, true)
 			_canvas.draw_polyline(line, Color(LIGHTNING_CORE, fade), 2.2, true)
 
-
 # --- Seasonal ice --------------------------------------------------------
 
 ## The seasonal closures in force (GameState.seasonal, while active): each
@@ -6428,7 +6350,6 @@ func _draw_ice() -> void:
 				_canvas.draw_circle(at, _port_radius(port_id) + ICE_RING_GAP, Color(ICE_COLOR, 0.35))
 				_canvas.draw_arc(at, _port_radius(port_id) + ICE_RING_GAP, 0.0, TAU, 24, Color(ICE_COLOR, 0.95), 2.0, true)
 
-
 ## Each canal shut by a seasonal closure, frosted over along its path (drawn
 ## over the canal and its locks).
 func _draw_ice_canals() -> void:
@@ -6442,7 +6363,6 @@ func _draw_ice_canals() -> void:
 			if path.size() >= 2:
 				_canvas.draw_polyline(path, Color(ICE_COLOR, 0.8), ICE_CANAL_WIDTH, true)
 
-
 ## A feature label's text: its name, with " River" added to a river's unless
 ## the name already says river (see RIVER_WORDS): "Mississippi River".
 func _feature_text(index: int) -> String:
@@ -6454,7 +6374,6 @@ func _feature_text(index: int) -> String:
 		if RIVER_WORDS.has(word):
 			return text
 	return text + " River"
-
 
 # --- Land drawings ---------------------------------------------------------
 
@@ -6478,30 +6397,30 @@ static func _load_decor() -> void:
 		_decor_units.append(_unit(p))
 		_decor_room.append(data.decor_clearance[i] / cosh(deg_to_rad(p.y)) if i < data.decor_clearance.size() else INF)
 
-
-## The little drawings on the land (WorldMapData decor: mountains, trees,
-## cacti, animals...), on the full-color map only. Every tier whose spacing is
-## at least DECOR_MIN_SPACING_PX apart on screen shows, so more appear as the
-## map zooms in; each is drawn standing on its spot, a fixed size on screen
-## (a little bigger zoomed in), the lower ones in front.
+## The drawings on the land (WorldMapData decor: mountains, stands of trees,
+## grass, scrub, cacti, rocks, dunes, polar waves), on the full-color map
+## only, each its size in the world (DECOR_KM) standing on its spot, the
+## nearer ones (lower on screen) in front. Only while all of it fits clear of
+## the water (land drawings on land, waves on the sea): its distance to the
+## nearest shore (decor_clearance, worked out by the map tool) at least half
+## its size. Not in locked regions (shaded, bare).
 func _draw_decor() -> void:
 	_canvas = _decor_layer
-	_fauna.clear()
 	if gray_mode:
 		return
-	var animals := Birds.shared().land_animals
 	var data := GameData.world_map
-	var max_tier := -1
-	var center_zoom := _local_zoom(_center)
-	for tier in data.decor_tier_spacing.size():
-		if data.decor_tier_spacing[tier] * center_zoom >= DECOR_MIN_SPACING_PX:
-			max_tier = tier
-	if max_tier < 0:
+	var km := _zoom / KM_PER_DEGREE
+	var kind_sides := PackedFloat64Array()
+	var largest := 0.0
+	for kind_name in data.decor_kind_names:
+		var side := float(DECOR_KM.get(kind_name, 0.0)) * km
+		kind_sides.append(side)
+		largest = maxf(largest, side)
+	if largest < DECOR_MIN_PX:
 		return
-	var scale := clampf(sqrt(_zoom / DECOR_ZOOM_REFERENCE), DECOR_SCALE_RANGE.x, DECOR_SCALE_RANGE.y)
 	# The cells that can be in view: those within the stretch of globe the
 	# view's corners reach (all of the near side, zoomed right out).
-	var reach := rad_to_deg(asin(minf(size.length() / 2.0 / _radius(), 1.0))) + DECOR_SIZE_PX.y * scale / _zoom
+	var reach := rad_to_deg(asin(minf(size.length() / 2.0 / _radius(), 1.0))) + largest / _zoom
 	var across := 180.0
 	if absf(_view_lat) + reach < 89.0:
 		across = rad_to_deg(asin(minf(sin(deg_to_rad(minf(reach, 90.0))) / cos(deg_to_rad(_view_lat)), 1.0)))
@@ -6510,210 +6429,300 @@ func _draw_decor() -> void:
 	var low := Vector2(_view_lon - across, _mercator_y(_view_lat - reach))
 	var high := Vector2(_view_lon + across, _mercator_y(_view_lat + reach))
 	var columns := ceili(Geo.WORLD_WIDTH / DECOR_BUCKET)
-	var shown := []  # [screen position, kind]
-	var screen := Rect2(Vector2.ZERO, size).grow(DECOR_SIZE_PX.y * scale)
+	var shown := []  # [screen position, kind, side]
+	var screen := Rect2(Vector2.ZERO, size).grow(largest)
 	var first_column := floori((low.x + 180.0) / DECOR_BUCKET)
 	var last_column := mini(floori((high.x + 180.0) / DECOR_BUCKET), first_column + columns - 1)
-	# Each kind's size, the zoom it shows from and (an animal's) its species, and
-	# each region's lock, worked out once here: there are thousands of drawings.
-	var kind_sides := PackedFloat64Array()
-	var kind_min_zooms := PackedFloat64Array()
-	var kind_infos := []
-	for kind_name in data.decor_kind_names:
-		kind_sides.append(_decor_side(kind_name, scale))
-		kind_min_zooms.append(float(DECOR_MIN_ZOOM.get(kind_name, 0.0)))
-		kind_infos.append(animals.get(kind_name, {}))
+	# How many of the four tiers each kind shows at this size (all from DECOR_FULL_PX).
+	var kind_tiers := PackedInt32Array()
+	for side in kind_sides:
+		kind_tiers.append(0 if side < DECOR_MIN_PX else clampi(1 + floori((side - DECOR_MIN_PX) / (DECOR_FULL_PX - DECOR_MIN_PX) * 3.0), 1, 4))
 	var check_locks := RegionMap.is_ready() and selectable_ports.is_empty()
 	var locks := {}  # Region (as _decor_regions has it) -> locked.
 	if check_locks:
 		_decor_locked(0)  # (Sorts the drawings into their regions, the first time.)
+	# Natively (DecorSim: the same drawings, places and order) where the library's there.
+	if _decor_native == null and ClassDB.class_exists(&"DecorSim"):
+		var textures := []
+		for texture in _decor_textures:
+			textures.append(texture.get_rid() if texture != null else RID())
+		_decor_native = ClassDB.instantiate(&"DecorSim")
+		_decor_native.setup(data.decor_positions, _decor_units, PackedInt32Array(Array(data.decor_kinds)), PackedInt32Array(Array(data.decor_tiers)),
+			_decor_room, textures, DECOR_BUCKET)
+	if _decor_native != null:
+		var locked := PackedByteArray()
+		if check_locks:
+			if not _decor_regions_native:
+				_decor_native.set_regions(_decor_regions)
+				_decor_regions_native = true
+			var regions: Array = GameData.markets.get("regions", [])
+			locked.resize(regions.size() + 1)
+			for r in regions.size():
+				locked[r + 1] = 0 if GameState.is_region_unlocked(RegionMap.region_id(r)) else 1
+		_decor_native.draw(_canvas.get_canvas_item(), {right = _right, up = _up, toward = _toward, radius = _radius(), middle = size / 2.0,
+			screen = screen, zoom = _zoom, sides = kind_sides, tiers = kind_tiers, columns = Vector2i(first_column, last_column),
+			rows = Vector2i(floori(low.y / DECOR_BUCKET), floori(high.y / DECOR_BUCKET)), locked = locked})
+		return
 	for column in range(first_column, last_column + 1):
 		for row in range(floori(low.y / DECOR_BUCKET), floori(high.y / DECOR_BUCKET) + 1):
 			for i: int in _decor_buckets.get(Vector2i(posmod(column, columns), row), PackedInt32Array()):
-				if data.decor_tiers[i] > max_tier:
-					continue
+				var kind := data.decor_kinds[i]
+				if data.decor_tiers[i] >= kind_tiers[kind]:
+					continue  # Too small to show (or thinned out at this size), or an animal.
+				var side := kind_sides[kind]
+				if _decor_room[i] * _zoom < side * 0.5:
+					continue  # Would reach into the water (or onto the land).
 				if check_locks:
 					var region: int = _decor_regions[i]
 					if not locks.has(region):
 						locks[region] = _decor_locked(i)
 					if locks[region]:
 						continue  # Its region is locked: shaded, bare.
-				var kind := data.decor_kinds[i]
-				if center_zoom < kind_min_zooms[kind]:
-					continue  # Not yet: it shows only from closer in.
 				var at := _unit_to_screen(_decor_units[i])
 				if not screen.has_point(at):
 					continue
-				# Only while all of it fits clear of the water (land drawings on land, waves
-				# on the sea): its corners reach about its size from its spot.
-				var side := kind_sides[kind]
-				var room := _decor_room[i] * _zoom
-				if room < side * 1.05:
-					continue
-				var info: Dictionary = kind_infos[kind]
-				if info.has("group"):
-					var kind_name := data.decor_kind_names[kind]
-					# A group roaming its patch (see _draw_fauna()), as much of it as
-					# keeps it on land.
-					var roam := float(info.get("roam", 2.0)) * side
-					var fit := clampf(maxf(room - side * 1.05, side * 1.2) / roam, 0.0, 1.0)
-					_fauna.append(["%d" % i, _decor_textures[data.decor_kinds[i]], at, side, fit, info, _decor_texture(str(info.get("tree", ""))), kind_name])
-					continue
-				shown.append([at, data.decor_kinds[i]])
+				shown.append([at, kind, side])
 	shown.sort_custom(func(p: Array, q: Array) -> bool: return p[0].y < q[0].y)
 	for item: Array in shown:
 		var texture := _decor_textures[item[1]]
 		if texture == null:
 			continue
-		var side := kind_sides[item[1]]
+		var side: float = item[2]
 		_canvas.draw_texture_rect(texture, Rect2(item[0] - Vector2(side / 2.0, side * 0.92), Vector2(side, side)), false)
-
-
-## How big a kind of drawing is on screen (px): mountains biggest, then
-## animals (and waves), then plants and rocks.
-static func _decor_side(kind_name: String, scale: float) -> float:
-	var big := DECOR_ANIMALS.has(kind_name) or kind_name == "waves"
-	return (DECOR_SIZE_PX.y if kind_name.begins_with("mountain") else (DECOR_SIZE_PX.z if big else DECOR_SIZE_PX.x)) * scale
-
 
 ## A land drawing's art by its name (as _load_decor() loaded it), or null.
 static func _decor_texture(kind_name: String) -> Texture2D:
 	var index := GameData.world_map.decor_kind_names.find(kind_name)
 	return _decor_textures[index] if index >= 0 and index < _decor_textures.size() else null
 
-
-## The land animals in view (_fauna, found by _draw_decor()), each group
-## roaming its patch and going about its day (LandLife): drawn standing on
-## their feet, the nearer ones in front, a bear's rubbing tree behind it, with
-## whatever goes with what they're doing (sleepers' z's, an elephant's spray,
-## a roar...). They keep going while the game's paused, like the birds.
-func _draw_fauna() -> void:
+## The wildlife (Wildlife) in view, at its size in the world (it grows and
+## shrinks with the map, like the ships): the birds' homes along the shore
+## either side of each port (a gull colony or cormorant colony at the water's
+## edge, an eyrie or heronry in the trees inland...), and the land animals'
+## homes (dens, caves, burrows, nests, rookeries, waterholes...) with each
+## animal of each group drawn from above, turned the way it's heading, stepping
+## as it walks, dimmed asleep; a den with its family asleep inside gets its
+## z's. Not in locked regions. Remembers what's where for clicks
+## (_animals_at(), _home_at()). Drawn every frame while any shows.
+func _draw_wildlife() -> void:
 	_canvas = _fauna_layer
-	var now := Time.get_ticks_msec() / 1000.0
 	_fauna_hits.clear()
-	var items := []  # [feet y, texture, pose, feet (screen), art side (px), info]
-	for group: Array in _fauna:
-		var key: String = group[0]
-		var texture: Texture2D = group[1]
-		var home: Vector2 = group[2]
-		var side: float = group[3]
-		var fit: float = group[4]
-		var info: Dictionary = group[5]
-		if texture == null:
+	_wildlife_shown = false
+	if gray_mode:
+		return
+	var km := _zoom / KM_PER_DEGREE
+	var wildlife := Wildlife.shared()
+	var home_km := float(wildlife.birds_data.get("home_km", 5.0))
+	if WILDLIFE_LARGEST_KM * km < WILDLIFE_MIN_PX:
+		return
+	_wildlife_shown = true
+	var cal := float(GameState.calendar_time())
+	var reach := Rect2(Vector2.ZERO, size).grow(60.0)
+	var check_locks := RegionMap.is_ready() and selectable_ports.is_empty()
+	# The birds' homes, port by port.
+	var home_side := home_km * km
+	if home_side >= WILDLIFE_HOME_MIN_PX:
+		for i in _ports_near_view():
+			var port_id: String = GameData.ports[i].id
+			if _port_locked(port_id) or not reach.has_point(port_screen_position(port_id)):
+				continue
+			var colonies := wildlife.colonies_at(port_id)
+			for k in colonies.size():
+				var index: int = colonies[k]
+				var colony: Dictionary = wildlife.colonies[index]
+				var at := _colony_home_screen(port_id, colony)
+				if not reach.has_point(at):
+					continue
+				var texture := _wildlife_texture("home_" + str(colony.home_kind))
+				if texture != null:
+					_canvas.draw_texture_rect(texture, Rect2(at - Vector2.ONE * home_side / 2.0, Vector2.ONE * home_side), false)
+				_fauna_hits.append([at, maxf(home_side * 0.5, BIRD_HIT_MIN_PX), "colony", index])
+	# The land animals and their homes: natively (LandSim) where the library's there.
+	if _land_sim == null and ClassDB.class_exists(&"LandSim"):
+		_land_sim = ClassDB.instantiate(&"LandSim")
+		_land_sim.setup(wildlife.groups, wildlife.land, wildlife.migrate_days, _land_texture, _land_region)
+	if _land_sim != null:
+		var unlocked: Variant = null
+		if check_locks:
+			unlocked = {"": true}  # (GameState.is_region_unlocked().)
+			for region: String in GameState.regions:
+				unlocked[region] = true
+		_fauna_hits.append_array(_land_sim.draw(_canvas.get_canvas_item(), {box = _view_lon_lat_box(), reach = reach,
+			right = _right, up = _up, toward = _toward, radius = _radius(), middle = size / 2.0, km = km, home_side = home_side,
+			home_min_px = WILDLIFE_HOME_MIN_PX, min_px = WILDLIFE_MIN_PX, stride_s = WILDLIFE_STRIDE_S, cal = cal,
+			life_time = wildlife.life_time, unlocked = unlocked, font = get_theme_default_font()}))
+		return
+	var items := []  # [y, texture, middle, angle, side, tint]
+	for gi: int in wildlife.groups_in(_view_lon_lat_box()):
+		var group: Dictionary = wildlife.groups[gi]
+		if check_locks and not GameState.is_region_unlocked(RegionMap.region_id(RegionMap.region_at(group.home))):
 			continue
-		var tree: Variant = LandLife.tree_spot(key, info)
-		if tree != null and group[6] != null:
-			var foot := home + (tree as Vector2) * side * fit
-			items.append([foot.y - 0.01, group[6], null, foot, side, info])
-		for pose: Dictionary in _land_life.poses(key, info, now):
-			var feet := home + (pose.at as Vector2) * side * fit
-			items.append([feet.y, texture, pose, feet, side, info, group[7]])
-			var art := side * float(pose.size)
-			_fauna_hits.append([feet - Vector2(0.0, art * 0.45), maxf(art * 0.5, BIRD_HIT_MIN_PX), key, group[7]])
+		var in_den := false
+		if group.home_kind != "none" and home_side >= WILDLIFE_HOME_MIN_PX:
+			var home_at := world_to_screen(Geo.project(group.home))
+			if not _is_hidden(home_at) and reach.has_point(home_at):
+				var side := home_side * 1.3
+				var texture := _wildlife_texture("home_" + str(group.home_kind))
+				if texture != null:
+					items.append([home_at.y - side, texture, home_at, 0.0, side, Color.WHITE])
+				_fauna_hits.append([home_at, maxf(side * 0.5, BIRD_HIT_MIN_PX), "home", gi])
+		for m in int(group.members):
+			var state := wildlife.land_state(group, m, cal)
+			if state.mode == "den":
+				in_den = true
+				continue
+			var at := world_to_screen(Geo.project(state.pos))
+			if _is_hidden(at) or not reach.has_point(at):
+				continue
+			var side := float(state.size) * km
+			if side < WILDLIFE_MIN_PX:
+				continue
+			# Its heading on screen: a step that way on the map.
+			var heading := float(state.heading)
+			var ahead := world_to_screen(Geo.project(Vector2(state.pos.x + cos(heading) * 0.01 / maxf(cos(deg_to_rad(state.pos.y)), 0.1), state.pos.y + sin(heading) * 0.01)))
+			var angle := (ahead - at).angle() if not _is_hidden(ahead) else 0.0
+			var walking: bool = state.mode == "walk"
+			var stepping := walking and fmod(wildlife.life_time / WILDLIFE_STRIDE_S + m * 0.37, 1.0) < 0.5
+			var texture := _wildlife_texture(str(group.species) + ("_step" if stepping else ""))
+			if texture == null:
+				continue
+			var tint := Color(0.78, 0.8, 0.88) if state.mode == "sleep" else Color.WHITE
+			items.append([at.y, texture, at, angle, side, tint])
+			_fauna_hits.append([at, maxf(side * 0.6, BIRD_HIT_MIN_PX), "group", gi])
+		if in_den and home_side >= WILDLIFE_HOME_MIN_PX:
+			var home_at := world_to_screen(Geo.project(group.home))
+			if not _is_hidden(home_at):
+				items.append([home_at.y + 1.0, null, home_at, 0.0, home_side, Color.WHITE])
 	items.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var font := get_theme_default_font()
 	for item: Array in items:
+		var at: Vector2 = item[2]
 		var side: float = item[4]
-		if item[2] == null:
-			_canvas.draw_texture_rect(item[1], Rect2(item[3] - Vector2(side / 2.0, side * LandLife.FEET), Vector2(side, side)), false)
+		if item[1] == null:
+			# A den with its family asleep inside: z's rising.
+			var z := maxf(side * 0.3, 8.0)
+			_canvas.draw_string(font, at + Vector2(side * 0.2, -side * 0.3), "z", HORIZONTAL_ALIGNMENT_LEFT, -1, int(z), Color(1, 1, 1, 0.85))
+			_canvas.draw_string(font, at + Vector2(side * 0.35, -side * 0.55), "z", HORIZONTAL_ALIGNMENT_LEFT, -1, int(z * 0.75), Color(1, 1, 1, 0.7))
 			continue
-		_draw_land_animal(_animal_frame(str(item[6]), str((item[2] as Dictionary).get("frame", "")), item[1]), item[2], item[3], side, item[5])
+		_canvas.draw_set_transform(at, float(item[3]), Vector2.ONE * side / 64.0)
+		_canvas.draw_texture_rect(item[1], Rect2(-32.0, -32.0, 64.0, 64.0), false, item[5])
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
+## Where a bird colony's home is on screen: one of the spots along the shore
+## either side of its port (_shore_spots()), picked by the colony: at the
+## water's edge for gulls, cormorants and seabirds, inland (in the trees or
+## the reeds) for the rest when there's land there.
+func _colony_home_screen(port_id: String, colony: Dictionary) -> Vector2:
+	return _dock_point(port_id, _colony_home_local(port_id, colony))
 
-## A land animal's drawing for a frame of its pose (LandLife: "step", its
-## legs swung, or "fly", wings out; art/decor/<kind>_<frame>.svg), or its
-## own (`texture`) for "" or one it hasn't. Loaded once.
-static func _animal_frame(kind_name: String, frame: String, texture: Texture2D) -> Texture2D:
-	if frame.is_empty():
-		return texture
-	var key := kind_name + "_" + frame
-	if not _animal_frames.has(key):
-		var path := DECOR_ART_DIR + key + ".svg"
-		_animal_frames[key] = load(path) if ResourceLoader.exists(path) else null
-	var found: Texture2D = _animal_frames[key]
-	return found if found != null else texture
 
+## Where a bird colony's home is round its port (dock units: see _colony_home_screen()).
+func _colony_home_local(port_id: String, colony: Dictionary) -> Vector2:
+	var shores := _shore_spots(port_id)
+	var radius := float(_port_layout(port_id).radius)
+	if shores.is_empty():
+		var side := 1.0 if Birds.chance([colony.key, "side"]) < 0.5 else -1.0
+		return Vector2(radius * 0.3, side * radius * (1.4 + 0.6 * Birds.chance([colony.key, "far"])))
+	var spot: Array = shores[floori(Birds.chance([colony.key, "home"]) * shores.size()) % shores.size()]
+	var shore_kinds := ["gull_colony", "cormorant_colony", "seabird_colony", "burrow"]
+	return spot[0] if shore_kinds.has(colony.home_kind) or spot[1] == Vector2.INF else spot[1]
+
+## The box of (lon, lat) the screen itself shows, `margin` px past its edges
+## (traced round them): much tighter than _view_lon_lat_box() zoomed in. That
+## box instead when the globe's edge or a pole is in view.
+func _screen_lon_lat_box(margin: float) -> Rect2:
+	var rect := Rect2(Vector2.ZERO, size).grow(margin)
+	var middle := size / 2.0
+	var reach := _radius() * 0.95
+	var corners := [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]
+	for corner: Vector2 in corners:
+		if corner.distance_to(middle) >= reach:
+			return _view_lon_lat_box(margin / maxf(_zoom, 0.01))
+	for pole: float in [1.0, -1.0]:
+		if rect.has_point(_unit_to_screen(Vector3(0.0, 0.0, pole))):
+			return _view_lon_lat_box(margin / maxf(_zoom, 0.01))
+	var low := Vector2(INF, INF)
+	var high := Vector2(-INF, -INF)
+	for i in 4:
+		var a: Vector2 = corners[i]
+		var b: Vector2 = corners[(i + 1) % 4]
+		for s in SCREEN_BOX_STEPS:
+			var spot := _screen_lon_lat(a.lerp(b, float(s) / SCREEN_BOX_STEPS))
+			spot.x = wrapf(spot.x - _view_lon, -180.0, 180.0) + _view_lon  # (Round the back of the date line, near the view.)
+			low = low.min(spot)
+			high = high.max(spot)
+	var box := Rect2(low, high - low)
+	return box.grow_individual(box.size.x * 0.02, box.size.y * 0.02, box.size.x * 0.02, box.size.y * 0.02)
+
+
+## The box of (lon, lat) the view can show (all of the near side, zoomed right
+## out), and `margin` degrees round it.
+func _view_lon_lat_box(margin := 1.0) -> Rect2:
+	var reach := rad_to_deg(asin(minf(size.length() / 2.0 / _radius(), 1.0))) + margin
+	var across := 180.0
+	if absf(_view_lat) + reach < 89.0 and reach < 90.0:
+		across = rad_to_deg(asin(minf(sin(deg_to_rad(reach)) / cos(deg_to_rad(_view_lat)), 1.0)))
+	return Rect2(Vector2(_view_lon - across, _view_lat - reach), Vector2(across * 2.0, reach * 2.0))
+
+## For the native land animals (LandSim): a wildlife drawing's texture, by name.
+func _land_texture(name: String) -> RID:
+	var texture := _wildlife_texture(name)
+	return texture.get_rid() if texture != null else RID()
+
+
+## For the native land animals: the region a spot is in (its id), or null till the regions are ready.
+func _land_region(spot: Vector2) -> Variant:
+	if not RegionMap.is_ready():
+		return null
+	return RegionMap.region_id(RegionMap.region_at(spot))
+
+
+## A wildlife drawing (art/wildlife/<name>.svg), loaded once, or null.
+static func _wildlife_texture(name: String) -> Texture2D:
+	if not _wildlife_art.has(name):
+		var path := WILDLIFE_ART_DIR + name + ".svg"
+		_wildlife_art[name] = load(path) if ResourceLoader.exists(path) else null
+	return _wildlife_art[name]
 
 ## The land animal group drawn under a screen point (the nearest one in
-## front): [patch key, species], or [].
+## front): [group (its index, as text), species], or [].
 func _animals_at(screen_pos: Vector2) -> Array:
 	for i in range(_fauna_hits.size() - 1, -1, -1):
 		var hit: Array = _fauna_hits[i]
-		if (hit[0] as Vector2).distance_to(screen_pos) <= float(hit[1]):
+		if hit[2] == "group" and (hit[0] as Vector2).distance_to(screen_pos) <= float(hit[1]):
+			return [str(hit[3]), str(Wildlife.shared().groups[hit[3]].species)]
+	return []
+
+## The home drawn under a screen point: ["colony" or "home", index (of the
+## colony or land group)], or [].
+func _home_at(screen_pos: Vector2) -> Array:
+	for i in range(_fauna_hits.size() - 1, -1, -1):
+		var hit: Array = _fauna_hits[i]
+		if hit[2] != "group" and (hit[0] as Vector2).distance_to(screen_pos) <= float(hit[1]):
 			return [hit[2], hit[3]]
 	return []
 
-
-## Where a land animal group's patch is on screen, or Vector2.INF while it isn't drawn.
+## Where a land animal group is on screen (its first member), or Vector2.INF
+## while it's round the far side.
 func animal_group_screen_position(key: String) -> Vector2:
-	for group: Array in _fauna:
-		if group[0] == key:
-			return group[2]
-	return Vector2.INF
+	var wildlife := Wildlife.shared()
+	var index := int(key)
+	if index < 0 or index >= wildlife.groups.size():
+		return Vector2.INF
+	var state := wildlife.land_state(wildlife.groups[index], 0, float(GameState.calendar_time()))
+	var at := world_to_screen(Geo.project(state.pos))
+	return Vector2.INF if _is_hidden(at) else at
 
-
-## One animal in its pose (LandLife.poses()), its feet at a screen point, its
-## art `side` px for a full-sized one: turned the way it faces, about its
-## pivot, then what goes with its act.
-func _draw_land_animal(texture: Texture2D, pose: Dictionary, feet: Vector2, side: float, info: Dictionary) -> void:
-	var art := side * float(pose.size)
-	var faces := str(info.get("faces", "left"))
-	var f := float(pose.facing)
-	var flip := -f if faces == "left" else (f if faces == "right" else 1.0)
-	var pivot: Vector2 = pose.pivot
-	var scale: Vector2 = pose.scale
-	var origin := feet + Vector2((pivot.x - 0.5) * flip, pivot.y - LandLife.FEET) * art
-	var rot := float(pose.rot)
-	_canvas.draw_set_transform(origin, rot, Vector2(flip * scale.x, scale.y))
-	_canvas.draw_texture_rect(texture, Rect2(-pivot * art, Vector2(art, art)), false)
-	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
-	var act := str(pose.act)
-	if act == "rest":
-		return
-	var head_local := ((pose.head as Vector2) - pivot) * art
-	var head := origin + (Vector2(head_local.x * flip * scale.x, head_local.y * scale.y)).rotated(rot)
-	var u := float(pose.u)
-	var t := float(pose.t)
-	match act:
-		"nap", "sleep":
-			# Z's drifting up from its head.
-			var font := get_theme_default_font()
-			var font_size := maxi(int(art * 0.32), 8)
-			for k in 2:
-				var rise := fmod(t * 0.45 + k * 0.5, 1.0)
-				var at := head + Vector2(f * art * (0.1 + 0.25 * rise), -art * (0.2 + 0.5 * rise))
-				_canvas.draw_string(font, at, "z", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(1, 1, 1, 0.85 * sin(rise * PI)))
-		"spray", "dust", "wallow":
-			# Water (or dust) thrown up over its back from its trunk.
-			var color := Color(0.62, 0.82, 1.0) if act == "spray" else Color(0.74, 0.6, 0.42)
-			for k in 7:
-				var s := fmod(t * 1.1 + k / 7.0, 1.0)
-				var at := head + Vector2(-f * s * art * 0.8, -sin(s * PI) * art * 0.55)
-				if act == "wallow":
-					at = feet + Vector2((k - 3) * art * 0.12, -art * 0.1 - s * art * 0.35)
-				var radius := art * (0.035 if act == "spray" else 0.05 + 0.05 * s)
-				_canvas.draw_circle(at, radius, Color(color, (0.9 if act == "spray" else 0.55) * (1.0 - s)))
-		"roar":
-			# Its roar rolling out ahead of it.
-			for k in 3:
-				var s := fmod(t * 1.4 + k / 3.0, 1.0)
-				var middle := head + Vector2(f * art * 0.12, 0.0)
-				var facing_angle := 0.0 if f > 0.0 else PI
-				_canvas.draw_arc(middle, art * (0.15 + 0.45 * s), facing_angle - 0.6, facing_angle + 0.6, 10, Color(1, 1, 1, 0.8 * (1.0 - s)), maxf(art * 0.04, 1.0), true)
-		"spit":
-			if u > 0.3:
-				var s := (u - 0.3) / 0.7
-				_canvas.draw_circle(head + Vector2(f * s * art * 0.9, s * s * art * 0.3), art * 0.04, Color(1, 1, 1, 0.9 * (1.0 - s)))
-		"chest":
-			# Thumping its chest: little bursts either side.
-			var burst := absf(sin(t * 20.0))
-			var chest := feet - Vector2(0.0, art * 0.5 * float((pose.scale as Vector2).y))
-			for side_sign: float in [-1.0, 1.0]:
-				for k in 3:
-					var angle := (0.0 if side_sign > 0.0 else PI) + (k - 1) * 0.5
-					var from := chest + Vector2(side_sign * art * 0.42, 0.0) + Vector2.from_angle(angle) * art * 0.05
-					_canvas.draw_line(from, from + Vector2.from_angle(angle) * art * 0.12 * burst, Color(1, 1, 1, 0.8), maxf(art * 0.03, 1.0), true)
-
+## Where a home is on screen (see _home_at()), or Vector2.INF.
+func home_screen_position(kind: String, index: int) -> Vector2:
+	var wildlife := Wildlife.shared()
+	var at := Vector2.INF
+	if kind == "colony":
+		var colony: Dictionary = wildlife.colonies[index]
+		at = _colony_home_screen(colony.port, colony)
+	else:
+		at = world_to_screen(Geo.project(wildlife.groups[index].home))
+	return Vector2.INF if _is_hidden(at) else at
 
 # --- Sea animals -------------------------------------------------------------------
 
@@ -6735,6 +6744,7 @@ const SEA_ROUTE_COLOR := Color(0.75, 0.95, 1.0, 0.45)
 const SEA_HIT_MIN_PX := 12.0
 
 
+
 ## Every pod of sea animals in view (from the opening zoom in): a loose group
 ## swimming the way it's heading, each animal a shadow under the water unless
 ## it's up at the surface, breaching or leaping.
@@ -6749,10 +6759,27 @@ func _draw_sea_life() -> void:
 	for highlight in [selected_pod, _hovered_pod]:
 		if highlight >= 0 and highlight < sea.pods.size():
 			_draw_pod_routes(sea, highlight)
+	# A pod staying in an area is within its radius till it leaves (its state's
+	# until): skipped till then while that area's out of view.
+	var box := _screen_lon_lat_box(80.0)
+	# The animals natively (SeaPainter: the same ones, the same ways), where the library's there.
+	if _sea_painter == null and ClassDB.class_exists(&"SeaPainter"):
+		_sea_painter = ClassDB.instantiate(&"SeaPainter")
+	var native_pods := []
 	for i in sea.pods.size():
+		var bound: Array = _pod_bounds.get(i, NO_POD_BOUND)
+		if now < float(bound[1]):
+			var area_box: Rect2 = bound[0]
+			if not area_box.intersects(box) and not area_box.intersects(Rect2(box.position + Vector2(360.0, 0.0), box.size)) and not area_box.intersects(Rect2(box.position - Vector2(360.0, 0.0), box.size)):
+				continue
 		var pod: Dictionary = sea.pods[i]
 		var kind: Dictionary = sea.species[pod.species]
 		var state := sea.state(i, now)
+		if state.migrating:
+			_pod_bounds.erase(i)
+		else:
+			var area: Dictionary = sea.areas[state.area]
+			_pod_bounds[i] = [_lon_lat_rect(Vector2(float(area.lon), float(area.lat)), float(area.radius_nm) / 60.0 + 0.1), float(state.until)]
 		var center := world_to_screen(Geo.project(state.pos))
 		if not view.has_point(center):
 			continue
@@ -6764,10 +6791,26 @@ func _draw_sea_life() -> void:
 		var spacing := float(kind.spacing_px) * scale
 		var reach := spacing * sqrt(float(shown)) + float(kind.length_px) * scale * 0.5
 		_pod_hits.append([i, center, maxf(reach, SEA_HIT_MIN_PX)])
+		if _sea_painter != null:
+			native_pods.append([i, center, angle, _sea_kind_index(pod.species, kind), shown])
+			continue
 		for j in shown:
 			_draw_sea_animal(i, j, kind, center, angle, spacing, scale)
+	if _sea_painter != null and not native_pods.is_empty():
+		_sea_painter.draw(_canvas.get_canvas_item(), native_pods, _sea_kinds, {right = _right, up = _up, toward = _toward, radius = _radius(),
+			middle = size / 2.0, play_time = GameState.play_time, scale = scale, mask = sea._mask, mask_size = sea._mask_size})
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
+## A sea animal species' place in _sea_kinds (what SeaPainter draws it with), added the first time.
+func _sea_kind_index(species: String, kind: Dictionary) -> int:
+	if not _sea_kind_indices.has(species):
+		var texture := _sea_texture(str(kind.art))
+		var silhouette := _sea_silhouette(str(kind.art))
+		_sea_kind_indices[species] = _sea_kinds.size()
+		_sea_kinds.append({texture = texture.get_rid() if texture != null else RID(), silhouette = silhouette.get_rid() if silhouette != null else RID(),
+			length_px = float(kind.length_px), spacing_px = float(kind.spacing_px), dolphin = kind.kind == "dolphin",
+			breach = kind.get("breach", []), surface = kind.get("surface", [])})
+	return _sea_kind_indices[species]
 
 ## One animal of a pod: its place in the group (spread round the middle,
 ## drifting a little), then its shadow and whatever it's doing at the surface.
@@ -6803,7 +6846,6 @@ func _draw_sea_animal(pod: int, j: int, kind: Dictionary, center: Vector2, angle
 			if up > 0.15 and up < 0.75:
 				_draw_blow(at + Vector2.from_angle(facing) * length * 0.32, length, (up - 0.15) / 0.6)
 
-
 ## True if a sea animal `length` long (screen px) at a screen point, facing
 ## that way, lies wholly over water: its middle, nose, tail and both sides, by
 ## the sea mask (which counts the cells along the coast as land, so this errs
@@ -6817,7 +6859,6 @@ func _on_water(at: Vector2, facing: float, length: float) -> bool:
 			return false
 	return true
 
-
 ## How far (0..1) an animal is through an event lasting `seconds`, or -1 if
 ## it isn't having one now. Play time is cut into `every`-second slots; in
 ## each, by the pod, animal and slot, it has the event with this chance, at a
@@ -6825,21 +6866,31 @@ func _on_water(at: Vector2, facing: float, length: float) -> bool:
 static func _sea_event(pod: int, j: int, what: String, every: float, chance: float, seconds: float) -> float:
 	var t := GameState.play_time
 	var slot := floorf(t / every)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([pod, j, what, int(slot)])
-	if rng.randf() >= chance:
+	# When in its slot it happens (or that it doesn't), kept for the slot: the
+	# same rolls every frame till the next.
+	var key := Vector4i(pod, j, what.hash(), int(slot))
+	var start: float
+	if _sea_events.has(key):
+		start = _sea_events[key]
+	else:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([pod, j, what, int(slot)])
+		start = NAN
+		if rng.randf() < chance:
+			start = slot * every + rng.randf() * maxf(every - seconds, 0.0)
+		if _sea_events.size() > 4096:
+			_sea_events.clear()
+		_sea_events[key] = start
+	if is_nan(start):
 		return -1.0
-	var start := slot * every + rng.randf() * maxf(every - seconds, 0.0)
 	var into := (t - start) / seconds
 	return into if into >= 0.0 and into < 1.0 else -1.0
-
 
 func _draw_sea_sprite(texture: Texture2D, at: Vector2, facing: float, length: float, grow: float, tint: Color) -> void:
 	var size_px := Vector2(length, length / SEA_ART_ASPECT) * grow
 	_canvas.draw_set_transform(at, facing, Vector2.ONE)
 	_canvas.draw_texture_rect(texture, Rect2(-size_px / 2.0, size_px), false, tint)
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
-
 
 ## A whale or orca breaching: it rises clear (bigger, lifted a little up the
 ## screen), then crashes back in a ring of splash and spray.
@@ -6850,7 +6901,6 @@ func _draw_breach(texture: Texture2D, at: Vector2, facing: float, length: float,
 	if up > 0.55:
 		_draw_splash(at, length * 0.9, (up - 0.55) / 0.45)
 
-
 ## A dolphin leaping: an arc ahead of its shadow, a small splash where it lands.
 func _draw_leap(texture: Texture2D, at: Vector2, facing: float, length: float, up: float) -> void:
 	var arc := minf(up / 0.8, 1.0)
@@ -6859,7 +6909,6 @@ func _draw_leap(texture: Texture2D, at: Vector2, facing: float, length: float, u
 		_draw_sea_sprite(texture, at + ahead - Vector2(0.0, sin(PI * arc) * length * 0.7), facing - (arc - 0.5) * 0.5, length, 1.0 + 0.25 * sin(PI * arc), Color.WHITE)
 	if up > 0.7:
 		_draw_splash(at + Vector2.from_angle(facing) * length * 0.7, length * 0.6, (up - 0.7) / 0.3)
-
 
 ## A splash spreading out and fading (0..1): two white rings and a few drops.
 func _draw_splash(at: Vector2, reach: float, t: float) -> void:
@@ -6870,7 +6919,6 @@ func _draw_splash(at: Vector2, reach: float, t: float) -> void:
 		var drop := at + Vector2.from_angle(k * TAU / 6.0 + 0.4) * reach * (0.4 + t * 0.9) - Vector2(0.0, sin(PI * t) * reach * 0.5)
 		_canvas.draw_circle(drop, maxf(reach * 0.06, 0.8), Color(SEA_SPLASH, 0.9 * fade))
 
-
 ## A whale's blow: a puff of spray rising from its blowhole and fading (0..1).
 func _draw_blow(at: Vector2, length: float, t: float) -> void:
 	var fade := sin(PI * t)
@@ -6878,13 +6926,11 @@ func _draw_blow(at: Vector2, length: float, t: float) -> void:
 		var puff := at - Vector2((k - 1) * length * 0.07, length * (0.1 + t * 0.35 + k * 0.05))
 		_canvas.draw_circle(puff, length * (0.07 + t * 0.06), Color(SEA_SPLASH, 0.75 * fade))
 
-
 func _sea_texture(art: String) -> Texture2D:
 	if not _sea_art.has(art):
 		var path := SEA_ART_DIR + art + ".svg"
 		_sea_art[art] = load(path) if ResourceLoader.exists(path) else null
 	return _sea_art[art]
-
 
 ## An animal's outline filled in one flat white (tinted SEA_SHADOW when drawn),
 ## for its shape under the water.
@@ -6906,7 +6952,6 @@ func _sea_silhouette(art: String) -> Texture2D:
 			_sea_art[key] = ImageTexture.create_from_image(image)
 	return _sea_art[key]
 
-
 ## A pod's year: its migration paths and the areas it stays in, dashed.
 func _draw_pod_routes(sea: SeaLife, pod: int) -> void:
 	for points in sea.pod_paths(pod):
@@ -6917,7 +6962,6 @@ func _draw_pod_routes(sea: SeaLife, pod: int) -> void:
 		var at := world_to_screen(Geo.project(Vector2(area.lon, area.lat)))
 		if not _is_hidden(at):
 			_draw_dashed_path(_circle_points(at, float(area.radius_nm) / 60.0 * _zoom), SEA_ROUTE_COLOR, 2.0)
-
 
 ## The pod under a screen point (as last drawn), the nearest if several, or -1.
 func _pod_at(screen_pos: Vector2) -> int:
@@ -6930,7 +6974,6 @@ func _pod_at(screen_pos: Vector2) -> int:
 			best = hit[0]
 	return best
 
-
 ## Where a pod's middle is on screen (local to this control), as last drawn,
 ## or Vector2.INF if it isn't in view.
 func pod_screen_position(pod: int) -> Vector2:
@@ -6938,7 +6981,6 @@ func pod_screen_position(pod: int) -> Vector2:
 		if hit[0] == pod:
 			return hit[1]
 	return Vector2.INF
-
 
 # --- Winter sea ice ----------------------------------------------------------
 
@@ -6963,7 +7005,6 @@ func _update_ice() -> void:
 		_ice_arts[k + 1].visible = _lake_ice != null
 	for node in _ice_arts:
 		node.queue_redraw()
-
 
 ## Notes where each icebreaker in the ice has been (the channel it breaks) and
 ## forgets stretches older than ICE_REFREEZE_S (frozen over again). True while
@@ -6992,13 +7033,11 @@ func _track_icebreakers() -> bool:
 			_ice_tracks.erase(ship)
 	return not _ice_tracks.is_empty()
 
-
 func _in_ice(at: Vector2) -> bool:
 	for circle: Array in _ice_circles:
 		if (circle[0] as Vector2).distance_to(at) <= circle[1]:
 			return true
 	return false
-
 
 ## Circles ([center, radius, ...]) merged into the outlines of their union
 ## (holes inside it are left filled).
@@ -7020,7 +7059,6 @@ static func _merge_circles(circles: Array) -> Array[PackedVector2Array]:
 		kept.append(shape)
 		merged = kept
 	return merged
-
 
 ## The lake triangles whose middles are inside the frozen circles, as one mesh
 ## (null if none): the frozen lakes. The lakes' triangles are sorted into
@@ -7054,7 +7092,6 @@ func _build_lake_ice() -> ArrayMesh:
 				if all_in:
 					taken[cell] = true  # Already all in: another circle needn't add it again.
 	return _triangle_mesh(out) if not out.is_empty() else null
-
 
 ## Draws the sea ice onto an ice node (in projected coordinates): soft edges,
 ## then the solid sheet, its cracks, and the channels icebreakers have broken
@@ -7096,7 +7133,6 @@ func _draw_ice_sheet(canvas: CanvasItem) -> void:
 			canvas.draw_line(a, b, Color(ICE_BROKEN, open), width * 1.8)
 			canvas.draw_line(a, b, Color(ICE_CHANNEL, open), width)
 
-
 ## The named sea routes (seasonal closures with a label: the Northern Sea Route
 ## and the Northwest Passage), labeled all year at the middle of their stretch
 ## of sea, like the map's sea names (slanted, pale, with a dark edge), from
@@ -7122,7 +7158,6 @@ func _draw_route_labels() -> void:
 			_color(&"sea_label_outline"))
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, ROUTE_LABEL_FONT_SIZE, _color(&"sea_label"))
 
-
 ## The land's biome colors (LAND_COLORS), from the load GameData starts in the
 ## background at boot, or null if there are none.
 static func land_colors_texture() -> Texture2D:
@@ -7130,97 +7165,441 @@ static func land_colors_texture() -> Texture2D:
 		return ResourceLoader.load_threaded_get(LAND_COLORS) as Texture2D
 	return load(LAND_COLORS) as Texture2D if ResourceLoader.exists(LAND_COLORS) else null
 
-
 # --- Birds ---------------------------------------------------------------------
 
-## Birds (Birds: gulls round ports, ships and sea animals; raptors along the
-## shore and sea ducks rafting off ports; seabirds following ships), drawn
-## from above over everything once zoomed in far enough that a gull's wings
-## are BIRD_MIN_PX across: each a little silhouette in its species' colors,
-## flapping (or gliding), with a faint shadow on the water. Each bird's way
-## round its flock is its own (steady from the flock's key); they keep
-## flying while the game's paused.
+## Every bird (BirdLife) in view, each where it is and doing what it's doing,
+## at its size in the world (with the ships: _ship_scale()). It's always
+## somewhere: no bird is ever made up or taken away, they fly from place to
+## place. Far out, where a bird would be under BIRD_FULL_PX across, it's a dot
+## of its color (down to BIRD_DOT_PX); closer, its drawing: flying (circling,
+## soaring, gliding, hunting, following a ship) from above with its shadow
+## below; perched, resting or asleep with its wings folded; swimming on the
+## water (sea ducks and cormorants low in it, from draw_duck()); a diver just
+## a dark shape under a ripple; waders standing or stalking from above with
+## their long shadows (a bittern in its reeds, bill to the sky). A hunter
+## plunging in makes a splash. Clicking one opens its colony's popup.
+##
+## Birds keeping still for a while yet (BirdLife.still_until()) are drawn on
+## their own layer (_draw_still_birds()), only again when the view changes or
+## the first of them is about to move: the rest every frame, here.
 func _draw_birds() -> void:
 	_bird_hits.clear()
-	if gray_mode or not show_ships or _ship_scale() < BIRD_MIN_PX:
+	var now := Wildlife.shared().bird_time
+	var cal := float(GameState.calendar_time())
+	var native: Object = BirdLife.shared().native
+	if native != null:
+		if now >= float(native.still_redraw_at()) or native.where_changes() != native.still_epoch():
+			_still_birds.queue_redraw()
+	elif now >= _still_redraw_at or Wildlife.shared().where_changes != _still_epoch:
+		_still_redraw_at = INF
+		_still_birds.queue_redraw()
+	_draw_bird_pass(false, now, cal)
+
+
+## The birds keeping still for a while yet (see _draw_birds()), on their own layer.
+func _draw_still_birds() -> void:
+	_canvas = _still_birds
+	_still_drawn.clear()
+	_still_hits.clear()
+	var now := Wildlife.shared().bird_time
+	var cal := float(GameState.calendar_time())
+	_still_epoch = Wildlife.shared().where_changes
+	_still_redraw_at = INF
+	_draw_bird_pass(true, now, cal)
+	_canvas = _overlay
+
+
+## One pass over the birds in view (see _draw_birds()): those keeping still
+## for STILL_LAYER_S or more (marked in _still_drawn), or all the others.
+func _draw_bird_pass(still: bool, now: float, cal: float) -> void:
+	if gray_mode or not show_ships:
 		return
-	var birds := Birds.shared()
 	var scale := _ship_scale()
-	var now := Time.get_ticks_msec() / 1000.0
-	var view := Rect2(Vector2.ZERO, size)
-	# Gulls round each port's marina.
-	var near := view.grow(MARINA_MAX_REACH * scale)
-	for i in _ports_near_view():
-		var port: Dictionary = GameData.ports[i]
-		var port_id: String = port.id
-		var root := port_screen_position(port_id)
-		if not near.has_point(root) or not _marina_shown(port_id):
+	if BIRD_SMALLEST_SPAN * BIRD_SCALE * scale < BIRD_DOT_PX:
+		return
+	var life := BirdLife.shared()
+	if not life.spots_provider.is_valid():
+		life.set_map_providers(_bird_spots, _native_bird_mesh)
+	if not life.ensure_built():
+		return
+	var wildlife := Wildlife.shared()
+	if life.native != null:
+		life.native.draw(_canvas.get_canvas_item(), still, {box = _screen_lon_lat_box(BIRD_VIEW_MARGIN_PX), view = Rect2(Vector2.ZERO, size).grow(40.0),
+			right = _right, up = _up, toward = _toward, radius = _radius(), middle = size / 2.0, now = now, cal = cal,
+			scale = BIRD_SCALE * scale, dot_px = BIRD_DOT_PX, full_px = BIRD_FULL_PX, reach_gulls_km = BIRD_REACH_KM.gulls,
+			reach_other_km = BIRD_REACH_KM.other, view_lat = _view_lat, still_s = STILL_LAYER_S, still_margin_s = STILL_LAYER_MARGIN_S})
+		return
+	var hits: Array = _still_hits if still else _bird_hits
+	var view := Rect2(Vector2.ZERO, size).grow(40.0)
+	var box := _screen_lon_lat_box(BIRD_VIEW_MARGIN_PX)
+	var wide_by := 1.0 / maxf(cos(deg_to_rad(clampf(_view_lat, -80.0, 80.0))), 0.1)
+	# The colonies whose birds could be in view: those of the ports near it (and
+	# visiting them; no further from their port than BIRD_REACH_KM), the seabirds
+	# whose range reaches it, and those on the wing.
+	var colonies := {}
+	var most := float(BIRD_REACH_KM.gulls) / Wildlife.KM_PER_DEGREE
+	for index: int in wildlife.colonies_near(box.grow_individual(most * wide_by, most, most * wide_by, most)):
+		var colony: Dictionary = wildlife.colonies[index]
+		if colony.cls == "seabirds":
 			continue
-		var radius := float(_port_layout(port_id).radius) * scale
-		var flock := birds.port_flock(port_id)
-		_draw_gulls(flock, root, radius * 0.35, radius * 1.15, now, {port = port_id})
-		_draw_raptors(port_id, root, radius, now)
-		_draw_sea_ducks(port_id, root, radius, now)
-		_draw_cormorants(port_id, root, radius, now)
-		_draw_waders(port_id, root, radius, now)
-	# Round ships (gulls, and the seabirds following ships at sea).
-	var reach := view.grow(SHIP_CULL_MARGIN * scale)
-	for ship in GameState.ships:
-		if ship.is_carried():
+		var where: String = wildlife.colony_where(colony, cal)[0]
+		if where.begins_with("to_"):
+			continue  # (On the wing: below.)
+		var reach := float(BIRD_REACH_KM.get(colony.cls, BIRD_REACH_KM.other)) / Wildlife.KM_PER_DEGREE
+		if box.grow_individual(reach * wide_by, reach, reach * wide_by, reach).has_point(colony.away_spot if where == "away" else colony.spot):
+			colonies[index] = true
+	for index: int in wildlife.seabird_colonies_in(box):
+		var colony: Dictionary = wildlife.colonies[index]
+		var reach := float(colony.get("range_km", 500.0)) / Wildlife.KM_PER_DEGREE
+		var spot: Vector2 = colony.spot
+		var wide := reach / maxf(cos(deg_to_rad(spot.y)), 0.1)
+		if box.grow_individual(wide, reach, wide, reach).has_point(spot) or box.grow_individual(wide, reach, wide, reach).has_point(colony.away_spot):
+			colonies[index] = true
+	if not still:
+		for entry: Array in wildlife.migrating(cal):
+			colonies[entry[0]] = true
+	var epoch := wildlife.where_changes
+	# (The box round the back of the date line too, when it reaches past it.)
+	var wraps := box.position.x < -180.0 or box.end.x > 180.0
+	var box_east := Rect2(box.position + Vector2(360.0, 0.0), box.size)
+	var box_west := Rect2(box.position - Vector2(360.0, 0.0), box.size)
+	for index: int in colonies:
+		var colony: Dictionary = wildlife.colonies[index]
+		var info := Birds.shared().species(colony.species)
+		var span := float(info.get("span", 1.0)) * BIRD_SCALE * scale
+		if span < BIRD_DOT_PX:
 			continue
-		var at := ship_screen_position(ship)
-		if not reach.has_point(at) or ship.is_docked() and not _marina_shown(ship.docked_at):
-			continue
-		var length := (_model_look(ship.model_id)[7] as Rect2).size.x * scale
-		var under_way := _under_way(ship, now)
-		var flock := birds.ship_flock(ship)
-		if not flock.is_empty():
-			_draw_gulls(flock, at, length * 0.35, length * 0.9, now, {ship = ship}, _screen_angle(ship), under_way, length)
-		for entry: Dictionary in birds.followers(ship):
-			_draw_followers(ship, entry, at, _screen_angle(ship), length, now, under_way)
-	# Round pods of sea animals (where they're drawn: see _draw_sea_life()).
-	for hit: Array in _pod_hits:
-		var pod_index: int = hit[0]
-		var center: Vector2 = hit[1]
-		var pod_reach: float = hit[2]
-		var pod := SeaLife.shared().state(pod_index, float(GameState.calendar_time()))
-		var flock := birds.pod_flock(pod_index, pod.pos)
-		if not flock.is_empty():
-			_draw_gulls(flock, center, pod_reach * 0.6, pod_reach * 1.4, now, {pod = pod_index})
+		var about := []  # (What a click on one of them opens: made once a colony.)
+		# Which way east and north are on screen about its birds, for their headings:
+		# worked out at the first one drawn (they're never far apart; a seabird's each).
+		var basis := Transform2D(Vector2.ZERO, Vector2.ZERO, Vector2.ZERO)
+		var each_own: bool = colony.cls == "seabirds"
+		for b: int in life.birds_of(index):
+			if not still and _still_drawn.has(b):
+				continue  # (On the still birds' layer.)
+			# Skipped while all it can do till its spell ends is out of view (see BirdLife.bird_bounds()).
+			var bound: Array = _bird_bounds.get(b, NO_BIRD_BOUND)
+			if now >= float(bound[1]) or int(bound[2]) != epoch:
+				var reach := life.bird_bounds(b, now, cal)
+				bound = [_lon_lat_rect(reach[0], float(reach[1]) / Wildlife.KM_PER_DEGREE), reach[2], epoch] if not reach.is_empty() else [EVERYWHERE, now + 1.0, epoch]
+				_bird_bounds[b] = bound
+			var area: Rect2 = bound[0]
+			if not area.intersects(box) and not (wraps and (area.intersects(box_east) or area.intersects(box_west))):
+				continue
+			var state := life.bird_state(b, now, cal)
+			if still:
+				var until := life.still_until(b)
+				if until < now + STILL_LAYER_S:
+					continue
+				_still_drawn[b] = true
+				_still_redraw_at = minf(_still_redraw_at, until - STILL_LAYER_MARGIN_S)
+			var pos: Vector2 = state.pos
+			var at := world_to_screen(Geo.project(pos))
+			if _is_hidden(at) or not view.has_point(at):
+				continue
+			if span >= BIRD_FULL_PX and (each_own or basis.x == Vector2.ZERO):
+				basis = _screen_basis(pos, at)
+			_draw_one_bird(life.birds[b], colony, info, state, at, span, now, basis)
+			if about.is_empty():
+				about = [{colony = index}, {count = int(colony.count), species = [colony.species]}]
+			hits.append([at, maxf(span * 0.6, BIRD_HIT_MIN_PX), about[0], about[1]])
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## Which way (and how far: px a degree) east and north go on screen at a
+## (lon, lat) spot, at its screen point: [east, north] as a transform's axes
+## (zero where the globe turns away).
+func _screen_basis(spot: Vector2, at: Vector2) -> Transform2D:
+	var east := world_to_screen(Geo.project(spot + Vector2(0.01 / maxf(cos(deg_to_rad(spot.y)), 0.1), 0.0)))
+	var north := world_to_screen(Geo.project(spot + Vector2(0.0, 0.01)))
+	if _is_hidden(east) or _is_hidden(north):
+		return Transform2D(Vector2.RIGHT, Vector2.UP, Vector2.ZERO)
+	return Transform2D(east - at, north - at, Vector2.ZERO)
+
+
+## The box of (lon, lat) within `reach` degrees (of latitude) of a spot.
+static func _lon_lat_rect(spot: Vector2, reach: float) -> Rect2:
+	var wide := reach / maxf(cos(deg_to_rad(clampf(absf(spot.y) + reach, 0.0, 89.0))), 0.05)
+	return Rect2(spot - Vector2(wide, reach), Vector2(wide, reach) * 2.0)
+
+
+## One bird on screen, as it is now (see _draw_birds()).
+func _draw_one_bird(bird: Dictionary, colony: Dictionary, info: Dictionary, state: Dictionary, at: Vector2, span: float, now: float, basis: Transform2D) -> void:
+	if span < BIRD_FULL_PX:
+		_canvas.draw_circle(at, maxf(span * 0.22, 0.7), _bird_dot_color(info))
+		return
+	var heading := float(state.heading)
+	var angle := (basis.x * cos(heading) + basis.y * sin(heading)).angle()
+	var mode: String = state.mode
+	var cls: String = colony.cls
+	var wings := float(state.wings)
+	var height := float(state.height)
+	var flying := FLYING_MODES.has(mode)
+	if mode == "dive":
+		# Under the water: a dark shape and a ripple over it.
+		_canvas.draw_set_transform(at, angle, Vector2.ONE)
+		_canvas.draw_colored_polygon(_oval(Vector2.ZERO, Vector2(span * 0.3, span * 0.1)), Color(0.08, 0.12, 0.18, 0.35))
+		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+		var ripple := fmod(now * 0.7 + float(bird.seed % 10), 1.0)
+		_canvas.draw_arc(at, span * (0.15 + 0.25 * ripple), 0.0, TAU, 14, Color(1, 1, 1, 0.5 * (1.0 - ripple)), maxf(span * 0.03, 1.0), true)
+		return
+	match cls:
+		"sea_ducks":
+			if flying:
+				_draw_bird_mesh(at, angle, _duck_flyer(info, bool(bird.hen)), wings, span, height)
+			else:
+				_draw_duck_mesh(at, angle, info, span, bool(bird.hen))
+		"waders":
+			if flying:
+				_draw_bird_mesh(at, angle, info, wings, span, height)
+			else:
+				var hiding := str(info.get("behavior", "")) == "hide" and mode == "stand"
+				if hiding:
+					_draw_reeds(at, span, now, 0.0, float(bird.seed % 100))
+				var neck: float = {stand = 0.55, stalk = 0.85, sleep = 0.1, rest = 0.3, perch = 0.3}.get(mode, 0.5)
+				_draw_wader_mesh(at, angle, info, span, neck, hiding)
+		"cormorants":
+			if mode == "swim":
+				_draw_duck_mesh(at, angle, _cormorant_swimmer(info), span * 1.2, false)
+			else:
+				_draw_bird_mesh(at, angle, info, wings, span, height if flying else 0.03)
+		_:
+			if mode == "swim":
+				_draw_bird_mesh(at, angle, info, 0.2, span, -1.0)
+			else:
+				_draw_bird_mesh(at, angle, info, wings, span, height if flying else 0.03)
+	if float(state.splash) > 0.0:
+		var s := float(state.splash)
+		_canvas.draw_arc(at, span * (0.2 + 0.4 * (1.0 - s)), 0.0, TAU, 16, Color(1, 1, 1, 0.8 * s), maxf(span * 0.05, 1.0), true)
+
+
+## A bird drawn from above (draw_bird()) as one mesh: made once for its
+## species, how far its wings are out (to BIRD_WING_STEP) and about its size
+## (to BIRD_SIZE_STEP times), then just placed, turned and scaled; its shadow
+## the same mesh in the dark, `height` times as far off as a gull's usual (none
+## when `height` is below 0).
+func _draw_bird_mesh(at: Vector2, heading: float, info: Dictionary, wings: float, span: float, height: float) -> void:
+	var step := roundi(clampf(wings, 0.0, 1.5) / BIRD_WING_STEP)
+	var bucket := _mesh_bucket(span)
+	var key := ((_bird_mesh_id(info) * 64 + step) * 256 + bucket) * 4
+	var mesh: ArrayMesh = _bird_meshes.get(key)
+	var made := _bucket_made
+	if mesh == null:
+		var recorder := ShapeRecorder.new()
+		draw_bird(recorder, Vector2.ZERO, 0.0, info, step * BIRD_WING_STEP, made, false)
+		mesh = _keep_bird_mesh(key, recorder)
+	var scale := Vector2.ONE * (span / made)
+	if height >= 0.0:
+		var off := Vector2(span * 0.45, span * 0.55) * height
+		_canvas.draw_mesh(mesh, null, Transform2D(heading, scale, 0.0, at + off), Color(0, 0, 0, 0.16 / sqrt(maxf(height, 0.5))))
+	_canvas.draw_mesh(mesh, null, Transform2D(heading, scale, 0.0, at))
+
+
+## A sea duck (or a cormorant) swimming (draw_duck()) as one mesh, the same way
+## as _draw_bird_mesh().
+func _draw_duck_mesh(at: Vector2, heading: float, info: Dictionary, span: float, hen: bool) -> void:
+	var bucket := _mesh_bucket(span)
+	var key := (_bird_mesh_id(info) * 64 * 256 + bucket) * 4 + (2 if hen else 1)
+	var mesh: ArrayMesh = _bird_meshes.get(key)
+	var made := _bucket_made
+	if mesh == null:
+		var recorder := ShapeRecorder.new()
+		draw_duck(recorder, Vector2.ZERO, 0.0, info, made, hen)
+		mesh = _keep_bird_mesh(key, recorder)
+	_canvas.draw_mesh(mesh, null, Transform2D(heading, Vector2.ONE * (span / made), 0.0, at))
+
+
+## A wader on the ground (draw_wader()): its long shadow drawn as it falls,
+## the bird itself as one mesh, the same way as _draw_bird_mesh().
+func _draw_wader_mesh(at: Vector2, heading: float, info: Dictionary, span: float, neck: float, bill_up: bool) -> void:
+	draw_wader(_canvas, at, heading, info, span, neck, 0.0, bill_up, 0.0, false, true, false)
+	var bucket := _mesh_bucket(span)
+	var shape := roundi(clampf(neck, 0.0, 1.0) * 20.0) * 2 + (1 if bill_up else 0)
+	var key := ((_bird_mesh_id(info) * 64 + shape) * 256 + bucket) * 4 + 3
+	var mesh: ArrayMesh = _bird_meshes.get(key)
+	var made := _bucket_made
+	if mesh == null:
+		var recorder := ShapeRecorder.new()
+		draw_wader(recorder, Vector2.ZERO, 0.0, info, made, neck, 0.0, bill_up, 0.0, false, false, true)
+		mesh = _keep_bird_mesh(key, recorder)
+	_canvas.draw_mesh(mesh, null, Transform2D(heading, Vector2.ONE * (span / made), 0.0, at))
+
+
+## Which size of mesh a bird `span` px across is drawn from (and that size,
+## px: _bucket_made); the same for a run of birds the same size.
+func _mesh_bucket(span: float) -> int:
+	if span != _bucket_span:
+		_bucket_span = span
+		_bucket = clampi(roundi(log(maxf(span, 1.0)) * BIRD_SIZE_LOG), 0, 255)
+		_bucket_made = pow(BIRD_SIZE_STEP, _bucket)
+	return _bucket
+
+
+## A number for a species' (or its colors') meshes, given it the first time.
+func _bird_mesh_id(info: Dictionary) -> int:
+	var id: int = info.get("_mesh_id", -1)
+	if id < 0:
+		id = _bird_mesh_ids
+		_bird_mesh_ids += 1
+		info["_mesh_id"] = id
+	return id
+
+
+func _keep_bird_mesh(key: int, recorder: ShapeRecorder) -> ArrayMesh:
+	if _bird_meshes.size() >= BIRD_MESHES_KEPT:
+		_bird_meshes.clear()  # (Zoomed through a lot of sizes: start again.)
+	var mesh := recorder.mesh()
+	_bird_meshes[key] = mesh
+	return mesh
+
+
+## A sea duck's colors for flying (_duck_flying()), made once a species and sex.
+func _duck_flyer(info: Dictionary, hen: bool) -> Dictionary:
+	var key := "%s|%s" % [info.get("latin", ""), hen]
+	if not _duck_flyers.has(key):
+		var flyer := _duck_flying(info, hen)
+		flyer.latin = info.get("latin", "")
+		flyer._key = "flying hen" if hen else "flying drake"
+		_duck_flyers[key] = flyer
+	return _duck_flyers[key]
+
+
+## Takes down what draw_bird() and draw_duck() draw (as a canvas item would)
+## as triangles, to make one mesh of them.
+class ShapeRecorder:
+	extends RefCounted
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	var _xform := Transform2D.IDENTITY
+
+	func draw_set_transform(position: Vector2, rotation := 0.0, scale := Vector2.ONE) -> void:
+		_xform = Transform2D(rotation, scale, 0.0, position)
+
+	func draw_set_transform_matrix(xform: Transform2D) -> void:
+		_xform = xform
+
+	func draw_colored_polygon(polygon: PackedVector2Array, color: Color, _uvs := PackedVector2Array(), _texture: Texture2D = null) -> void:
+		var placed := _xform * polygon
+		for i in Geometry2D.triangulate_polygon(polygon):
+			points.append(placed[i])
+			colors.append(color)
+
+	func draw_circle(center: Vector2, radius: float, color: Color, _filled := true, _width := -1.0, _antialiased := false) -> void:
+		var ring := PackedVector2Array()
+		for i in 12:
+			ring.append(center + Vector2.from_angle(TAU * i / 12.0) * radius)
+		draw_colored_polygon(ring, color)
+
+	func draw_line(from: Vector2, to: Vector2, color: Color, width := -1.0, _antialiased := false) -> void:
+		if from == to:
+			return
+		var side := (to - from).normalized().orthogonal() * maxf(width, 0.02) * 0.5
+		draw_colored_polygon(PackedVector2Array([from + side, to + side, to - side, from - side]), color)
+
+	func draw_rect(rect: Rect2, color: Color, _filled := true, _width := -1.0, _antialiased := false) -> void:
+		draw_colored_polygon(PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]), color)
+
+	func mesh() -> ArrayMesh:
+		var out := ArrayMesh.new()
+		if points.is_empty():
+			return out
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = points
+		arrays[Mesh.ARRAY_COLOR] = colors
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		return out
+
+
+## A mesh for the native birds (BirdSim, which asks once for each): `kind` 0 a
+## bird from above (draw_bird(): wings out `step` x BIRD_WING_STEP), 1 a sea
+## duck flying (the same, in its colors), 2 a sea duck swimming
+## (draw_duck()), 3 a cormorant swimming, 4 a wader on the ground
+## (draw_wader()'s body: its neck out `step` / 20, bill up if `hen`); `bucket`
+## sizes it (BIRD_SIZE_STEP to the power of it, px across).
+func _native_bird_mesh(kind: int, species_id: String, hen: bool, step: int, bucket: int) -> RID:
+	var info := Birds.shared().species(species_id)
+	var made := pow(BIRD_SIZE_STEP, bucket)
+	var recorder := ShapeRecorder.new()
+	match kind:
+		0:
+			draw_bird(recorder, Vector2.ZERO, 0.0, info, step * BIRD_WING_STEP, made, false)
+		1:
+			draw_bird(recorder, Vector2.ZERO, 0.0, _duck_flyer(info, hen), step * BIRD_WING_STEP, made, false)
+		2:
+			draw_duck(recorder, Vector2.ZERO, 0.0, info, made, hen)
+		3:
+			draw_duck(recorder, Vector2.ZERO, 0.0, _cormorant_swimmer(info), made, false)
+		4:
+			draw_wader(recorder, Vector2.ZERO, 0.0, info, made, step / 20.0, 0.0, hen, 0.0, false, false, true)
+	var mesh := recorder.mesh()
+	_native_meshes.append(mesh)  # (Kept: the native birds hold only its RID.)
+	return mesh.get_rid()
+
+
+## A bird's color as a dot (its back's), read once a species.
+func _bird_dot_color(info: Dictionary) -> Color:
+	var key := str(info.get("name", ""))
+	if not _bird_dot_colors.has(key):
+		_bird_dot_colors[key] = Color.from_string(str((info.get("colors", {}) as Dictionary).get("mantle", "#aab4bd")), Color.GRAY)
+	return _bird_dot_colors[key]
+
+
+## A port's spots for its birds (BirdLife's spots provider), in (lon, lat):
+## the marina's middle and how wide it is (km), along the breakwater's arms,
+## the water's edge either side and the land just behind it (_shore_spots()),
+## the sea off it, and its colonies' homes (by colony index); {} till the
+## map's land is ready.
+func _bird_spots(port_id: String) -> Dictionary:
+	if _land_cells.is_empty():
+		_start_land_cells()
+		return {}
+	var layout := _port_layout(port_id)
+	var radius := float(layout.radius)
+	var gap := float(layout.get("gap", 0.4))
+	var out := {center = _dock_lon_lat(port_id, Vector2.ZERO), radius_km = radius * KM_PER_DEGREE / SHIP_WORLD_ZOOM}
+	var breakwater := []
+	for side: float in [1.0, -1.0]:
+		for i in 5:
+			var along := lerpf(gap + 0.1, PI / 2.0 - 0.05, (i + 0.5) / 5.0) * side
+			breakwater.append(_dock_lon_lat(port_id, Vector2.from_angle(along) * radius))
+	out.breakwater = breakwater
+	var shore := []
+	var inland := []
+	for spot: Array in _shore_spots(port_id):
+		shore.append(_dock_lon_lat(port_id, spot[0]))
+		if spot[1] != Vector2.INF:
+			inland.append(_dock_lon_lat(port_id, spot[1]))
+	out.shore = shore if not shore.is_empty() else breakwater
+	out.inland = inland if not inland.is_empty() else out.shore
+	var sea := []
+	for x: float in [1.5, 2.0, 2.6]:
+		for y: float in [-1.2, -0.6, 0.0, 0.6, 1.2]:
+			var there := _dock_lon_lat(port_id, Vector2(x, y) * radius)
+			if not _on_land(there):
+				sea.append(there)
+	out.sea = sea if not sea.is_empty() else [_dock_lon_lat(port_id, Vector2(2.0, 0.0) * radius)]
+	var homes := {}
+	for index: int in Wildlife.shared().colonies_at(port_id):
+		homes[index] = _dock_lon_lat(port_id, _colony_home_local(port_id, Wildlife.shared().colonies[index]))
+	out.homes = homes
+	out.roost = (out.shore as Array)[0]
+	return out
+
+
+## A point of a port's marina (dock units) as (lon, lat): dock units are
+## 1 / SHIP_WORLD_ZOOM of a degree, turned the way the port faces the sea.
+func _dock_lon_lat(port_id: String, local: Vector2) -> Vector2:
+	var port := GameData.get_port(port_id)
+	var off := Vector2(local.x, local.y * float(_dock_flips.get(port_id, 1.0))).rotated(_port_sea_angle(port_id)) / SHIP_WORLD_ZOOM
+	var lat := float(port.get("lat", 0.0))
+	return Vector2(float(port.get("lon", 0.0)) + off.x / maxf(cos(deg_to_rad(lat)), 0.05), lat - off.y)
 
 
 ## True if a screen point is out on the sea (SeaLife's sea mask, 0.25 degree
 ## cells), for birds on or over the water.
 func _on_sea(screen: Vector2) -> bool:
 	return not _is_hidden(screen) and SeaLife.shared().is_sea(_screen_lon_lat(screen))
-
-
-## How much a ship's under way (0 still to 1 sailing), for its birds: they
-## fly along with a ship that's moving and wheel round one that isn't
-## (docked, at anchor, waiting at a canal, a tug standing by). Eased over a
-## couple of seconds as it gets going or stops; kept as it was while the
-## game's paused.
-func _under_way(ship: Ship, now: float) -> float:
-	var where := ship.world_position()
-	var kept: Array = _ship_motion.get(ship, [])
-	if kept.is_empty():
-		kept = [where, now, 0.0 if ship.is_docked() else 1.0, now]  # [last place, last time, under way, last moved]
-		_ship_motion[ship] = kept
-		return kept[2]
-	var seconds := clampf(now - float(kept[1]), 0.0, 0.5)
-	kept[1] = now
-	if GameState.time_speed > 0:
-		if not ship.is_docked() and (where - (kept[0] as Vector2)).length_squared() > 0.0:
-			kept[3] = now
-		# (Moving if it's moved in the last half second: it needn't move every frame.)
-		var moving := not ship.is_docked() and now - float(kept[3]) < 0.5
-		kept[2] = move_toward(float(kept[2]), 1.0 if moving else 0.0, seconds / UNDER_WAY_EASE_S)
-	else:
-		kept[3] = now  # (Paused: as it was.)
-	kept[0] = where
-	return kept[2]
-
 
 ## Where a bird of a V (pelicans, cormorants, migrating sea ducks) flies:
 ## `place` 0 the leader at `lead`, then back along either arm by turns,
@@ -7231,389 +7610,17 @@ static func _v_spot(lead: Vector2, way: Vector2, place: int, span: float) -> Vec
 	var spacing := span * 0.8
 	return lead - way * rank * spacing * 0.8 + way.orthogonal() * arm * rank * spacing * 0.75
 
-
-## A flock of gulls wheeling round a point on screen, between two radii (px),
-## each bird one of its species in turn. `about` says what it's round, for
-## clicking it (see bird_clicked). Over a ship under way (under_way, `way` its
-## heading on screen, `length` its length in px) they fly along with it instead.
-func _draw_gulls(flock: Dictionary, center: Vector2, inner: float, outer: float, now: float, about: Dictionary, way := 0.0, under_way := 0.0, length := 0.0) -> void:
-	var birds := Birds.shared()
-	var count := int(flock.count)
-	var kinds: Array = flock.species
-	var traits := _bird_traits(str(flock.key), count)
-	for k in count:
-		var info := birds.species(str(kinds[k % kinds.size()]))
-		var t: PackedFloat32Array = traits[k]
-		var turn := 1.0 if t[3] < 0.5 else -1.0
-		var angle := t[0] * TAU + turn * (0.35 + 0.4 * t[1]) * now
-		var radius := lerpf(inner, outer, t[2]) * (1.0 + 0.15 * sin(now * 0.7 + t[4] * TAU))
-		var at := center + Vector2.from_angle(angle) * radius
-		var heading := angle + turn * PI / 2.0
-		if under_way > 0.0:
-			# Over a ship under way, flying along with it, the way it's going: spread
-			# round and behind it, drifting about a little, wheeling no more.
-			var ahead := Vector2.from_angle(way)
-			var along := -length * (0.25 + 0.9 * t[2]) + sin(now * 0.5 + t[0] * TAU) * length * 0.15
-			var across := (t[3] - 0.5) * 2.0 * length * 0.6 + sin(now * 0.7 + t[4] * TAU) * length * 0.12
-			var alongside := center + ahead * along + ahead.orthogonal() * across
-			at = at.lerp(alongside, under_way)
-			heading = lerp_angle(heading, way + 0.25 * sin(now * 0.8 + t[0] * TAU), under_way)
-		# Flapping, with spells of gliding.
-		var gliding := sin(now * 0.45 + t[4] * TAU) > 0.35
-		var wings := 1.0 if gliding else 0.78 + 0.22 * cos(now * (6.0 + 3.0 * t[1]) + t[0] * TAU)
-		_draw_bird(at, heading, info, wings)
-		_bird_hits.append([at, maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale() * 0.6, BIRD_HIT_MIN_PX), about, flock])
-
-
-## Seabirds following a ship, going its way, each kind its own way:
-## albatrosses glide in sweeping arcs behind, condors drift high and slow
-## behind and off to a side, terns flit about round it and ahead, pelicans
-## fly in a V off to one side, shearwaters skim low weaving behind. While it's
-## stopped (under_way 0: see _under_way()), they wheel round it instead.
-func _draw_followers(ship: Ship, entry: Dictionary, at: Vector2, heading: float, length: float, now: float, under_way := 1.0) -> void:
-	var birds := Birds.shared()
-	var id: String = entry.id
-	var info := birds.species(id)
-	var behavior := str(info.get("behavior", "glide"))
-	var ahead := Vector2.from_angle(heading)
-	var side := ahead.orthogonal()
-	var count := int(entry.count)
-	var traits := _bird_traits("follow/%d/%s" % [ship.id, id], count)
-	var flock := {count = count, species = [id], key = id}
-	for k in count:
-		var t: PackedFloat32Array = traits[k]
-		var phase := t[0] * TAU
-		var pos := at
-		var facing := heading
-		var wings := 1.0
-		match behavior:
-			"glide":
-				var sweep := sin(now * 0.55 + phase)
-				pos = at - ahead * length * (1.0 + 0.5 * k + 0.2 * cos(now * 0.4 + phase)) + side * length * 1.1 * sweep
-				facing = heading + 0.7 * cos(now * 0.55 + phase)
-			"soar":
-				# High and slow, behind and off to a side, drifting, going its way.
-				pos = at - ahead * length * (0.9 + 0.7 * t[2]) + side * length * (t[3] - 0.5) * 2.6 + Vector2(sin(now * 0.3 + phase), cos(now * 0.25 + phase)) * length * 0.2
-				facing = heading + 0.15 * sin(now * 0.3 + phase)
-			"dart":
-				# Flitting about round it and ahead, zigzagging, going its way.
-				pos = at + ahead * length * (0.1 + 0.6 * sin(now * 0.9 + phase)) + side * length * 0.7 * sin(now * 1.3 + phase * 2.0) + Vector2(sin(now * 9.0 + phase), cos(now * 7.0 + phase)) * length * 0.04
-				facing = heading + 0.5 * cos(now * 1.3 + phase * 2.0)
-				wings = 0.6 + 0.4 * absf(sin(now * 14.0 + phase))
-			"line":
-				# A V off to one side of the ship (the flock's side), the leader ahead
-				# and the rest back along either arm by turns; all flapping a few beats
-				# and gliding together, the flaps rippling back down the arms.
-				var flock_side := 1.0 if Birds.chance([ship.id, id, "side"]) < 0.5 else -1.0
-				var rank := (k + 1) / 2  # (How far back along its arm.)
-				var lead := at + side * length * 1.1 * flock_side + ahead * length * 0.1 + side * sin(now * 0.4 + float(ship.id)) * length * 0.05
-				pos = _v_spot(lead, ahead, k, _bird_span(info))
-				var flapping := sin(now * 0.7 + float(ship.id)) > 0.4
-				wings = 0.8 + 0.2 * cos(now * 5.0 - rank * 0.7) if flapping else 1.0
-			"skim":
-				var weave := sin(now * 1.3 + phase)
-				pos = at - ahead * length * (1.2 + 0.35 * k) + side * length * 0.8 * weave
-				facing = heading + 0.6 * cos(now * 1.3 + phase)
-		if under_way < 1.0:
-			# Its ship stopped (waiting, at anchor): wheeling round it instead.
-			var turn := 1.0 if t[3] < 0.5 else -1.0
-			var round := phase + now * (0.25 + 0.15 * t[1]) * turn
-			var circling := at + Vector2.from_angle(round) * length * (1.0 + 0.8 * t[2])
-			pos = circling.lerp(pos, under_way)
-			facing = lerp_angle(round + PI / 2.0 * turn, facing, under_way)
-		_draw_bird(pos, facing, info, wings)
-		_bird_hits.append([pos, maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale() * 0.6, BIRD_HIT_MIN_PX), {ship = ship}, flock])
-
-
-## The raptors about a port (Birds.port_raptors()), each going about its day
-## as it really does along a shore, round a marina `radius` px across, its
-## sea out one way and the land the other: sea eagles sit on their perch on
-## the shore, now and then flying out to swoop and snatch a fish off the water
-## and carrying it back; the osprey circles over the water, hovers, plunges
-## feet first with a splash and carries its fish head forward to a perch to
-## eat; golden and wedge-tailed eagles soar high over the land and stoop;
-## buzzards and the like circle on thermals over the land and hang on the
-## wind, hunting below; Swainson's hawks pass over in a kettle, circling up
-## and streaming off; Harris's hawks sit together, then hunt low over the land
-## in a line, taking turns to lead; goshawks and Cooper's hawks sit hidden on
-## the shore and dash off low, flap-flap-glide.
-func _draw_raptors(port_id: String, root: Vector2, radius: float, now: float) -> void:
-	var birds := Birds.shared()
-	var sea := Vector2.from_angle(_port_sea_angle(port_id))
-	var across := sea.orthogonal()
-	var land := -sea
-	for entry: Dictionary in birds.port_raptors(port_id):
-		var id: String = entry.id
-		var info := birds.species(id)
-		var behavior := str(info.get("behavior", "kite"))
-		var count := int(entry.count)
-		var traits := _bird_traits("raptor/%s/%s" % [port_id, id], count)
-		var flock := {count = count, species = [id], key = id}
-		var span := _bird_span(info)
-		# Where it perches on the shore, where it fishes and where it soars over
-		# the land: its own, either side of the marina.
-		var wind := Birds.chance([port_id, "wind"]) * TAU  # Where the wind blows from (hawks hang facing into it).
-		for k in count:
-			var t: PackedFloat32Array = traits[k]
-			var phase := t[0] * TAU
-			var turn := 1.0 if t[3] < 0.5 else -1.0
-			var flank := across * turn
-			var perch := root + land * radius * (1.75 + 0.3 * t[2]) + flank * radius * (0.6 + 0.6 * t[1])
-			var water := root + sea * radius * (1.5 + 0.6 * t[2]) + flank * radius * (0.4 + 0.6 * t[1])
-			if not _on_sea(water):
-				water = root + flank * radius * 0.3  # (Up a river, its sea far off: fishing in the marina.)
-			var over_land := root + land * radius * (2.6 + 0.8 * t[2]) + flank * radius * 0.6 * t[1]
-			var pos := perch
-			var facing := sea.angle()  # Perched looking out to sea.
-			var wings := 0.24  # Folded.
-			var height := 0.05
-			var fish := false
-			var splash := -1.0
-			match behavior:
-				"snatch":
-					var cycle := 34.0 + 10.0 * t[1]
-					var c := fmod(now / cycle + t[0], 1.0)
-					if c >= 0.55 and c < 0.75:
-						# Out low over the water, dropping to it, and up with a fish.
-						var s := (c - 0.55) / 0.2
-						var out := perch.lerp(water, smoothstep(0.0, 0.7, s))
-						var back := water.lerp(perch, smoothstep(0.7, 1.0, s))
-						pos = out if s < 0.7 else back
-						facing = (water - perch).angle() if s < 0.6 else (perch - water).angle()
-						height = 1.3 - 1.15 * sin(clampf((s - 0.3) / 0.4, 0.0, 1.0) * PI)
-						wings = 0.9 + 0.1 * cos(now * 5.0 + phase)
-						if absf(s - 0.5) < 0.08:
-							splash = (s - 0.42) / 0.16
-							wings = 0.7
-						fish = s > 0.55
-					elif c >= 0.75:
-						# Back on its perch, tearing at its fish.
-						fish = true
-						facing = sea.angle() + 0.3 * sin(now * 3.0 + phase) * turn
-				"plunge":
-					var cycle := 26.0 + 8.0 * t[1]
-					var c := fmod(now / cycle + t[0], 1.0)
-					var round := phase + now * 0.2 * turn
-					var circling := water + Vector2.from_angle(round) * radius * 0.5
-					height = 1.8
-					wings = 1.0
-					if c < 0.3:
-						pos = circling
-						facing = round + PI / 2.0 * turn
-					elif c < 0.36:
-						pos = circling.lerp(water, smoothstep(0.0, 1.0, (c - 0.3) / 0.06))
-						facing = wind
-					elif c < 0.44:
-						pos = water  # Hovering into the wind, looking down.
-						facing = wind
-						wings = 0.65 + 0.35 * absf(sin(now * 16.0 + phase))
-						height = 1.6
-					elif c < 0.47:
-						pos = water
-						facing = wind
-						wings = 0.3
-						height = lerpf(1.6, 0.0, (c - 0.44) / 0.03)
-					elif c < 0.5:
-						pos = water
-						facing = wind
-						wings = 0.45
-						height = 0.0
-						splash = (c - 0.47) / 0.03
-					elif c < 0.66:
-						var s := smoothstep(0.0, 1.0, (c - 0.5) / 0.16)
-						pos = water.lerp(perch, s)
-						facing = (perch - water).angle()
-						height = 0.2 + 1.2 * sin(s * PI)
-						wings = 0.8 + 0.2 * cos(now * 7.0 + phase)
-						fish = true
-					else:
-						fish = c < 0.9  # Eating it on its perch.
-						facing = land.angle() + 0.3 * sin(now * 3.0 + phase)
-				"stoop":
-					var cycle := 40.0 + 10.0 * t[1]
-					var c := fmod(now / cycle + t[0], 1.0)
-					var round := phase + now * (0.07 + 0.03 * t[1]) * turn
-					var circling := over_land + Vector2.from_angle(round) * radius * (0.9 + 0.4 * t[2])
-					pos = circling
-					facing = round + PI / 2.0 * turn
-					wings = 1.0
-					height = 3.2
-					if c >= 0.8 and c < 0.92:
-						var s := (c - 0.8) / 0.12
-						var ground := over_land + flank * radius * 0.3
-						var dip := smoothstep(0.0, 0.45, s) * (1.0 - smoothstep(0.55, 1.0, s))
-						pos = circling.lerp(ground, dip)
-						height = lerpf(3.2, 0.1, dip)
-						wings = lerpf(1.0, 0.3, dip)
-						facing = (ground - circling).angle() if s < 0.5 else (circling - ground).angle()
-				"kite":
-					var cycle := 24.0 + 8.0 * t[1]
-					var c := fmod(now / cycle + t[0], 1.0)
-					var round := phase + now * 0.16 * turn
-					var circling := over_land + Vector2.from_angle(round) * radius * (0.6 + 0.3 * t[2])
-					wings = 1.0
-					height = 1.8
-					if c < 0.5:
-						pos = circling  # Circling on a thermal.
-						facing = round + PI / 2.0 * turn
-					elif c < 0.56:
-						pos = circling.lerp(over_land, smoothstep(0.0, 1.0, (c - 0.5) / 0.06))
-						facing = wind
-					elif c < 0.8:
-						pos = over_land + Vector2(sin(now * 1.7 + phase), cos(now * 1.3 + phase)) * span * 0.05
-						facing = wind  # Hanging on the wind, wings trembling.
-						wings = 0.9 + 0.1 * sin(now * 12.0 + phase)
-						height = 1.5
-					elif c < 0.86:
-						var s := (c - 0.8) / 0.06
-						pos = over_land.lerp(perch, smoothstep(0.0, 1.0, s))
-						facing = (perch - over_land).angle()
-						height = lerpf(1.5, 0.05, s)
-					else:
-						pos = perch  # On a post, watching the ground.
-						facing = land.angle()
-						wings = 0.24
-						height = 0.05
-				"kettle":
-					# Circling up together on a thermal over the land, then
-					# streaming off one after another on their way.
-					var cycle := 60.0
-					var c := fmod(now / cycle, 1.0)
-					var round := phase + now * 0.4
-					var thermal := root + land * radius * 3.0
-					pos = thermal + Vector2.from_angle(round) * radius * (0.3 + 0.6 * t[2])
-					facing = round + PI / 2.0
-					wings = 1.0
-					height = 1.2 + 2.0 * c
-					var leave := 0.7 + 0.25 * t[1]
-					if c > leave:
-						var s := (c - leave) / (1.0 - leave)
-						var way := Vector2.from_angle(Birds.chance([port_id, "kettle"]) * TAU)
-						pos = pos.lerp(thermal + way * radius * 5.0, s)
-						facing = way.angle()
-				"pack":
-					# Perched together, then off hunting low over the land in a
-					# line, taking turns to lead.
-					var cycle := 30.0
-					var c := fmod(now / cycle, 1.0)
-					var lead := posmod(floori(now / cycle) + k, count)
-					pos = root + land * radius * 1.8 + across * radius * (0.8 + 0.18 * k)
-					facing = land.angle()
-					if c > 0.6:
-						var s := (c - 0.6) / 0.4
-						var loop := over_land + Vector2.from_angle(s * TAU + PI) * radius * 0.9
-						var trail := s - 0.04 * lead
-						var at_trail := over_land + Vector2.from_angle(trail * TAU + PI) * radius * 0.9
-						pos = pos.lerp(at_trail, sin(s * PI))
-						facing = (loop - pos).angle() if loop.distance_to(pos) > 0.5 else facing + PI / 2.0
-						wings = 0.85 + 0.15 * cos(now * 9.0 + phase)
-						height = lerpf(0.05, 0.5, sin(s * PI))
-				"perch":
-					var cycle := 28.0 + 8.0 * t[1]
-					var c := fmod(now / cycle + t[0], 1.0)
-					facing = land.angle() + 0.4 * turn
-					if c >= 0.8:
-						# A dash low along the shore and back: flap-flap-glide.
-						var s := (c - 0.8) / 0.2
-						var far := perch + flank * radius * 1.4 + land * radius * 0.4
-						pos = perch.lerp(far, sin(s * PI))
-						facing = (far - perch).angle() if s < 0.5 else (perch - far).angle()
-						wings = 1.0 if fmod(now * 2.5, 1.0) > 0.6 else 0.7 + 0.3 * absf(cos(now * 18.0))
-						height = lerpf(0.05, 0.4, sin(s * PI))
-			if splash >= 0.0:
-				for ring in 2:
-					var r := clampf(splash - ring * 0.3, 0.0, 1.0)
-					if r > 0.0:
-						_canvas.draw_arc(pos, span * (0.15 + 0.35 * r), 0.0, TAU, 16, Color(1, 1, 1, 0.75 * (1.0 - r)), maxf(span * 0.04, 1.0), true)
-			_draw_bird(pos, facing, info, wings, height)
-			if fish:
-				# Held head forward under it, its tail showing behind the bird's.
-				var back := Vector2.from_angle(facing)
-				_canvas.draw_line(pos - back * span * 0.26, pos - back * span * 0.44, Color(0.78, 0.82, 0.86), maxf(span * 0.07, 1.5), true)
-			_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-
-
-## The cormorants about a port (Birds.port_cormorants()), round its marina
-## `radius` px across: some stand on its breakwater looking out to sea, now and
-## then holding their wings out to dry; some swim low off it, making long
-## dives for fish (a ripple as each goes down and comes up); and every minute
-## or so the rest fly past low over the water in a V. By night (by the sun)
-## they all roost on the breakwater.
-func _draw_cormorants(port_id: String, root: Vector2, radius: float, now: float) -> void:
-	var entries := Birds.shared().port_cormorants(port_id)
-	if entries.is_empty():
-		return
-	var birds := Birds.shared()
-	var layout := _port_layout(port_id)
-	var sea := Vector2.from_angle(_port_sea_angle(port_id))
-	var across := sea.orthogonal()
-	var wind := Birds.chance([port_id, "wind"]) * TAU
-	var port := GameData.get_port(port_id)
-	var hour := Birds.local_hour(float(port.get("lon", 0.0)), float(GameState.calendar_time()))
-	var night := hour < Birds.RAPTOR_DAY.x or hour > Birds.RAPTOR_DAY.y
-	var gap := float(layout.gap)
-	for entry: Dictionary in entries:
-		var id: String = entry.id
-		var info := birds.species(id)
-		var count := int(entry.count)
-		var traits := _bird_traits("cormorants/%s/%s" % [port_id, id], count)
-		var flock := {count = count, species = [id], key = id}
-		var span := _bird_span(info)
-		var swimmer := _cormorant_swimmer(info)
-		# Their pass: every CORMORANT_PASS_S or so, across the sea off the port.
-		var cycle := CORMORANT_PASS_S * (0.8 + 0.4 * Birds.chance([port_id, id, "cycle"]))
-		var flying := fmod(now / cycle + Birds.chance([port_id, id, "pass"]), 1.0)
-		var way := Vector2.from_angle(Birds.chance([port_id, id, "way"]) * TAU)
-		var lead := root + sea * radius * 2.2 + way * radius * (12.0 * flying / 0.35 - 6.0)
-		var flyers := 0
-		for k in count:
-			var t: PackedFloat32Array = traits[k]
-			var phase := t[4] * TAU
-			var role := 0 if night or t[0] < 0.35 else (1 if t[0] < 0.6 else 2)  # Perched, swimming, flying past.
-			if role == 1:
-				var spot := root + sea * radius * (1.4 + 0.8 * t[2]) + across * radius * (t[1] - 0.5) * 2.2 + Vector2(sin(now * 0.2 + phase), cos(now * 0.17 + phase)) * span * 0.3
-				if not _on_sea(spot):
-					role = 0
-				else:
-					var dive := fmod(now / (25.0 + 10.0 * t[1]) + t[3], 1.0)
-					if dive > 0.5 and dive < 0.95:  # Down a long while.
-						var ripple := (dive - 0.5) / 0.45
-						for edge: float in [0.0, 1.0]:
-							var r := 1.0 - absf(ripple - edge) * 8.0
-							if r > 0.0:
-								_canvas.draw_arc(spot, span * (0.1 + 0.2 * (1.0 - r)), 0.0, TAU, 12, Color(1, 1, 1, 0.6 * r), maxf(span * 0.03, 1.0), true)
-						continue
-					draw_duck(_canvas, spot, wind + 0.3 * (t[3] - 0.5), swimmer, span * 1.2, false)
-					_bird_hits.append([spot, maxf(span * 0.5, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-					continue
-			if role == 2:
-				if flying < 0.35:
-					var pos := _v_spot(lead, way, flyers, span)
-					flyers += 1
-					_draw_bird(pos, way.angle(), info, 0.75 + 0.25 * absf(sin(now * 9.0 - flyers * 0.6)), 0.5)
-					_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-				continue
-			# On the breakwater, along either arm, looking out to sea.
-			var arm_side := 1.0 if t[3] < 0.5 else -1.0
-			var along := lerpf(gap + 0.1, PI / 2.0 - 0.05, t[1]) * arm_side
-			var perch := _dock_point(port_id, Vector2.from_angle(along) * float(layout.radius))
-			var drying := not night and sin(now * 0.12 + phase) > 0.55
-			_draw_bird(perch, _dock_angle(port_id, along) + 0.2 * (t[2] - 0.5), info, 0.7 if drying else 0.2, 0.03)
-			_bird_hits.append([perch, maxf(span * 0.5, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-
-
 ## A cormorant's colors for drawing it swimming low (see draw_duck()): all
 ## its back's dark color, its head and bill. Made once a species.
 func _cormorant_swimmer(info: Dictionary) -> Dictionary:
 	var id := str(info.get("latin", ""))
 	if not _cormorant_swimmers.has(id):
 		var colors: Dictionary = info.get("colors", {})
-		_cormorant_swimmers[id] = {colors = {mantle = colors.get("mantle", "#1e1e1e"), sides = colors.get("mantle", "#1e1e1e"),
+		_cormorant_swimmers[id] = {latin = id, _key = "swimmer", colors = {mantle = colors.get("mantle", "#1e1e1e"), sides = colors.get("mantle", "#1e1e1e"),
 			head = colors.get("head", "#141414"), cap = colors.get("head", "#141414"), bill = colors.get("bill", "#d8b040"), patch = colors.get("cheek", colors.get("throat", ""))}}
 		if str(_cormorant_swimmers[id].colors.patch).is_empty():
 			(_cormorant_swimmers[id].colors as Dictionary).erase("patch")
 	return _cormorant_swimmers[id]
-
 
 ## A port's shore either side of its marina, found once from the land as
 ## the map draws it (_on_land()): [[the water's edge, a spot a little inland
@@ -7627,6 +7634,24 @@ func _shore_spots(port_id: String) -> Array:
 		_start_land_cells()
 		return []
 	var radius := float(_port_layout(port_id).radius)
+	if _land_test != null:
+		# The search natively (LandTest: the same, a lot quicker).
+		var marinas := []
+		for other: String in _shore_neighbours_of(port_id):
+			var layout := _port_layout(other)
+			var there := GameData.get_port(other)
+			marinas.append({lon = float(there.get("lon", 0.0)), lat = float(there.get("lat", 0.0)), angle = _port_sea_angle(other),
+				clear = float(layout.radius) + JETTY_WIDTH / 2.0, quay_inland = _quay_inland(layout)})
+		var port := GameData.get_port(port_id)
+		var angle := _port_sea_angle(port_id)  # (Works out its flip too.)
+		var found: Array = _land_test.shore_spots({lon = float(port.get("lon", 0.0)), lat = float(port.get("lat", 0.0)), angle = angle,
+			flip = float(_dock_flips.get(port_id, 1.0)), radius = radius}, marinas, SHORE_SAMPLES, SHORE_REACH, SHORE_SEAWARD, SHORE_INLAND)
+		if not native_shores_off:
+			if found.is_empty():
+				for y: float in [-1.9, -1.4, 1.4, 1.9]:
+					found.append([Vector2(radius * 0.3, y * radius), Vector2(-radius * 0.8, y * radius)])
+			_shores[port_id] = found
+			return found
 	var out := []
 	for i in SHORE_SAMPLES:
 		var y := lerpf(-SHORE_REACH, SHORE_REACH, (i + 0.5) / SHORE_SAMPLES) * radius
@@ -7661,43 +7686,53 @@ func _shore_spots(port_id: String) -> Array:
 	_shores[port_id] = out
 	return out
 
-
 ## True if a point of a port's marina (dock units) is on the land and clear
 ## of every marina near it (a quay's no place for a heron); or, `blocked`,
 ## if it's on the land or a marina either way (the shore's looked for from
-## the sea in to the first of either).
+## the sea in to the first of either). Worked out on the map in (lon, lat)
+## (_dock_lon_lat()), the same whatever the view.
 func _local_on_land(port_id: String, local: Vector2, blocked := false) -> bool:
-	var screen := _dock_point(port_id, local)
-	if _is_hidden(screen):
-		return false
-	var land := _on_land(_screen_lon_lat(screen))
+	var spot := _dock_lon_lat(port_id, local)
+	var land := _on_land(spot)
 	if land and blocked:
 		return true
 	if not land and not blocked:
 		return false
-	if not _shore_neighbours.has(port_id):
-		var here := GameData.port_position(port_id)
-		var near: Array[String] = [port_id]
-		for port: Dictionary in GameData.ports:
-			if port.id != port_id and GameData.port_position(port.id).distance_to(here) < 3.0:
-				near.append(port.id)
-		_shore_neighbours[port_id] = near
-	for other: String in _shore_neighbours[port_id]:
-		if _in_marina(other, screen):
+	for other: String in _shore_neighbours_of(port_id):
+		if _in_marina_at(other, spot):
 			return blocked
 	return not blocked
 
+## A port and the ports within 3 degrees of it (whose marinas its shore keeps
+## clear of), from the ports filed by 3-degree cell; worked out once.
+func _shore_neighbours_of(port_id: String) -> Array[String]:
+	if not _shore_neighbours.has(port_id):
+		var here := GameData.port_position(port_id)
+		var near: Array[String] = [port_id]
+		if _port_grid.is_empty():
+			for port: Dictionary in GameData.ports:
+				var at := GameData.port_position(port.id)
+				(_port_grid.get_or_add(Vector2i(floori(at.x / 3.0), floori(at.y / 3.0)), []) as Array).append(port.id)
+		var cell := Vector2i(floori(here.x / 3.0), floori(here.y / 3.0))
+		for dx in range(-1, 2):
+			for dy in range(-1, 2):
+				for other: String in _port_grid.get(Vector2i(posmod(cell.x + dx + 60, 120) - 60, cell.y + dy), []):
+					if other != port_id and GameData.port_position(other).distance_to(here) < 3.0:
+						near.append(other)
+		_shore_neighbours[port_id] = near
+	return _shore_neighbours[port_id]
 
-## True if a screen point's on a port's marina: its cleared circle or its
-## square quay (a little grown).
-func _in_marina(port_id: String, screen: Vector2) -> bool:
+## True if a (lon, lat) spot's on a port's marina: its cleared circle or its
+## square quay (a little grown), in its dock units (_dock_lon_lat() backwards).
+func _in_marina_at(port_id: String, spot: Vector2) -> bool:
 	var layout := _port_layout(port_id)
-	var angle := _port_sea_angle(port_id) + _port_turn(port_id)
-	var local := (screen - port_screen_position(port_id)).rotated(-angle) / dock_scale(port_id)
+	var port := GameData.get_port(port_id)
+	var lat := float(port.get("lat", 0.0))
+	var off := Vector2(wrapf(spot.x - float(port.get("lon", 0.0)), -180.0, 180.0) * maxf(cos(deg_to_rad(lat)), 0.05), lat - spot.y) * SHIP_WORLD_ZOOM
+	var local := off.rotated(-_port_sea_angle(port_id))
 	var clear := float(layout.radius) + JETTY_WIDTH / 2.0
 	var margin := clear * 0.1
 	return local.length() < clear + margin or (local.x <= margin and local.x >= _quay_inland(layout) - margin and absf(local.y) <= clear + margin)
-
 
 ## A place along a port's shore (see _shore_spots()): `along` from 0 at one
 ## end to its last spot, between spots smoothly (though not across the
@@ -7715,218 +7750,6 @@ static func _shore_at(shore: Array, along: float, out: float) -> Array:
 	var at := a.lerp(b, along - i) if (a.y < 0.0) == (b.y < 0.0) else a
 	return [at + Vector2(out, 0.0), run]
 
-
-## The waders about a port (Birds.port_waders()), along its shore either side
-## of its marina `radius` px across, each its own way. Herons stand stock
-## still at the water's edge, neck poised, now and then taking a slow step or
-## striking (sometimes coming up with a fish), and every few minutes one
-## flaps slowly off and round; by night they stand hunched. Night herons roost
-## hunched together inland by day and come down to the water at dusk. Egrets
-## walk the shallows steadily in loose groups, stabbing as they go (little
-## and snowy egrets stirring the mud with their yellow feet, ripples round
-## them), and roost inland by night. Cattle egrets work the fields inland,
-## heads bobbing, the ones at the back hopping over to the front. The reddish
-## egret lurches and spins through the shallows with its wings held out over
-## the water. A bittern stands in the reeds at the water's edge, bill to the
-## sky, swaying with them; in spring at dawn it booms. Cranes forage over the
-## fields in family groups, and in spring pairs dance, leaping with wings
-## spread and bowing; on migration they pass high over in Vs instead.
-func _draw_waders(port_id: String, root: Vector2, radius: float, now: float) -> void:
-	var entries := Birds.shared().port_waders(port_id)
-	if entries.is_empty():
-		return
-	var shore := _shore_spots(port_id)
-	if shore.is_empty():
-		return
-	var birds := Birds.shared()
-	var dock := dock_scale(port_id)
-	var unit := radius / dock  # The marina's radius in dock units.
-	var port := GameData.get_port(port_id)
-	var unix := float(GameState.calendar_time())
-	var hour := Birds.local_hour(float(port.get("lon", 0.0)), unix)
-	var night := hour < Birds.RAPTOR_DAY.x or hour > Birds.RAPTOR_DAY.y
-	var dusk := hour > Birds.RAPTOR_DAY.y - 1.5 or hour < Birds.RAPTOR_DAY.x + 0.5
-	var month := Birds.month_of(unix)
-	var spring := month in ([2, 3, 4, 5] if float(port.get("lat", 0.0)) >= 0.0 else [8, 9, 10, 11])
-	var wind := Birds.chance([port_id, "wind"]) * TAU
-	var last := float(shore.size() - 1)
-	for entry: Dictionary in entries:
-		var id: String = entry.id
-		var info := birds.species(id)
-		var behavior := str(info.get("behavior", "stalk"))
-		var count := int(entry.count)
-		var traits := _bird_traits("waders/%s/%s" % [port_id, id], count)
-		var flock := {count = count, species = [id], key = id}
-		var span := _bird_span(info)
-		var hit := {port = port_id}
-		if bool(entry.get("moving", false)):
-			_draw_crane_pass(port_id, root, radius, now, info, count, flock)
-			continue
-		# Where along the shore this species keeps to (a group together).
-		var home := Birds.chance([port_id, id, "home"]) * last
-		for k in count:
-			var t: PackedFloat32Array = traits[k]
-			var phase := t[4] * TAU
-			var along := home
-			var out := unit * 0.06
-			var facing := 0.0  # Dock units: 0 out to sea.
-			var neck := 0.5
-			var wings := 0.0
-			var bill_up := false
-			var lift := 0.0
-			var ripple := -1.0
-			var fish := false
-			var flying := false
-			var place := Vector2.ZERO
-			match behavior:
-				"stalk", "night":
-					var roosting := behavior == "night" and not dusk and not night
-					along = home + (float(k) - (count - 1) / 2.0) * (1.6 if behavior == "stalk" else 0.25)
-					if roosting:
-						# Roosting hunched together in the trees inland.
-						out = -unit * (0.7 + 0.3 * t[2])
-						facing = PI + (t[3] - 0.5) * 2.0
-						neck = 0.0
-					else:
-						var cycle := 45.0 + 25.0 * t[2]
-						var c := fmod(now / cycle + t[0], 1.0)
-						var turn_no := floori(now / cycle + t[0])
-						var way := 1.0 if (turn_no + k) % 2 == 0 else -1.0
-						along += 0.25 * way * smoothstep(0.0, 0.12, c) - 0.125 * way
-						facing = (t[3] - 0.5) * 1.2
-						neck = 0.1 if night and behavior == "stalk" else 0.55
-						if c < 0.12:
-							facing = PI / 2.0 * way  # A slow step along the shore.
-						elif c >= 0.6 and c < 0.7 and not (night and behavior == "stalk"):
-							var s := (c - 0.6) / 0.1
-							neck = 1.0 if s < 0.12 else lerpf(1.0, 0.55, clampf((s - 0.12) / 0.2, 0.0, 1.0))
-							ripple = s * 4.0 if s < 0.25 else -1.0
-							fish = s > 0.1 and s < 0.7 and t[1] < 0.45
-						elif c >= 0.8 and turn_no % 3 == k % 3 and behavior == "stalk" and not night:
-							# Off and round over the water with slow deep beats, then back.
-							flying = true
-							var s := (c - 0.8) / 0.2
-							var edge: Array = _shore_at(shore, along, out)
-							var loop := Vector2(sin(s * PI) * unit * 1.4, (1.0 - cos(s * TAU)) * 0.5 * unit * 1.2 * way)
-							var from: Vector2 = _dock_point(port_id, (edge[0] as Vector2) + loop)
-							var next: Vector2 = _dock_point(port_id, (edge[0] as Vector2) + Vector2(sin(minf(s + 0.02, 1.0) * PI) * unit * 1.4, (1.0 - cos(minf(s + 0.02, 1.0) * TAU)) * 0.5 * unit * 1.2 * way))
-							var angle := (next - from).angle() if next != from else _dock_angle(port_id, 0.0)
-							_draw_bird(from, angle, info, 0.55 + 0.45 * absf(sin(now * 2.4 + phase)), 0.15 + 0.6 * sin(s * PI))
-							_bird_hits.append([from, maxf(span * 0.6, BIRD_HIT_MIN_PX), hit, flock])
-				"wade":
-					if night:
-						along = home + (t[1] - 0.5) * 0.6
-						out = -unit * (0.5 + 0.4 * t[2])
-						facing = t[3] * TAU
-						neck = 0.0
-					else:
-						var pace := 0.035 * (0.7 + 0.6 * t[2])
-						along = home + (t[1] - 0.5) * 1.4 + 0.45 * sin(now * pace + phase)
-						out = unit * (0.05 + 0.08 * t[3])
-						facing = PI / 2.0 if cos(now * pace + phase) >= 0.0 else -PI / 2.0
-						facing += 0.4 * sin(now * 0.7 + phase)
-						var c := fmod(now / (5.0 + 4.0 * t[3]) + t[0], 1.0)
-						neck = 1.0 if c < 0.05 else 0.6
-						ripple = c * 12.0 if c < 0.08 else -1.0
-				"graze":
-					along = home + (t[1] - 0.5) * 0.9 + 0.3 * sin(now * 0.015 + Birds.chance([port_id, id, "drift"]) * TAU)
-					out = -unit * (0.35 + 0.5 * t[2])
-					facing = PI / 2.0 if cos(now * 0.015) >= 0.0 else -PI / 2.0
-					neck = 0.0 if night else 0.35 + 0.25 * absf(sin(now * 2.2 + phase))
-					var c := fmod(now / (16.0 + 8.0 * t[3]) + t[0], 1.0)
-					if not night and c < 0.08:
-						# Hopping over the others to the front.
-						lift = sin(c / 0.08 * PI) * 0.4
-						wings = 0.8
-						along += (c / 0.08 - 0.5) * 0.4 * (1.0 if facing > 0.0 else -1.0)
-				"dance":
-					along = home + (t[1] - 0.5) * 0.8 + 0.18 * sin(now * 0.35 + phase) + 0.07 * sin(now * 1.6 + phase)
-					out = unit * (0.1 + 0.06 * sin(now * 0.5 + phase))
-					var c := fmod(now / 11.0 + t[0], 1.0)
-					facing = PI / 2.0 * signf(cos(now * 0.35 + phase)) + (c * TAU * 2.0 if c > 0.85 else 0.0)
-					if night:
-						neck = 0.0
-					else:
-						wings = 0.55 if c > 0.4 and c < 0.85 else 0.0  # Canopy: wings out as a shade.
-						neck = 1.0 if fmod(c * 5.0, 1.0) < 0.1 else 0.6
-						ripple = fmod(c * 5.0, 1.0) * 6.0 if fmod(c * 5.0, 1.0) < 0.16 else -1.0
-				"hide":
-					along = home
-					out = -unit * 0.04
-					var c := fmod(now / 40.0 + t[0], 1.0)
-					var sway := 0.12 * sin(now * 0.9 + wind)
-					facing = (t[3] - 0.5) * 0.6 + sway
-					bill_up = not (c > 0.7 and c < 0.74)  # Bill to the sky, but for the odd strike.
-					neck = 0.15 if bill_up else 0.9
-					var edge: Array = _shore_at(shore, along, out)
-					var reed_at: Vector2 = _dock_point(port_id, edge[0])
-					_draw_reeds(reed_at, span, now, wind, t[0])
-					if spring and hour > 3.5 and hour < 7.5:
-						# Booming: rings rolling out across the marsh every few seconds.
-						var b := fmod(now / 3.0 + t[1], 1.0)
-						_canvas.draw_arc(reed_at, span * (0.2 + b * 1.2), 0.0, TAU, 24, Color(1, 1, 1, 0.35 * (1.0 - b)), maxf(span * 0.02, 1.0), true)
-				"crane":
-					along = home + (t[1] - 0.5) * 1.6
-					out = -unit * (0.4 + 0.7 * t[2])
-					var drift := 0.12 * sin(now * 0.02 + phase)
-					along += drift
-					facing = PI / 2.0 * signf(cos(now * 0.02 + phase)) + 0.5 * sin(now * 0.1 + phase)
-					if night:
-						neck = 0.05
-					else:
-						neck = 0.45 + 0.4 * maxf(sin(now * 0.8 + phase), 0.0)  # Pecking about.
-						if (spring and t[3] < 0.6) or t[3] < 0.1:
-							var c := fmod(now / 12.0 + t[0], 1.0)
-							if c < 0.35:
-								# Dancing: leaps with wings spread, then a bow.
-								var s := c / 0.35
-								lift = absf(sin(s * PI * 3.0)) * 0.8 if s < 0.7 else 0.0
-								wings = 0.9 if s < 0.7 else 0.3
-								neck = 0.3 if s < 0.7 else 1.0
-								facing += sin(s * TAU) * 0.8
-			if flying:
-				continue
-			along = pingpong(along, last) if last > 0.0 else 0.0
-			var spot: Array = _shore_at(shore, along, out)
-			var local: Vector2 = spot[0]
-			if out < 0.0:
-				out = maxf(out, -unit * 0.9)
-				spot = _shore_at(shore, along, out)
-			if behavior in ["graze", "crane"] or out < 0.0:
-				# Inland: on the land behind the shore, where there is some.
-				var inland: Vector2 = shore[clampi(roundi(along), 0, shore.size() - 1)][1]
-				if inland == Vector2.INF:
-					local = (spot[0] as Vector2) + Vector2(-unit * 0.05, 0.0)
-			place = _dock_point(port_id, local)
-			var angle := _dock_angle(port_id, facing)
-			if ripple >= 0.0 and ripple <= 1.0:
-				_canvas.draw_arc(place + Vector2.from_angle(angle) * span * 0.3, span * (0.05 + 0.2 * ripple), 0.0, TAU, 12, Color(1, 1, 1, 0.55 * (1.0 - ripple)), maxf(span * 0.025, 1.0), true)
-			if (info.get("colors", {}) as Dictionary).has("feet") and behavior == "wade" and not night:
-				# Stirring the mud with its yellow feet.
-				var stir := fmod(now * 0.8 + t[2], 1.0)
-				_canvas.draw_arc(place, span * (0.04 + 0.12 * stir), 0.0, TAU, 10, Color(1, 1, 1, 0.35 * (1.0 - stir)), maxf(span * 0.02, 1.0), true)
-			draw_wader(_canvas, place, angle, info, span, neck, wings, bill_up, lift, fish)
-			_bird_hits.append([place, maxf(span * 0.45, BIRD_HIT_MIN_PX), hit, flock])
-
-
-## A port's migrating cranes passing high over (every CRANE_PASS_S or so), in
-## Vs of up to V_SIZE, necks out and legs trailing, calling as they go.
-func _draw_crane_pass(port_id: String, root: Vector2, radius: float, now: float, info: Dictionary, count: int, flock: Dictionary) -> void:
-	var id := str(info.get("latin", ""))
-	var cycle := CRANE_PASS_S * (0.8 + 0.4 * Birds.chance([port_id, id, "cycle"]))
-	var flying := fmod(now / cycle + Birds.chance([port_id, id, "pass"]), 1.0)
-	if flying > 0.45:
-		return
-	var span := _bird_span(info)
-	var way := Vector2.from_angle(Birds.chance([port_id, id, "way"]) * TAU)
-	var lead := root + way.orthogonal() * radius * (Birds.chance([port_id, id, "off"]) - 0.5) + way * radius * (14.0 * flying / 0.45 - 7.0)
-	for k in count:
-		var v := k / V_SIZE
-		var pos := _v_spot(lead - way.orthogonal() * v * span * 5.0 - way * v * span * 3.0, way, k % V_SIZE, span * 1.3)
-		_draw_bird(pos, way.angle(), info, 0.7 + 0.3 * absf(sin(now * 3.0 - k * 0.5)), 3.0)
-		_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-
-
 ## A clump of reeds (round a bittern), swaying with the wind.
 func _draw_reeds(at: Vector2, span: float, now: float, wind: float, seed: float) -> void:
 	var lean := Vector2.from_angle(wind) * span * 0.06 * (1.0 + sin(now * 0.9 + wind))
@@ -7939,7 +7762,6 @@ func _draw_reeds(at: Vector2, span: float, now: float, wind: float, seed: float)
 		if i % 4 == 0:
 			_canvas.draw_circle(base + lean + Vector2.from_angle(a + 0.6) * span * 0.1, maxf(span * 0.022, 0.8), Color(0.45, 0.3, 0.18))
 
-
 ## A wader standing or walking, seen from above, on any canvas item: its
 ## shadow cast long to the side (it's tall: legs, body, neck and head), its
 ## body with its wings folded over it (dark tips), its neck out ahead as far
@@ -7949,7 +7771,7 @@ func _draw_reeds(at: Vector2, span: float, now: float, wind: float, seed: float)
 ## (a crane dancing, an egret shading the water). `lift` raises it off the
 ## ground (a crane leaping, an egret hopping), its shadow further off; `fish`
 ## puts a fish crosswise in its bill. Leaves the transform reset.
-static func draw_wader(canvas: CanvasItem, at: Vector2, heading: float, info: Dictionary, span: float, neck := 0.5, wings := 0.0, bill_up := false, lift := 0.0, fish := false) -> void:
+static func draw_wader(canvas: Object, at: Vector2, heading: float, info: Dictionary, span: float, neck := 0.5, wings := 0.0, bill_up := false, lift := 0.0, fish := false, with_shadow := true, with_body := true) -> void:
 	var colors: Dictionary = info.get("colors", {})
 	var parsed: Array = colors.get("_wader", [])
 	if parsed.is_empty():
@@ -7970,20 +7792,23 @@ static func draw_wader(canvas: CanvasItem, at: Vector2, heading: float, info: Di
 	var upright := span * 0.22 * (1.0 - neck)  # How far up the neck stands (shows in the shadow).
 	var legs := span * (0.32 if crane else 0.26)
 	# Its shadow: legs down from the hips, then the body, neck and head, cast off to the side.
-	var cast := Vector2(0.45, 0.55).normalized()
-	var hips := at + cast * (legs + lift * span * 0.6)
-	var dark := Color(0, 0, 0, 0.18)
-	if lift < 0.05:
-		for side: float in [-1.0, 1.0]:
-			canvas.draw_line(at + fwd.orthogonal() * side * body_wide * 0.3, hips, dark, maxf(span * 0.012, 1.0), true)
-	canvas.draw_set_transform(hips, heading, Vector2.ONE)
-	canvas.draw_colored_polygon(_oval(Vector2.ZERO, Vector2(body_len * 0.5, body_wide * 0.5)), dark)
-	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
-	var shadow_head := hips + fwd * (body_len * 0.45 + neck_len) + cast * upright
-	canvas.draw_line(hips + fwd * body_len * 0.4, shadow_head, dark, maxf(span * 0.022, 1.0), true)
-	canvas.draw_circle(shadow_head, span * 0.025, dark)
-	if not bill_up:
-		canvas.draw_line(shadow_head, shadow_head + fwd * span * (0.05 if crane else 0.075), dark, maxf(span * 0.012, 1.0), true)
+	if with_shadow:
+		var cast := Vector2(0.45, 0.55).normalized()
+		var hips := at + cast * (legs + lift * span * 0.6)
+		var dark := Color(0, 0, 0, 0.18)
+		if lift < 0.05:
+			for side: float in [-1.0, 1.0]:
+				canvas.draw_line(at + fwd.orthogonal() * side * body_wide * 0.3, hips, dark, maxf(span * 0.012, 1.0), true)
+		canvas.draw_set_transform(hips, heading, Vector2.ONE)
+		canvas.draw_colored_polygon(_oval(Vector2.ZERO, Vector2(body_len * 0.5, body_wide * 0.5)), dark)
+		canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+		var shadow_head := hips + fwd * (body_len * 0.45 + neck_len) + cast * upright
+		canvas.draw_line(hips + fwd * body_len * 0.4, shadow_head, dark, maxf(span * 0.022, 1.0), true)
+		canvas.draw_circle(shadow_head, span * 0.025, dark)
+		if not bill_up:
+			canvas.draw_line(shadow_head, shadow_head + fwd * span * (0.05 if crane else 0.075), dark, maxf(span * 0.012, 1.0), true)
+	if not with_body:
+		return
 	# Wings held out.
 	if wings > 0.02:
 		var shape := _bird_shape(true, false)
@@ -8023,105 +7848,6 @@ static func draw_wader(canvas: CanvasItem, at: Vector2, heading: float, info: Di
 			canvas.draw_line(bill_end + Vector2(0.0, -span * 0.03), bill_end + Vector2(0.0, span * 0.03), Color(0.78, 0.82, 0.86), maxf(span * 0.02, 1.2), true)
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
-
-## The sea ducks off a port (Birds.port_sea_ducks()), out on the sea beyond
-## its marina `radius` px across: each species a raft, the ducks facing into
-## the wind and bobbing, drakes in their pattern and hens brown. Eiders dive
-## each in its own time for mussels, scoters all together (a ripple where
-## each goes down and comes up); now and then the whole raft patters off the
-## water and flies low to settle somewhere new. In high summer eider hens
-## lead their pooled ducklings. On migration they don't stop: long low Vs
-## pass over the sea, north in spring and south in autumn.
-func _draw_sea_ducks(port_id: String, root: Vector2, radius: float, now: float) -> void:
-	var birds := Birds.shared()
-	var sea := Vector2.from_angle(_port_sea_angle(port_id))
-	var across := sea.orthogonal()
-	var wind := Birds.chance([port_id, "wind"]) * TAU
-	var month := Birds.month_of(float(GameState.calendar_time()))
-	var entries := birds.port_sea_ducks(port_id)
-	for e in entries.size():
-		var entry: Dictionary = entries[e]
-		var id: String = entry.id
-		var info := birds.species(id)
-		var count := int(entry.count)
-		var traits := _bird_traits("ducks/%s/%s" % [port_id, id], count)
-		var flock := {count = count, species = [id], key = id}
-		var span := _bird_span(info)
-		var side := 1.0 if Birds.chance([port_id, id, "side"]) < 0.5 else -1.0
-		# Out on the sea off the marina: its side first, then the other, nearer or
-		# further out (none at a port up a river, its sea too far off).
-		var home := Vector2.INF
-		for out: float in [2.2, 1.6, 3.0]:
-			for flank: float in [side, -side]:
-				var spot := root + sea * radius * (out + 0.7 * e) + across * radius * 1.3 * flank
-				if home == Vector2.INF and _on_sea(spot):
-					home = spot
-		if home == Vector2.INF:
-			continue
-		if entry.moving:
-			# Passing on migration: low over the sea in Vs of up to V_SIZE, one
-			# behind another, each a little to the side.
-			var north := month <= 6
-			var way := Vector2(0.0, -1.0 if north else 1.0).rotated(0.3 * side)
-			var s := fmod(now / 40.0 + Birds.chance([port_id, id, "pass"]), 1.0)
-			var lead := home + way * radius * (12.0 * s - 6.0)
-			for k in count:
-				var t: PackedFloat32Array = traits[k]
-				var v := k / V_SIZE
-				var v_lead := lead - way * v * span * 5.0 + way.orthogonal() * span * 2.5 * (1.0 if v % 2 == 0 else -1.0) * signf(float(v))
-				var pos := _v_spot(v_lead, way, k % V_SIZE, span) + way.orthogonal() * sin(now * 0.8 + v) * span * 0.15
-				_draw_bird(pos, way.angle(), _duck_flying(info, t[4] < 0.45), 0.7 + 0.3 * absf(sin(now * 14.0 + k)), 0.4)
-				_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-			continue
-		# The raft's spot, and now and then a flight to a new one.
-		var cycle := 120.0 + 60.0 * Birds.chance([port_id, id, "cycle"])
-		var clock := now / cycle + Birds.chance([port_id, id, "clock"])
-		var spell := floori(clock)
-		var c := clock - spell
-		var spot := func(n: int) -> Vector2:
-			return home + Vector2.from_angle(Birds.chance([port_id, id, n, "a"]) * TAU) * radius * 0.8 * Birds.chance([port_id, id, n, "r"])
-		var here: Vector2 = spot.call(spell)
-		var raft := span * 0.45 * sqrt(float(count))
-		var flying := c > 0.92
-		var next: Vector2 = spot.call(spell + 1) if flying else here
-		var sync := bool(info.get("sync", false))
-		var creche := bool(info.get("creche", false)) and (month == 6 or month == 7)
-		for k in count:
-			var t: PackedFloat32Array = traits[k]
-			var hen := t[4] < 0.45
-			var place := Vector2.from_angle(t[0] * TAU) * raft * sqrt(t[2])
-			var pos: Vector2 = here + place + Vector2(sin(now * 0.3 + t[1] * TAU), cos(now * 0.25 + t[0] * TAU)) * span * 0.08
-			if flying:
-				var s := (c - 0.92) / 0.08
-				var go := clampf(s * 1.2 - t[1] * 0.2, 0.0, 1.0)  # (They don't all go at once.)
-				pos = (here + place).lerp(next + place, smoothstep(0.0, 1.0, go))
-				if go > 0.0 and go < 1.0:
-					var heading := (next - here).angle()
-					_draw_bird(pos, heading, _duck_flying(info, hen), 0.7 + 0.3 * absf(sin(now * 14.0 + k)), 0.3 * sin(go * PI))
-					_bird_hits.append([pos, maxf(span * 0.6, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-					continue
-				if go >= 1.0:
-					pos = next + place
-			# Diving for mussels: under for a spell (a ripple as it goes and comes up).
-			var dive := fmod(now / (16.0 if sync else 9.0 + 5.0 * t[1]) + (0.0 if sync else t[0]), 1.0)
-			var down := 0.55 + (t[1] * 0.06 if sync else 0.0)
-			var up := down + 0.28
-			if not flying and dive > down and dive < up:
-				var ripple := (dive - down) / (up - down)
-				for edge: float in [0.0, 1.0]:
-					var r := 1.0 - absf(ripple - edge) * 6.0
-					if r > 0.0:
-						_canvas.draw_arc(pos, span * (0.12 + 0.2 * (1.0 - r)), 0.0, TAU, 12, Color(1, 1, 1, 0.6 * r), maxf(span * 0.03, 1.0), true)
-				continue
-			var facing := wind + 0.25 * (t[3] - 0.5) + 0.1 * sin(now * 0.4 + t[0] * TAU)
-			draw_duck(_canvas, pos, facing, info, span, hen)
-			if creche and hen and k % 3 == 0:
-				for chick in 3:
-					var behind := pos - Vector2.from_angle(facing) * span * (0.35 + 0.18 * chick) + Vector2.from_angle(facing).orthogonal() * span * 0.08 * sin(now * 2.0 + chick)
-					_canvas.draw_circle(behind, maxf(span * 0.06, 1.0), Color(0.3, 0.24, 0.18))
-			_bird_hits.append([pos, maxf(span * 0.5, BIRD_HIT_MIN_PX), {port = port_id}, flock])
-
-
 ## A sea duck's colors for drawing it flying (see draw_bird()): its back on
 ## the wings, its sides on the tips; a hen all brown.
 static func _duck_flying(info: Dictionary, hen: bool) -> Dictionary:
@@ -8130,11 +7856,10 @@ static func _duck_flying(info: Dictionary, hen: bool) -> Dictionary:
 	return {span = info.get("span", 0.7), colors = {mantle = brown if hen else colors.get("mantle", "#141416"), head = brown if hen else colors.get("head", "#141416"),
 		tip = brown if hen else colors.get("wing", colors.get("sides", "#141416")), belly = brown, bill = "#3a3a3a" if hen else colors.get("bill", "#e8c040")}}
 
-
 ## A sea duck swimming, seen from above, `span` px its wingspan: a low oval
 ## body (a drake's sides, back, breast and wing patch in its colors; a hen
 ## brown), its head (cap, nape and face patches), bill and a faint wake.
-static func draw_duck(canvas: CanvasItem, at: Vector2, heading: float, info: Dictionary, span: float, hen: bool) -> void:
+static func draw_duck(canvas: Object, at: Vector2, heading: float, info: Dictionary, span: float, hen: bool) -> void:
 	var colors: Dictionary = info.get("colors", {})
 	var color := func(key: String, fallback: String) -> Color:
 		return Color.from_string(str(colors.get(key, fallback)), Color.BLACK)
@@ -8167,7 +7892,6 @@ static func draw_duck(canvas: CanvasItem, at: Vector2, heading: float, info: Dic
 	canvas.draw_colored_polygon(PackedVector2Array([head_at + Vector2(width * 0.3, -width * 0.14), head_at + Vector2(width * 0.75, 0.0), head_at + Vector2(width * 0.3, width * 0.14)]), bill)
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
-
 ## An oval's outline points round a middle, with these half sizes.
 static func _oval(middle: Vector2, half: Vector2) -> PackedVector2Array:
 	var points := PackedVector2Array()
@@ -8175,31 +7899,6 @@ static func _oval(middle: Vector2, half: Vector2) -> PackedVector2Array:
 		var a := TAU * i / 14.0
 		points.append(middle + Vector2(cos(a) * half.x, sin(a) * half.y))
 	return points
-
-
-## Steady numbers for each bird of a flock (0 to 1: where it starts round,
-## how fast, how far out, which way, its rhythm), made once per flock.
-func _bird_traits(key: String, count: int) -> Array:
-	var traits: Array = _bird_trait_cache.get(key, [])
-	while traits.size() < count:
-		var k := traits.size()
-		var values := PackedFloat32Array()
-		for n in 5:
-			values.append(Birds.chance([key, k, n]))
-		traits.append(values)
-	_bird_trait_cache[key] = traits
-	return traits
-
-## One bird seen from above at a screen point, heading a way (see draw_bird()),
-## `height` times as high as a gull's usual (its shadow that much further off).
-func _draw_bird(at: Vector2, heading: float, info: Dictionary, wings: float, height := 1.0) -> void:
-	draw_bird(_canvas, at, heading, info, wings, _bird_span(info), true, height)
-
-
-## A bird's wingspan on screen (px).
-func _bird_span(info: Dictionary) -> float:
-	return maxf(float(info.get("span", 1.0)) * BIRD_SCALE * _ship_scale(), BIRD_MIN_PX)
-
 
 ## A bird seen from above on any canvas item, at a point, heading a way,
 ## `span` px from wingtip to wingtip: body and tail in its mantle color, its
@@ -8209,7 +7908,7 @@ func _bird_span(info: Dictionary) -> float:
 ## color) has broad wings with fingered tips (an osprey's bent at the wrist),
 ## a fanned tail and a hooked bill; some have pale or chestnut shoulders.
 ## Leaves the canvas item's transform reset.
-static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dictionary, wings: float, span: float, shadow := true, height := 1.0) -> void:
+static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Dictionary, wings: float, span: float, shadow := true, height := 1.0) -> void:
 	var colors: Dictionary = info.get("colors", {})
 	# Its colors read from their names once, and kept with them (every bird, every frame).
 	var parsed: Array = colors.get("_parsed", [])
@@ -8301,7 +8000,6 @@ static func draw_bird(canvas: CanvasItem, at: Vector2, heading: float, info: Dic
 		canvas.draw_line(Vector2(0.21, 0.0), Vector2(0.36 if long_bill else 0.27, 0.0), bill, maxf(span * 0.03, 1.0) / span)
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
-
 ## A bird's wings, wingtips and (a raptor's) tail a unit across, made once
 ## (see draw_bird()): {wing, wing_mirrored, tip, tip_mirrored, tail}. A gull or
 ## seabird's wings swept back to their tips; a raptor's broad and square (bent
@@ -8332,20 +8030,359 @@ static func _bird_shape(raptor: bool, bent: bool) -> Dictionary:
 	_bird_shapes[key] = {wing = wing, wing_mirrored = _mirror_y(wing), tip = tip_part, tip_mirrored = _mirror_y(tip_part), tail = tail}
 	return _bird_shapes[key]
 
-
 static func _mirror_y(points: PackedVector2Array) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	for p in points:
 		out.append(Vector2(p.x, -p.y))
 	return out
 
-
-## The flock of birds drawn under a screen point, if any: [what it's round
-## ({port}, {ship} or {pod}), the flock ({count, species})], or []; `reach`
+## The bird drawn under a screen point, if any (moving ones over still ones):
+## [what it's round ({colony}), its colony ({count, species})], or []; `reach`
 ## times its usual reach (smaller: only right on a bird).
 func _birds_at(screen_pos: Vector2, reach := 1.0) -> Array:
-	for i in range(_bird_hits.size() - 1, -1, -1):
-		var hit: Array = _bird_hits[i]
-		if (hit[0] as Vector2).distance_to(screen_pos) <= float(hit[1]) * reach:
-			return [hit[2], hit[3]]
+	var native: Object = BirdLife.shared().native
+	if native != null:
+		var index: int = native.hit_at(screen_pos, reach)
+		if index < 0:
+			return []
+		var colony: Dictionary = Wildlife.shared().colonies[index]
+		return [{colony = index}, {count = int(colony.count), species = [colony.species]}]
+	for hits: Array in [_bird_hits, _still_hits]:
+		for i in range(hits.size() - 1, -1, -1):
+			var hit: Array = hits[i]
+			if (hit[0] as Vector2).distance_to(screen_pos) <= float(hit[1]) * reach:
+				return [hit[2], hit[3]]
 	return []
+
+# --- Wonders of the world ------------------------------------------------------
+
+## The wonders of the world (GameData.wonders) on the full-color map, each its
+## size in the world (wonders.json km, exaggerated so it reads), growing and
+## shrinking with the map like the land; shown once WONDER_MIN_PX across.
+## Most are their picture, centered on their spot (_wonder_spot(): moved just
+## far enough that it never covers a port's marina, even zoomed right in); the
+## lost ancient wonders faded. Four follow their real course (wonders.json
+## line): the Great Wall as a strip of grey brick wall with battlements and
+## watchtowers, the Grand Canyon as a layered gorge with the Colorado at its
+## bottom, the Great Barrier Reef as reefs strung along Queensland's coast
+## out to sea, and the Northern Lights as shimmering curtains over Lapland,
+## brightest at night. Names show under them once they're WONDER_LABEL_PX
+## across, clear of the ports' names. Remembers where each was drawn, for
+## clicks (_wonder_at()). Shown in locked regions too: they're world-famous.
+func _draw_wonders() -> void:
+	_canvas = _wonder_layer
+	_wonder_hits.clear()
+	if gray_mode:
+		return
+	if _wonder_textures.is_empty():
+		for item: Dictionary in GameData.wonders:
+			var path: String = WONDER_ART_DIR + str(item.id) + ".svg"
+			_wonder_textures.append(load(path) if ResourceLoader.exists(path) else null)
+	var km := _zoom / KM_PER_DEGREE
+	var screen := Rect2(Vector2.ZERO, size)
+	var font := get_theme_default_font()
+	var labels: Array[Rect2] = []
+	for port_label: Array in _port_labels:
+		labels.append((port_label[1] as Rect2).grow(LABEL_PADDING))
+	var pictures := []  # [middle, side, index]
+	var view_box := _view_lon_lat_box()
+	for i in GameData.wonders.size():
+		var item: Dictionary = GameData.wonders[i]
+		if item.has("line"):
+			var line_box := _wonder_line_box(i)
+			if not line_box.intersects(view_box) and not line_box.intersects(Rect2(view_box.position + Vector2(360.0, 0.0), view_box.size)) and not line_box.intersects(Rect2(view_box.position - Vector2(360.0, 0.0), view_box.size)):
+				continue  # (Its whole course, and a good way round it, out of view.)
+			match str(item.id):
+				"great_wall":
+					_draw_great_wall(item, km)
+				"grand_canyon":
+					_draw_grand_canyon(item, km)
+				"great_barrier_reef":
+					_draw_barrier_reef(item, km)
+				"aurora_borealis":
+					_draw_aurora(item, km)
+			continue
+		var side := float(item.get("km", 25.0)) * km
+		if side < WONDER_MIN_PX:
+			continue
+		var middle := world_to_screen(Geo.project(_wonder_spot(i)))
+		if _is_hidden(middle) or not screen.grow(side).has_point(middle):
+			continue
+		pictures.append([middle, side, i])
+	pictures.sort_custom(func(a: Array, b: Array) -> bool: return a[0].y + a[1] * 0.5 < b[0].y + b[1] * 0.5)  # Nearer the bottom in front.
+	for entry: Array in pictures:
+		var middle: Vector2 = entry[0]
+		var side: float = entry[1]
+		var i: int = entry[2]
+		var item: Dictionary = GameData.wonders[i]
+		var rect := Rect2(middle - Vector2.ONE * side / 2.0, Vector2.ONE * side)
+		if _wonder_textures[i] != null:
+			var tint := Color(1, 1, 1, WONDER_LOST_ALPHA) if item.get("kind", "") == "ancient" else Color.WHITE
+			_canvas.draw_texture_rect(_wonder_textures[i], rect, false, tint)
+		_wonder_hits.append([middle, side * 0.5, str(item.id), []])
+		if side >= WONDER_LABEL_PX:
+			_wonder_label(str(item.name), Vector2(middle.x, rect.end.y + 1.0), rect.position.y, font, labels)
+
+## The box of (lon, lat) a wonder along a course (wonders.json line) draws
+## within, and 5 degrees round it (worked out once; for skipping it).
+func _wonder_line_box(index: int) -> Rect2:
+	if not _wonder_line_boxes.has(index):
+		var line: Array = GameData.wonders[index].get("line", [])
+		var box := Rect2(Vector2(float(line[0][0]), float(line[0][1])), Vector2.ZERO)
+		for point: Array in line:
+			box = box.expand(Vector2(float(point[0]), float(point[1])))
+		_wonder_line_boxes[index] = box.grow(5.0)
+	return _wonder_line_boxes[index]
+
+## A wonder's name centered at a point (its top), or over `above` if that
+## spot's taken; not at all if both are (labels: what's already there).
+func _wonder_label(text: String, under: Vector2, above: float, font: Font, labels: Array[Rect2]) -> void:
+	var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, WONDER_FONT_SIZE)
+	var label := Rect2(Vector2(under.x - text_size.x / 2.0, under.y), text_size)
+	if labels.any(func(other: Rect2) -> bool: return other.intersects(label)):
+		label.position.y = above - text_size.y - 1.0
+		if labels.any(func(other: Rect2) -> bool: return other.intersects(label)):
+			return
+	labels.append(label)
+	var baseline := label.position + Vector2(0, font.get_ascent(WONDER_FONT_SIZE))
+	_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, WONDER_FONT_SIZE, 3, Color(1, 1, 1, 0.85))
+	_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, WONDER_FONT_SIZE, Color(0.23, 0.19, 0.16))
+
+## Where a wonder's picture stands (lon, lat): its own spot, moved
+## away from any port whose marina (at its size now: a hub's is bigger) it
+## would reach over, till it's WONDER_PORT_GAP_KM clear (straight away, or the
+## nearest way round that's still on land). Worked out again when
+## the ports' marinas change (a hub founded).
+func _wonder_spot(i: int) -> Vector2:
+	var key := 0
+	for each in GameState.all_companies():
+		key += each.hubs.size()
+	if key != _wonder_spots_key:
+		_wonder_spots_key = key
+		_wonder_spots.clear()
+	if _wonder_spots.has(i):
+		return _wonder_spots[i]
+	var item: Dictionary = GameData.wonders[i]
+	var spot := Vector2(float(item.lon), float(item.lat))
+	var half := float(item.get("km", 25.0)) / 2.0
+	_land_ready()
+	for attempt in 4:
+		var moved := false
+		for port: Dictionary in GameData.ports:
+			var port_spot := Vector2(float(port.lon), float(port.lat))
+			var clear := half + float(_port_layout(port.id).radius) * KM_PER_DEGREE / SHIP_WORLD_ZOOM + WONDER_PORT_GAP_KM
+			var gap := Geo.distance_nm(port_spot, spot) * 1.852
+			if gap >= clear:
+				continue
+			var away := Vector2((spot.x - port_spot.x) * cos(deg_to_rad(spot.y)), spot.y - port_spot.y)
+			if away.length() < 0.0001:
+				away = Vector2(1.0, 0.0)
+			away = away.normalized() * (clear + 0.5) / KM_PER_DEGREE
+			# Straight away from the port, or (if that's out at sea and the wonder
+			# isn't a sea one) the nearest way round from it that's on land.
+			var on_land: bool = item.get("kind", "") != "natural" or _on_land(spot)
+			var best := port_spot + Vector2(away.x / maxf(cos(deg_to_rad(spot.y)), 0.1), away.y)
+			if on_land:
+				for turn: float in [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 2.6, -2.6, PI]:
+					var way := away.rotated(turn)
+					var there := port_spot + Vector2(way.x / maxf(cos(deg_to_rad(spot.y)), 0.1), way.y)
+					if _on_land(there):
+						best = there
+						break
+			spot = best
+			moved = true
+		if not moved:
+			break
+	_wonder_spots[i] = spot
+	return spot
+
+## A line wonder's course on screen: its points (lon, lat) as screen points,
+## in runs broken where it goes round the far side.
+func _wonder_runs(item: Dictionary) -> Array:
+	var runs := []
+	var run := PackedVector2Array()
+	for point: Array in item.line:
+		var at := world_to_screen(Geo.project(Vector2(float(point[0]), float(point[1]))))
+		if _is_hidden(at):
+			if run.size() > 1:
+				runs.append(run)
+			run = PackedVector2Array()
+			continue
+		run.append(at)
+	if run.size() > 1:
+		runs.append(run)
+	return runs
+
+## The Great Wall: a strip of grey brick wall along its course, its battlements
+## along the north side and a watchtower every WALL_TOWER_KM; brick courses
+## and a walkway once it's wide enough to see them.
+func _draw_great_wall(item: Dictionary, km: float) -> void:
+	var width := maxf(float(item.km) * km, 1.6)
+	var stone := Color(0.66, 0.66, 0.63)
+	var dark := Color(0.23, 0.19, 0.16)
+	for run: PackedVector2Array in _wonder_runs(item):
+		_canvas.draw_polyline(run, dark, width + 2.0, true)
+		_canvas.draw_polyline(run, stone, width, true)
+		if width >= 5.0:
+			_canvas.draw_polyline(run, Color(0.76, 0.75, 0.71), width * 0.45, true)  # The walkway.
+		# Along it: battlements, brick courses and towers, spaced in the world.
+		var crenel := maxf(width * 0.9, 3.0)
+		var tower_every := WALL_TOWER_KM * km
+		var since_tower := tower_every * 0.5
+		for s in range(run.size() - 1):
+			var a := run[s]
+			var b := run[s + 1]
+			var length := a.distance_to(b)
+			if length < 0.5:
+				continue
+			var way := (b - a) / length
+			var north := way.orthogonal()
+			if north.y > 0.0:
+				north = -north  # (The battlements face north: up the screen.)
+			var d := 0.0
+			while d < length:
+				var at := a + way * d
+				if width >= 6.0:
+					_canvas.draw_rect(Rect2(at + north * (width * 0.5) - Vector2.ONE * crenel * 0.25, Vector2.ONE * crenel * 0.5), dark)
+					_canvas.draw_line(at + north * width * 0.45, at - north * width * 0.45, Color(0.55, 0.55, 0.52), 1.0)
+				if since_tower >= tower_every and tower_every > width * 2.5:
+					since_tower = 0.0
+					var tower := maxf(width * 1.7, 3.0)
+					_canvas.draw_rect(Rect2(at - Vector2.ONE * tower / 2.0, Vector2.ONE * tower), dark)
+					_canvas.draw_rect(Rect2(at - Vector2.ONE * (tower / 2.0 - 1.0), Vector2.ONE * (tower - 2.0)), Color(0.72, 0.71, 0.67))
+				var step := crenel if width >= 6.0 else maxf(tower_every * 0.25, 2.0)
+				d += step
+				since_tower += step
+		_wonder_line_hit(item, run, width)
+	_wonder_line_label(item, km)
+
+## The Grand Canyon: a gorge along the Colorado, its rims red-orange, its
+## walls in layered bands, the river blue at the bottom.
+func _draw_grand_canyon(item: Dictionary, km: float) -> void:
+	var width := maxf(float(item.km) * km, 1.8)
+	for run: PackedVector2Array in _wonder_runs(item):
+		_canvas.draw_polyline(run, Color(0.23, 0.19, 0.16), width + 2.0, true)
+		_canvas.draw_polyline(run, Color(0.85, 0.5, 0.3), width, true)
+		_canvas.draw_polyline(run, Color(0.72, 0.36, 0.2), width * 0.72, true)
+		_canvas.draw_polyline(run, Color(0.9, 0.62, 0.38), width * 0.5, true)
+		_canvas.draw_polyline(run, Color(0.6, 0.27, 0.15), width * 0.3, true)
+		_canvas.draw_polyline(run, Color(0.37, 0.62, 0.82), maxf(width * 0.1, 1.0), true)
+		_wonder_line_hit(item, run, width)
+	_wonder_line_label(item, km)
+
+## The Great Barrier Reef: reefs strung along its course out to sea from the
+## coast, every REEF_SPACING_KM, each a pale lagoon in a ring of coral (dots
+## of pink, orange, purple and yellow), staggered in and out.
+func _draw_barrier_reef(item: Dictionary, km: float) -> void:
+	var patch := float(item.km) * km
+	if patch < 2.0:
+		return
+	var corals := [Color(0.95, 0.42, 0.42), Color(0.95, 0.64, 0.24), Color(0.69, 0.42, 0.84), Color(0.95, 0.82, 0.29)]
+	var line: Array = item.line
+	var reach := patch * 0.6
+	for s in range(line.size() - 1):
+		var a := Vector2(float(line[s][0]), float(line[s][1]))
+		var b := Vector2(float(line[s + 1][0]), float(line[s + 1][1]))
+		var seaward := Vector2(b.y - a.y, -(b.x - a.x)).normalized() * -1.0  # (The coast is to the west.)
+		var leg_km := Geo.distance_nm(a, b) * 1.852
+		var count := maxi(roundi(leg_km / REEF_SPACING_KM), 1)
+		for k in count:
+			var t := (k + 0.5) / count
+			var out := 0.1 + 0.25 * fposmod(sin(float(s * 7 + k) * 12.9898) * 43758.5453, 1.0)
+			var spot := a.lerp(b, t) + seaward * out
+			var at := world_to_screen(Geo.project(spot))
+			if _is_hidden(at) or not Rect2(Vector2.ZERO, self.size).grow(reach).has_point(at):
+				continue
+			_canvas.draw_circle(at, patch * 0.5, Color(0.55, 0.88, 0.86, 0.85))
+			_canvas.draw_circle(at, patch * 0.32, Color(0.75, 0.95, 0.92, 0.9))
+			if patch >= 8.0:
+				for c in 8:
+					var angle := TAU * c / 8.0 + s + k
+					_canvas.draw_circle(at + Vector2.from_angle(angle) * patch * 0.42, patch * 0.08, corals[(c + k) % corals.size()])
+			_wonder_hits.append([at, maxf(patch * 0.5, 6.0), str(item.id), []])
+	_wonder_line_label(item, km)
+
+## The Northern Lights: soft curtains of green (purple at their tops) rising
+## from their course over Lapland, in folds; brightest in the dark, faint
+## by day (by the sun there).
+func _draw_aurora(item: Dictionary, km: float) -> void:
+	var height := AURORA_HEIGHT_KM * km
+	if height < 6.0:
+		return
+	var hour := Birds.local_hour(23.0, float(GameState.calendar_time()))
+	var dark := 1.0 - Birds.daylight(hour)
+	var strength := lerpf(0.18, 0.75, dark)
+	for run: PackedVector2Array in _wonder_runs(item):
+		for s in range(run.size() - 1):
+			var a := run[s]
+			var b := run[s + 1]
+			var length := a.distance_to(b)
+			var strips := maxi(int(length / maxf(height * 0.08, 2.0)), 1)
+			for k in strips:
+				var t := float(k) / strips
+				var base := a.lerp(b, t)
+				var sway := sin((s * strips + k) * 0.35) * height * 0.06
+				var tall := height * (0.7 + 0.3 * sin((s * strips + k) * 0.2))
+				var top := base + Vector2(sway, -tall)
+				var step := (b - a) / strips
+				var green := Color(0.25, 0.88, 0.54, 0.45 * strength)
+				var purple := Color(0.69, 0.42, 0.84, 0.0)
+				_canvas.draw_polygon(PackedVector2Array([base, base + step, top + step, top]),
+					PackedColorArray([green, green, purple, purple]))
+	_wonder_line_label(item, km)
+
+## Clicking near a line wonder's course opens it (see _wonder_at()).
+func _wonder_line_hit(item: Dictionary, run: PackedVector2Array, width: float) -> void:
+	_wonder_hits.append([Vector2.INF, maxf(width, 8.0), str(item.id), run])
+
+## A line wonder's name, at its spot (wonders.json lon, lat) once it's zoomed in enough.
+func _wonder_line_label(item: Dictionary, km: float) -> void:
+	if WONDER_LINE_LABEL_KM * km < WONDER_LABEL_PX:
+		return
+	var at := world_to_screen(Geo.project(Vector2(float(item.lon), float(item.lat))))
+	if _is_hidden(at) or not Rect2(Vector2.ZERO, size).has_point(at):
+		return
+	var labels: Array[Rect2] = []
+	for port_label: Array in _port_labels:
+		labels.append((port_label[1] as Rect2).grow(LABEL_PADDING))
+	_wonder_label(str(item.name), at + Vector2(0.0, 6.0), at.y - 6.0, get_theme_default_font(), labels)
+
+## The wonder drawn under a screen point (the nearest if two are close), or "".
+func _wonder_at(screen_pos: Vector2) -> String:
+	var best := ""
+	var best_dist := INF
+	for hit: Array in _wonder_hits:
+		var dist := INF
+		var run: PackedVector2Array = hit[3] if not (hit[3] as Array).is_empty() else PackedVector2Array()
+		if run.is_empty():
+			dist = (hit[0] as Vector2).distance_to(screen_pos)
+		else:
+			for s in range(run.size() - 1):
+				dist = minf(dist, Geometry2D.get_closest_point_to_segment(screen_pos, run[s], run[s + 1]).distance_to(screen_pos))
+		if dist <= float(hit[1]) and dist < best_dist:
+			best_dist = dist
+			best = hit[2]
+	return best
+
+## Where a wonder stands on screen, or Vector2.INF round the far side.
+func wonder_screen_position(id: String) -> Vector2:
+	for i in GameData.wonders.size():
+		if GameData.wonders[i].id == id:
+			var at := world_to_screen(Geo.project(_wonder_spot(i)))
+			return Vector2.INF if _is_hidden(at) else at
+	return Vector2.INF
+
+
+## Where a bird colony away from its home is on screen (the leader of its V
+## on the wing, or the first of its seabirds out at sea: BirdLife), else its
+## home; Vector2.INF round the far side.
+func colony_screen_position(index: int) -> Vector2:
+	var wildlife := Wildlife.shared()
+	var colony: Dictionary = wildlife.colonies[index]
+	var cal := float(GameState.calendar_time())
+	var where: String = wildlife.colony_where(colony, cal)[0]
+	var birds := BirdLife.shared().birds_of(index)
+	if (colony.cls == "seabirds" or where.begins_with("to_")) and not birds.is_empty():
+		var at := world_to_screen(Geo.project(BirdLife.shared().bird_state(birds[0], wildlife.bird_time, cal).pos))
+		return Vector2.INF if _is_hidden(at) else at
+	return home_screen_position("colony", index)

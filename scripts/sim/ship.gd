@@ -210,6 +210,14 @@ var _leg_has_canal := false
 ## heading]) with the mile it was taken at: the map asks for both every frame,
 ## so they're kept until the ship moves (see lane_sample()).
 var _leg_lane: GameData.SeaLane = null
+## Whole legs' seconds from full maintenance, for every ship (see
+## leg_seconds()): [from, to, miles, top speed, wear a second] -> seconds.
+static var _whole_legs := {}
+## The last other leg's zones asked for (see leg_zones()): from, to, at what top speed.
+var _zones_from := ""
+var _zones_to := ""
+var _zones_speed := -1.0
+var _zones_asked: Array = []
 var _here_cache: Array = []
 var _here_mile := -1.0
 ## When it was lost, relative to other lost ships (lower = earlier), for the recovery queue.
@@ -551,12 +559,32 @@ func sailing_seconds(distance: float, start_maintenance: float) -> float:
 ## slower in convoy canals, faster wear in rough seas) in turn, carrying the
 ## wear over. Time held in locks, lines and anchorages doesn't count (engines off).
 func leg_seconds(from: String, to: String, start_mile: float, end_mile: float, start_maintenance: float) -> float:
+	# A whole leg from full maintenance (asked for again and again: can_reach(),
+	# fuel_needed() in port, the AI rivals' loops) is kept, for any ship as fast
+	# and wearing as fast: that's all it depends on (its zones' harbor speed too).
+	var whole := start_mile == 0.0 and start_maintenance == 1.0
+	var key: Array
+	if whole:
+		if _stats_dirty:
+			_refresh_stats()
+		key = [from, to, end_mile, _top_speed, _wear_per_s]
+		if _whole_legs.has(key):
+			return _whole_legs[key]
+	var seconds := _leg_seconds(from, to, start_mile, end_mile, start_maintenance)
+	if whole:
+		_whole_legs[key] = seconds
+	return seconds
+
+
+func _leg_seconds(from: String, to: String, start_mile: float, end_mile: float, start_maintenance: float) -> float:
 	var seconds := 0.0
 	var m := start_maintenance
 	var mile := start_mile
 	var zones := _current_zones()
 	if from != from_port or to != to_port:
 		zones = leg_zones(from, to)
+	if GameData.native_lanes:
+		return LaneMath.leg_seconds(zones, start_mile, end_mile, start_maintenance, top_speed(), wear_per_s())  # (The same, natively.)
 	for zone: Array in zones:
 		if mile >= end_mile - 0.0001:
 			break
@@ -817,7 +845,15 @@ func lane_heading() -> Vector2:
 ## A leg's zones for this ship ([[end mile, speed factor, wear factor], ...]):
 ## the lane's (GameData.lane_zones()) with its harbor speed laid over each end.
 func leg_zones(from: String, to: String) -> Array:
-	return _with_harbor_speed(GameData.lane_zones(from, to), GameData.distance_nm(from, to))
+	# (Kept for the last leg asked about, at this top speed: a ship waiting in
+	# port asks about its next leg every step.)
+	var speed := top_speed()
+	if from != _zones_from or to != _zones_to or speed != _zones_speed:
+		_zones_from = from
+		_zones_to = to
+		_zones_speed = speed
+		_zones_asked = _with_harbor_speed(GameData.lane_zones(from, to), GameData.distance_nm(from, to))
+	return _zones_asked
 
 
 ## A lane's zones with the ship's harbor speed (game_config harbor_speed) laid
@@ -827,6 +863,8 @@ func leg_zones(from: String, to: String) -> Array:
 ## the piece), multiplied into whatever the lane's own zone there is.
 func _with_harbor_speed(zones: Array, length: float) -> Array:
 	var settings: Dictionary = GameData.config.get("harbor_speed", {})
+	if GameData.native_lanes:
+		return LaneMath.with_harbor_speed(zones, length, top_speed(), settings)  # (The same, natively.)
 	var start := float(settings.get("start", 1.0))
 	var steps := int(settings.get("steps", 0))
 	# Distance covered speeding up from start x top speed at a steady rate.

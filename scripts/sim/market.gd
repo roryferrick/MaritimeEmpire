@@ -82,15 +82,44 @@ func _half_life(port_id: String) -> float:
 ## next, and its profit per unit there (after the canal tolls, and with the
 ## leg's bonuses on the profit, with a company's hubs and upgrades: this
 ## player's unless `of` says), as [commodity id, profit per unit]; ["", 0] if nothing it
-## carries makes a profit.
-func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Company = null) -> Array:
+## carries makes a profit. `memo` (when given) keeps the prices and bonuses
+## it looks up for the next call, for a caller asking about many legs while
+## nothing can change them (RivalAI, within a think).
+func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Company = null, memo: Variant = null) -> Array:
 	var best := ""
 	var best_profit := 0.0
+	var model_id := str(model.get("id", ""))
 	var toll_share := GameData.leg_toll_share(from_port, to_port)
+	var factor := NAN  # (The leg's bonuses, from the memo: looked up once.)
 	for commodity_id: String in model.get("cargo", []):
-		var sell: float = _state.company_sell_price(to_port, commodity_id, of)
-		var margin: float = sell - _state.company_buy_price(from_port, commodity_id, of)
-		var profit: float = margin + _state.trade_bonus(from_port, to_port, margin, str(model.get("id", "")), of) - sell * toll_share
+		var sell: float
+		var buy: float
+		var bonus: float
+		if memo == null:
+			sell = _state.company_sell_price(to_port, commodity_id, of)
+			buy = _state.company_buy_price(from_port, commodity_id, of)
+			bonus = _state.trade_bonus(from_port, to_port, sell - buy, model_id, of)
+		else:
+			var kept: Dictionary = memo
+			var sell_key := "s" + to_port + "/" + commodity_id
+			if not kept.has(sell_key):
+				kept[sell_key] = _state.company_sell_price(to_port, commodity_id, of)
+			sell = kept[sell_key]
+			var buy_key := "b" + from_port + "/" + commodity_id
+			if not kept.has(buy_key):
+				kept[buy_key] = _state.company_buy_price(from_port, commodity_id, of)
+			buy = kept[buy_key]
+			if sell - buy <= 0.0:
+				bonus = 0.0
+			else:
+				if is_nan(factor):
+					var factor_key := "f" + from_port + ">" + to_port + "/" + model_id
+					if not kept.has(factor_key):
+						kept[factor_key] = _state.trade_bonus_factor(from_port, to_port, model_id, of)
+					factor = kept[factor_key]
+				bonus = (sell - buy) * (factor - 1.0)
+		var margin := sell - buy
+		var profit := margin + bonus - sell * toll_share
 		if profit > best_profit:
 			best = commodity_id
 			best_profit = profit

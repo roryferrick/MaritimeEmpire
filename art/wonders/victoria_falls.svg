@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M0,26 L64,22 L64,30 L0,34 Z" fill="#6aa0c8" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M0,34 L64,30 L64,44 L0,48 Z" fill="#5a4a3a" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M4,34 L4,46 M10,33.6 L10,46 M16,33.2 L16,45 M22,32.8 L22,45 M28,32.4 L28,44 M34,32 L34,44 M40,31.6 L40,43 M46,31.2 L46,43 M52,30.8 L52,42 M58,30.4 L58,42" stroke="#eef6fb" stroke-width="3.6"/>
+<path d="M0,48 Q10,40 20,48 Q30,40 40,46 Q50,38 64,44 L64,54 Q48,50 32,56 Q16,52 0,56 Z" fill="#ffffff" opacity="0.92"/>
+<path d="M6,24 Q32,-4 58,20" fill="none" stroke="#e2483d" stroke-width="1.4" opacity="0.75"/>
+<path d="M9,24 Q32,0 55,20" fill="none" stroke="#f2d24a" stroke-width="1.4" opacity="0.75"/>
+<path d="M12,24 Q32,4 52,20" fill="none" stroke="#4f8fd1" stroke-width="1.4" opacity="0.75"/>
+</svg>
