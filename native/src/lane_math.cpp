@@ -309,6 +309,80 @@ double LaneMath::leg_seconds(const Array &zones, double start_mile, double end_m
 	return seconds;
 }
 
+
+// MapView._lane_pieces()'s middle: the lane's points on screen from `start`
+// to `stop` nm along it (both ends kept where `start` is 0 or there's no
+// curve in at `stop`), its chunks that can't be in view broken off with one
+// HIDDEN point each, appended to `out`.
+PackedVector2Array LaneMath::lane_on_screen(const PackedVector2Array &out, const PackedVector3Array &units, const PackedFloat64Array &miles,
+		const PackedVector3Array &centers, const PackedFloat64Array &spans, int64_t chunk, const Dictionary &view,
+		double start, double stop, bool curve_in) {
+	PackedVector2Array result = out;
+	const Vector3 toward = view["toward"];
+	const Vector3 right = view["right"];
+	const Vector3 up = view["up"];
+	const double radius = view["radius"];
+	const Vector2 middle = view["middle"];
+	const double view_angle = view["view_angle"];
+	const Vector2 hidden = view["hidden"];
+	const int64_t count = units.size();
+	const Vector3 *u = units.ptr();
+	const double *m = miles.ptr();
+	result.resize(result.size() + count + centers.size());  // (Trimmed after.)
+	Vector2 *w = result.ptrw();
+	int64_t n = out.size();
+	for (int64_t c = 0; c < centers.size(); c++) {
+		const int64_t first = c * chunk;
+		if (centers[c].dot(toward) < std::cos(MIN(view_angle + spans[c], PI_D))) {
+			if (n > 0 && w[n - 1].x > hidden.x / 2.0) {
+				w[n++] = hidden;
+			}
+			continue;
+		}
+		const int64_t last = MIN(first + chunk, count);
+		for (int64_t k = first; k < last; k++) {
+			const double mile = m[k];
+			if ((mile > start || (start <= 0.0 && k == 0)) && (mile < stop || (!curve_in && k == count - 1))) {
+				const Vector3 p = u[k];
+				w[n++] = p.dot(toward) < 0.0 ? hidden : middle + Vector2(p.dot(right), -p.dot(up)) * radius;
+			}
+		}
+	}
+	result.resize(n);
+	return result;
+}
+
+// MapView._visible_runs(): a line's points on screen cut into the runs on the
+// globe's near side (each at least two points), leaving out the HIDDEN ones.
+// With min_px above 0, points closer than that to the last one kept are left
+// out too (each run's ends always kept): far more points than pixels, zoomed out.
+Array LaneMath::visible_runs(const PackedVector2Array &points, double min_px, const Vector2 &hidden) {
+	Array runs;
+	PackedVector2Array run;
+	const double min_sq = min_px * min_px;
+	const int64_t count = points.size();
+	const Vector2 *p = points.ptr();
+	auto finish = [&]() {
+		if (run.size() >= 2) {
+			runs.append(run);
+		}
+		run = PackedVector2Array();
+	};
+	for (int64_t i = 0; i < count; i++) {
+		if (p[i].x <= hidden.x / 2.0) {
+			finish();
+			continue;
+		}
+		const bool run_ends = i + 1 >= count || p[i + 1].x <= hidden.x / 2.0;
+		if (min_sq > 0.0 && run.size() > 0 && !run_ends && run[run.size() - 1].distance_squared_to(p[i]) < min_sq) {
+			continue;
+		}
+		run.append(p[i]);
+	}
+	finish();
+	return runs;
+}
+
 void LaneMath::_bind_methods() {
 	ClassDB::bind_static_method("LaneMath", D_METHOD("lane_points", "lon_lats"), &LaneMath::lane_points);
 	ClassDB::bind_static_method("LaneMath", D_METHOD("project", "lon_lat"), &LaneMath::project);
@@ -320,4 +394,6 @@ void LaneMath::_bind_methods() {
 	ClassDB::bind_static_method("LaneMath", D_METHOD("zones", "points", "miles", "slow", "rough_lat", "rough_wear"), &LaneMath::zones);
 	ClassDB::bind_static_method("LaneMath", D_METHOD("with_harbor_speed", "zones", "length", "top_speed", "settings"), &LaneMath::with_harbor_speed);
 	ClassDB::bind_static_method("LaneMath", D_METHOD("leg_seconds", "zones", "start_mile", "end_mile", "start_maintenance", "top_speed", "wear_per_s"), &LaneMath::leg_seconds);
+	ClassDB::bind_static_method("LaneMath", D_METHOD("lane_on_screen", "out", "units", "miles", "centers", "spans", "chunk", "view", "start", "stop", "curve_in"), &LaneMath::lane_on_screen);
+	ClassDB::bind_static_method("LaneMath", D_METHOD("visible_runs", "points", "min_px", "hidden"), &LaneMath::visible_runs);
 }

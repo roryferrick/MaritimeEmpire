@@ -201,6 +201,17 @@ bool ShipStepper::_idle_in_port(Object *ship, double play_time) {
 }
 
 
+// True if GameState._advance() would do nothing for a ship this step because
+// it's lost at sea waiting to be fetched (not on a tow, not an icebreaker).
+bool ShipStepper::_adrift(Object *ship) {
+	const Names &n = names();
+	if (String(ship->get(n.lost_reason)).is_empty() || !String(ship->get(n.docked_at)).is_empty() || !String(ship->get(n.job_phase)).is_empty()) {
+		return false;
+	}
+	int kind = ship->get(n.kind);
+	return kind >= 0 && kind != _kind_icebreaker;
+}
+
 // GameState._step()'s `for ship in ships: _advance(ship, delta)`.
 void ShipStepper::advance(const Array &ships, double delta) {
 	const Names &n = names();
@@ -213,7 +224,7 @@ void ShipStepper::advance(const Array &ships, double delta) {
 		}
 		// (Read for each ship: an icebreaker before it may have opened or closed one.)
 		bool any_closure = _icebreaking != nullptr && (bool)_icebreaking->get(n.any_open_closure);
-		if (_idle_in_port(ship, play_time)) {
+		if (_idle_in_port(ship, play_time) || _adrift(ship)) {
 			_idle_steps++;
 		} else if (_sail(ship, delta, play_time, can_close, any_closure, true)) {
 			_native_steps++;

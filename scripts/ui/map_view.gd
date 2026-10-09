@@ -193,6 +193,16 @@ const BAND_STEP := 2.0
 const ARCTIC_DEPTH := 3000
 const ANTARCTIC_ICE := Color(0.93, 0.95, 0.97)
 const NEVER_CULLED := Rect2(-1.0e6, -1.0e6, 2.0e6, 2.0e6)
+## The globe art is cut into tiles this size (projected degrees: see _tiled()),
+## each one's reach worked out from this many samples across it each way.
+const TILE_DEG := 30.0
+const TILE_SAMPLES := 8
+## Zoomed in until the view reaches less than this far round the globe
+## (radians from its middle), only the art's tiles in view are drawn.
+const TILE_MAX_REACH := 1.0
+## The tiles drawn reach this much (radians) beyond the view, so dragging
+## only draws them again every few degrees.
+const TILE_SLACK := 0.1
 ## The clouds fade out as the map zooms in between these (px a degree), and
 ## the storms thin to this much; the sky draws up to this many storms.
 const CLOUD_ZOOM := Vector2(7.0, 24.0)
@@ -370,6 +380,8 @@ const LABEL_CELL_DEG := 10.0
 ## Route lines are looked at in chunks of this many points, so the parts that
 ## can't be in view are skipped (see _chunk_caps()).
 const LANE_CHUNK := 32
+## Solid lines on screen leave out points closer together than this (px): see _draw_line_runs().
+const LINE_MIN_PX := 1.5
 ## Lanes bend round the harbours of ports they pass but aren't sailing to (see
 ## _bent_lane()): each port's keep-out zone reaches this many times its mouth's
 ## distance from it (round its marina and approach curves), filled in every
@@ -613,6 +625,15 @@ var _lane_units := {}
 var _lane_caps := {}
 ## Each sea lane's chunks a ship can be seen on (1) or not (see _on_lane_in_view()), till the view changes.
 var _lanes_in_view := {}
+## Lanes put on screen natively (LaneMath.lane_on_screen() and visible_runs()), if the library has them.
+var _native_lane_screen := ClassDB.class_has_method(&"LaneMath", &"lane_on_screen")
+## How far round the globe (radians from its middle) the view reaches (with a
+## few px to spare); whether the art was last drawn tile by tile, and if so,
+## round which middle and how far (see _tile_in_view()).
+var _tile_reach := PI
+var _art_tiled := false
+var _art_toward := Vector3.ZERO
+var _art_reach := PI
 ## Canals' boxes (lon, lat), where lanes don't bend (see _in_canal()).
 var _canal_boxes: Array[Rect2] = []
 ## The land's triangles by cell (see _on_land()), and the task sorting them.
@@ -840,10 +861,11 @@ class WorldArt:
 	## MapView._ready()).
 	func _draw() -> void:
 		draw_mesh(sea_mesh, white, Transform2D.IDENTITY, view._color(&"ocean"))
+		var tiles := view._art_tiles()
 		if not view.gray_mode:
 			for band in depth_meshes.size():
-				draw_mesh(depth_meshes[band], white, Transform2D.IDENTITY, view._depth_color(band + 1))
-				draw_mesh(depth_hole_meshes[band], white, Transform2D.IDENTITY, view._depth_color(band))
+				view._draw_tiled(self, depth_meshes[band], tiles.depths[band] if tiles else [], white, view._depth_color(band + 1))
+				view._draw_tiled(self, depth_hole_meshes[band], tiles.depth_holes[band] if tiles else [], white, view._depth_color(band))
 
 	func land_texture() -> Texture2D:
 		return white if view.gray_mode else land_colors
@@ -861,7 +883,7 @@ class LandArt:
 	var art: WorldArt
 
 	func _draw() -> void:
-		draw_mesh(art.land_mesh, art.land_texture(), Transform2D.IDENTITY, art.land_tint())
+		view._draw_tiled(self, art.land_mesh, view._art_tiles().get("land", []), art.land_texture(), art.land_tint())
 		draw_mesh(art.south_cap_mesh, art.white, Transform2D.IDENTITY, view._color(&"land") if view.gray_mode else ANTARCTIC_ICE)
 
 ## The whole globe again, over the rest of the art, drawn by the regions'
@@ -891,9 +913,10 @@ class LandMask:
 	extends Node2D
 
 	var art: WorldArt
+	var view: MapView
 
 	func _draw() -> void:
-		draw_mesh(art.land_mesh, art.white)
+		view._draw_tiled(self, art.land_mesh, view._art_tiles().get("land", []), art.white)
 
 ## The biomes as flat-colored, straight-edged patches (WorldMapData
 ## biome_triangles), cut to the land by the land mask (MapView._land_mask:
@@ -907,7 +930,7 @@ class BiomeArt:
 
 	func _draw() -> void:
 		if not view.gray_mode:
-			draw_mesh(art.biome_mesh, art.white)
+			view._draw_tiled(self, art.biome_mesh, view._art_tiles().get("biome", []), art.white)
 
 ## Over the land: inland seas, and the lakes in their simplified real colors
 ## (plain water on the gray map).
@@ -921,7 +944,7 @@ class WaterArt:
 		draw_mesh(art.water_mesh, art.white, Transform2D.IDENTITY, view._color(&"ocean"))
 		for i in art.lake_meshes.size():
 			if art.lake_meshes[i] != null:
-				draw_mesh(art.lake_meshes[i], art.white, Transform2D.IDENTITY, view._color(&"ocean") if view.gray_mode else art.lake_colors[i])
+				view._draw_tiled(self, art.lake_meshes[i], view._art_tiles().lakes[i] if view._art_tiles() else [], art.white, view._color(&"ocean") if view.gray_mode else art.lake_colors[i])
 
 ## Over the land, lakes and lake ice: the lakes' islands, the borders, the
 ## coast, and the equator, faint.
@@ -933,9 +956,10 @@ class TopArt:
 
 	func _draw() -> void:
 		var data := GameData.world_map
-		draw_mesh(art.lake_island_mesh, art.land_texture(), Transform2D.IDENTITY, art.land_tint())
-		draw_multiline(data.border_segments, view._color(&"border"), -1.0)
-		draw_multiline(data.coast_segments, view._color(&"coast"), -1.0)
+		var tiles := view._art_tiles()
+		view._draw_tiled(self, art.lake_island_mesh, tiles.get("lake_island", []), art.land_texture(), art.land_tint())
+		view._draw_tiled_lines(self, data.border_segments, tiles.get("border", []), view._color(&"border"))
+		view._draw_tiled_lines(self, data.coast_segments, tiles.get("coast", []), view._color(&"coast"))
 		draw_polyline(art.equator, view._color(&"equator"), -1.0)
 
 ## Winter sea ice (see MapView._ice_circles and
@@ -972,9 +996,11 @@ class RiverTier:
 	var view: MapView
 	var segments: PackedVector2Array
 	var min_zoom := 0.0
+	## Its place in WorldMapData.river_tiers (for its tiles: see MapView._tiled()).
+	var tier := 0
 
 	func _draw() -> void:
-		draw_multiline(segments, view._color(&"river"), -1.0)
+		view._draw_tiled_lines(self, segments, view._art_tiles().rivers[tier] if view._art_tiles() else [], view._color(&"river"))
 
 func _exit_tree() -> void:
 	if GameState.anchor_route.get_object() == self:
@@ -1069,6 +1095,7 @@ func _ready() -> void:
 		tier.view = self
 		tier.segments = data.river_tiers[i]
 		tier.min_zoom = data.river_tier_min_zoom[i]
+		tier.tier = i
 		art.add_child(tier)
 		_river_tiers.append(tier)
 	var shade := RegionShade.new()
@@ -1099,6 +1126,7 @@ func _ready() -> void:
 	_land_mask.render_target_update_mode = SubViewport.UPDATE_DISABLED if gray_mode else SubViewport.UPDATE_ONCE
 	add_child(_land_mask)
 	_land_mask_art.art = art
+	_land_mask_art.view = self
 	_land_mask_art.material = _globe
 	RenderingServer.canvas_item_set_custom_rect(_land_mask_art.get_canvas_item(), true, NEVER_CULLED)
 	_land_mask.add_child(_land_mask_art)
@@ -1211,7 +1239,85 @@ static func _world_meshes() -> Dictionary:
 		depths = depths,
 		depth_holes = depth_holes,
 	}
+	# The same cut into tiles (see _tiled()), for views zoomed in: natively, or not at all.
+	if ClassDB.class_exists(&"GlobeTiles"):
+		var depth_tiles := []
+		var depth_hole_tiles := []
+		for band in data.depth_levels.size():
+			var cap := north_cap if data.depth_levels[band] <= ARCTIC_DEPTH else PackedVector2Array()
+			depth_tiles.append(_tiled(data.depth_triangles[band] + cap))
+			depth_hole_tiles.append(_tiled(data.depth_hole_triangles[band]))
+		_shared_meshes.tiles = {
+			land = _tiled(data.land_triangles),
+			biome = _tiled(data.biome_triangles, data.biome_colors),
+			lake_island = _tiled(data.lake_island_triangles),
+			lakes = data.lake_triangles.map(func(triangles: PackedVector2Array) -> Array: return _tiled(triangles)),
+			depths = depth_tiles,
+			depth_holes = depth_hole_tiles,
+			coast = _tiled(data.coast_segments, PackedColorArray(), 2),
+			border = _tiled(data.border_segments, PackedColorArray(), 2),
+			rivers = data.river_tiers.map(func(segments: PackedVector2Array) -> Array: return _tiled(segments, PackedColorArray(), 2)),
+		}
 	return _shared_meshes
+
+## Map triangles (or, `per_shape` 2, line segments) cut into TILE_DEG tiles:
+## [[a mesh of its triangles (or its segments), its middle on the unit sphere,
+## how far (radians) its furthest point is from that], ...]. Zoomed in, only
+## the tiles near the view are drawn (see _draw_tiled()): the art's hundreds
+## of thousands of triangles are mostly round the far side or off screen.
+static func _tiled(points: PackedVector2Array, colors := PackedColorArray(), per_shape := 3) -> Array:
+	var out := []
+	for tile: Dictionary in ClassDB.class_call_static(&"GlobeTiles", &"split", points, colors, per_shape, TILE_DEG):
+		# Its reach from samples across its box (a lon, lat box on the globe), with
+		# half a sample's step to spare.
+		var box: Rect2 = tile.box
+		var samples := PackedVector3Array()
+		var middle := Vector3.ZERO
+		for i in TILE_SAMPLES + 1:
+			for j in TILE_SAMPLES + 1:
+				var unit := _unit(box.position + box.size * Vector2(float(i), float(j)) / TILE_SAMPLES)
+				samples.append(unit)
+				middle += unit
+		middle = middle.normalized() if middle.length() > 0.000001 else samples[0]
+		var reach := 0.0
+		for unit in samples:
+			reach = maxf(reach, middle.angle_to(unit))
+		reach += samples[0].angle_to(samples[TILE_SAMPLES + 2]) / 2.0
+		var shapes: Variant = _triangle_mesh(tile.points, tile.colors) if per_shape == 3 else tile.points
+		out.append([shapes, middle, reach])
+	return out
+
+## Whether a tile (see _tiled()) can be in view.
+func _tile_in_view(tile: Array) -> bool:
+	return (tile[1] as Vector3).dot(_art_toward) >= cos(minf(_art_reach + TILE_SLACK + float(tile[2]), PI))
+
+## Whether the art is drawn tile by tile (only those in view): zoomed in far
+## enough that most of the globe can't be seen. Zoomed out, the whole meshes
+## (far fewer draw calls).
+func _tiles_shown() -> bool:
+	return _tile_reach < TILE_MAX_REACH and _shared_meshes.has("tiles")
+
+## The art's mesh, or zoomed in, only its tiles in view (see _tiled()).
+func _draw_tiled(canvas: CanvasItem, whole: ArrayMesh, tiles: Array, texture: Texture2D, modulate := Color.WHITE) -> void:
+	if not _art_tiled or tiles.is_empty():
+		canvas.draw_mesh(whole, texture, Transform2D.IDENTITY, modulate)
+		return
+	for tile: Array in tiles:
+		if _tile_in_view(tile):
+			canvas.draw_mesh(tile[0], texture, Transform2D.IDENTITY, modulate)
+
+## The same for line segments (the coast, borders and rivers).
+func _draw_tiled_lines(canvas: CanvasItem, whole: PackedVector2Array, tiles: Array, color: Color) -> void:
+	if not _art_tiled or tiles.is_empty():
+		canvas.draw_multiline(whole, color, -1.0)
+		return
+	for tile: Array in tiles:
+		if _tile_in_view(tile):
+			canvas.draw_multiline(tile[0], color, -1.0)
+
+## The art's tiles (see _shared_meshes), or {} if they weren't made.
+func _art_tiles() -> Dictionary:
+	return _shared_meshes.get("tiles", {})
 
 ## A mesh of map triangles (already small enough to curve round the globe:
 ## see Geo.tessellate()), and their colors if any. Their place on LAND_COLORS
@@ -2336,7 +2442,10 @@ func _zoom_at(screen_pos: Vector2, factor: float) -> void:
 func _update_rivers() -> void:
 	var web_zoom := _web_zoom()
 	for tier in _river_tiers:
-		tier.visible = web_zoom >= tier.min_zoom
+		var shown := web_zoom >= tier.min_zoom
+		if shown and not tier.visible:
+			tier.queue_redraw()  # (Its tiles may be from another view: see _tiled().)
+		tier.visible = shown
 
 ## The view's zoom as a web-map zoom level (0 = whole world in 256 px).
 func _web_zoom() -> float:
@@ -2363,6 +2472,21 @@ func _changed() -> void:
 	_near_ports_valid = false
 	_port_screens.clear()
 	_lanes_in_view.clear()
+	# Zoomed in, the art's drawn tile by tile (see _tiled()), TILE_SLACK beyond
+	# the view: drawn again once the view's moved past that (only queuing its
+	# few hundred meshes), and once more on zooming back out to the whole meshes.
+	_tile_reach = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0))
+	var tiled := _tiles_shown()
+	if _art != null and (tiled != _art_tiled or tiled and _art_toward.angle_to(_toward) + _tile_reach - _art_reach > TILE_SLACK):
+		_art_tiled = tiled
+		_art_toward = _toward
+		_art_reach = _tile_reach
+		var pieces: Array[Node] = [_art, _land_mask_art]
+		while not pieces.is_empty():
+			var piece: Node = pieces.pop_back()
+			if (piece as CanvasItem).visible:
+				(piece as CanvasItem).queue_redraw()  # (A hidden one's drawn when it shows: see _update_rivers().)
+			pieces.append_array(piece.get_children())
 	_update_rivers()
 	if not _ice_circles.is_empty():
 		for node in _ice_arts:
@@ -5285,6 +5409,13 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 	var centers: PackedVector3Array = caps[0]
 	var spans: PackedFloat64Array = caps[1]
 	var view_angle := asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0))
+	if _native_lane_screen:
+		# (The same, natively: a big fleet's lanes have many thousands of points.)
+		middle = ClassDB.class_call_static(&"LaneMath", &"lane_on_screen", middle, units, lane_miles, centers, spans, LANE_CHUNK, {toward = _toward, right = _right, up = _up,
+			radius = _radius(), middle = size / 2.0, view_angle = view_angle, hidden = HIDDEN}, start, stop, reaches[0] > 0.0)
+		if reaches[0] > 0.0:
+			middle.append(world_to_screen(_bent_sample(sea_lane, from_port, to_port, stop)[0]))
+		return [curves[1], middle, curves[0]]
 	for c in centers.size():
 		var first := c * LANE_CHUNK
 		if centers[c].dot(_toward) < cos(minf(view_angle + spans[c], PI)):
@@ -5647,7 +5778,10 @@ static func _chunk_caps(units: PackedVector3Array) -> Array:
 
 ## A line on screen, drawn on the near side of the globe only.
 func _draw_line_runs(points: PackedVector2Array, color: Color, dashed: bool, width: float) -> void:
-	for part in _visible_runs(points):
+	# Solid lines natively, without points closer than LINE_MIN_PX (zoomed out,
+	# a lane has far more points than pixels, each costly to draw smoothly).
+	var runs: Array = ClassDB.class_call_static(&"LaneMath", &"visible_runs", points, 0.0 if dashed else LINE_MIN_PX, HIDDEN) if _native_lane_screen else _visible_runs(points)
+	for part: PackedVector2Array in runs:
 		if dashed:
 			for i in range(1, part.size()):
 				_canvas.draw_dashed_line(part[i - 1], part[i], color, width, 8.0)

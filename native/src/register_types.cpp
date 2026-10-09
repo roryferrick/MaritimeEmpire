@@ -12,6 +12,7 @@
 #include "decor_sim.h"
 #include "land_test.h"
 #include "gust_painter.h"
+#include "globe_tiles.h"
 #include "land_sim.h"
 #include "native_probe.h"
 #include "port_painter.h"
@@ -36,6 +37,7 @@ static void initialize_maritime_native(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(LandTest);
 	GDREGISTER_CLASS(GustPainter);
 	GDREGISTER_CLASS(SeaPainter);
+	GDREGISTER_CLASS(GlobeTiles);
 }
 
 static void uninitialize_maritime_native(ModuleInitializationLevel p_level) {

@@ -37,6 +37,7 @@ class ShipStepper : public RefCounted {
 
 	bool _sail(Object *ship, double delta, double play_time, bool can_close, bool any_closure, bool events);
 	bool _idle_in_port(Object *ship, double play_time);
+	bool _adrift(Object *ship);
 
 protected:
 	static void _bind_methods();

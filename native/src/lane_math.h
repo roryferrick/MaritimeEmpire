@@ -6,6 +6,7 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 
 namespace godot {
@@ -31,6 +32,8 @@ public:
 	static Array zones(const PackedVector2Array &points, const PackedFloat64Array &miles, const Array &slow, double rough_lat, double rough_wear);
 	static Array with_harbor_speed(const Array &zones, double length, double top_speed, const Dictionary &settings);
 	static double leg_seconds(const Array &zones, double start_mile, double end_mile, double start_maintenance, double top_speed, double wear_per_s);
+	static PackedVector2Array lane_on_screen(const PackedVector2Array &out, const PackedVector3Array &units, const PackedFloat64Array &miles, const PackedVector3Array &centers, const PackedFloat64Array &spans, int64_t chunk, const Dictionary &view, double start, double stop, bool curve_in);
+	static Array visible_runs(const PackedVector2Array &points, double min_px, const Vector2 &hidden);
 };
 
 } // namespace godot
