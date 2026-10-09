@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 
 using namespace godot;
 
@@ -217,6 +218,19 @@ void BirdSim::setup(const Array &colonies, const Dictionary &species, double mig
 		}
 		_colonies.push_back(colony);
 	}
+	// Perching order at each port: its own birds (gulls and cormorants, the
+	// ones that perch on the breakwater) first, then those spending their away
+	// months there, so each has its own spot (see _perch()).
+	std::vector<int> perchers(_port_ids.size(), 0);
+	for (int away = 0; away < 2; away++) {
+		for (Bird &bird : _birds) {
+			const Colony &colony = _colonies[(size_t)bird.colony];
+			int port = away ? colony.away_port : colony.port;
+			if ((colony.cls == GULLS || colony.cls == CORMORANTS) && port >= 0) {
+				(away ? bird.perch_away : bird.perch_home) = perchers[(size_t)port]++;
+			}
+		}
+	}
 	size_t n = _birds.size();
 	_plans.assign(n, Plan());
 	_last.assign(n, Last());
@@ -408,6 +422,23 @@ BirdSim::V2 BirdSim::_target(const Plan &plan, const Bird &bird, double now) con
 	return plan.place;
 }
 
+// Its own slot (`order`, see Bird.perch_home) among a breakwater's evenly
+// spaced slots, taken in a stride round them (about 0.618 of the way) so
+// the first few birds are spread along both arms. Each bird has its own while
+// there are as many slots as perching birds; past that, two share one, and
+// only meet if both perch at once.
+BirdSim::V2 BirdSim::_perch(const std::vector<V2> &slots, int order, V2 fallback) {
+	const int64_t n = (int64_t)slots.size();
+	if (n == 0) {
+		return fallback;
+	}
+	int64_t stride = std::max<int64_t>((int64_t)std::llround((double)n * 0.618), 1);
+	while (std::gcd(stride, n) != 1) {
+		stride++;
+	}
+	return slots[(size_t)(((int64_t)std::max(order, 0) * stride) % n)];
+}
+
 // --- Spells -------------------------------------------------------------------
 
 BirdSim::Plan BirdSim::_plan(int index, bool away, int64_t k, double start, double cal, double now, bool with_from) {
@@ -462,7 +493,7 @@ BirdSim::Plan BirdSim::_plan(int index, bool away, int64_t k, double start, doub
 				plan.has_radius = true;
 			} else if (roll < 0.53) {
 				plan.act = A_PERCH;
-				plan.place = pick(spots.breakwater, 2);
+				plan.place = _perch(spots.breakwater, away ? bird.perch_away : bird.perch_home, center);
 			} else if (roll < 0.68) {
 				plan.act = A_SWIM;
 				plan.place = pick(spots.sea, 3);
@@ -496,7 +527,7 @@ BirdSim::Plan BirdSim::_plan(int index, bool away, int64_t k, double start, doub
 				plan.act = A_SLEEP;
 			} else if (group_roll < 0.4) {
 				plan.act = A_PERCH;
-				plan.place = pick(spots.breakwater, 7);
+				plan.place = _perch(spots.breakwater, away ? bird.perch_away : bird.perch_home, center);
 			} else if (group_roll < 0.82) {
 				plan.act = A_SWIM;
 				if (spots.sea.empty()) {
@@ -610,8 +641,8 @@ BirdSim::Plan BirdSim::_plan(int index, bool away, int64_t k, double start, doub
 	if (plan.act == A_FOLLOW) {
 		_ships_now();
 	}
-	V2 target = _target(plan, bird, start);
-	double distance = _distance_km(plan.from, target);
+	// (To where it starts circling, on its circle, for the circling kinds.)
+	double distance = _distance_km(plan.from, _doing(plan, bird, colony, 0.0, start).pos);
 	plan.travel = std::min(distance / SPEED_KMS[cls], length * TRAVEL_SHARE);
 	return plan;
 }
@@ -656,14 +687,15 @@ BirdSim::State BirdSim::_doing(Plan &plan, const Bird &bird, const Colony &colon
 		return s;
 	}
 	double since = into - plan.travel;
-	double settle = smoothstep(0.0, 3.0, since); // (Easing from its flight into the thing.)
 	int64_t seed = bird.seed;
 	switch (plan.act) {
 		case A_CIRCLE:
 		case A_SOAR:
 		case A_GLIDE:
 		case A_HUNT: {
-			double radius = (plan.has_radius ? plan.radius : 5.0) * settle;
+			// At its full size from the start: its flight there ends just where it
+			// joins its circle (not at the middle, flung out to it).
+			double radius = plan.has_radius ? plan.radius : 5.0;
 			double angle = plan.angle0 + since * plan.speed;
 			s.pos = _offset(target, { std::cos(angle) * radius, std::sin(angle) * radius });
 			s.height = plan.height;

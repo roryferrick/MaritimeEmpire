@@ -83,6 +83,10 @@ private:
 		bool hen = false;
 		double length = 30.0;
 		double phase = 0.0;
+		// Its place in the perching order at its port and at the port it spends
+		// its away months at (see _perch()), or -1.
+		int perch_home = -1;
+		int perch_away = -1;
 	};
 
 	struct Plan {
@@ -195,6 +199,8 @@ private:
 	static double _mix(int64_t n);
 	static V2 _disc_n(int64_t n);
 	static V2 _offset(V2 spot, V2 km);
+	// A perched bird's spot on its port's breakwater: its own (see Bird.perch_home).
+	static V2 _perch(const std::vector<V2> &slots, int order, V2 fallback);
 	static double _distance_km(V2 a, V2 b);
 	static double _local_hour(double lon, double unix);
 	static double _chance(const Array &parts);

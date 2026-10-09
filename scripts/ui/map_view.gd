@@ -57,6 +57,8 @@ const SHORE_REACH := 3.2
 const SHORE_SAMPLES := 24
 const SHORE_INLAND := 2.6
 const SHORE_SEAWARD := 3.0
+## Ships drawn full size are picked on their hulls (see _ship_on_hull()); the
+## rest (dots) within this many dock units of their middle.
 const SHIP_HIT_RADIUS := 6.0
 ## However small ships are drawn, a click this close (px) still picks one.
 const SHIP_HIT_MIN_PX := 7.0
@@ -125,6 +127,9 @@ const WILDLIFE_LARGEST_KM := 13.5
 const WILDLIFE_STRIDE_S := 500.0
 ## Kilometers in a degree of the globe's surface (px per km = _zoom / this).
 const KM_PER_DEGREE := 111.32
+## Birds perched on a breakwater stand this far apart (dock units), room for a
+## cormorant to hold its wings out to dry.
+const PERCH_SPACING := 1.2
 ## Wonders of the world (data/wonders.json, see _draw_wonders()): where their
 ## art is; how big (px) one must be to show, and for its name to show; how
 ## faded the lost ancient ones are; their names' size; how far (km) they're
@@ -670,6 +675,9 @@ var _dock_slots_frame := -1
 var _tug_slots := {}
 var _tug_counts := {}
 var _draw_order: Array[Ship] = []
+## Where each ship's hull was last drawn, for clicks (see _ship_on_hull()):
+## ship -> [where, angle]. Ships drawn as dots aren't in it.
+var _ship_hulls := {}
 var _draw_order_dirty := true
 var _model_looks := {}
 ## Docked-ship dot images (see _dot_image()).
@@ -2386,11 +2394,15 @@ func _click(screen_pos: Vector2) -> void:
 			marina_dist = dist
 			marina_port = port.id
 	if show_ships:
-		for ship in _ships_topmost_first():
-			var dist := ship_screen_position(ship).distance_to(screen_pos)
-			if dist <= maxf(SHIP_HIT_RADIUS * _ship_scale(), SHIP_HIT_MIN_PX) and dist < nearest_dist:
-				nearest_dist = dist
-				nearest_ship = ship
+		nearest_ship = _ship_on_hull(screen_pos)  # Right on one, the one on top.
+		if nearest_ship == null:
+			for ship in _ships_topmost_first():
+				if _ship_hulls.has(ship):
+					continue  # (Picked only on its hull, just above.)
+				var dist := ship_screen_position(ship).distance_to(screen_pos)
+				if dist <= maxf(SHIP_HIT_RADIUS * _ship_scale(), SHIP_HIT_MIN_PX) and dist < nearest_dist:
+					nearest_dist = dist
+					nearest_ship = ship
 	if nearest_ship:
 		ship_clicked.emit(nearest_ship)
 	elif not nearest_port.is_empty():
@@ -2423,6 +2435,22 @@ func _click(screen_pos: Vector2) -> void:
 		storm_clicked.emit(_storm_at(screen_pos))
 	else:
 		empty_clicked.emit()
+
+## The topmost ship whose hull, as drawn (_ship_hulls: its art's own rect,
+## turned and scaled), is under a screen point, or null; one drawn under
+## SHIP_HIT_MIN_PX across or long is picked within that.
+func _ship_on_hull(screen_pos: Vector2) -> Ship:
+	var scale := _ship_scale()
+	for ship in _ships_topmost_first():
+		var hull: Array = _ship_hulls.get(ship, [])
+		if hull.is_empty():
+			continue
+		var rect: Rect2 = _model_look(ship.model_id)[7]
+		var grow := (Vector2.ONE * SHIP_HIT_MIN_PX / scale - rect.size).max(Vector2.ZERO) / 2.0
+		rect = rect.grow_individual(grow.x, grow.y, grow.x, grow.y)
+		if rect.has_point((screen_pos - (hull[0] as Vector2)).rotated(-float(hull[1])) / scale):
+			return ship
+	return null
 
 ## Zooms by a factor, keeping the map point under a screen point there (if
 ## it's on the globe; else about the middle).
@@ -2862,6 +2890,9 @@ const PEEL_OUT_WIDTHS := 1.6
 const PEEL_ANGLE := 0.45
 ## A click this near a bird picks it (its colony).
 const BIRD_HIT_MIN_PX := 6.0
+## Birds are picked this many times further out than their own reach (their
+## span and BIRD_HIT_MIN_PX), so they're easier to click.
+const BIRD_HIT_REACH := 1.6
 ## Birds are drawn this many times their span (in dock units), to read clearly.
 const BIRD_SCALE := 1.4
 ## The smallest bird's span (dock units: a sandpiper's), and how wide (px) a
@@ -3385,6 +3416,10 @@ func _show_marina_item(item: Control, shown: bool) -> void:
 	if bool(item.get_meta(&"shown", true)) != shown:
 		item.set_meta(&"shown", shown)
 		RenderingServer.canvas_item_set_visible(item.get_canvas_item(), shown)
+	if not shown:
+		# Parked far off screen too: should anything show it again, it isn't left
+		# where it was, drawn at the zoom it was (put back when shown).
+		(item.get_parent() as Node2D).position = HIDDEN
 
 
 ## A port's marina's canvas item (see _update_marinas()), made the first time,
@@ -6037,6 +6072,7 @@ func _draw_hub_alerts() -> void:
 ## middle. Lost ships get a red "!" above them, and ships that won't make it
 ## to port an amber one.
 func _draw_ships() -> void:
+	_ship_hulls.clear()
 	var outline := _color(&"ship_outline")
 	# Ports whose ships in port can show (near the view, their marina showing),
 	# looked at once each rather than for every ship there.
@@ -6187,6 +6223,7 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	if ship.is_docked() and docks_shown() and not ship.is_tug() and ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		_draw_mooring_ropes(ship)  # Moored: tied up to the bollards.
+	_ship_hulls[ship] = [at, angle]
 	_canvas.draw_set_transform(at, angle, Vector2.ONE * _ship_scale())
 	var art: Dictionary = look[6]
 	if not art.is_empty():
@@ -7756,10 +7793,13 @@ func _bird_spots(port_id: String) -> Dictionary:
 	var radius := float(layout.radius)
 	var gap := float(layout.get("gap", 0.4))
 	var out := {center = _dock_lon_lat(port_id, Vector2.ZERO), radius_km = radius * KM_PER_DEGREE / SHIP_WORLD_ZOOM}
+	# Perching spots along both arms of the breakwater, PERCH_SPACING apart (each
+	# perching bird has its own: see BirdLife._perch()).
 	var breakwater := []
+	var slots := maxi(floori((PI / 2.0 - 0.05 - gap - 0.1) * radius / PERCH_SPACING), 1)
 	for side: float in [1.0, -1.0]:
-		for i in 5:
-			var along := lerpf(gap + 0.1, PI / 2.0 - 0.05, (i + 0.5) / 5.0) * side
+		for i in slots:
+			var along := lerpf(gap + 0.1, PI / 2.0 - 0.05, (i + 0.5) / slots) * side
 			breakwater.append(_dock_lon_lat(port_id, Vector2.from_angle(along) * radius))
 	out.breakwater = breakwater
 	var shore := []
@@ -8238,6 +8278,7 @@ static func _mirror_y(points: PackedVector2Array) -> PackedVector2Array:
 ## [what it's round ({colony}), its colony ({count, species})], or []; `reach`
 ## times its usual reach (smaller: only right on a bird).
 func _birds_at(screen_pos: Vector2, reach := 1.0) -> Array:
+	reach *= BIRD_HIT_REACH
 	var native: Object = BirdLife.shared().native
 	if native != null:
 		var index: int = native.hit_at(screen_pos, reach)

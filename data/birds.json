@@ -310,7 +310,7 @@
 			"colors": {"mantle": "#4a3828", "head": "#f6f4ee", "tip": "#24180f", "belly": "#f6f4ee", "bill": "#2a2a2a", "tail": "#6a5844"},
 			"where": "Coasts, lakes and rivers on every continent but Antarctica: north in summer, south to the tropics in winter; all year in Australia.", "fact": "It plunges feet first for fish, and carries them head forward to cut the wind.",
 			"seasons": [{"months": [4, 5, 6, 7, 8, 9], "ranges": [[-170, 180, 35, 70]]}, {"months": [10, 11, 12, 1, 2, 3], "ranges": [[-120, -35, -30, 30], [-20, 50, -35, 30], [60, 155, -40, 30]]}, {"ranges": [[110, 155, -45, -10]]}]},
-		"red_tailed_hawk": {"name": "Red-tailed Hawk", "latin": "Buteo jamaicensis", "kind": "Hawk", "span": 0.95, "behavior": "kite", "visit": [0.4, 1, 1],
+		"red_tailed_hawk": {"name": "Red-tailed Hawk", "latin": "Buteo jamaicensis", "kind": "Hawk", "span": 0.95, "behavior": "kite", "visit": [0.55, 1, 1],
 			"colors": {"mantle": "#6a4a30", "head": "#5a3e28", "tip": "#2a1c12", "belly": "#e8dcc8", "bill": "#3a3a3a", "tail": "#c0582a"},
 			"where": "Across North America, from Alaska to Panama.", "fact": "Its scream is the one films give to every eagle.",
 			"seasons": [{"ranges": [[-170, -60, 8, 65]]}]},

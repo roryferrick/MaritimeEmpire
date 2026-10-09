@@ -46,6 +46,11 @@ const YOUNG_SIZE := 0.55
 const SPECIES_A_PORT := {raptors = 2, cormorants = 2, waders = 3, sea_ducks = 1}
 ## The most birds of one species in a colony, by class (rafts and cormorant groups can be big).
 const COLONY_MOST := {cormorants = 8, sea_ducks = 16, waders = 3, raptors = 2}
+## The share of each colony's birds that live (a fixed roll per colony
+## settling the odd bird, so some colonies of one have none); these species
+## all of them.
+const BIRD_SHARE := 2.0 / 3.0
+const FULL_NUMBERS := ["red_tailed_hawk"]
 ## Land groups and seabird colonies are found by cells this many degrees across.
 const CELL_DEG := 5.0
 
@@ -345,6 +350,8 @@ func _build_birds() -> void:
 			var follow: Array = info.get("follow", [0.3, 1, 2])
 			var count := int(follow[2]) * int(birds_data.get("seabird_colony_size", 3))
 			var index := _add_colony("seabirds", id, port.id, spot, count, str(species_homes.get(id, homes.get("seabirds", "seabird_colony"))), months)
+			if index < 0:
+				continue
 			colonies[index].range_km = seabird_range_km(id)
 			(_seabird_cells.get_or_add(_cell(spot), []) as Array).append(index)
 
@@ -370,8 +377,14 @@ func _add_gulls(port: Dictionary, spot: Vector2, here: Array) -> void:
 
 
 ## A colony: living at a port in its home months, and (if those aren't all
-## of them) at the nearest port its species' range covers in the rest.
+## of them) at the nearest port its species' range covers in the rest. Its
+## BIRD_SHARE of `count` live; its index, or -1 if that leaves none.
 func _add_colony(cls: String, id: String, port_id: String, spot: Vector2, count: int, home_kind: String, months: Array) -> int:
+	if not FULL_NUMBERS.has(id):
+		var share := count * BIRD_SHARE
+		count = floori(share) + (1 if Birds.chance([cls, id, port_id, "share"]) < share - floorf(share) else 0)
+		if count <= 0:
+			return -1
 	var info := Birds.shared().species(id)
 	var away_port := ""
 	var away_spot := spot

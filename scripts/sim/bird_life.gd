@@ -110,6 +110,16 @@ func ensure_built() -> bool:
 			birds.append({colony = index, n = n, seed = seed, hen = cls == "sea_ducks" and n % 2 == 1,
 				length = lerpf(SPELL_S[cls].x, SPELL_S[cls].y, Wildlife._mix(seed)), phase = Wildlife._mix(seed + 1)})
 		_colony_birds[index] = list
+	# Perching order at each port (see _perch()): its own gulls and cormorants
+	# first, then those spending their away months there.
+	var perchers := {}
+	for away: bool in [false, true]:
+		for bird: Dictionary in birds:
+			var colony: Dictionary = wildlife.colonies[bird.colony]
+			var port: String = colony.away_port if away else colony.port
+			if colony.cls in ["gulls", "cormorants"] and not port.is_empty():
+				bird["perch_away" if away else "perch_home"] = int(perchers.get(port, 0))
+				perchers[port] = int(perchers.get(port, 0)) + 1
 	_built = true
 	return true
 
@@ -322,7 +332,7 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 				plan.radius = float(spots.get("radius_km", 15.0)) * lerpf(0.5, 1.2, Wildlife._mix(bird.seed + k * 3))
 			elif roll < 0.53:
 				plan.act = "perch"
-				plan.place = pick.call(spots.get("breakwater", []), 2)
+				plan.place = _perch(spots.get("breakwater", []), int(bird.get("perch_away" if away else "perch_home", 0)), center)
 			elif roll < 0.68:
 				plan.act = "swim"
 				plan.place = pick.call(spots.get("sea", []), 3)
@@ -350,7 +360,7 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 				plan.act = "sleep"
 			elif group_roll < 0.4:
 				plan.act = "perch"
-				plan.place = pick.call(spots.get("breakwater", []), 7)
+				plan.place = _perch(spots.get("breakwater", []), int(bird.get("perch_away" if away else "perch_home", 0)), center)
 			elif group_roll < 0.82:
 				plan.act = "swim"
 				plan.place = (spots.get("sea", [center]) as Array)[int(group_roll * 997) % maxi((spots.get("sea", [center]) as Array).size(), 1)]
@@ -425,13 +435,34 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 	else:
 		var before := _plan(index, bird, colony, away, k - 1, start - length, cal, start, false)
 		plan.from = _doing(before, bird, colony, length, start).pos
-	var target := _target(plan, bird, start)
-	var distance := Geo.distance_nm(plan.from, target) * 1.852
+	# (To where it starts circling, on its circle, for the circling kinds.)
+	var distance := Geo.distance_nm(plan.from, _doing(plan, bird, colony, 0.0, start).pos) * 1.852
 	plan.travel = minf(distance / float(SPEED_KMS[cls]), length * TRAVEL_SHARE)
 	return plan
 
 
 ## Where a spell's activity is at a time (the start of it, where it flies to).
+## A perched bird's own slot (`order`: its place in its port's perching order)
+## among a breakwater's evenly spaced slots, taken in a stride round them
+## (about 0.618 of the way) so the first few are spread along both arms: each
+## bird has its own while there are as many slots as perching birds. (As
+## BirdSim._perch().)
+static func _perch(slots: Array, order: int, fallback: Vector2) -> Vector2:
+	var n := slots.size()
+	if n == 0:
+		return fallback
+	var stride := maxi(roundi(n * 0.618), 1)
+	while _gcd(stride, n) != 1:
+		stride += 1
+	return slots[(maxi(order, 0) * stride) % n]
+
+static func _gcd(a: int, b: int) -> int:
+	while b != 0:
+		var t := b
+		b = a % b
+		a = t
+	return a
+
 func _target(plan: Dictionary, bird: Dictionary, now: float) -> Vector2:
 	if plan.act == "follow":
 		var ship: Ship = plan.ship
@@ -464,11 +495,12 @@ func _doing(plan: Dictionary, bird: Dictionary, colony: Dictionary, into: float,
 		along += Vector2(bend.x / maxf(cos(deg_to_rad(along.y)), 0.1), bend.y)
 		return {pos = along, heading = NAN, mode = "fly", height = 1.2, wings = flap, splash = 0.0}
 	var since := into - float(plan.travel)
-	var settle := smoothstep(0.0, 3.0, since)  # (Easing from its flight into the thing.)
 	var seed: int = bird.seed
 	match plan.act:
 		"circle", "soar", "glide", "hunt":
-			var radius := float(plan.get("radius", 5.0)) * settle
+			# At its full size from the start: its flight there ends just where it
+			# joins its circle (not at the middle, flung out to it).
+			var radius := float(plan.get("radius", 5.0))
 			var turn := float(plan.turn)
 			var angle := float(plan.angle0) + since * float(plan.speed)
 			var pos := Wildlife._offset(target, Vector2.from_angle(angle) * radius)
