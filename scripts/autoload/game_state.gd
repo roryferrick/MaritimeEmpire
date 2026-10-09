@@ -253,6 +253,8 @@ var _calendar_start := -1
 var _calendar_rate := 0.0
 
 var _autosave_timer := Timer.new()
+## The autosave being written off the main thread (a WorkerThreadPool task), or -1.
+var _autosave_task := -1
 var _breakdown_clock := 0.0
 var _auto_recovery_clock := 0.0
 var _storm_warning_clock := 0.0
@@ -294,7 +296,7 @@ var ai_acting: Company = null
 
 func _ready() -> void:
 	_autosave_timer.wait_time = float(GameData.config.get("autosave_seconds", 30))
-	_autosave_timer.timeout.connect(save_game)
+	_autosave_timer.timeout.connect(_autosave)
 	add_child(_autosave_timer)
 	_migrate_legacy_save()
 	port_sizes.band_changed.connect(port_band_changed.emit)
@@ -303,6 +305,10 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		save_game()
+
+
+func _exit_tree() -> void:
+	_finish_autosave()  # (Quitting: the autosave's written out first.)
 
 
 func _process(delta: float) -> void:
@@ -2620,7 +2626,7 @@ func tug_plan(lost: Ship) -> Dictionary:
 		var miles: float = maxf(float(end[1]), 0.0)
 		var team: Array = ships.filter(func(tug: Ship) -> bool:
 			return tug.is_tug() and owner_of(tug) == owner_of(lost) and tug.base_port == port and tug.docked_at == port and not tug.is_docking() \
-				and not tug.is_on_job() and tug.reach_nm() >= miles and tug.fuel >= _tug_fuel(tug, miles))
+				and not tug.is_on_job() and _tug_can_fetch(tug, miles))
 		if team.is_empty():
 			continue
 		team = team.slice(0, tugs_per_port())
@@ -2636,6 +2642,11 @@ func tug_plan(lost: Ship) -> Dictionary:
 				+ minf(tug.wear_per_s() * seconds, 1.0) * tug.full_repair_cost() * port_sizes.cost_factor(port)
 		return {tugs = team, tow_port = port, miles = miles, seconds = seconds, cost = cost}
 	return {}
+
+
+## Whether a free tug reaches, and has the fuel, to fetch a ship `miles` out.
+func _tug_can_fetch(tug: Ship, miles: float) -> bool:
+	return tug.reach_nm() >= miles and tug.fuel >= _tug_fuel(tug, miles)
 
 
 ## Fuel a tug needs to fetch a ship `miles` out: out there, and back towing it
@@ -2906,9 +2917,50 @@ func recovery_plan(lost: Ship) -> Dictionary:
 func _send_queued_recoveries() -> void:
 	var waiting := ships.filter(func(ship: Ship) -> bool:
 		return ship.is_lost() and ship.auto_recover and ship.rescuer == null)
+	if waiting.is_empty():
+		return
 	waiting.sort_custom(func(a: Ship, b: Ship) -> bool: return a.lost_order < b.lost_order)
+	# Working out a recovery is costly, and most of the time every boat that
+	# could fetch a ship is busy: a ship no free tug or boat could fetch is
+	# skipped (what's free is looked at again after each one sent).
+	var free := _free_rescuers()
 	for ship: Ship in waiting:
-		_send_recovery(ship, true)
+		if not _could_fetch(ship, free):
+			continue
+		if _send_recovery(ship, true).is_empty() and ship.rescuer != null:
+			free = _free_rescuers()
+
+
+## Who could set out on a recovery now (see tug_plan() and recovery_plan()):
+## {boats: company -> its free recovery boats, tugs: [company, port] -> the
+## free tugs based there}.
+func _free_rescuers() -> Dictionary:
+	var boats := {}
+	var tugs := {}
+	for ship in ships:
+		if ship.is_on_job() or not ship.is_docked() or ship.is_docking():
+			continue
+		if ship.is_recovery():
+			(boats.get_or_add(owner_of(ship), []) as Array).append(ship)
+		elif ship.is_tug() and ship.base_port == ship.docked_at:
+			(tugs.get_or_add([owner_of(ship), ship.docked_at], []) as Array).append(ship)
+	return {boats = boats, tugs = tugs}
+
+
+## Whether any of the free rescuers (see _free_rescuers()) might fetch a lost
+## ship: a tug at either end of its leg that reaches it, or a boat that can
+## carry it on its lane. (If none, recovery_plan() would find none either.)
+func _could_fetch(lost: Ship, free: Dictionary) -> bool:
+	var owner := owner_of(lost)
+	if not lost.from_port.is_empty():
+		for end: Array in [[lost.from_port, lost.traveled_nm], [lost.to_port, lost.leg_length() - lost.traveled_nm]]:
+			for tug: Ship in free.tugs.get([owner, end[0]], []):
+				if _tug_can_fetch(tug, maxf(float(end[1]), 0.0)):
+					return true
+	for boat: Ship in free.boats.get(owner, []):
+		if boat.can_carry(lost) and boat.fits_lane(lost.from_port, lost.to_port):
+			return true
+	return false
 
 
 ## Sends the nearest free recovery boat that can carry a lost ship. Returns
@@ -3320,6 +3372,7 @@ func has_save(slot: int, online := multiplayer_save) -> bool:
 ## home_port (id), max_time_speed, storms, seasons, money, date (calendar Unix
 ## time)}, plus error if it can't be loaded; {} if empty.
 func save_summary(slot: int, online := multiplayer_save) -> Dictionary:
+	_finish_autosave()
 	if not has_save(slot, online):
 		return {}
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_path(slot, online)))
@@ -3347,6 +3400,7 @@ func save_summary(slot: int, online := multiplayer_save) -> Dictionary:
 
 
 func delete_save(slot: int, online := multiplayer_save) -> void:
+	_finish_autosave()
 	DirAccess.remove_absolute(save_path(slot, online))
 
 
@@ -3389,6 +3443,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 ## Loads a slot's save and starts a session saving to it. Returns why it
 ## couldn't, or "". A save from before companies loads as its one company.
 func continue_game(slot: int) -> String:
+	_finish_autosave()
 	var path := save_path(slot)
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(data) != TYPE_DICTIONARY:
@@ -3467,11 +3522,34 @@ func _fit_ports_to_routes() -> void:
 func save_game() -> void:
 	if not in_session or Net.is_client() or ai_acting != null:
 		return  # A joined player's game is the host's to save (and an AI rival's moves wait for the next).
-	var file := FileAccess.open(save_path(save_slot), FileAccess.WRITE)
+	_finish_autosave()  # (So an older autosave can't land after this.)
+	_write_save(save_path(save_slot), world_dict())
+
+
+## The timed autosave: the game is copied here, then turned into text and
+## written off the main thread (most of the time it takes with a big fleet),
+## so play doesn't hitch.
+func _autosave() -> void:
+	if not in_session or Net.is_client() or ai_acting != null:
+		return
+	_finish_autosave()
+	var data := world_dict().duplicate(true)  # (Its own copy: the ships' routes and such are the live ones.)
+	_autosave_task = WorkerThreadPool.add_task(_write_save.bind(save_path(save_slot), data), false, "Autosave")
+
+
+## Waits for the autosave being written, if any.
+func _finish_autosave() -> void:
+	if _autosave_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_autosave_task)
+		_autosave_task = -1
+
+
+func _write_save(path: String, data: Dictionary) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		push_error("GameState: could not write save (%s)" % error_string(FileAccess.get_open_error()))
 		return
-	file.store_string(JSON.stringify(world_dict(), "\t"))
+	file.store_string(JSON.stringify(data, "\t"))
 
 
 ## The whole game as a save holds it: the world, every company (and which is

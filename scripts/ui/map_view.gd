@@ -611,6 +611,8 @@ var _drag_samples: Array = []
 var _lane_units := {}
 ## Each lane's chunks (see _chunk_caps()), worked out with its points.
 var _lane_caps := {}
+## Each sea lane's chunks a ship can be seen on (1) or not (see _on_lane_in_view()), till the view changes.
+var _lanes_in_view := {}
 ## Canals' boxes (lon, lat), where lanes don't bend (see _in_canal()).
 var _canal_boxes: Array[Rect2] = []
 ## The land's triangles by cell (see _on_land()), and the task sorting them.
@@ -2360,6 +2362,7 @@ func _changed() -> void:
 	_port_turns.clear()
 	_near_ports_valid = false
 	_port_screens.clear()
+	_lanes_in_view.clear()
 	_update_rivers()
 	if not _ice_circles.is_empty():
 		for node in _ice_arts:
@@ -5154,12 +5157,65 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 	for piece: PackedVector2Array in pieces:
 		line.append_array(piece)
 	_draw_line_runs(line, color, dashed, width)
-	if both_ways:
+	if both_ways and _lane_curve_ends(from_port, to_port) != [false, false]:  # (Without a marina showing, the way back has no curves.)
 		var back = GameData.lane(to_port, from_port)
 		if back != null:
 			var back_pieces := _lane_pieces(back, to_port, from_port)
 			_draw_line_runs(back_pieces[0], color, dashed, width)
 			_draw_line_runs(back_pieces[2], color, dashed, width)
+
+## A bent lane's (see _bent_lane()) points on the sphere, and its chunks (see
+## _chunk_caps()), worked out once.
+func _bent_units(sea_lane, bent: Dictionary) -> PackedVector3Array:
+	var units: PackedVector3Array = _lane_units.get(sea_lane, PackedVector3Array())
+	if units.is_empty():
+		for p: Vector2 in bent.points:
+			units.append(_unit(p))
+		_lane_units[sea_lane] = units
+		_lane_caps[sea_lane] = _chunk_caps(units)
+	return units
+
+## Whether a ship `mile` along a lane could be in view: the lane's chunk
+## there (see _chunk_caps()) is near enough the view for a ship on it (eased
+## into its harbour, or in a canal's other channel) to show. Zoomed in, most of
+## a big fleet isn't: skipped before working out just where each one is.
+func _on_lane_in_view(sea_lane, from_port: String, to_port: String, mile: float) -> bool:
+	var bent := _bent_lane(sea_lane, from_port, to_port)
+	var units := _bent_units(sea_lane, bent)
+	var chunks: PackedByteArray = _lanes_in_view.get(sea_lane, PackedByteArray())
+	if chunks.is_empty():
+		var caps: Array = _lane_caps[sea_lane]
+		var centers: PackedVector3Array = caps[0]
+		var spans: PackedFloat64Array = caps[1]
+		var margin := (SHIP_CULL_MARGIN + PORT_MAX_REACH) * _ship_scale()
+		var view_angle := asin(minf((size.length() / 2.0 + margin) / _radius(), 1.0))
+		chunks.resize(centers.size())
+		for c in centers.size():
+			chunks[c] = 1 if centers[c].dot(_toward) >= cos(minf(view_angle + spans[c], PI)) else 0
+		_lanes_in_view[sea_lane] = chunks
+	# Between points i - 1 and i (as _bent_sample() finds them): in the chunk with i - 1.
+	var miles: PackedFloat64Array = bent.miles
+	var i := clampi(miles.bsearch(clampf(mile, 0.0, sea_lane.length())), 1, units.size() - 1)
+	return chunks[mini((i - 1) / LANE_CHUNK, chunks.size() - 1)] == 1
+
+## Whether a ship at sea could be in view (see _on_lane_in_view()); true if
+## it's not on a lane.
+func _ship_maybe_in_view(ship: Ship) -> bool:
+	if ship.is_docked() or ship.from_port.is_empty() or ship.to_port.is_empty():
+		return true
+	var sea_lane = GameData.lane(ship.from_port, ship.to_port)
+	return sea_lane == null or _on_lane_in_view(sea_lane, ship.from_port, ship.to_port, ship.traveled_nm)
+
+## Which ends of a lane curve in to their harbours: [arriving, leaving], each
+## where its port's marina shows near the view.
+func _lane_curve_ends(from_port: String, to_port: String) -> Array:
+	var near := Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)
+	var shows := [false, false]
+	for i in 2:
+		var port := to_port if i == 0 else from_port
+		var root := port_screen_position(port)
+		shows[i] = not _is_hidden(root) and near.has_point(root) and _marina_shown(port)
+	return shows
 
 ## A lane on screen in three pieces: the curve out of its first port's
 ## harbour, the lane between, and the curve into its last port's (the curves
@@ -5169,21 +5225,10 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 	# sphere are worked out once.
 	var bent := _bent_lane(sea_lane, from_port, to_port)
 	var lane_miles: PackedFloat64Array = bent.miles
-	var units: PackedVector3Array = _lane_units.get(sea_lane, PackedVector3Array())
-	if units.is_empty():
-		for p: Vector2 in bent.points:
-			units.append(_unit(p))
-		_lane_units[sea_lane] = units
-		_lane_caps[sea_lane] = _chunk_caps(units)
+	var units := _bent_units(sea_lane, bent)
 	var length: float = sea_lane.length()
-	var near := Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)
-	var shows := [false, false]  # (Arriving, leaving: where its port's marina shows, it curves in.)
-	var curved := false
-	for i in 2:
-		var port := to_port if i == 0 else from_port
-		var root := port_screen_position(port)
-		shows[i] = not _is_hidden(root) and near.has_point(root) and _marina_shown(port)
-		curved = curved or shows[i]
+	var shows := _lane_curve_ends(from_port, to_port)
+	var curved: bool = shows[0] or shows[1]
 	var curves: Array[PackedVector2Array] = [PackedVector2Array(), PackedVector2Array()]  # [in, out]
 	var reaches := PackedFloat32Array([0.0, 0.0])
 	if curved:
@@ -5292,6 +5337,7 @@ func _port_zones() -> Array:
 		_bent_lanes.clear()
 		_lane_units.clear()
 		_lane_caps.clear()
+		_lanes_in_view.clear()
 		_lane_reach_memo.clear()
 	return _zones
 
@@ -5858,9 +5904,21 @@ func _draw_hub_alerts() -> void:
 ## to port an amber one.
 func _draw_ships() -> void:
 	var outline := _color(&"ship_outline")
+	# Ports whose ships in port can show (near the view, their marina showing),
+	# looked at once each rather than for every ship there.
+	var near := Rect2(Vector2.ZERO, size).grow((SHIP_CULL_MARGIN + PORT_MAX_REACH) * _ship_scale())
+	var ports_shown := {}
 	for ship in _ships_biggest_first():
-		if not ship.is_carried() and (not ship.is_docked() or docks_shown()):  # Docked ones as dots: see _draw_dock_layer().
-			_draw_ship(ship, outline)
+		if ship.is_carried() or ship.is_docked() and not docks_shown():
+			continue  # Docked ones as dots: see _draw_dock_layer().
+		if ship.is_docked():
+			var shown = ports_shown.get(ship.docked_at)
+			if shown == null:
+				shown = near.has_point(port_screen_position(ship.docked_at)) and _marina_shown(ship.docked_at)
+				ports_shown[ship.docked_at] = shown
+			if not shown:
+				continue  # (See _draw_ship().)
+		_draw_ship(ship, outline)
 	for ship in GameState.ships:
 		if ship.is_carried():
 			_draw_ship(ship, outline)
@@ -5869,6 +5927,10 @@ func _draw_ships() -> void:
 	for ship in GameState.ships:
 		if ship.is_towed() or not GameState.is_mine(ship):
 			continue  # On its way in, or another player's: no marker.
+		if not (ship.is_lost() and not ship.is_carried() or ship.at_risk):
+			continue
+		if not ship.canal_state in [Ship.CANAL_ANCHORED, Ship.CANAL_CONVOY, Ship.CANAL_TOLL] and not _ship_maybe_in_view(ship):
+			continue  # (Well out of view.)
 		if ship.is_lost() and not ship.is_carried():
 			_draw_marker(ship_screen_position(ship), _color(&"lost_marker"))
 		elif ship.at_risk:
@@ -5962,6 +6024,8 @@ func _draw_ship(ship: Ship, outline: Color) -> void:
 	if not ship.is_docked() and not ship.is_service() and ship.rescuer == null and not ship.canal_state in [Ship.CANAL_ANCHORED, Ship.CANAL_CONVOY, Ship.CANAL_TOLL]:
 		# A cargo ship on its lane (most of them): where and which way from
 		# one sample of the lane.
+		if not _ship_maybe_in_view(ship):
+			return  # (Its stretch of lane is well out of view.)
 		var here := _ship_bent(ship)
 		if here.is_empty():
 			return
