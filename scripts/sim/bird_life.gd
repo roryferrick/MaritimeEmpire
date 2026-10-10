@@ -71,6 +71,9 @@ const NO_FIX := [null, -INF, INF, -1]
 var _spots := {}
 var spots_provider: Callable
 var _built := false
+## The task making the birds (see ensure_built()), or -1; and what it made.
+var _task := -1
+var _made: Array = []
 ## The native birds (BirdSim), when the native library's loaded; null otherwise.
 var native: Object = null
 ## The map's meshes for the native birds (see MapView._native_bird_mesh()).
@@ -85,43 +88,66 @@ static func shared() -> BirdLife:
 	return _shared
 
 
-## The birds, once the wildlife's colonies are built (or [] till then).
+## The birds, once the wildlife's colonies are built (or [] till then): the
+## first ask once they are starts making them off the main thread (11,000
+## or so birds, natively and here), and till that's done there are none.
 func ensure_built() -> bool:
 	if _built:
 		return true
-	var wildlife := Wildlife.shared()
-	if not wildlife.ensure_built():
+	if not Wildlife.shared().ensure_built():
 		return false
+	if _task < 0:
+		_task = WorkerThreadPool.add_task(_build, false, "Birds")
+		return false
+	if not WorkerThreadPool.is_task_completed(_task):
+		return false
+	WorkerThreadPool.wait_for_task_completion(_task)
+	_task = -1
+	# (Taken on now, on the main thread: nothing sees them half made.)
+	native = _made[0]
+	birds = _made[1]
+	_colony_birds = _made[2]
+	_made = []
+	_hand_providers()
+	_built = true
+	return true
+
+
+## Makes the birds (see ensure_built()), off the main thread, into _made:
+## [the native birds or null, birds, _colony_birds].
+func _build() -> void:
+	var wildlife := Wildlife.shared()
+	var made_native: Object = null
 	if ClassDB.class_exists(&"BirdSim"):
-		native = ClassDB.instantiate(&"BirdSim")
+		made_native = ClassDB.instantiate(&"BirdSim")
 		var species := {}
 		var names := Birds.shared()
 		for group: Dictionary in [names.gulls, names.seabirds, names.raptors, names.sea_ducks, names.cormorants, names.waders]:
 			species.merge(group)
-		native.setup(wildlife.colonies, species, wildlife.migrate_days)
-		_hand_providers()
+		made_native.setup(wildlife.colonies, species, wildlife.migrate_days)
+	var made: Array[Dictionary] = []
+	var colony_birds := {}
 	for index in wildlife.colonies.size():
 		var colony: Dictionary = wildlife.colonies[index]
 		var list := []
 		for n in int(colony.count):
-			list.append(birds.size())
+			list.append(made.size())
 			var seed := int(colony.seed) * 977 + n * 131
 			var cls: String = colony.cls
-			birds.append({colony = index, n = n, seed = seed, hen = cls == "sea_ducks" and n % 2 == 1,
+			made.append({colony = index, n = n, seed = seed, hen = cls == "sea_ducks" and n % 2 == 1,
 				length = lerpf(SPELL_S[cls].x, SPELL_S[cls].y, Wildlife._mix(seed)), phase = Wildlife._mix(seed + 1)})
-		_colony_birds[index] = list
+		colony_birds[index] = list
 	# Perching order at each port (see _perch()): its own gulls and cormorants
 	# first, then those spending their away months there.
 	var perchers := {}
 	for away: bool in [false, true]:
-		for bird: Dictionary in birds:
+		for bird: Dictionary in made:
 			var colony: Dictionary = wildlife.colonies[bird.colony]
 			var port: String = colony.away_port if away else colony.port
 			if colony.cls in ["gulls", "cormorants"] and not port.is_empty():
 				bird["perch_away" if away else "perch_home"] = int(perchers.get(port, 0))
 				perchers[port] = int(perchers.get(port, 0)) + 1
-	_built = true
-	return true
+	_made = [made_native, made, colony_birds]
 
 
 ## Gives the native birds the map's spots and meshes and the ships (again

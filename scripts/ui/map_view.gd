@@ -395,6 +395,8 @@ const LINE_MIN_PX := 1.5
 const ZONE_MOUTHS := 1.8
 const ZONE_STEP_DEG := 0.04
 const ZONE_CHECK_S := 5.0
+## The fleet's lanes are bent ahead of time for up to this long a frame (ms): see _warm_lanes().
+const LANE_WARM_MS := 3.0
 const ZONE_HEADING_NM := 2.0
 ## How far along a lane (points) how far it may bend is smoothed (see _bent_lane()).
 const ZONE_SMOOTH_POINTS := 8
@@ -1194,6 +1196,11 @@ func _process(delta: float) -> void:
 		_fauna_layer.queue_redraw()  # The wildlife going about its life.
 	if not show_ships:
 		return
+	# Made ahead, off the main thread, so the first look at a port's birds
+	# doesn't wait for them; and the lanes bent a few at a time (see _warm_lanes()).
+	if not gray_mode:
+		BirdLife.shared().ensure_built()
+	_warm_lanes()
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_overlay.queue_redraw()
@@ -5655,6 +5662,23 @@ static func _smoothed(values: PackedFloat32Array, reach: int) -> PackedFloat32Ar
 			count += 1
 		out[i] = total / count
 	return out
+
+## Bends (_bent_lane()) the fleet's lanes both ways ahead of their being
+## drawn, LANE_WARM_MS' worth a frame: a lane takes a few ms, and the way back
+## of each is only drawn once a marina shows, so the first zoom in found them
+## all to do in one frame.
+func _warm_lanes() -> void:
+	if _land_cells.is_empty():
+		return  # (Bending waits for the land's cells: not here, while they're still being made.)
+	var start := Time.get_ticks_usec()
+	for lane: Array in _active_lanes():
+		for way: Array in [[lane[0], lane[1]], [lane[1], lane[0]]]:
+			var sea_lane = GameData.lane(way[0], way[1])
+			if sea_lane == null or _bent_lanes.has(sea_lane):
+				continue
+			_bent_lane(sea_lane, way[0], way[1])
+			if Time.get_ticks_usec() - start >= LANE_WARM_MS * 1000.0:
+				return
 
 ## A port's keep-out zone's radius (degrees), or 0 for one without (on a canal).
 func _zone_reach(port_id: String) -> float:
