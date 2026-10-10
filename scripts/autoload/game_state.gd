@@ -106,6 +106,12 @@ const DIRECT_DEPART_MAINTENANCE := 0.95
 ## How often (game seconds) a ship at sea checks it can still make port (see
 ## _check_at_risk()); a breakdown or a new leg checks at once.
 const AT_RISK_CHECK_S := 1.0
+## A ship done with its stop but not sailing yet waits at its pier while the
+## port has at least this many berths free; otherwise it pulls out to the anchorage.
+const WAIT_AT_PIER_FREE := 2
+## How often (s of play) ships waiting at the anchorages are looked at, to
+## come in to a pier where there's room.
+const WAKE_WAITING_S := 2.0
 ## A ship bound for a port a storm has closed waits this far off it.
 const STORM_OFFSHORE_NM := 25.0
 ## How often storm warnings are looked for, and how far ahead (in seconds of
@@ -257,6 +263,8 @@ var _autosave_timer := Timer.new()
 var _autosave_task := -1
 var _breakdown_clock := 0.0
 var _auto_recovery_clock := 0.0
+## When ships waiting at the anchorages were last looked at (see _wake_waiting_ships()).
+var _wake_clock := 0.0
 var _storm_warning_clock := 0.0
 ## Storm warnings already given: port id -> the storm closing it; "storm/port"
 ## keys for storms heading for a port; ship -> the storm it's sailing through.
@@ -351,6 +359,20 @@ func _step(delta: float) -> void:
 	if _auto_recovery_clock >= AUTO_RECOVERY_INTERVAL:
 		_auto_recovery_clock = 0.0
 		_send_queued_recoveries()
+	_wake_clock += delta
+	if _wake_clock >= WAKE_WAITING_S:
+		_wake_clock = 0.0
+		_wake_waiting_ships()
+
+
+## The clock (the calendar's time of day) is the home port's local time: the
+## longitude (degrees) the clock is read at, 0 with no home port yet. The sun
+## stands over it at 12:00 (MapView._update_night()), and the birds' day and
+## night go by it (Birds.local_hour()).
+func clock_longitude() -> float:
+	if home_port.is_empty():
+		return 0.0
+	return float(GameData.get_port(home_port).get("lon", 0.0))
 
 
 ## The calendar date and time now, as a Unix time (see game_config calendar).
@@ -1850,6 +1872,10 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 ## Afterwards a running ship leaves as soon as it has the fuel for its next
 ## leg, and a Mammoth away from home sails back.
 func _advance_docked(ship: Ship, delta: float) -> void:
+	# A cargo ship waiting at the anchorage comes in to a pier while the port has
+	# room to spare (and goes back out if it fills up: see below).
+	if ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE and not ship.is_service() and not ship.is_docking() and not ship.is_on_job() and docks.free_berths(ship.docked_at) > WAIT_AT_PIER_FREE + 1:
+		ship.berth_phase = Ship.BERTH_WAIT
 	if not _advance_berth(ship, delta):
 		return
 	if ship.is_docking():
@@ -1878,8 +1904,8 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
 	else:
 		_set_hold(ship, "")
-	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
-		_pull_out(ship, "")  # Done, but not going yet: off to the anchorage to wait.
+	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE and docks.free_berths(ship.docked_at) < WAIT_AT_PIER_FREE:
+		_pull_out(ship, "")  # Done, but not going yet: it waits at its pier while the port has room, else off to the anchorage.
 
 
 ## A cargo ship's berth: queuing for one, coming alongside, pulling out. True
@@ -3635,3 +3661,17 @@ func _without_retired_ports(data: Variant) -> Variant:
 			out.hubs = kept
 		return out
 	return data
+
+
+## Every WAKE_WAITING_S: a cargo ship lying at a port's anchorage (idle, or
+## waiting for a load) comes in to a pier while the port has room to spare
+## (more than WAIT_AT_PIER_FREE berths free), queuing for one like any other
+## (see _advance_berth()); it pulls out again if the port fills up (see
+## _advance_docked()). Ships lying idle are otherwise left alone by the step.
+func _wake_waiting_ships() -> void:
+	for ship in ships:
+		if ship.berth >= 0 or ship.berth_phase != Ship.BERTH_NONE or not ship.is_docked() or ship.is_service() or ship.is_on_job() or ship.is_docking() or ship.is_lost():
+			continue
+		if docks.free_berths(ship.docked_at) > WAIT_AT_PIER_FREE + 1:
+			ship.berth_phase = Ship.BERTH_WAIT
+			ship_changed.emit(ship)

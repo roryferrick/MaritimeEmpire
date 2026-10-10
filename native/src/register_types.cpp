@@ -9,6 +9,7 @@
 
 #include "bird_sim.h"
 #include "lane_math.h"
+#include "lane_painter.h"
 #include "decor_sim.h"
 #include "land_test.h"
 #include "gust_painter.h"
@@ -18,6 +19,7 @@
 #include "port_painter.h"
 #include "route_finder.h"
 #include "sea_painter.h"
+#include "ship_culler.h"
 #include "ship_stepper.h"
 
 using namespace godot;
@@ -29,7 +31,9 @@ static void initialize_maritime_native(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(NativeProbe);
 	GDREGISTER_CLASS(BirdSim);
 	GDREGISTER_CLASS(ShipStepper);
+	GDREGISTER_CLASS(ShipCuller);
 	GDREGISTER_CLASS(LaneMath);
+	GDREGISTER_CLASS(LanePainter);
 	GDREGISTER_CLASS(RouteFinder);
 	GDREGISTER_CLASS(LandSim);
 	GDREGISTER_CLASS(DecorSim);

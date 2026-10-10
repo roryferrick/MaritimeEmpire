@@ -24,6 +24,11 @@ uniform vec3 haze = vec3(0.72, 0.84, 1.0);
 // to -land_top (projected: Geo.MAX_LAT), worked out here from where a point is.
 uniform float land_top = 179.4;
 uniform bool masked = false;
+// Snow on the land (the biomes, masked) beyond these latitudes (degrees from
+// the equator; 999: none), north and south: see MapView._update_seasons().
+uniform float snow_lat_north = 999.0;
+uniform float snow_lat_south = 999.0;
+uniform vec3 snow_color = vec3(0.93, 0.95, 0.97);
 uniform sampler2D land_mask : filter_linear, repeat_disable, hint_default_white;
 uniform bool regions = false;
 uniform sampler2D region_map : filter_nearest, repeat_disable, hint_default_black;
@@ -220,6 +225,11 @@ void fragment() {
 	} else {
 		if (masked) {
 			COLOR.a *= texture(land_mask, mask_uv).a;
+			// Snow beyond the snow line, its edge a few degrees wide.
+			float lat = degrees(asin(clamp(sphere.z / length(sphere), -1.0, 1.0)));
+			float line = lat >= 0.0 ? snow_lat_north : snow_lat_south;
+			float snow = smoothstep(line - 3.0, line + 1.0, abs(lat));
+			COLOR.rgb = mix(COLOR.rgb, snow_color, snow * 0.9);
 		}
 		float edge = 1.0 - facing;
 		COLOR.rgb = mix(COLOR.rgb * (0.82 + 0.18 * sqrt(facing)), haze, edge * edge * edge * 0.45);

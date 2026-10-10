@@ -423,14 +423,29 @@ func _add_achievements_button() -> void:
 	add_child(timer)
 
 
+## Whether the achievements have been checked once this session (see _check_achievements()).
+var _achievements_primed := false
+
+
 func _check_achievements() -> void:
 	if not GameState.in_session:
 		return
+	# A save from before the achievements (or a reloaded one) earns everything it
+	# already had in one go on its first check: logged, but no cards for those.
+	var primed := _achievements_primed
+	_achievements_primed = true
 	for news: Dictionary in Achievements.check(GameState.company):
 		var stars := int(news.stars)
 		var text := "Achievement: %s" % news.name if stars == 0 \
 			else "Achievement: %s %s (%d of 3 stars)" % [news.name, "★".repeat(stars), stars]
 		ActivityLog.add(text, ActivityLog.Kind.GOOD, AchievementsPage.GOLD)
+		var unit := ""
+		for line: Dictionary in Achievements.lines():
+			if line.id == news.id:
+				unit = str(line.unit)
+		var root := GameRoot.find(self)
+		if root != null and primed:
+			root.event_card.show_achievement(str(news.name), stars, unit)
 
 
 ## A hub's industry, from clicking one of its plots on the map (see IndustryPopup).

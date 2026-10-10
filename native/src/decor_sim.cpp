@@ -37,6 +37,18 @@ void DecorSim::set_regions(const PackedByteArray &regions) {
 	_regions = regions;
 }
 
+void DecorSim::set_seasons(const Dictionary &north, const Dictionary &south) {
+	const Dictionary *sides[2] = { &north, &south };
+	for (int h = 0; h < 2; h++) {
+		_before[h] = (*sides[h])["before"];
+		_now[h] = (*sides[h])["now"];
+		_snow[h] = (*sides[h])["snow"];
+		_mix[h] = (*sides[h])["mix"];
+		_snow_lat[h] = (*sides[h])["snow_lat"];
+	}
+	_seasons = true;
+}
+
 // MapView._draw_decor()'s picking and drawing. params: right, up, toward,
 // radius, middle (the view), screen (Rect2: grown by the largest drawing),
 // zoom, sides (px each kind is), tiers (how many tiers each kind shows),
@@ -60,6 +72,7 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 		Vector2 at;
 		int kind;
 		double side;
+		int texture;
 	};
 	std::vector<Shown> shown;
 	for (int column = columns.x; column <= columns.y; column++) {
@@ -93,23 +106,41 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 				if (!screen.has_point(at)) {
 					continue;
 				}
-				shown.push_back({ at, kind, side });
+				int texture = kind;
+				if (_seasons) {
+					// Its season: by its hemisphere, in the snow beyond the snow line,
+					// else changing over at its own moment (a hash of its index).
+					int h = p.z < 0.0f ? 1 : 0;
+					double lat = Math::rad_to_deg(std::asin(std::clamp((double)p.z, -1.0, 1.0)));
+					if (std::abs(lat) >= _snow_lat[h] && kind < _snow[h].size()) {
+						texture = _snow[h][kind];
+					} else if (kind < _now[h].size() && kind < _before[h].size()) {
+						uint32_t x = (uint32_t)i * 2654435761u;
+						x ^= x >> 15;
+						x *= 2246822519u;
+						x ^= x >> 13;
+						double moment = (double)(x & 0xffffff) / 16777216.0;
+						texture = moment < _mix[h] ? _now[h][kind] : _before[h][kind];
+					}
+				}
+				shown.push_back({ at, kind, side, texture });
 			}
 		}
 	}
 	std::stable_sort(shown.begin(), shown.end(), [](const Shown &a, const Shown &b) { return a.at.y < b.at.y; });
 	RenderingServer *rs = RenderingServer::get_singleton();
 	for (const Shown &item : shown) {
-		if (item.kind >= (int)_textures.size() || !_textures[item.kind].is_valid()) {
+		if (item.texture < 0 || item.texture >= (int)_textures.size() || !_textures[item.texture].is_valid()) {
 			continue;
 		}
 		real_t side = (real_t)item.side;
-		rs->canvas_item_add_texture_rect(canvas, Rect2(item.at - Vector2(side / 2.0f, side * 0.92f), Vector2(side, side)), _textures[item.kind], false);
+		rs->canvas_item_add_texture_rect(canvas, Rect2(item.at - Vector2(side / 2.0f, side * 0.92f), Vector2(side, side)), _textures[item.texture], false);
 	}
 }
 
 void DecorSim::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("setup", "positions", "units", "kinds", "tiers", "room", "textures", "bucket"), &DecorSim::setup);
 	ClassDB::bind_method(D_METHOD("set_regions", "regions"), &DecorSim::set_regions);
+	ClassDB::bind_method(D_METHOD("set_seasons", "north", "south"), &DecorSim::set_seasons);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "params"), &DecorSim::draw);
 }

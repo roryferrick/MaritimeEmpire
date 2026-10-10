@@ -11,6 +11,8 @@ extends SceneTree
 ## existing lanes again in seconds (without rounding the corners where they
 ## join; see _round_corners(), which needs the land grid of a lanes run):
 ##   Godot --headless --path . -s tools/build_map_data.gd
+## "-- --channels-only" lays every port's approach channels into the existing
+## lanes again (see _lay_channels(); a lanes run doesn't: run it after one).
 ## "-- --biomes-only" redraws just the biome patches into the existing
 ## data/world_map.res (after changing BIOME_SIMPLIFY, say), in about a minute.
 ## "-- --decor-only" rebuilds just the land drawings (and their clearance) in
@@ -77,6 +79,12 @@ const BIOME_SMOOTHING_RADII: Array[int] = [2, 2, 1, 1]
 ## Land drawings (see _add_decor()): the land's cover is placed on a grid this
 ## far apart (real degrees, jittered), each spot its biome's drawing (or none).
 const VEGETATION_SPACING := 0.2
+## Mangroves (see _plant_mangroves()): how near the equator (degrees), how near
+## the water (projected degrees), which drawings, and what share of those.
+const MANGROVE_LAT := 28.0
+const MANGROVE_SHORE := 0.3
+const MANGROVE_SHARE := 0.45
+const MANGROVE_FROM := {rainforest = true, palm = true, acacia = true, grass = true}
 ## The mountains along the ranges, this far apart (real degrees), so their
 ## peaks (MapView DECOR_KM) overlap into ridges; and the ranges that are
 ## snow-capped all along, whatever their latitude (Natural Earth names).
@@ -119,6 +127,14 @@ const ANIMALS := [
 	["quetzal", -90.4, 15.4, 2], ["quetzal", -84.33, 10.57, 2],
 ]
 const LANES_OUT := "res://data/sea_lanes.res"
+## Approach channels (see _lay_channels()): a port's lanes share their last
+## CHANNEL_NM nm, each leaving its own way CHANNEL_JOIN_NM out to join; lanes
+## coming in within CHANNEL_SPREAD_DEG of bearing of each other share one;
+## lanes shorter than CHANNEL_MIN_LANE_NM keep their own ways.
+const CHANNEL_NM := 80.0
+const CHANNEL_JOIN_NM := 105.0
+const CHANNEL_SPREAD_DEG := 30.0
+const CHANNEL_MIN_LANE_NM := 260.0
 
 ## Coastline simplification, in projected degrees (~0.7 nm at the equator).
 const SIMPLIFY_TOLERANCE := 0.012
@@ -285,6 +301,11 @@ func _init() -> void:
 		_resplice_lanes()
 		quit()
 		return
+	if "--channels-only" in args:
+		_rechannel_lanes()
+		print("Done in %.1f min" % ((Time.get_ticks_msec() - started) / 60000.0))
+		quit()
+		return
 	if "--animals-only" in args:
 		_replace_animals("--nudge" in args)
 		quit()
@@ -385,9 +406,11 @@ func _build_map(land_polygons: Array) -> void:
 	var biomes := _build_biomes()
 	_build_land_texture(biomes)
 	_add_decor(map, biomes)
+	_drop_wet_decor(map)
 	_add_sea_mask(map, biomes)
 	_add_biome_polygons(map, biomes)
 	_add_decor_clearance(map)
+	_plant_mangroves(map)
 	# Split small enough to curve round the globe (the map is drawn on one).
 	Geo.tessellate_map(map)
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
@@ -411,7 +434,7 @@ func _replace_animals(nudge: bool) -> void:
 	var animal_names := {}
 	for animal: Array in ANIMALS:
 		animal_names[animal[0]] = true
-	var plants := ["acacia", "cactus", "conifer", "deciduous", "dunes", "grass", "mountain", "mountain_b", "mountain_c", "mountain_snow", "mountain_snow_b", "mountain_snow_c", "palm", "rainforest", "red_rock", "shrub", "waves"]
+	var plants := ["acacia", "baobab", "birch", "cactus", "cherry", "conifer", "cypress", "deciduous", "dunes", "grass", "mangrove", "mountain", "mountain_b", "mountain_c", "mountain_snow", "mountain_snow_b", "mountain_snow_c", "oak", "palm", "rainforest", "red_rock", "shrub", "waves"]
 	while count < map.decor_positions.size() and not plants.has(map.decor_kind_names[map.decor_kinds[count]]) and not animal_names.has(map.decor_kind_names[map.decor_kinds[count]]):
 		print("  Dropped a %s" % map.decor_kind_names[map.decor_kinds[count]])
 		map.decor_positions.remove_at(count)
@@ -864,24 +887,34 @@ func _add_polar_waves(_map: WorldMapData, biomes: PackedByteArray, add: Callable
 			lat += WAVES_SPACING
 
 
-## The drawing for a spot in a biome (or "" for none): a stand of conifers in
-## the boreal forest (and some in temperate ones), of round trees in temperate
-## forests, of big leafy trees (and palms) in the rainforest; grass on the
-## grassland; acacias and grass on the savanna; scrub on the tundra; and in the
-## deserts cacti in the Americas (not in cold deserts), red rock in Australia
-## and dunes elsewhere. Forests are nearly every spot; open country a few.
+## The drawing for a spot in a biome (or "" for none): a stand of conifers
+## (and birches) in the boreal forest, of round trees, oaks and some conifers
+## and birches in temperate forests (cherry trees in Japan and Korea, cypresses
+## round the Mediterranean), of big leafy trees (and palms) in the rainforest;
+## grass on the grassland; acacias and grass (and baobabs in Africa and the
+## north of Australia) on the savanna; scrub on the tundra; and in the deserts
+## cacti in the Americas (not in cold deserts), red rock in Australia and dunes
+## elsewhere. Forests are nearly every spot; open country a few. Mangroves come
+## after (see _plant_mangroves()).
 static func _decor_for_biome(biome: int, lon_lat: Vector2, rng: RandomNumberGenerator) -> String:
 	var roll := rng.randf()
 	match biome:
 		BIOME_BOREAL:
-			return "conifer" if roll < 0.9 else ""
+			return "conifer" if roll < 0.68 else ("birch" if roll < 0.9 else "")
 		BIOME_TEMPERATE:
-			return "deciduous" if roll < 0.58 else ("conifer" if roll < 0.85 else "")
+			if lon_lat.x > 122.0 and lon_lat.x < 146.0 and lon_lat.y > 30.0 and lon_lat.y < 46.0:
+				return "cherry" if roll < 0.24 else ("deciduous" if roll < 0.5 else ("oak" if roll < 0.62 else ("conifer" if roll < 0.85 else "")))  # Japan and Korea: cherry trees.
+			if lon_lat.x > -10.0 and lon_lat.x < 42.0 and lon_lat.y > 30.0 and lon_lat.y < 46.0:
+				return "cypress" if roll < 0.16 else ("oak" if roll < 0.4 else ("deciduous" if roll < 0.62 else ("conifer" if roll < 0.85 else "")))  # The Mediterranean: cypresses.
+			return "deciduous" if roll < 0.34 else ("oak" if roll < 0.52 else ("conifer" if roll < 0.78 else ("birch" if roll < 0.83 else ("cherry" if roll < 0.85 else ""))))
 		BIOME_RAINFOREST:
 			return "rainforest" if roll < 0.82 else ("palm" if roll < 0.95 else "")
 		BIOME_GRASSLAND:
 			return "grass" if roll < 0.22 else ("shrub" if roll < 0.27 else "")
 		BIOME_SAVANNA:
+			var baobabs: bool = (lon_lat.x > -18.0 and lon_lat.x < 52.0 and lon_lat.y > -26.0 and lon_lat.y < 16.0) or (lon_lat.x > 120.0 and lon_lat.x < 150.0 and lon_lat.y > -20.0 and lon_lat.y < -10.0)
+			if baobabs and roll < 0.06:
+				return "baobab"  # Africa, Madagascar and the north of Australia.
 			return "acacia" if roll < 0.2 else ("grass" if roll < 0.32 else "")
 		BIOME_TUNDRA:
 			return "shrub" if roll < 0.16 else ""
@@ -896,6 +929,33 @@ static func _decor_for_biome(biome: int, lon_lat: Vector2, rng: RandomNumberGene
 	return ""
 
 
+## Mangroves: in the tropics (within MANGROVE_LAT of the equator), the trees
+## nearest the water (clearance under MANGROVE_SHORE projected degrees) become
+## mangroves, MANGROVE_SHARE of them, and stand right at the water's edge
+## (their clearance is left as the most, so the map never holds them back).
+func _plant_mangroves(map: WorldMapData) -> void:
+	var kinds := {}
+	for i in map.decor_kind_names.size():
+		kinds[map.decor_kind_names[i]] = i
+	if not kinds.has("mangrove"):
+		kinds["mangrove"] = map.decor_kind_names.size()
+		map.decor_kind_names.append("mangrove")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261010
+	var count := 0
+	for i in map.decor_positions.size():
+		var name := map.decor_kind_names[map.decor_kinds[i]]
+		if not MANGROVE_FROM.has(name) or i >= map.decor_clearance.size():
+			continue
+		if absf(Geo.unproject(map.decor_positions[i]).y) > MANGROVE_LAT or map.decor_clearance[i] > MANGROVE_SHORE:
+			continue
+		if rng.randf() < MANGROVE_SHARE:
+			map.decor_kinds[i] = kinds["mangrove"]
+			map.decor_clearance[i] = DECOR_CLEARANCE_MAX
+			count += 1
+	print("Mangroves: %d" % count)
+
+
 ## Rebuilds just the land drawings (see _add_decor()) and their clearance in
 ## the existing map (--decor-only), from the biomes worked out again.
 func _rebuild_decor() -> void:
@@ -905,7 +965,63 @@ func _rebuild_decor() -> void:
 	map.decor_kinds = PackedByteArray()
 	map.decor_tiers = PackedByteArray()
 	_add_decor(map, _build_biomes())
+	_drop_wet_decor(map)
 	_add_decor_clearance(map)
+	_plant_mangroves(map)
+
+
+## Takes out every land drawing whose spot isn't on the map's own land (the
+## biomes are coarser than the coast: a stand of trees could stand in the sea
+## off a headland, or in a lake), by the land triangles as drawn (and the
+## lakes', and the islands' in them). Waves (the sea's) and the animals (placed
+## by hand; see --animals-only --nudge) are left.
+func _drop_wet_decor(map: WorldMapData) -> void:
+	var cells := {}  # 1-degree cell -> the land triangles starting there.
+	var index := func(triangles: PackedVector2Array, into: Dictionary) -> void:
+		for t in range(0, triangles.size() - 2, 3):
+			var box := Rect2(triangles[t], Vector2.ZERO).expand(triangles[t + 1]).expand(triangles[t + 2])
+			for x in range(floori(box.position.x), floori(box.end.x) + 1):
+				for y in range(floori(box.position.y), floori(box.end.y) + 1):
+					var cell := Vector2i(x, y)
+					if not into.has(cell):
+						into[cell] = PackedInt32Array()
+					into[cell].append(t)
+	index.call(map.land_triangles, cells)
+	var lake_cells := {}
+	var lakes := PackedVector2Array()
+	for triangles: PackedVector2Array in map.lake_triangles:
+		lakes.append_array(triangles)
+	index.call(lakes, lake_cells)
+	var island_cells := {}
+	index.call(map.lake_island_triangles, island_cells)
+	var inside := func(triangles: PackedVector2Array, into: Dictionary, p: Vector2) -> bool:
+		for t: int in into.get(Vector2i(floori(p.x), floori(p.y)), PackedInt32Array()):
+			if Geometry2D.point_is_inside_triangle(p, triangles[t], triangles[t + 1], triangles[t + 2]):
+				return true
+		return false
+	var animals := {}
+	for animal: Array in ANIMALS:
+		animals[animal[0]] = true
+	var kept_positions := PackedVector2Array()
+	var kept_kinds := PackedByteArray()
+	var kept_tiers := PackedByteArray()
+	var dropped := 0
+	for i in map.decor_positions.size():
+		var name := map.decor_kind_names[map.decor_kinds[i]]
+		var p := map.decor_positions[i]
+		var wet := false
+		if name != "waves" and not animals.has(name):
+			wet = not inside.call(map.land_triangles, cells, p) or (inside.call(lakes, lake_cells, p) and not inside.call(map.lake_island_triangles, island_cells, p))
+		if wet:
+			dropped += 1
+			continue
+		kept_positions.append(p)
+		kept_kinds.append(map.decor_kinds[i])
+		kept_tiers.append(map.decor_tiers[i])
+	map.decor_positions = kept_positions
+	map.decor_kinds = kept_kinds
+	map.decor_tiers = kept_tiers
+	print("Decor in the water taken out: %d (%d left)" % [dropped, kept_positions.size()])
 	var err := ResourceSaver.save(map, MAP_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % MAP_OUT)
 
@@ -2135,6 +2251,237 @@ func _resplice_lanes() -> void:
 	assert(err == OK, "Couldn't save %s" % LANES_OUT)
 	print("Canals laid into %d of %d lanes" % [changed, out.keys.size()])
 	_print_stats(out)
+
+
+## Lays each port's approach channels into the existing lanes, for
+## "--channels-only" (see _lay_channels()).
+func _rechannel_lanes() -> void:
+	var land_rings := _read_land_rings()
+	_build_grid(land_rings)
+	land_rings.clear()
+	var data: SeaLaneData = load(LANES_OUT)
+	var out := _lay_channels(data)
+	var err := ResourceSaver.save(out, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % LANES_OUT)
+	_print_stats(out)
+
+
+## Every port's lanes come in to it along a few shared approach channels
+## (like a real port's traffic separation scheme) rather than each on its own
+## way: its lanes' ends are gathered by the bearing they come in from (those
+## within CHANNEL_SPREAD_DEG of each other together), and each group's last
+## CHANNEL_NM nm are made one and the same, the way of the lane nearest the
+## middle of the group; the rest leave their own way CHANNEL_JOIN_NM out and
+## join the channel's outer end straight across (only where that join is
+## clear of the coast; else the lane keeps its own way in). So ships bound
+## for a port, from wherever, come in by one of a few known ways, and the
+## water between the channels is quiet (for anchorages, and for keeping
+## ships clear of each other). Lanes shorter than CHANNEL_MIN_LANE_NM, and
+## the ends of lanes at ports on a canal or through one, keep their own ways.
+func _lay_channels(data: SeaLaneData) -> SeaLaneData:
+	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
+	var canal_ports := {}
+	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
+		for id: String in canal.get("ports", []):
+			canal_ports[id] = true
+	var lanes: Array[PackedVector2Array] = []
+	for i in data.keys.size():
+		lanes.append(data.points.slice(data.starts[i], data.starts[i + 1]))
+	# Each port's lane ends: port id -> [[lane index, end (0 at the first port, 1 at the second)], ...].
+	var ends := {}
+	for i in data.keys.size():
+		var ids := data.keys[i].split("-")
+		for end in 2:
+			var port: String = ids[end]
+			if not ends.has(port):
+				ends[port] = []
+			ends[port].append([i, end])
+	var changed := {}
+	var refused := 0
+	var kept_short := 0
+	var channel_counts := []
+	for port: Dictionary in ports:
+		var id: String = port.id
+		if canal_ports.has(id) or not ends.has(id):
+			continue
+		# Where each of its lanes comes in: [bearing at CHANNEL_NM out, lane, end].
+		var entries := []
+		for entry: Array in ends[id]:
+			var lane: PackedVector2Array = lanes[entry[0]]
+			if data.distances[entry[0]] < CHANNEL_MIN_LANE_NM:
+				kept_short += 1
+				continue
+			var inner := _inner_point(lane, entry[1], CHANNEL_JOIN_NM)
+			if inner.is_empty():
+				continue
+			var on_canal := false
+			var root: Vector2 = lane[0] if entry[1] == 0 else lane[-1]
+			for k in _inner_range(lane, entry[1], int(inner[1])):
+				if _on_canal(lane[k]):
+					on_canal = true
+					break
+			if on_canal:
+				continue
+			var at: Vector2 = _inner_point(lane, entry[1], CHANNEL_NM)[0]
+			var bearing := rad_to_deg(_local(root, at).angle())
+			entries.append([bearing, entry[0], entry[1]])
+		if entries.size() < 2:
+			continue
+		var groups := _bearing_groups(entries, CHANNEL_SPREAD_DEG)
+		channel_counts.append(groups.size())
+		for group: Array in groups:
+			if group.size() < 2:
+				continue
+			# The channel: the way in of the lane nearest the group's middle.
+			var middle := _mean_bearing(group)
+			group.sort_custom(func(a: Array, b: Array) -> bool: return absf(wrapf(a[0] - middle, -180.0, 180.0)) < absf(wrapf(b[0] - middle, -180.0, 180.0)))
+			var lead: Array = group[0]
+			var lead_lane: PackedVector2Array = lanes[lead[1]]
+			var lead_inner := _inner_point(lead_lane, lead[2], CHANNEL_NM)
+			var channel := PackedVector2Array([lead_inner[0]])  # From its outer end in to the port.
+			for k in _inner_range(lead_lane, lead[2], int(lead_inner[1])):
+				channel.append(lead_lane[k])
+			var lead_root: Vector2 = lead_lane[0] if lead[2] == 0 else lead_lane[-1]
+			for member: Array in group.slice(1):
+				var lane: PackedVector2Array = lanes[member[1]]
+				var end: int = member[2]
+				var join := _inner_point(lane, end, CHANNEL_JOIN_NM)
+				var root: Vector2 = lane[0] if end == 0 else lane[-1]
+				# The channel's points, on this lane's copy of the world.
+				var shift := roundf((root.x - lead_root.x) / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
+				var way := PackedVector2Array()
+				for p in channel:
+					way.append(Vector2(p.x + shift, p.y))
+				way[-1] = root  # (The same port, at this lane's longitude.)
+				if not _arc_clear(join[0], way[0], false, false):
+					refused += 1
+					continue
+				# The lane's own way out to the join, straight to the channel's
+				# outer end, then the channel in; the two new corners rounded.
+				var outer := PackedVector2Array()
+				var corners := []
+				if end == 1:
+					for k in range(0, int(join[1]) + 1):
+						outer.append(lane[k])
+					corners = [outer.size(), outer.size() + 1]
+					outer.append(join[0])
+					outer.append_array(way)
+				else:
+					var back := way.duplicate()
+					back.reverse()  # Port -> channel's outer end.
+					outer.append_array(back)
+					corners = [outer.size() - 1, outer.size()]
+					outer.append(join[0])
+					for k in range(int(join[1]), lane.size()):
+						outer.append(lane[k])
+				lanes[member[1]] = _round_joins(outer, corners)
+				changed[member[1]] = true
+	var out := SeaLaneData.new()
+	for i in data.keys.size():
+		out.keys.append(data.keys[i])
+		out.starts.append(out.points.size())
+		for p in lanes[i]:
+			out.points.append(Vector2(snappedf(p.x, 0.0001), snappedf(p.y, 0.0001)))
+		out.distances.append(_length_nm(lanes[i]) if changed.has(i) else data.distances[i])
+	out.starts.append(out.points.size())
+	var most := 0
+	var total := 0
+	for n: int in channel_counts:
+		most = maxi(most, n)
+		total += n
+	print("Approach channels laid into %d lane ends of %d lanes: %d ports with channels (%.1f each, at most %d); %d joins refused for the coast, %d lane ends of short lanes left alone" % [changed.size(), data.keys.size(), channel_counts.size(), float(total) / maxi(channel_counts.size(), 1), most, refused, kept_short])
+	return out
+
+
+## Where a lane is `nm` along it from one of its ends (0: its first point, 1:
+## its last): [the point, the index of the first lane point further out
+## than it from that end], or [] if the lane's too short.
+func _inner_point(lane: PackedVector2Array, end: int, nm: float) -> Array:
+	var along := 0.0
+	var n := lane.size()
+	for step in range(1, n):
+		var i := step if end == 0 else n - 1 - step
+		var previous := i - 1 if end == 0 else i + 1
+		var piece := Geo.distance_nm(lane[previous], lane[i])
+		if along + piece >= nm:
+			var t := (nm - along) / maxf(piece, 0.0001)
+			return [lane[previous].lerp(lane[i], t), i]
+		along += piece
+	return []
+
+
+## The indices of a lane's points from one end (0: its first point, 1: its
+## last) in to `outer` (exclusive), outer end first.
+static func _inner_range(lane: PackedVector2Array, end: int, outer: int) -> Array:
+	var indices := []
+	if end == 0:
+		for k in range(outer - 1, -1, -1):
+			indices.append(k)
+	else:
+		for k in range(outer + 1, lane.size()):
+			indices.append(k)
+	return indices
+
+
+## A (lon, lat) point as east and north nm of a root point.
+static func _local(root: Vector2, point: Vector2) -> Vector2:
+	return Vector2(wrapf(point.x - root.x, -180.0, 180.0) * 60.0 * maxf(cos(deg_to_rad(root.y)), 0.05), (point.y - root.y) * 60.0)
+
+
+## Lane ends ([bearing, ...]) gathered into groups no wider than `spread`
+## degrees of bearing: cut at the widest gaps round the circle, then any
+## group still too wide cut into equal slices.
+static func _bearing_groups(entries: Array, spread: float) -> Array:
+	entries.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var n := entries.size()
+	# Start after the widest gap round the circle.
+	var widest := -1.0
+	var first := 0
+	for i in n:
+		var gap := wrapf(entries[(i + 1) % n][0] - entries[i][0], 0.0, 360.0) if n > 1 else 360.0
+		if gap > widest:
+			widest = gap
+			first = (i + 1) % n
+	var groups := []
+	var group := []
+	for k in n:
+		var entry: Array = entries[(first + k) % n]
+		if group.is_empty() or wrapf(entry[0] - group[0][0], 0.0, 360.0) <= spread:
+			group.append(entry)
+		else:
+			groups.append(group)
+			group = [entry]
+	if not group.is_empty():
+		groups.append(group)
+	return groups
+
+
+## The middle bearing of a group of lane ends.
+static func _mean_bearing(group: Array) -> float:
+	var sum := Vector2.ZERO
+	for entry: Array in group:
+		sum += Vector2.from_angle(deg_to_rad(entry[0]))
+	return rad_to_deg(sum.angle()) if sum.length() > 0.001 else float(group[0][0])
+
+
+## Rounds the new corners (`corners`: their indices) where a lane joins its
+## channel (see _lay_channels()): at the join point and at the channel's outer end.
+func _round_joins(points: PackedVector2Array, corners: Array) -> PackedVector2Array:
+	var projected := _project_all(points)
+	var out := PackedVector2Array()
+	var n := points.size()
+	for i in n:
+		var arc := PackedVector2Array()
+		if i in corners and i > 0 and i < n - 1:
+			arc = _corner_arc(projected, i)
+		if arc.is_empty():
+			out.append(points[i])
+		else:
+			for p in arc:
+				var lon_lat := Geo.unproject(p)
+				if out.is_empty() or lon_lat.distance_to(out[-1]) > 0.001:
+					out.append(lon_lat)
+	return out
 
 
 ## The grid is too coarse to follow a canal (lanes can slip through lakes

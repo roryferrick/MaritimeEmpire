@@ -219,7 +219,7 @@ void BirdSim::setup(const Array &colonies, const Dictionary &species, double mig
 		_colonies.push_back(colony);
 	}
 	// Perching order at each port: its own birds (gulls and cormorants, the
-	// ones that perch on the breakwater) first, then those spending their away
+	// ones that perch on the rocks and the breakwater) first, then those spending their away
 	// months there, so each has its own spot (see _perch()).
 	std::vector<int> perchers(_port_ids.size(), 0);
 	for (int away = 0; away < 2; away++) {
@@ -241,7 +241,7 @@ void BirdSim::setup(const Array &colonies, const Dictionary &species, double mig
 	_join_since.assign(n, 0.0);
 	_still_drawn.assign(n, 0);
 	_spots.assign(_port_ids.size(), Spots());
-	_meshes.clear();
+	_shapes.clear();
 }
 
 void BirdSim::set_providers(const Callable &spots, const Callable &ships, const Callable &meshes) {
@@ -351,7 +351,7 @@ BirdSim::Spots &BirdSim::_port_spots(int port) {
 			out.push_back(v2(a[i]));
 		}
 	};
-	list(d.get("breakwater", Array()), spots.breakwater);
+	list(d.get("perches", d.get("breakwater", Array())), spots.breakwater); // (The rocks' spots first, then the breakwater's.)
 	list(d.get("shore", Array()), spots.shore);
 	list(d.get("inland", Array()), spots.inland);
 	list(d.get("sea", Array()), spots.sea);
@@ -422,21 +422,17 @@ BirdSim::V2 BirdSim::_target(const Plan &plan, const Bird &bird, double now) con
 	return plan.place;
 }
 
-// Its own slot (`order`, see Bird.perch_home) among a breakwater's evenly
-// spaced slots, taken in a stride round them (about 0.618 of the way) so
-// the first few birds are spread along both arms. Each bird has its own while
-// there are as many slots as perching birds; past that, two share one, and
-// only meet if both perch at once.
+// Its own slot (`order`, see Bird.perch_home) among a port's perching spots
+// (MapView._bird_spots() perches: those on the rocks first, then along the
+// breakwater), taken in order so the rocks fill first. Each bird has its own
+// while there are as many slots as perching birds; past that, two share one,
+// and only meet if both perch at once.
 BirdSim::V2 BirdSim::_perch(const std::vector<V2> &slots, int order, V2 fallback) {
 	const int64_t n = (int64_t)slots.size();
 	if (n == 0) {
 		return fallback;
 	}
-	int64_t stride = std::max<int64_t>((int64_t)std::llround((double)n * 0.618), 1);
-	while (std::gcd(stride, n) != 1) {
-		stride++;
-	}
-	return slots[(size_t)(((int64_t)std::max(order, 0) * stride) % n)];
+	return slots[(size_t)((int64_t)std::max(order, 0) % n)];
 }
 
 // --- Spells -------------------------------------------------------------------
@@ -1018,68 +1014,117 @@ Transform2D BirdSim::_basis(V2 spot, Vector2 at) const {
 	return Transform2D(east - at, north - at, Vector2());
 }
 
-RID BirdSim::_mesh(int kind, int species, bool hen, int step, int bucket) {
+// A bird's shape (MapView's shapes: 0 a bird from above, 1 a sea duck
+// flying, 2 a sea duck swimming, 3 a cormorant swimming, 4 a wader on the
+// ground) as a triangle list a bucket's size across, asked of the map once.
+const BirdSim::Shape &BirdSim::_shape(int kind, int species, bool hen, int step, int bucket) {
 	int64_t key = ((((int64_t)kind * 1024 + species) * 2 + (hen ? 1 : 0)) * 64 + step) * 256 + bucket;
-	auto found = _meshes.find(key);
-	if (found != _meshes.end()) {
+	auto found = _shapes.find(key);
+	if (found != _shapes.end()) {
 		return found->second;
 	}
-	RID rid;
+	Shape &shape = _shapes[key];
 	if (_mesh_provider.is_valid()) {
 		_stats[5]++;
-		rid = _mesh_provider.call(kind, _species[species].id, hen, step, bucket);
+		Array made = _mesh_provider.call(kind, _species[species].id, hen, step, bucket);
+		if (made.size() >= 2) {
+			PackedVector2Array points = made[0];
+			PackedColorArray colors = made[1];
+			int64_t count = std::min(points.size(), colors.size()) / 3 * 3;
+			shape.points.assign(points.ptr(), points.ptr() + count);
+			shape.colors.assign(colors.ptr(), colors.ptr() + count);
+		}
 	}
-	_meshes[key] = rid;
-	return rid;
+	return shape;
 }
 
-// A bird as one mesh (MapView's meshes: 0 a bird from above, 1 a sea duck
-// flying, 2 a sea duck swimming, 3 a cormorant swimming, 4 a wader on the
-// ground), placed, turned and scaled; its shadow the same mesh in the dark,
-// `shadow_height` times as far off as a gull's usual (none when below 0).
-void BirdSim::_draw_mesh(RID canvas, int kind, int species, bool hen, int step, Vector2 at, double angle, double span, double shadow_height) {
+// Every bird of a pass goes into one batch of triangles (see draw()): one
+// draw call for them all rather than one or two each.
+void BirdSim::_tri(Vector2 a, Vector2 b, Vector2 c, Color color) {
+	_batch_points.push_back(a);
+	_batch_points.push_back(b);
+	_batch_points.push_back(c);
+	_batch_colors.push_back(color);
+	_batch_colors.push_back(color);
+	_batch_colors.push_back(color);
+}
+
+void BirdSim::_line(Vector2 from, Vector2 to, double width, Color color) {
+	Vector2 way = to - from;
+	if (way.length_squared() < 1.0e-12f) {
+		return;
+	}
+	Vector2 side = way.normalized().orthogonal() * (real_t)(width * 0.5);
+	_tri(from + side, to + side, to - side, color);
+	_tri(from + side, to - side, from - side, color);
+}
+
+void BirdSim::_oval(Vector2 at, double angle, Vector2 half, Color color, int segments) {
+	Vector2 x = Vector2(1, 0).rotated((real_t)angle);
+	Vector2 y = Vector2(0, 1).rotated((real_t)angle);
+	Vector2 first = at + x * half.x;
+	Vector2 last = first;
+	for (int i = 1; i <= segments; i++) {
+		double a = TAU_D * i / segments;
+		Vector2 next = i == segments ? first : at + x * (real_t)(std::cos(a) * half.x) + y * (real_t)(std::sin(a) * half.y);
+		_tri(at, last, next, color);
+		last = next;
+	}
+}
+
+void BirdSim::_ring(Vector2 at, double radius, int segments, Color color, double width) {
+	double in = std::max(radius - width * 0.5, 0.0);
+	double out = radius + width * 0.5;
+	Vector2 last_in, last_out;
+	for (int i = 0; i <= segments; i++) {
+		double a = TAU_D * i / segments;
+		Vector2 way((real_t)std::cos(a), (real_t)std::sin(a));
+		Vector2 p_in = at + way * (real_t)in;
+		Vector2 p_out = at + way * (real_t)out;
+		if (i > 0) {
+			_tri(last_in, last_out, p_out, color);
+			_tri(last_in, p_out, p_in, color);
+		}
+		last_in = p_in;
+		last_out = p_out;
+	}
+}
+
+// A bird as its shape, placed, turned and scaled into the batch; its shadow
+// the same shape in the dark, shadow_height times as far off as a gull's
+// usual (none when below 0).
+void BirdSim::_draw_shape(int kind, int species, bool hen, int step, Vector2 at, double angle, double span, double shadow_height) {
 	int bucket = std::clamp((int)std::lround(std::log(std::max(span, 1.0)) / std::log(SIZE_STEP)), 0, 255);
-	RID mesh = _mesh(kind, species, hen, step, bucket);
-	if (!mesh.is_valid()) {
+	const Shape &shape = _shape(kind, species, hen, step, bucket);
+	if (shape.points.empty()) {
 		return;
 	}
 	double made = std::pow(SIZE_STEP, bucket);
-	Size2 scale((real_t)(span / made), (real_t)(span / made));
-	RenderingServer *rs = RenderingServer::get_singleton();
+	real_t scale = (real_t)(span / made);
+	real_t c = (real_t)std::cos(angle) * scale;
+	real_t s = (real_t)std::sin(angle) * scale;
+	size_t count = shape.points.size();
 	if (shadow_height >= 0.0) {
 		Vector2 off = Vector2((real_t)(span * 0.45), (real_t)(span * 0.55)) * (real_t)shadow_height;
-		rs->canvas_item_add_mesh(canvas, mesh, Transform2D((real_t)angle, scale, 0.0f, at + off), Color(0, 0, 0, (real_t)(0.16 / std::sqrt(std::max(shadow_height, 0.5)))));
+		Vector2 origin = at + off;
+		real_t alpha = (real_t)(0.16 / std::sqrt(std::max(shadow_height, 0.5)));
+		_batch_points.reserve(_batch_points.size() + count * 2);
+		_batch_colors.reserve(_batch_colors.size() + count * 2);
+		for (size_t i = 0; i < count; i++) {
+			Vector2 v = shape.points[i];
+			_batch_points.push_back(Vector2(origin.x + v.x * c - v.y * s, origin.y + v.x * s + v.y * c));
+			_batch_colors.push_back(Color(0, 0, 0, shape.colors[i].a * alpha));
+		}
 	}
-	rs->canvas_item_add_mesh(canvas, mesh, Transform2D((real_t)angle, scale, 0.0f, at));
-}
-
-void BirdSim::_oval(RID canvas, Vector2 at, double angle, Vector2 half, Color color) {
-	PackedVector2Array points;
-	Vector2 x = Vector2(1, 0).rotated((real_t)angle);
-	Vector2 y = Vector2(0, 1).rotated((real_t)angle);
-	for (int i = 0; i < 14; i++) {
-		double a = TAU_D * i / 14.0;
-		points.push_back(at + x * (real_t)(std::cos(a) * half.x) + y * (real_t)(std::sin(a) * half.y));
+	for (size_t i = 0; i < count; i++) {
+		Vector2 v = shape.points[i];
+		_batch_points.push_back(Vector2(at.x + v.x * c - v.y * s, at.y + v.x * s + v.y * c));
+		_batch_colors.push_back(shape.colors[i]);
 	}
-	PackedColorArray colors;
-	colors.push_back(color);
-	RenderingServer::get_singleton()->canvas_item_add_polygon(canvas, points, colors);
-}
-
-void BirdSim::_ring(RID canvas, Vector2 at, double radius, int segments, Color color, double width) {
-	PackedVector2Array points;
-	for (int i = 0; i <= segments; i++) {
-		double a = TAU_D * i / segments;
-		points.push_back(at + Vector2((real_t)(std::cos(a) * radius), (real_t)(std::sin(a) * radius)));
-	}
-	PackedColorArray colors;
-	colors.push_back(color);
-	RenderingServer::get_singleton()->canvas_item_add_polyline(canvas, points, colors, (real_t)width, true);
 }
 
 // A wader's long shadow as it falls (MapView.draw_wader()'s shadow).
-void BirdSim::_draw_wader_shadow(RID canvas, Vector2 at, double heading, const Species &info, double span, double neck, bool bill_up) {
-	RenderingServer *rs = RenderingServer::get_singleton();
+void BirdSim::_draw_wader_shadow(Vector2 at, double heading, const Species &info, double span, double neck, bool bill_up) {
 	bool crane = info.crane;
 	Vector2 fwd = Vector2(1, 0).rotated((real_t)heading);
 	Vector2 side_way(fwd.y, -fwd.x);
@@ -1092,20 +1137,19 @@ void BirdSim::_draw_wader_shadow(RID canvas, Vector2 at, double heading, const S
 	Vector2 hips = at + cast * (real_t)legs;
 	Color dark(0, 0, 0, 0.18f);
 	for (double side : { -1.0, 1.0 }) {
-		rs->canvas_item_add_line(canvas, at + side_way * (real_t)(side * body_wide * 0.3), hips, dark, (real_t)std::max(span * 0.012, 1.0), true);
+		_line(at + side_way * (real_t)(side * body_wide * 0.3), hips, std::max(span * 0.012, 1.0), dark);
 	}
-	_oval(canvas, hips, heading, Vector2((real_t)(body_len * 0.5), (real_t)(body_wide * 0.5)), dark);
+	_oval(hips, heading, Vector2((real_t)(body_len * 0.5), (real_t)(body_wide * 0.5)), dark);
 	Vector2 shadow_head = hips + fwd * (real_t)(body_len * 0.45 + neck_len) + cast * (real_t)upright;
-	rs->canvas_item_add_line(canvas, hips + fwd * (real_t)(body_len * 0.4), shadow_head, dark, (real_t)std::max(span * 0.022, 1.0), true);
-	rs->canvas_item_add_circle(canvas, shadow_head, (real_t)(span * 0.025), dark);
+	_line(hips + fwd * (real_t)(body_len * 0.4), shadow_head, std::max(span * 0.022, 1.0), dark);
+	_oval(shadow_head, 0.0, Vector2((real_t)(span * 0.025), (real_t)(span * 0.025)), dark, 8);
 	if (!bill_up) {
-		rs->canvas_item_add_line(canvas, shadow_head, shadow_head + fwd * (real_t)(span * (crane ? 0.05 : 0.075)), dark, (real_t)std::max(span * 0.012, 1.0), true);
+		_line(shadow_head, shadow_head + fwd * (real_t)(span * (crane ? 0.05 : 0.075)), std::max(span * 0.012, 1.0), dark);
 	}
 }
 
 // A clump of reeds round a bittern, swaying (MapView._draw_reeds()).
-void BirdSim::_draw_reeds(RID canvas, Vector2 at, double span, double now, double seed) {
-	RenderingServer *rs = RenderingServer::get_singleton();
+void BirdSim::_draw_reeds(Vector2 at, double span, double now, double seed) {
 	double wind = 0.0;
 	Vector2 lean = Vector2(1, 0).rotated((real_t)wind) * (real_t)(span * 0.06 * (1.0 + std::sin(now * 0.9 + wind)));
 	for (int i = 0; i < 11; i++) {
@@ -1114,21 +1158,22 @@ void BirdSim::_draw_reeds(RID canvas, Vector2 at, double span, double now, doubl
 		Vector2 base = at + Vector2(1, 0).rotated((real_t)a) * (real_t)r;
 		Color color = i % 3 == 0 ? Color(0.62f, 0.56f, 0.32f) : Color(0.42f, 0.5f, 0.26f);
 		Vector2 tip = base + lean + Vector2(1, 0).rotated((real_t)(a + 0.6)) * (real_t)(span * 0.1);
-		rs->canvas_item_add_line(canvas, base, tip, color, (real_t)std::max(span * 0.025, 1.0), true);
+		_line(base, tip, std::max(span * 0.025, 1.0), color);
 		if (i % 4 == 0) {
-			rs->canvas_item_add_circle(canvas, tip, (real_t)std::max(span * 0.022, 0.8), Color(0.45f, 0.3f, 0.18f));
+			real_t head = (real_t)std::max(span * 0.022, 0.8);
+			_oval(tip, 0.0, Vector2(head, head), Color(0.45f, 0.3f, 0.18f), 8);
 		}
 	}
 }
 
-// One bird on screen as it is now (MapView._draw_one_bird()).
-void BirdSim::_draw_one(RID canvas, int index, const State &state, Vector2 at, double span, double now, const Transform2D &basis) {
-	RenderingServer *rs = RenderingServer::get_singleton();
+// One bird on screen as it is now (MapView._draw_one_bird()), into the batch.
+void BirdSim::_draw_one(int index, const State &state, Vector2 at, double span, double now, const Transform2D &basis) {
 	const Bird &bird = _birds[index];
 	const Colony &colony = _colonies[bird.colony];
 	const Species &info = _species[colony.species];
 	if (span < _full_px) {
-		rs->canvas_item_add_circle(canvas, at, (real_t)std::max(span * 0.22, 0.7), info.dot);
+		real_t dot = (real_t)std::max(span * 0.22, 0.7);
+		_oval(at, 0.0, Vector2(dot, dot), info.dot, 8);
 		return;
 	}
 	Vector2 way = basis.columns[0] * (real_t)std::cos(state.heading) + basis.columns[1] * (real_t)std::sin(state.heading);
@@ -1140,50 +1185,50 @@ void BirdSim::_draw_one(RID canvas, int index, const State &state, Vector2 at, d
 	int step = std::clamp((int)std::lround(std::clamp(wings, 0.0, 1.5) / WING_STEP), 0, 63);
 	if (mode == M_DIVE) {
 		// Under the water: a dark shape and a ripple over it.
-		_oval(canvas, at, angle, Vector2((real_t)(span * 0.3), (real_t)(span * 0.1)), Color(0.08f, 0.12f, 0.18f, 0.35f));
+		_oval(at, angle, Vector2((real_t)(span * 0.3), (real_t)(span * 0.1)), Color(0.08f, 0.12f, 0.18f, 0.35f));
 		double ripple = std::fmod(now * 0.7 + (double)(bird.seed % 10), 1.0);
-		_ring(canvas, at, span * (0.15 + 0.25 * ripple), 14, Color(1, 1, 1, (real_t)(0.5 * (1.0 - ripple))), std::max(span * 0.03, 1.0));
+		_ring(at, span * (0.15 + 0.25 * ripple), 14, Color(1, 1, 1, (real_t)(0.5 * (1.0 - ripple))), std::max(span * 0.03, 1.0));
 		return;
 	}
 	switch (colony.cls) {
 		case SEA_DUCKS:
 			if (flying) {
-				_draw_mesh(canvas, 1, colony.species, bird.hen, step, at, angle, span, height);
+				_draw_shape(1, colony.species, bird.hen, step, at, angle, span, height);
 			} else {
-				_draw_mesh(canvas, 2, colony.species, bird.hen, 0, at, angle, span, -1.0);
+				_draw_shape(2, colony.species, bird.hen, 0, at, angle, span, -1.0);
 			}
 			break;
 		case WADERS:
 			if (flying) {
-				_draw_mesh(canvas, 0, colony.species, false, step, at, angle, span, height);
+				_draw_shape(0, colony.species, false, step, at, angle, span, height);
 			} else {
 				bool hiding = info.hide && mode == M_STAND;
 				if (hiding) {
-					_draw_reeds(canvas, at, span, now, (double)(bird.seed % 100));
+					_draw_reeds(at, span, now, (double)(bird.seed % 100));
 				}
 				double neck = mode == M_STAND ? 0.55 : (mode == M_STALK ? 0.85 : (mode == M_SLEEP ? 0.1 : (mode == M_REST || mode == M_PERCH ? 0.3 : 0.5)));
-				_draw_wader_shadow(canvas, at, angle, info, span, neck, hiding);
-				_draw_mesh(canvas, 4, colony.species, hiding, (int)std::lround(neck * 20.0), at, angle, span, -1.0);
+				_draw_wader_shadow(at, angle, info, span, neck, hiding);
+				_draw_shape(4, colony.species, hiding, (int)std::lround(neck * 20.0), at, angle, span, -1.0);
 			}
 			break;
 		case CORMORANTS:
 			if (mode == M_SWIM) {
-				_draw_mesh(canvas, 3, colony.species, false, 0, at, angle, span * 1.2, -1.0);
+				_draw_shape(3, colony.species, false, 0, at, angle, span * 1.2, -1.0);
 			} else {
-				_draw_mesh(canvas, 0, colony.species, false, step, at, angle, span, flying ? height : 0.03);
+				_draw_shape(0, colony.species, false, step, at, angle, span, flying ? height : 0.03);
 			}
 			break;
 		default:
 			if (mode == M_SWIM) {
-				_draw_mesh(canvas, 0, colony.species, false, (int)std::lround(0.2 / WING_STEP), at, angle, span, -1.0);
+				_draw_shape(0, colony.species, false, (int)std::lround(0.2 / WING_STEP), at, angle, span, -1.0);
 			} else {
-				_draw_mesh(canvas, 0, colony.species, false, step, at, angle, span, flying ? height : 0.03);
+				_draw_shape(0, colony.species, false, step, at, angle, span, flying ? height : 0.03);
 			}
 			break;
 	}
 	if (state.splash > 0.0) {
 		double s = state.splash;
-		_ring(canvas, at, span * (0.2 + 0.4 * (1.0 - s)), 16, Color(1, 1, 1, (real_t)(0.8 * s)), std::max(span * 0.05, 1.0));
+		_ring(at, span * (0.2 + 0.4 * (1.0 - s)), 16, Color(1, 1, 1, (real_t)(0.8 * s)), std::max(span * 0.05, 1.0));
 	}
 }
 
@@ -1196,6 +1241,8 @@ void BirdSim::_draw_one(RID canvas, int index, const State &state, Vector2 at, d
 bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 	std::vector<Hit> &hits = still ? _still_hits : _hits;
 	hits.clear();
+	_batch_points.clear();
+	_batch_colors.clear();
 	if (still) {
 		std::fill(_still_drawn.begin(), _still_drawn.end(), 0);
 		_still_redraw_at = INFINITY;
@@ -1247,6 +1294,7 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 		}
 		return false;
 	};
+	uint64_t t_loop = Time::get_singleton()->get_ticks_usec();
 	bool drew = false;
 	for (size_t ci = 0; ci < _colonies.size(); ci++) {
 		Colony &colony = _colonies[ci];
@@ -1255,6 +1303,7 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 		if (span < dot_px) {
 			continue;
 		}
+		_stats[8]++;
 		_where(colony, cal);
 		bool flying_off = colony.where == W_TO_HOME || colony.where == W_TO_AWAY;
 		// The colonies whose birds could be in view: those of the ports near it
@@ -1287,6 +1336,7 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 			if (!still && _still_drawn[b]) {
 				continue; // (On the still birds' layer.)
 			}
+			_stats[9]++;
 			// Skipped while all it can do till its spell ends is out of view.
 			Bound &bound = _bounds[b];
 			if (now >= bound.until || bound.epoch != _where_changes) {
@@ -1322,11 +1372,27 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 				basis = _basis(s.pos, at);
 				basis_set = true;
 			}
-			_draw_one(canvas, b, s, at, span, now, basis);
+			_draw_one(b, s, at, span, now, basis);
 			hits.push_back({ at, (float)std::max(span * 0.6, 6.0), (int)ci });
 			drew = true;
 		}
 	}
+	_stats[6] += Time::get_singleton()->get_ticks_usec() - t_loop;
+	uint64_t t_flush = Time::get_singleton()->get_ticks_usec();
+	_stats[10] += (int64_t)_batch_points.size();
+	// All of them in one go: the birds on the move as a mesh kept from frame to
+	// frame (its vertices sent again each frame), the still ones (drawn again
+	// only now and then) as a polygon.
+	if (!_batch_points.empty() && (still || !_moving.draw(canvas, _batch_points, _batch_colors))) {
+		PackedVector2Array points;
+		PackedColorArray colors;
+		points.resize(_batch_points.size());
+		colors.resize(_batch_colors.size());
+		std::copy(_batch_points.begin(), _batch_points.end(), points.ptrw());
+		std::copy(_batch_colors.begin(), _batch_colors.end(), colors.ptrw());
+		RenderingServer::get_singleton()->canvas_item_add_triangle_array(canvas, PackedInt32Array(), points, colors);
+	}
+	_stats[7] += Time::get_singleton()->get_ticks_usec() - t_flush;
 	return drew;
 }
 
@@ -1361,11 +1427,13 @@ void BirdSim::_bind_methods() {
 }
 
 // What the passes since the last asking did (for profiling): spots asked,
-// ships asked, plans made, bounds worked out, states worked out, meshes asked.
+// ships asked, plans made, bounds worked out, states worked out, shapes asked,
+// the time (us) in the passes and in sending the batch, colonies and birds
+// looked at, and vertices drawn.
 Dictionary BirdSim::stats() {
 	Dictionary out;
-	const char *names[6] = { "spots", "ships", "plans", "bounds", "states", "meshes" };
-	for (int i = 0; i < 6; i++) {
+	const char *names[11] = { "spots", "ships", "plans", "bounds", "states", "meshes", "loop_us", "flush_us", "colonies", "birds_looked", "verts" };
+	for (int i = 0; i < 11; i++) {
 		out[names[i]] = _stats[i];
 		_stats[i] = 0;
 	}

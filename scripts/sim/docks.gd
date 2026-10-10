@@ -1,15 +1,15 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Docks
 extends RefCounted
-## Each port's berths: a cargo ship arriving queues for one that fits it
-## (first come, first served, every company's ships together), comes
-## alongside, does its stop there and pulls out (see
-## GameState._advance_docked()); ships waiting or idle in port lie at the
-## anchorage. A port's berths go by its size band (game_config docks berths),
-## or hub_berths at a port with any company's HQ or hub: each a kind (see
-## berth_kinds()), so at a Large or Giant port the biggest ships share its one
-## big berth while the rest use the others; when no big ship is waiting, two
-## smaller ships short enough to lie end to end can share it (see shares()).
+## Each port's berths (its marina's piers): a cargo ship arriving queues for one
+## that fits it (first come, first served, every company's ships together),
+## comes alongside, does its stop there and pulls out (see
+## GameState._advance_docked()); ships waiting at a full port lie at the
+## anchorage, and a ship with nothing to do comes in to a pier while the port
+## has berths to spare (GameState._wake_waiting_ships()). A port's berths go by
+## its size band (game_config docks berths: 4, 6, 8 or 12 piers), or hub_berths
+## (12) at a port with any company's HQ or hub: each a kind (see berth_kinds()),
+## now "L" everywhere but Small ports, so any ship the port takes fits any pier.
 
 
 var _state: Node  # GameState
@@ -41,19 +41,25 @@ static func settings() -> Dictionary:
 	return GameData.config.get("docks", {})
 
 
-## A port's berths in order round its marina, a letter each: "s" for the
-## smaller ships (those that can dock at a Small port), "m" for any ship a
-## Medium port takes, "B" a big berth only for the biggest ships (see
-## needs_big_berth()); at a hub port the B's are its slip's two walls.
+## A port's berths in order round its marina (the +y piers from the entrance
+## in, then the -y ones), a letter each: "s" for the smaller ships (those that
+## can dock at a Small port), "m" for any ship a Medium port takes, "L" a long
+## pier for any ship (the rule now); "B" an old big berth only for the biggest
+## ships (see needs_big_berth()), which two smaller ships can share (shares()).
 func berth_kinds(port_id: String) -> String:
 	if has_hub(port_id):
-		return str(settings().get("hub_berths", "sssBBsss"))
-	return str(settings().get("berths", {}).get(_state.port_sizes.band(port_id), "ss"))
+		return str(settings().get("hub_berths", "LLLLLLLLLLLL"))
+	return str(settings().get("berths", {}).get(_state.port_sizes.band(port_id), "ssss"))
 
 
 ## How many berths a port has now.
 func berth_count(port_id: String) -> int:
 	return berth_kinds(port_id).length()
+
+
+## How many of a port's berths are free now.
+func free_berths(port_id: String) -> int:
+	return berth_count(port_id) - (_taken.get(port_id, {}) as Dictionary).size()
 
 
 ## True if a model is one of the biggest ships, those that need a Medium or

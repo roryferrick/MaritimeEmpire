@@ -29,6 +29,12 @@ class DecorSim : public RefCounted {
 	PackedFloat64Array _room;
 	PackedByteArray _regions;
 	std::vector<RID> _textures;
+	// The season (see set_seasons()): each kind's texture before and now (and
+	// in the snow), per hemisphere, how far the change has come, and the snow line.
+	PackedInt32Array _before[2], _now[2], _snow[2];
+	double _mix[2] = { 1.0, 1.0 };
+	double _snow_lat[2] = { 999.0, 999.0 };
+	bool _seasons = false;
 	double _bucket = 2.5;
 	int _columns = 144;
 	std::unordered_map<int64_t, std::vector<int32_t>> _buckets;
@@ -42,6 +48,11 @@ public:
 	void setup(const PackedVector2Array &positions, const PackedVector3Array &units, const PackedInt32Array &kinds, const PackedInt32Array &tiers,
 			const PackedFloat64Array &room, const Array &textures, double bucket);
 	void set_regions(const PackedByteArray &regions);
+	// The season's textures (indexes into setup()'s textures) by kind: before
+	// and now (drawings change over from one to the other as mix goes 0 to 1,
+	// each at its own moment), and in the snow (beyond snow_lat degrees from the
+	// equator), for the north (0) and south (1).
+	void set_seasons(const Dictionary &north, const Dictionary &south);
 	void draw(const RID &canvas, const Dictionary &params);
 };
 

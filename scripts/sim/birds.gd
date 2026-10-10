@@ -110,9 +110,11 @@ static func daylight(hour: float) -> float:
 	return 0.15 + 0.85 * maxf(maxf(dawn, dusk), day)
 
 
-## The local hour (by the sun) at a longitude and calendar time.
+## The local hour (by the sun) at a longitude and calendar time: the clock is
+## the home port's local time (GameState.clock_longitude()), an hour later
+## for every 15 degrees east of it.
 static func local_hour(lon: float, unix: float) -> float:
-	return fposmod(fposmod(unix, 86400.0) / 3600.0 + lon / 15.0, 24.0)
+	return fposmod(fposmod(unix, 86400.0) / 3600.0 + (lon - GameState.clock_longitude()) / 15.0, 24.0)
 
 
 ## More in a hemisphere's breeding season (its spring and summer), fewer in its winter.

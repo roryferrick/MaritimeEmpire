@@ -1,17 +1,24 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
-extends SceneTree
+extends Node
 ## Builds data/anchorages.json: for every port, where its ships lie at anchor
 ## (waiting for a berth, idle, tugs and service ships): anchor points on a
 ## hexagonal grid round the port, each far enough from every other that two
-## ships swung round by the same wind never touch, and each clear of land all
+## ships swung round by the same wind never touch, each clear of land all
 ## the way round, as far as the longest ship in the game (the Mammoth) can
-## swing about its anchor, whatever way the wind blows. The map leaves out
-## those its port's marina could reach (MapView._anchor_spots()) and fills the
-## rest nearest the sea first.
+## swing about its anchor, whatever way the wind blows, and none in the
+## funnel in front of the harbour mouth, where every ship in or out sails
+## (FUNNEL_DEG either side of the way to sea, out to where the ways into the
+## harbour from the lanes have all come together: see
+## MapView._harbour_corridors()). The map leaves out those its port's marina
+## could reach (MapView._anchor_spots()) and fills the rest nearest the port
+## first, favouring the sides over straight out in front (where the lanes
+## come in), and never one a lane sailed now, or a way between the harbour
+## and such a lane, runs through (MapView._anchors_in_lanes()).
 ##
-##   Godot --headless --path . -s tools/build_anchorages.gd
+##   Godot --headless --path . tools/build_anchorages.tscn
 ##
-## Rerun after changing ports.json, the map (world_map.res) or ship sizes.
+## Rerun after changing ports.json, the map (world_map.res), ship sizes or
+## the marinas' sizes.
 
 const OUT := "res://data/anchorages.json"
 const FACING := "res://data/port_facing.json"
@@ -26,15 +33,32 @@ const SEARCH_NM := 420.0
 const MARGIN_NM := 1.0
 ## Map units (MapView): a dock unit is 1 / SHIP_WORLD_ZOOM degrees of the globe.
 const SHIP_WORLD_ZOOM := 75.0
-const SHIP_SIZE := 0.35
+const SHIP_SIZE := 0.245
 const BOW_LENGTH_FACTOR := 0.6
+## The funnel in front of the harbour mouth no ship anchors in: this far
+## either side of the way to sea (degrees), out to this share of how far out
+## the ways in from the lanes start (MapView.HARBOUR_REACH times the mouth's
+## distance, for the biggest marina the port can have), at least FUNNEL_MIN_NM.
+const FUNNEL_DEG := 30.0
+const FUNNEL_SHARE := 0.5
+const FUNNEL_MIN_NM := 6.0
+## A spot straight out in front counts this much further than one the same
+## distance off to the side (so the sides fill first; the lanes come in in
+## front), and one behind the port (where a ship coming to anchor would
+## have to go round the marina) further still.
+const FRONT_PENALTY := 0.6
+const BACK_PENALTY := 1.5
+## No spot further round than this (degrees off the way to sea): a ship coming
+## to anchor sails there from the harbour mouth, and behind the port that's
+## through the marina.
+const BEHIND_DEG := 110.0
 
 var _cols := 360 * CELLS_PER_DEG
 var _rows := 180 * CELLS_PER_DEG
 var _land := PackedByteArray()
 
 
-func _init() -> void:
+func _ready() -> void:
 	var started := Time.get_ticks_msec()
 	var map: WorldMapData = load("res://data/world_map.res")
 	_land.resize(_cols * _rows)
@@ -55,59 +79,136 @@ func _init() -> void:
 	var small_swing_nm := SMALL_LENGTH * 60.0 / SHIP_WORLD_ZOOM + MARGIN_NM
 	print("Swing room %.1f nm (ships up to %.1f units long: %.1f nm)" % [swing_nm, SMALL_LENGTH, small_swing_nm])
 
+	# The funnel's reach: the biggest marina a port can have (a hub's), and a
+	# canal port's (its mouth differs).
+	var hub_berths := str((GameData.config.get("docks", {}) as Dictionary).get("hub_berths", "sssBBsss"))
+	var funnels := {}
+	for canal in [false, true]:
+		var layout: Dictionary = MapView._marina_layout(hub_berths, true, canal)
+		var mouth_nm := (layout.mouth as Vector2).x * 60.0 / SHIP_WORLD_ZOOM
+		funnels[canal] = maxf(maxf(mouth_nm * MapView.HARBOUR_REACH, MapView.HARBOUR_MIN_NM) * FUNNEL_SHARE, FUNNEL_MIN_NM)
+	print("Funnel in front of the mouth: %.0f degrees either side, out to %.1f nm (%.1f nm at a canal port)" % [FUNNEL_DEG, funnels[false], funnels[true]])
+
+	var old: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(OUT)) if FileAccess.file_exists(OUT) else {}
 	var facing: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FACING)) if FileAccess.file_exists(FACING) else {}
+	# No anchoring in another port's marina (the biggest it can be), nor so near
+	# it that a ship swinging there could reach it, nor in its funnel.
+	var widest := 0.0
+	for canal in [false, true]:
+		widest = maxf(widest, float(MapView._marina_layout(hub_berths, true, canal).radius))
+	var keep_off_nm := (widest + MapView.JETTY_WIDTH) * 60.0 / SHIP_WORLD_ZOOM + swing_nm + MARGIN_NM
+	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string("res://data/ports.json")).ports
+	var places := []  # [port id, (lon, lat), bearing, funnel nm]
+	for port: Dictionary in ports:
+		var entry: Dictionary = facing.get("manual", {}).get(port.id, facing.get("facing", {}).get(port.id, {}))
+		places.append([port.id, Vector2(float(port.lon), float(port.lat)), float(entry.get("bearing", NAN)), funnels[MapView._is_canal_port(port.id)]])
 	var out := {}
 	var short := []
-	for port: Dictionary in JSON.parse_string(FileAccess.get_file_as_string("res://data/ports.json")).ports:
-		var entry: Dictionary = facing.get("manual", {}).get(port.id, facing.get("facing", {}).get(port.id, {}))
-		var bearing := float(entry.get("bearing", NAN))
-		var at := Vector2(float(port.lon), float(port.lat))
+	var in_funnel := 0
+	var worst := []
+	for place: Array in places:
+		var port := {id = place[0]}
+		var at: Vector2 = place[1]
+		var bearing: float = place[2]
+		var funnel_nm: float = place[3]
+		# The ports near enough to matter, as east and north nm of this one: [(east, north), the way to sea (or zero), funnel nm].
+		var others := []
+		var squash := maxf(cos(deg_to_rad(at.y)), 0.05)
+		for other: Array in places:
+			if other[0] == port.id or Geo.distance_nm(at, other[1]) > SEARCH_NM + keep_off_nm + float(other[3]):
+				continue
+			var there: Vector2 = other[1]
+			var sea_way := Vector2.ZERO if is_nan(float(other[2])) else Vector2.from_angle(deg_to_rad(90.0 - float(other[2])))
+			others.append([Vector2(wrapf(there.x - at.x, -180.0, 180.0) * 60.0 * squash, (there.y - at.y) * 60.0), sea_way, float(other[3])])
 		var spots := {
-			all = _spots(at, bearing, swing_nm, swing_nm + MARGIN_NM),
-			small = _spots(at, bearing, small_swing_nm, small_swing_nm + MARGIN_NM),
+			all = _spots(at, bearing, swing_nm, swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm),
+			small = _spots(at, bearing, small_swing_nm, small_swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm),
 		}
 		out[port.id] = spots
 		if spots.all.size() < 8 or spots.small.size() < 12:
 			short.append("%s (%d, %d)" % [port.id, spots.all.size(), spots.small.size()])
+		# How many of the old anchor points lay in the funnel (for the record).
+		var was := 0
+		for spot: Array in (old.get("ports", {}) as Dictionary).get(port.id, {}).get("all", []):
+			if _in_funnel(at, bearing, Vector2(float(spot[0]), float(spot[1])), funnel_nm):
+				was += 1
+		if was > 0:
+			in_funnel += was
+			worst.append([was, port.id])
 	var file := FileAccess.open(OUT, FileAccess.WRITE)
 	file.store_string(JSON.stringify({
-		_comment = "Anchor points (lon, lat) round each port, nearest the sea first: built by tools/build_anchorages.gd. all: each clear of land as far as the longest ship can swing about it (%.1f nm), and that far and a little more from the others; small: the same for ships up to small_length dock units long (%.1f nm)." % [swing_nm, small_swing_nm],
+		_comment = "Anchor points (lon, lat) round each port, nearest first (the sides before straight out in front) and none in the funnel in front of the harbour mouth: built by tools/build_anchorages.gd. all: each clear of land as far as the longest ship can swing about it (%.1f nm), and that far and a little more from the others; small: the same for ships up to small_length dock units long (%.1f nm)." % [swing_nm, small_swing_nm],
 		small_length = SMALL_LENGTH,
 		ports = out,
 	}, "\t", false))
 	file.close()
+	worst.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	print("Old anchor points in the funnel in front of a mouth: %d, most at %s" % [in_funnel, ", ".join(worst.slice(0, 12).map(func(w: Array) -> String: return "%s (%d)" % [w[1], w[0]]))])
 	print("Ports with under 8 anchor points for the longest ships or 12 for the rest: %s" % (", ".join(short) if not short.is_empty() else "none"))
 	print("Done in %d s" % ((Time.get_ticks_msec() - started) / 1000))
-	quit()
+	get_tree().quit()
 
 
 ## A port's anchor points: a hexagonal grid (spacing_nm apart, lined up with
 ## the way to sea) out to SEARCH_NM, keeping those whose swing circle is all
-## water, nearest a point out to sea from the port first.
-func _spots(at: Vector2, bearing: float, swing_nm: float, spacing_nm: float) -> Array:
+## water and that aren't in the funnel in front of the mouth, nearest the
+## port first (a spot out in front counting further: see FRONT_PENALTY).
+func _spots(at: Vector2, bearing: float, swing_nm: float, spacing_nm: float, funnel_nm: float, others: Array, keep_off_nm: float) -> Array:
 	var sea_way := Vector2.ZERO
 	var turn := 0.0
 	if not is_nan(bearing):
 		turn = deg_to_rad(90.0 - bearing)  # Compass bearing to an east-north angle.
 		sea_way = Vector2.from_angle(turn)
-	var toward := sea_way * swing_nm * 1.5  # Prefer the sea side.
 	var found := []
 	var rings := ceili(SEARCH_NM / spacing_nm)
 	var row_step := spacing_nm * sqrt(3.0) / 2.0
 	for row in range(-rings, rings + 1):
 		for col in range(-rings, rings + 1):
 			var local := Vector2((col + (row % 2) * 0.5) * spacing_nm, row * row_step).rotated(turn)
-			if local.length() > SEARCH_NM or local.length() < spacing_nm * 0.5:
+			var distance := local.length()
+			if distance > SEARCH_NM or distance < spacing_nm * 0.5:
+				continue
+			if _local_in_funnel(local, sea_way, funnel_nm) or (sea_way != Vector2.ZERO and absf(rad_to_deg(local.angle_to(sea_way))) > BEHIND_DEG):
+				continue
+			if _near_another(local, others, keep_off_nm):
 				continue
 			var point := _offset(at, local)
 			if _clear(point, swing_nm):
-				found.append([local.distance_to(toward), point])
+				var along := local.dot(sea_way) / maxf(distance, 0.001) if sea_way != Vector2.ZERO else 0.0
+				found.append([distance * (1.0 + FRONT_PENALTY * maxf(along, 0.0) + BACK_PENALTY * maxf(-along, 0.0)), point])
 	found.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 	var spots := []
 	for item: Array in found.slice(0, KEEP):
 		var point: Vector2 = item[1]
 		spots.append([snappedf(point.x, 0.0001), snappedf(point.y, 0.0001)])
 	return spots
+
+
+## True if a point (east and north nm of a port) lies in the funnel in front
+## of its mouth: within FUNNEL_DEG of the way to sea, out to funnel_nm.
+static func _local_in_funnel(local: Vector2, sea_way: Vector2, funnel_nm: float) -> bool:
+	if sea_way == Vector2.ZERO or local.length() > funnel_nm:
+		return false
+	return absf(rad_to_deg(local.angle_to(sea_way))) <= FUNNEL_DEG
+
+
+## True if a point (east and north nm of a port) is within keep_off_nm of
+## another port, or in the funnel in front of its mouth (`others`: [(east,
+## north) of the other, its way to sea, its funnel nm]).
+static func _near_another(local: Vector2, others: Array, keep_off_nm: float) -> bool:
+	for other: Array in others:
+		var off: Vector2 = local - (other[0] as Vector2)
+		if off.length() < keep_off_nm or _local_in_funnel(off, other[1], float(other[2])):
+			return true
+	return false
+
+
+## The same for a (lon, lat) point round a port facing a compass bearing.
+static func _in_funnel(at: Vector2, bearing: float, point: Vector2, funnel_nm: float) -> bool:
+	if is_nan(bearing):
+		return false
+	var local := Vector2(wrapf(point.x - at.x, -180.0, 180.0) * 60.0 * maxf(cos(deg_to_rad(at.y)), 0.05), (point.y - at.y) * 60.0)
+	return _local_in_funnel(local, Vector2.from_angle(deg_to_rad(90.0 - bearing)), funnel_nm)
 
 
 ## A (lon, lat) moved by east and north nm.

@@ -35,6 +35,8 @@ var _current_screen := Screen.WORLD
 
 ## Shown on the Ships tab while any ship needs the player (see
 ## Ship.attention_reason()), and on the Shop tab while any ship can be bought.
+## The cards for the big moments (levels, achievements), over everything.
+var event_card := EventCard.new()
 var _ships_alert := AlertDot.new()
 var _shop_alert := AlertDot.new()
 ## On the Hubs tab while a hub has upgrade points to spend or can be founded.
@@ -92,6 +94,8 @@ func _ready() -> void:
 		var tutorial := TutorialCard.new()
 		_popup_host.add_sibling(tutorial)
 		_popup_host.get_parent().move_child(tutorial, _popup_host.get_index())
+	# Over the popups and the tutorial: the last of the siblings.
+	_popup_host.get_parent().add_child(event_card)
 	show_screen(Screen.WORLD)
 
 
@@ -149,8 +153,13 @@ func show_port_on_map(port_id: String) -> void:
 func show_ship_on_map(ship: Ship) -> void:
 	show_screen(Screen.WORLD)
 	var map: MapView = %WorldScreen.find_child("MapView")
-	map.focus_ship(ship, map.size.y * 0.3)
+	map.follow_ship(ship)
 	%WorldScreen.open_ship_popup(ship)
+
+
+## The ship the World map is following (see MapView.follow_ship()), or null.
+func followed_ship() -> Ship:
+	return (%WorldScreen.find_child("MapView") as MapView).followed
 
 
 func show_screen(screen: Screen) -> void:
@@ -307,6 +316,7 @@ func _on_company_leveled(level: int, unlocks: Array[String]) -> void:
 	if not unlocks.is_empty():
 		text += " Unlocked: %s" % ", ".join(unlocks)
 	ActivityLog.add(text, ActivityLog.Kind.GOOD)
+	event_card.show_level(level, unlocks)
 
 
 func _on_ship_leveled(ship: Ship, level: int) -> void:

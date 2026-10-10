@@ -8,6 +8,8 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
 
+#include "bird_batch.h"
+
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -180,12 +182,21 @@ private:
 	std::vector<int64_t> _ship_ids;
 	std::vector<V2> _ship_spots;
 	std::unordered_map<int64_t, int> _ship_slot;
-	std::unordered_map<int64_t, RID> _meshes;
+	// The birds' shapes (MapView's: see _shape()), each a triangle list, asked once.
+	struct Shape {
+		std::vector<Vector2> points;
+		std::vector<Color> colors;
+	};
+	std::unordered_map<int64_t, Shape> _shapes;
+	// The pass's batch: every bird's triangles, drawn in one go (see draw()).
+	std::vector<Vector2> _batch_points;
+	std::vector<Color> _batch_colors;
+	BirdBatch _moving; // The birds on the move, as one mesh kept from frame to frame.
 	std::vector<Hit> _hits;
 	std::vector<Hit> _still_hits;
 	double _still_redraw_at = -INFINITY;
 	double _full_px = 4.0;
-	int64_t _stats[6] = {};
+	int64_t _stats[11] = {};
 	int64_t _still_epoch = -1;
 
 	// The view, for a draw (see draw()).
@@ -221,13 +232,16 @@ private:
 	Vector2 _to_screen(V2 lon_lat) const;
 	static bool _hidden(Vector2 at);
 	Transform2D _basis(V2 spot, Vector2 at) const;
-	RID _mesh(int kind, int species, bool hen, int step, int bucket);
-	void _draw_one(RID canvas, int index, const State &state, Vector2 at, double span, double now, const Transform2D &basis);
-	void _draw_mesh(RID canvas, int kind, int species, bool hen, int step, Vector2 at, double angle, double span, double shadow_height);
-	void _draw_wader_shadow(RID canvas, Vector2 at, double heading, const Species &info, double span, double neck, bool bill_up);
-	void _draw_reeds(RID canvas, Vector2 at, double span, double now, double seed);
-	static void _oval(RID canvas, Vector2 at, double angle, Vector2 half, Color color);
-	static void _ring(RID canvas, Vector2 at, double radius, int segments, Color color, double width);
+	const Shape &_shape(int kind, int species, bool hen, int step, int bucket);
+	void _draw_one(int index, const State &state, Vector2 at, double span, double now, const Transform2D &basis);
+	void _draw_shape(int kind, int species, bool hen, int step, Vector2 at, double angle, double span, double shadow_height);
+	void _draw_wader_shadow(Vector2 at, double heading, const Species &info, double span, double neck, bool bill_up);
+	void _draw_reeds(Vector2 at, double span, double now, double seed);
+	// Into the batch: a triangle, a line as a quad, a filled oval (a circle when round), a ring.
+	void _tri(Vector2 a, Vector2 b, Vector2 c, Color color);
+	void _line(Vector2 from, Vector2 to, double width, Color color);
+	void _oval(Vector2 at, double angle, Vector2 half, Color color, int segments = 14);
+	void _ring(Vector2 at, double radius, int segments, Color color, double width);
 
 protected:
 	static void _bind_methods();

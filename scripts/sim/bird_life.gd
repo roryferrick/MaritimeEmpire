@@ -76,10 +76,16 @@ var _task := -1
 var _made: Array = []
 ## The native birds (BirdSim), when the native library's loaded; null otherwise.
 var native: Object = null
-## The map's meshes for the native birds (see MapView._native_bird_mesh()).
+## The map's shapes for the native birds (see MapView._native_bird_shape()).
 var mesh_provider: Callable
+## The ships birds could follow as last listed (see _ships_now()), when (ms),
+## and that list for the native birds (see _ship_lists()).
 var _ships_at := []
 var _ships_frame := -1
+var _ship_lists_time := -2
+var _ship_lists_made := []
+## How often (ms) the ships birds could follow are listed again.
+const SHIPS_REFRESH_MS := 250
 
 
 static func shared() -> BirdLife:
@@ -167,14 +173,20 @@ func set_map_providers(spots: Callable, meshes: Callable) -> void:
 	_hand_providers()
 
 
-## The ships birds can follow, for the native birds: [ids, (lon, lat)s].
+## The ships birds can follow, for the native birds: [ids, (lon, lat)s] (as
+## _ships_now() has them: made again only when that is).
 func _ship_lists() -> Array:
+	var ships := _ships_now()
+	if _ships_frame == _ship_lists_time:
+		return _ship_lists_made
+	_ship_lists_time = _ships_frame
 	var ids := PackedInt64Array()
 	var spots := PackedVector2Array()
-	for entry: Array in _ships_now():
+	for entry: Array in ships:
 		ids.append((entry[0] as Ship).id)
 		spots.append(entry[1])
-	return [ids, spots]
+	_ship_lists_made = [ids, spots]
+	return _ship_lists_made
 
 
 ## A colony's birds (indices into birds).
@@ -358,7 +370,7 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 				plan.radius = float(spots.get("radius_km", 15.0)) * lerpf(0.5, 1.2, Wildlife._mix(bird.seed + k * 3))
 			elif roll < 0.53:
 				plan.act = "perch"
-				plan.place = _perch(spots.get("breakwater", []), int(bird.get("perch_away" if away else "perch_home", 0)), center)
+				plan.place = _perch(spots.get("perches", spots.get("breakwater", [])), int(bird.get("perch_away" if away else "perch_home", 0)), center)
 			elif roll < 0.68:
 				plan.act = "swim"
 				plan.place = pick.call(spots.get("sea", []), 3)
@@ -386,7 +398,7 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 				plan.act = "sleep"
 			elif group_roll < 0.4:
 				plan.act = "perch"
-				plan.place = _perch(spots.get("breakwater", []), int(bird.get("perch_away" if away else "perch_home", 0)), center)
+				plan.place = _perch(spots.get("perches", spots.get("breakwater", [])), int(bird.get("perch_away" if away else "perch_home", 0)), center)
 			elif group_roll < 0.82:
 				plan.act = "swim"
 				plan.place = (spots.get("sea", [center]) as Array)[int(group_roll * 997) % maxi((spots.get("sea", [center]) as Array).size(), 1)]
@@ -469,18 +481,15 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 
 ## Where a spell's activity is at a time (the start of it, where it flies to).
 ## A perched bird's own slot (`order`: its place in its port's perching order)
-## among a breakwater's evenly spaced slots, taken in a stride round them
-## (about 0.618 of the way) so the first few are spread along both arms: each
-## bird has its own while there are as many slots as perching birds. (As
-## BirdSim._perch().)
+## among the port's perching spots (MapView._bird_spots() perches: those on
+## the rocks first, then along the breakwater), taken in order so the rocks
+## fill first: each bird has its own while there are as many slots as perching
+## birds. (As BirdSim._perch().)
 static func _perch(slots: Array, order: int, fallback: Vector2) -> Vector2:
 	var n := slots.size()
 	if n == 0:
 		return fallback
-	var stride := maxi(roundi(n * 0.618), 1)
-	while _gcd(stride, n) != 1:
-		stride += 1
-	return slots[(maxi(order, 0) * stride) % n]
+	return slots[maxi(order, 0) % n]
 
 static func _gcd(a: int, b: int) -> int:
 	while b != 0:
@@ -583,11 +592,12 @@ func _ship_near(spot: Vector2, km: float, seed: int) -> Ship:
 
 
 ## The ships birds could follow and where they are (lon, lat): [[ship, spot]],
-## worked out once a frame.
+## worked out a few times a second (SHIPS_REFRESH_MS: a ship moves well under
+## a pixel in that time, and a big fleet's places are a loop over every ship).
 func _ships_now() -> Array:
-	var frame := Engine.get_process_frames()
-	if frame != _ships_frame:
-		_ships_frame = frame
+	var now := Time.get_ticks_msec()
+	if now - _ships_frame >= SHIPS_REFRESH_MS or _ships_frame < 0:
+		_ships_frame = now
 		_ships_at.clear()
 		for ship in GameState.ships:
 			if ship.is_carried() or ship.is_service():

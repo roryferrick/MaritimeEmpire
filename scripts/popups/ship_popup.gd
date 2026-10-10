@@ -2,7 +2,7 @@
 class_name ShipPopup
 extends AnchoredPopup
 ## A ship's stats, live status, bars and route, with the repair, refuel, rescue
-## and full-load toggles, Assign Route, Pause/Go, Sell and View on Map. Click the
+## and full-load toggles, Assign Route, Pause/Go, Sell and Follow on Map (the map keeps it in the middle as it goes; again to stop). Click the
 ## name to rename the ship. Lost ships get a Send Recovery button; recovery boats
 ## have no route controls. Cargo ships show their level, and the Upgrades button
 ## (red dot while points are unspent) swaps the bars for spending upgrade points
@@ -395,6 +395,8 @@ func _station_picker() -> VBoxContainer:
 
 func _refresh() -> void:
 	%NameLabel.text = ship.name
+	var root := GameRoot.find(self)
+	%MapButton.text = "Stop Following" if root != null and root.followed_ship() == ship else "Follow on Map"
 	_update_live()
 	_refresh_level()
 	%RepairToggle.set_pressed_no_signal(ship.auto_repair)
