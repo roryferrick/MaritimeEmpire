@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="48" viewBox="0 0 128 48">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M16,24 L3,16 Q9,24 3,32 Z" fill="#a8b4bc" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M84,18 L74,7 Q88,12 94,18 Z M84,30 L74,41 Q88,36 94,30 Z" fill="#546a76" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M14,24 Q30,15 64,14 Q96,14 114,19.5 Q122,22 126,24 Q122,26 114,28.5 Q96,34 64,34 Q30,33 14,24 Z" fill="#a8b4bc" stroke="#3a3128" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M22,24 Q40,19.5 64,19 Q92,19.5 112,22.5 Q92,28.5 64,29 Q40,28.5 22,24 Z" fill="#3c5a68"/>
+<path d="M26,16.5 Q64,14.5 110,19 M26,31.5 Q64,33.5 110,29" fill="none" stroke="#eef1f3" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+<path d="M34,18 L36,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M42.25,18 L44.25,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M50.5,18 L52.5,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M58.75,18 L60.75,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M67,18 L69,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M75.25,18 L77.25,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M83.5,18 L85.5,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M91.75,18 L93.75,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/><path d="M100,18 L102,30" stroke="#2a3c48" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/>
+<path d="M110,21 L126,24 L110,27" fill="none" stroke="#3a3128" stroke-width="1.4"/>
+<circle cx="110" cy="19.8" r="1.9" fill="#0e0f12"/><circle cx="110" cy="28.2" r="1.9" fill="#0e0f12"/><circle cx="110.8" cy="19.2" r="0.6" fill="#ffffff"/><circle cx="110.8" cy="27.6" r="0.6" fill="#ffffff"/>
+</svg>

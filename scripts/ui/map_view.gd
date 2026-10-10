@@ -458,9 +458,22 @@ const CANAL_FONT_SIZE := 13
 ## Lock chamber water runs from this much darker than the ocean (low) to this
 ## much lighter (high) as it fills.
 const LOCK_WATER_SHADE := 0.3
-## Port colors in the price overlay (see price_commodity).
-const PRICE_CHEAP := Color(0.2, 0.85, 0.3)
-const PRICE_EXPENSIVE := Color(0.95, 0.2, 0.15)
+## Price boxes (see price_line): their text size, padding (px) and gap
+## between a commodity's name and its figure; their background; how often
+## (seconds) their figures are worked out again as prices drift; the colors
+## for cheap and dear prices (against the world average, full at half or
+## twice it) and for a good profit (full at PRICE_GOOD_MARGIN of the buy
+## price), and a loss's.
+const PRICE_FONT_SIZE := 12
+const PRICE_PADDING := Vector2(6.0, 3.0)
+const PRICE_GAP := 10.0
+const PRICE_BACKGROUND := Color(0.05, 0.07, 0.11, 0.85)
+const PRICE_REFRESH_S := 1.0
+const PRICE_CHEAP := Color(0.45, 0.75, 1.0)
+const PRICE_DEAR := Color(1.0, 0.62, 0.25)
+const PRICE_PROFIT := Color(0.35, 0.95, 0.45)
+const PRICE_GOOD_MARGIN := 0.5
+const PRICE_LOSS := Color(0.9, 0.45, 0.4)
 ## A convoy canal's doubled stretches: how far apart its two channels are
 ## (projected degrees); how close a click must be to its channel (px) or an
 ## anchorage; and how far apart ships at anchor sit (px).
@@ -541,12 +554,27 @@ var route: Array[String] = []:
 		route = value
 		_static_layer.queue_redraw()
 
-## A commodity id to color ports by (green where it's cheap, red where it's
-## expensive, against its world average), or "" for plain white ports.
-var price_commodity := "":
+## A ship line (ship_models.json category, e.g. "grain") whose cargo gets a
+## box over each port with room for one (see _place_price_boxes()): each
+## commodity's price there, or with price_origin its profit carried there from
+## the origin; "" for none.
+var price_line := "":
 	set(value):
-		price_commodity = value
-		_static_layer.queue_redraw()
+		price_line = value
+		_prices_changed()
+## Where the cargo would be loaded, for price_line's boxes: its own box shows
+## what each commodity costs to buy there, every other port's the profit per
+## unit (per load with price_ship) of carrying it there. "" for plain prices.
+var price_origin := "":
+	set(value):
+		price_origin = value
+		_prices_changed()
+## The ship a route is being built for, or null: the boxes show only its cargo,
+## its owner's prices and bonuses, and profits per load of it.
+var price_ship: Ship = null:
+	set(value):
+		price_ship = value
+		_prices_changed()
 
 ## Port ids drawn grayed out, e.g. ports out of range in the route editor.
 var dimmed_ports: Dictionary = {}:
@@ -707,6 +735,14 @@ var _feature_labels := []
 var _feature_order := PackedInt32Array()
 var _feature_fonts := {}
 var _labels_key := []
+## Placed price boxes: [port id, rect, rows], rows being [name, figure, color,
+## figure width]; each port's box worked out for the current prices (port id ->
+## {rows, size, score}, or null for no box), when that was (msec), and a count
+## of the times it was, for _labels_key.
+var _price_boxes := []
+var _price_rows := {}
+var _price_time := -INF
+var _price_epoch := 0
 ## The ports' dots drawn natively (PortPainter), when the library's there, and
 ## what their looks were last worked out for (see _update_port_styles()).
 var _port_painter: Object = null
@@ -1212,6 +1248,8 @@ func _process(delta: float) -> void:
 	if _wildlife_shown:
 		_fauna_layer.queue_redraw()  # The wildlife going about its life.
 	if not show_ships:
+		if not price_line.is_empty() and Time.get_ticks_msec() - _price_time >= PRICE_REFRESH_S * 1000.0:
+			_static_layer.queue_redraw()  # (The price boxes' figures, as prices drift.)
 		return
 	# Made ahead, off the main thread, so the first look at a port's birds
 	# doesn't wait for them; and the lanes bent a few at a time (see _warm_lanes()).
@@ -1231,7 +1269,7 @@ func _process(delta: float) -> void:
 	if _track_icebreakers():
 		for node in _ice_arts:
 			node.queue_redraw()
-	# Route lanes follow the ships' legs, hub rings the hubs and port colors the
+	# Route lanes follow the ships' legs, hub rings the hubs and price boxes the
 	# drifting prices: a few times a second is plenty.
 	_static_clock += delta
 	if _static_clock >= STATIC_REFRESH_S:
@@ -2780,11 +2818,17 @@ func _draw_canal_layer() -> void:
 func _draw_static_layer() -> void:
 	_canvas = _static_layer
 	# Where labels go only changes with the view (or the hubs), not every frame.
-	var key := [_center, _zoom, size, GameState.hubs.map(func(hub: Hub) -> String: return hub.port_id), selected_port]
+	if not price_line.is_empty() and Time.get_ticks_msec() - _price_time >= PRICE_REFRESH_S * 1000.0:
+		_price_time = Time.get_ticks_msec()
+		_price_rows.clear()  # (Prices drift: their figures worked out again.)
+		_price_epoch += 1
+	var key := [_center, _zoom, size, GameState.hubs.map(func(hub: Hub) -> String: return hub.port_id), selected_port, _price_epoch, dimmed_ports]
 	if key != _labels_key:
 		_labels_key = key
 		var placed_labels: Array[Rect2] = []
-		_port_labels = _place_port_labels(placed_labels)
+		var boxed := _place_price_boxes(placed_labels)
+		_price_boxes = boxed[0]
+		_port_labels = _place_port_labels(placed_labels, boxed[1])
 		_country_labels = _place_country_labels(placed_labels)
 		_feature_labels = [] if gray_mode else _place_feature_labels(placed_labels)
 	_draw_feature_labels()
@@ -2793,6 +2837,7 @@ func _draw_static_layer() -> void:
 		_draw_active_lanes()
 	_draw_route()
 	_draw_ports(_port_labels)
+	_draw_price_boxes()
 
 func _draw_dock_layer() -> void:
 	if not show_ships:
@@ -5047,9 +5092,10 @@ func _draw_overlay() -> void:
 		_draw_hub_alerts()
 
 ## Port labels, the HQ's and hubs' first and then in rank order, skipping any
-## that would overlap one already placed.
+## that would overlap one already placed, after `labels` (those of the ports
+## with price boxes, already placed).
 ## Returns [port id, label rect] pairs.
-func _place_port_labels(placed: Array[Rect2]) -> Array:
+func _place_port_labels(placed: Array[Rect2], labels := []) -> Array:
 	var font := get_theme_default_font()
 	if _ports_by_rank.is_empty():
 		_ports_by_rank = GameData.ports.duplicate()
@@ -5070,24 +5116,165 @@ func _place_port_labels(placed: Array[Rect2]) -> Array:
 	var near_ids := {}
 	for i in _ports_near_view():
 		near_ids[GameData.ports[i].id] = true
-	var labels := []
+	var named := {}
+	for label: Array in labels:
+		named[label[0]] = true
 	var bounds := Rect2(Vector2.ZERO, size)
 	var near := bounds.grow(LABEL_REACH_PX)
 	for port: Dictionary in _ranked_ports:
-		if not near_ids.has(port.id):
+		if not near_ids.has(port.id) or named.has(port.id):
 			continue  # (Cheapest first: most are well off screen.)
 		if not selectable_ports.is_empty() and not selectable_ports.has(port.id):
 			continue  # Picking a port: only the choices are named.
 		var pos := port_screen_position(port.id)
 		if not near.has_point(pos):
 			continue  # (Cheapest first: most are well off screen.)
-		var text_size := _label_size(font, port.name, PORT_FONT_SIZE)
-		var rect := Rect2(pos + Vector2(-text_size.x / 2.0, _port_radius(port.id) + 2.0), text_size)
+		var rect := _port_label_rect(font, port)
 		if not bounds.intersects(rect) or _overlaps(rect, placed):
 			continue
 		placed.append(rect.grow(LABEL_PADDING))
 		labels.append([port.id, rect])
 	return labels
+
+## Where a port's name goes: centered under its dot.
+func _port_label_rect(font: Font, port: Dictionary) -> Rect2:
+	var text_size := _label_size(font, port.name, PORT_FONT_SIZE)
+	return Rect2(port_screen_position(port.id) + Vector2(-text_size.x / 2.0, _port_radius(port.id) + 2.0), text_size)
+
+## Something about the price boxes changed: work them out and place them again.
+func _prices_changed() -> void:
+	_price_rows.clear()
+	_price_time = -INF
+	_labels_key = []
+	_static_layer.queue_redraw()
+
+## Price boxes (see price_line) over the ports in view, each with its port's
+## name under it, placed before the other names: the origin's first, then the
+## best profits from it (ports nothing pays at get none), or with no origin the
+## ports whose prices are furthest from the average; skipping any that would
+## overlap one placed already. Not for locked, dimmed (out of range) or, while
+## picking a port, unpickable ports, nor ones too small for price_ship.
+## Returns [[port id, box rect, rows], ...] and those ports' [port id, label rect] pairs.
+func _place_price_boxes(placed: Array[Rect2]) -> Array:
+	var boxes := []
+	var labels := []
+	if price_line.is_empty():
+		return [boxes, labels]
+	var font := get_theme_default_font()
+	var bounds := Rect2(Vector2.ZERO, size)
+	var candidates := []  # [score, port]
+	for i in _ports_near_view():
+		var port: Dictionary = GameData.ports[i]
+		if _port_locked(port.id) or dimmed_ports.has(port.id) or (not selectable_ports.is_empty() and not selectable_ports.has(port.id)):
+			continue
+		if price_ship != null and not price_ship.fits_port(port.id):
+			continue  # (Too small for it to dock.)
+		if not bounds.has_point(port_screen_position(port.id)):
+			continue
+		var box: Variant = _price_box(port.id, font)
+		if box != null:
+			candidates.append([INF if port.id == price_origin else float(box.score), port])
+	candidates.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	for candidate: Array in candidates:
+		var port: Dictionary = candidate[1]
+		var box: Dictionary = _price_rows[port.id]
+		var box_size: Vector2 = box.size
+		var rect := Rect2(port_screen_position(port.id) + Vector2(-box_size.x / 2.0, -_port_radius(port.id) - 3.0 - box_size.y), box_size)
+		var label := _port_label_rect(font, port)
+		if not bounds.encloses(rect) or _overlaps(rect, placed) or _overlaps(label, placed):
+			continue
+		placed.append(rect.grow(LABEL_PADDING))
+		placed.append(label.grow(LABEL_PADDING))
+		boxes.append([port.id, rect, box.rows])
+		labels.append([port.id, label])
+	return [boxes, labels]
+
+## A port's price box for price_line, worked out once a PRICE_REFRESH_S:
+## {rows: [[name, figure, color, figure width], ...], size, score (how much it
+## matters, for placing)}, or null if it gets none (nothing pays there from
+## the origin). The origin's own box is headed "Buy here".
+func _price_box(port_id: String, font: Font) -> Variant:
+	if _price_rows.has(port_id):
+		return _price_rows[port_id]
+	var of: Company = GameState.owner_of(price_ship) if price_ship != null else null
+	var model_id := price_ship.model_id if price_ship != null else ""
+	var rows := []
+	var score := -INF
+	var from := price_origin
+	if from == port_id:
+		rows.append(["Buy here", "", Color.WHITE, 0.0])
+	for commodity_id: String in _price_cargo():
+		var figure: String
+		var color: Color
+		if from.is_empty() or from == port_id:
+			# Its price: what the port pays for it, or at the origin what it costs to buy there.
+			var price: float = GameState.market.sell_price(port_id, commodity_id) if from.is_empty() else GameState.company_buy_price(port_id, commodity_id, of)
+			var t := clampf(log(price / GameData.world_price(commodity_id)) / log(2.0), -1.0, 1.0)
+			figure = Fmt.money(roundi(price))
+			color = Color.WHITE.lerp(PRICE_CHEAP if t < 0.0 else PRICE_DEAR, absf(t))
+			score = maxf(score, absf(t))
+		else:
+			var buy := GameState.company_buy_price(from, commodity_id, of)
+			var profit: float = GameState.market.unit_profit(commodity_id, from, port_id, model_id, of)
+			var share := profit / buy
+			if price_ship != null:  # Per load of this ship, less the port fee.
+				var quantity := floori(price_ship.capacity() * (1.0 - GameData.leg_lightening(from, port_id, price_ship.model())))
+				var margin := (GameState.company_sell_price(port_id, commodity_id, of) - buy) * quantity
+				profit = profit * quantity - GameState.port_fee(port_id, margin, of)
+			figure = ("+" if profit > 0.0 else "") + Fmt.money_short(roundi(profit))
+			color = PRICE_LOSS if profit <= 0.0 else Color.WHITE.lerp(PRICE_PROFIT, clampf(0.35 + share / PRICE_GOOD_MARGIN, 0.0, 1.0))
+			if profit > 0.0:
+				score = maxf(score, share)
+		var name: String = GameData.commodity(commodity_id).get("name", commodity_id)
+		rows.append([name, figure, color, font.get_string_size(figure, HORIZONTAL_ALIGNMENT_LEFT, -1, PRICE_FONT_SIZE).x])
+	if score == -INF:
+		_price_rows[port_id] = null
+		return null
+	var name_width := 0.0
+	var figure_width := 0.0
+	for row: Array in rows:
+		name_width = maxf(name_width, _label_size(font, row[0], PRICE_FONT_SIZE).x)
+		figure_width = maxf(figure_width, row[3])
+	var box := {rows = rows, score = score,
+		size = Vector2(name_width + PRICE_GAP + figure_width, font.get_height(PRICE_FONT_SIZE) * rows.size()) + PRICE_PADDING * 2.0}
+	_price_rows[port_id] = box
+	return box
+
+## The commodities price_line's boxes list: price_ship's cargo, or all its line carries.
+func _price_cargo() -> Array:
+	if price_ship != null:
+		return price_ship.model().get("cargo", [])
+	var cargo := []
+	for commodity: Dictionary in GameData.commodities:
+		for model: Dictionary in GameData.ship_models:
+			if model.get("category", "") == price_line and model.get("cargo", []).has(commodity.id):
+				cargo.append(commodity.id)
+				break
+	return cargo
+
+## The placed price boxes (see _place_price_boxes()): a dark rounded panel
+## edged in the line's color, each commodity's name on the left and its figure,
+## in its color, on the right.
+func _draw_price_boxes() -> void:
+	if _price_boxes.is_empty():
+		return
+	var font := get_theme_default_font()
+	var style := StyleBoxFlat.new()
+	style.bg_color = PRICE_BACKGROUND
+	style.border_color = GameData.category_color(price_line)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	var row_height := font.get_height(PRICE_FONT_SIZE)
+	var ascent := font.get_ascent(PRICE_FONT_SIZE)
+	var name_color := _color(&"label")
+	for box: Array in _price_boxes:
+		var rect: Rect2 = box[1]
+		_canvas.draw_style_box(style, rect)
+		var y := rect.position.y + PRICE_PADDING.y + ascent
+		for row: Array in box[2]:
+			_canvas.draw_string(font, Vector2(rect.position.x + PRICE_PADDING.x, y), row[0], HORIZONTAL_ALIGNMENT_LEFT, -1, PRICE_FONT_SIZE, name_color)
+			_canvas.draw_string(font, Vector2(rect.end.x - PRICE_PADDING.x - float(row[3]), y), row[1], HORIZONTAL_ALIGNMENT_LEFT, -1, PRICE_FONT_SIZE, row[2])
+			y += row_height
 
 ## The ports near enough the view to show there (a port, its label, its
 ## marina or its birds): their places in GameData.ports, in order. Worked out
@@ -5270,13 +5457,6 @@ func _overlaps(rect: Rect2, placed: Array[Rect2]) -> bool:
 			return true
 	return false
 
-## A port's color for price_commodity: green at half its world average price
-## or less, white at the average, red at twice it or more.
-func _price_color(port_id: String) -> Color:
-	var ratio := GameState.market.sell_price(port_id, price_commodity) / GameData.world_price(price_commodity)
-	var t := clampf(log(ratio) / log(2.0), -1.0, 1.0)
-	return Color.WHITE.lerp(PRICE_CHEAP if t < 0.0 else PRICE_EXPENSIVE, absf(t))
-
 func _port_radius(port_id: String) -> float:
 	var port_size: float = GameState.port_sizes.size(port_id)
 	if port_size <= PORT_RADIUS_SIZE:
@@ -5302,7 +5482,7 @@ func _draw_ports(labels: Array) -> void:
 			# In a locked region: a small faint dot, no more.
 			_canvas.draw_circle(pos, PORT_RADIUS_MIN, locked_fill)
 			return
-		var port_fill := fill if price_commodity.is_empty() else _price_color(port_id)
+		var port_fill := fill
 		if selectable_ports.get(port_id) is Color:
 			port_fill = selectable_ports[port_id]
 		var radius := _port_radius(port_id)
@@ -5362,17 +5542,15 @@ func _draw_ports(labels: Array) -> void:
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 
 ## Works out every port's look for the native dots (PortPainter) again when
-## anything that sets it has changed: the prices shown (every STATIC_REFRESH_S,
-## as they drift), a port picked, dimmed or shining, the regions open, the
+## anything that sets it has changed: a port picked, dimmed or shining, the regions open, the
 ## hubs, the ports' sizes, the colors. Dragging the map doesn't change them.
 func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, locked_fill: Color) -> void:
-	var key := [price_commodity, selectable_ports, dimmed_ports, shining_ports, GameState.regions.duplicate(), hub_ports.keys(), fill, dimmed, locked_fill]
+	var key := [selectable_ports, dimmed_ports, shining_ports, GameState.regions.duplicate(), hub_ports.keys(), fill, dimmed, locked_fill]
 	var sizes: Array = GameState.port_sizes._sizes.values() if Time.get_ticks_msec() - _port_styles_time >= STATIC_REFRESH_S * 1000.0 else _port_styles_sizes
 	var now := Time.get_ticks_msec()
-	# (Prices drift and ports grow a little all the time: looked at again as often as the ports are drawn when the view's still.)
+	# (Ports grow a little all the time: looked at again as often as the ports are drawn when the view's still.)
 	var due := now - _port_styles_time >= STATIC_REFRESH_S * 1000.0
-	var prices_due := due and not price_commodity.is_empty()
-	if key == _port_styles_key and (not due or sizes == _port_styles_sizes) and not prices_due:
+	if key == _port_styles_key and (not due or sizes == _port_styles_sizes):
 		return
 	_port_styles_key = key
 	_port_styles_sizes = sizes
@@ -5390,7 +5568,7 @@ func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, lock
 		var port_id: String = GameData.ports[i].id
 		radii[i] = _port_radius(port_id)
 		layout_radii[i] = float(_port_layout(port_id).radius)
-		var port_fill := fill if price_commodity.is_empty() else _price_color(port_id)
+		var port_fill := fill
 		if selectable_ports.get(port_id) is Color:
 			port_fill = selectable_ports[port_id]
 		fills[i] = port_fill
@@ -7323,7 +7501,9 @@ func home_screen_position(kind: String, index: int) -> Vector2:
 ## is in SEA_ART_DIR (drawn head to the right, SEA_ART_ASPECT long for its
 ## width). Under water an animal is a pale blue-grey shape (SEA_SHADOW, as one looks through the sea); now and
 ## then a whale or orca comes up to breathe (SEA_SURFACE_S, with a blow) or
-## breaches (SEA_BREACH_S, with a splash), and dolphins leap (SEA_LEAP_S).
+## breaches (SEA_BREACH_S, with a splash), and dolphins leap (SEA_LEAP_S); the
+## fish, sharks, seals, sea lions and otters do the same by their kind (see
+## _sea_leaps(), _sea_blows()).
 ## The selected or hovered pod's year of routes shows dashed (SEA_ROUTE_COLOR).
 const SEA_LIFE_MIN_ZOOM := 10.0
 const SEA_ART_DIR := "res://art/sea/"
@@ -7401,9 +7581,18 @@ func _sea_kind_index(species: String, kind: Dictionary) -> int:
 		var silhouette := _sea_silhouette(str(kind.art))
 		_sea_kind_indices[species] = _sea_kinds.size()
 		_sea_kinds.append({texture = texture.get_rid() if texture != null else RID(), silhouette = silhouette.get_rid() if silhouette != null else RID(),
-			length_px = float(kind.length_px), spacing_px = float(kind.spacing_px), dolphin = kind.kind == "dolphin",
+			length_px = float(kind.length_px), spacing_px = float(kind.spacing_px), leap = _sea_leaps(kind), blow = _sea_blows(kind),
 			breach = kind.get("breach", []), surface = kind.get("surface", [])})
 	return _sea_kind_indices[species]
+
+## Which sea animals leap clear in an arc (dolphins, fish, sea lions) rather
+## than breach straight up (whales, orcas, sharks), and which blow when they
+## surface (whales and orcas; sharks show their fin, seals bob up, otters float).
+static func _sea_leaps(kind: Dictionary) -> bool:
+	return kind.kind in ["dolphin", "fish", "sea_lion"]
+
+static func _sea_blows(kind: Dictionary) -> bool:
+	return kind.kind in ["whale", "orca"]
 
 ## One animal of a pod: its place in the group (spread round the middle,
 ## drifting a little), then its shadow and whatever it's doing at the surface.
@@ -7418,7 +7607,7 @@ func _draw_sea_animal(pod: int, j: int, kind: Dictionary, center: Vector2, angle
 	if texture == null or not _on_water(at, facing, length):
 		return  # Never drawn over land, even partly.
 	_draw_sea_sprite(_sea_silhouette(str(kind.art)), at, facing, length, 1.0, SEA_SHADOW)
-	var dolphin: bool = kind.kind == "dolphin"
+	var dolphin := _sea_leaps(kind)  # (A leap, as a dolphin's; else a breach.)
 	var breach: Array = kind.get("breach", [])
 	if not breach.is_empty():
 		var up := _sea_event(pod, j, "breach", float(breach[0]), float(breach[1]), SEA_LEAP_S if dolphin else SEA_BREACH_S)
@@ -7436,7 +7625,7 @@ func _draw_sea_animal(pod: int, j: int, kind: Dictionary, center: Vector2, angle
 		var up := _sea_event(pod, j, "surface", float(surface[0]), float(surface[1]), SEA_SURFACE_S)
 		if up >= 0.0:
 			_draw_sea_sprite(texture, at, facing, length, 1.0, Color(1, 1, 1, sin(PI * up) * 0.95))
-			if up > 0.15 and up < 0.75:
+			if up > 0.15 and up < 0.75 and _sea_blows(kind):
 				_draw_blow(at + Vector2.from_angle(facing) * length * 0.32, length, (up - 0.15) / 0.6)
 
 ## True if a sea animal `length` long (screen px) at a screen point, facing

@@ -141,7 +141,8 @@ double SeaPainter::_event(int64_t pod, int64_t animal, const String &what, int64
 }
 
 // pods: [[pod index, center (screen), angle, kind index, shown]]; kinds:
-// [{texture, silhouette (RIDs), length_px, spacing_px, dolphin, breach
+// [{texture, silhouette (RIDs), length_px, spacing_px, leap (an arc, as a
+// dolphin's, else a breach), blow (spray on surfacing), breach
 // ([every, chance] or []), surface (likewise)}]; params: right, up, toward,
 // radius, middle (the view), play_time, scale, mask (PackedByteArray),
 // mask_size (Vector2i).
@@ -172,7 +173,8 @@ void SeaPainter::draw(const RID &canvas, const Array &pods, const Array &kinds, 
 		RID silhouette = kind["silhouette"];
 		real_t length = (real_t)(double)kind["length_px"] * scale;
 		real_t spacing = (real_t)(double)kind["spacing_px"] * scale;
-		bool dolphin = kind["dolphin"];
+		bool dolphin = kind["leap"]; // (A leap, as a dolphin's; else a breach.)
+		bool blows = kind["blow"];
 		Array breach = kind["breach"];
 		Array surface = kind["surface"];
 		for (int64_t j = 0; j < shown; j++) {
@@ -218,7 +220,7 @@ void SeaPainter::draw(const RID &canvas, const Array &pods, const Array &kinds, 
 				if (up >= 0.0) {
 					real_t u = (real_t)up;
 					frame.sprite(texture, at, facing, length, 1.0f, Color(1, 1, 1, std::sin(PI_F * u) * 0.95f));
-					if (u > 0.15f && u < 0.75f) {
+					if (blows && u > 0.15f && u < 0.75f) {
 						frame.blow(at + Vector2::from_angle(facing) * length * 0.32f, length, (u - 0.15f) / 0.6f);
 					}
 				}

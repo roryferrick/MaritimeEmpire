@@ -2,7 +2,8 @@
 extends Control
 ## Full-screen gray map for building a looping route by clicking ports in order.
 ## Ports the ship can't reach from the current stop, or that are too small for
-## it, are grayed out.
+## it, are grayed out; boxes over the others say what a load of each of its
+## cargoes would make sailed there from the current stop (see MapView.price_line).
 
 ## Emitted when the player accepts or cancels.
 signal finished
@@ -99,6 +100,10 @@ func _accept() -> void:
 func _refresh() -> void:
 	_map.route = _waypoints.duplicate()
 	var from := _from_port()
+	# Over each port in reach, what a load of each of the ship's cargoes would make sailed there from the last stop.
+	_map.price_ship = _ship
+	_map.price_line = str(_ship.model().get("category", ""))
+	_map.price_origin = from
 	var dimmed := {}
 	for port: Dictionary in GameData.ports:
 		if port.id != from and not _ship.can_sail(from, port.id):

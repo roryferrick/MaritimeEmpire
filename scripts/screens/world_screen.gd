@@ -3,17 +3,18 @@ extends Control
 ## The main map: ports, ships, canal locks, storms and sea animals, with their popups, and the Routes switch,
 ## Tutorial switch (in saves with the tutorial) and price picker in one panel in
 ## the top right (the fleet's route lanes shown faintly; the tutorial's tips;
-## ports colored by a commodity's price), with an Unlock a region button over
+## a ship line's prices over the ports), with an Unlock a region button over
 ## them while a market region can be unlocked (see _add_region_choice()).
 
-## Commodity colors (their ship line's) are brightened to at least this
-## luminance so they read on the dark panel.
 const ZOOM_BUTTON_SIZE := Vector2(44, 44)
 const ZOOM_BUTTON_MARGIN := 14
 const FIELD_GUIDE_BUTTON := 44.0
+## Ship line colors are brightened to at least this luminance so they read on
+## the dark panel.
 const LINE_MIN_LUMINANCE := 0.5
-## How strongly each ship line's group is tinted in the price menu.
-const PRICE_GROUP_TINT := 0.16
+## The price picker's ship lines: [name, ship_models.json category].
+const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"]]
 
 @onready var _map: MapView = $MapView
 var _price_button := Button.new()
@@ -171,10 +172,22 @@ func _on_routes_toggled(on: bool) -> void:
 	_map.show_active_lanes = on
 
 
+## The port's popup; while it's open the price boxes (if shown) are worked out
+## from there: what each commodity would make carried from it to each port.
 func _open_port_popup(port_id: String) -> void:
 	var follow := func() -> Vector2:
 		return _map.get_global_transform() * _map.port_screen_position(port_id)
-	PopupHost.find(self).show_port(port_id, follow)
+	var popup := PopupHost.find(self).show_port(port_id, follow)
+	_map.price_origin = port_id
+	popup.tree_exiting.connect(func() -> void:
+		if _map.price_origin == port_id and not _port_popup_open(port_id):
+			_map.price_origin = "")
+
+
+## Whether a popup for this port is open (another may have replaced the one closing).
+func _port_popup_open(port_id: String) -> bool:
+	var current: Variant = PopupHost.find(self).current
+	return current is PortPopup and is_instance_valid(current) and not current.is_queued_for_deletion() and current.port_id == port_id
 
 
 func _open_lock_popup(canal_id: String, lock_index: int) -> void:
@@ -235,56 +248,53 @@ func open_ship_popup(ship: Ship) -> void:
 	PopupHost.find(self).show_ship(ship, follow)
 
 
-## "Prices: Toys ▾" under the Routes switch, in the same panel: colors the ports
-## by that commodity's price (see MapView.price_commodity), or "Prices: off". Its
-## menu groups the commodities by the ship line that carries them, each group on
-## a faint tint of the line's color, each commodity with a swatch in it; the
-## chosen one's name is shown in that color too.
+## "Prices: Grain carriers ▾" under the Routes switch, in the same panel: puts a
+## box over the ports with each of that ship line's commodities and its price
+## there, or, while a port's popup is open, what it would make carried from
+## that port (see MapView.price_line); or "Prices: off". Its menu has a swatch
+## of each line's color, and the chosen line's name is shown in that color.
 func _add_price_picker() -> void:
-	_price_button.tooltip_text = "Color the ports by a commodity's price: green where it's cheap, red where it's expensive."
+	_price_button.tooltip_text = "Show a ship line's prices over the ports: blue where its cargo is cheap, orange where it's dear.\nClick a port to see instead what each would make carried from there."
 	_price_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_price_button.pressed.connect(_open_price_menu)
 	%MapControls.add_child(_price_button)
 
 	var list := VBoxContainer.new()
-	list.add_theme_constant_override(&"separation", 3)
+	list.add_theme_constant_override(&"separation", 0)
 	_price_menu.add_child(list)
 	list.add_child(_price_item(""))
-	var group: VBoxContainer = null
-	var group_color := Color.TRANSPARENT
-	for commodity: Dictionary in GameData.commodities:
-		var color := _line_color(commodity.id)
-		if group == null or color != group_color:
-			group_color = color
-			var tint := PanelContainer.new()
-			var style := StyleBoxFlat.new()
-			style.bg_color = Color(color, PRICE_GROUP_TINT)
-			style.set_corner_radius_all(4)
-			tint.add_theme_stylebox_override(&"panel", style)
-			list.add_child(tint)
-			group = VBoxContainer.new()
-			group.add_theme_constant_override(&"separation", 0)
-			tint.add_child(group)
-		group.add_child(_price_item(commodity.id))
+	for line: Array in PRICE_LINES:
+		list.add_child(_price_item(line[1]))
 	_price_menu.add_theme_stylebox_override(&"panel", get_theme_stylebox(&"panel", &"MapPopup"))
 	add_child(_price_menu)
 	_choose_price("")
 
 
-## One entry in the price menu: "Prices: Toys" with its line's swatch.
-func _price_item(commodity_id: String) -> Button:
+## One entry in the price menu: "Prices: Grain carriers" with the line's
+## swatch, and its cargo in the tooltip.
+func _price_item(category: String) -> Button:
 	var item := Button.new()
 	item.flat = true
 	item.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	item.text = _price_text(commodity_id)
-	if not commodity_id.is_empty():
-		item.icon = _swatch(_line_color(commodity_id))
-	item.pressed.connect(_choose_price.bind(commodity_id))
+	item.text = _price_text(category)
+	if not category.is_empty():
+		item.icon = _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
+		var names := PackedStringArray()
+		for commodity: Dictionary in GameData.commodities:
+			for model: Dictionary in GameData.ship_models:
+				if model.get("category", "") == category and model.get("cargo", []).has(commodity.id):
+					names.append(commodity.name)
+					break
+		item.tooltip_text = ", ".join(names)
+	item.pressed.connect(_choose_price.bind(category))
 	return item
 
 
-func _price_text(commodity_id: String) -> String:
-	return "Prices: off" if commodity_id.is_empty() else "Prices: %s" % GameData.commodity(commodity_id).get("name", commodity_id)
+func _price_text(category: String) -> String:
+	for line: Array in PRICE_LINES:
+		if line[1] == category:
+			return "Prices: %s" % line[0]
+	return "Prices: off"
 
 
 func _open_price_menu() -> void:
@@ -292,24 +302,16 @@ func _open_price_menu() -> void:
 	_price_menu.popup(Rect2i(Vector2i(rect.position + Vector2(0, rect.size.y + 4)), Vector2i(int(rect.size.x), 0)))
 
 
-func _choose_price(commodity_id: String) -> void:
+func _choose_price(category: String) -> void:
 	_price_menu.hide()
-	_map.price_commodity = commodity_id
-	_price_button.text = _price_text(commodity_id) + "  ▾"
-	_price_button.icon = null if commodity_id.is_empty() else _swatch(_line_color(commodity_id))
+	_map.price_line = category
+	_price_button.text = _price_text(category) + "  ▾"
+	_price_button.icon = null if category.is_empty() else _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
 	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color"]:
-		if commodity_id.is_empty():
+		if category.is_empty():
 			_price_button.remove_theme_color_override(color_name)
 		else:
-			_price_button.add_theme_color_override(color_name, _line_color(commodity_id))
-
-
-## The color of the ship line that carries a commodity (see GameData.category_color()).
-static func _line_color(commodity_id: String) -> Color:
-	for model: Dictionary in GameData.ship_models:
-		if not model.get("recovery", false) and model.get("cargo", []).has(commodity_id):
-			return GameData.category_color(model.get("category", ""), LINE_MIN_LUMINANCE)
-	return Color.WHITE
+			_price_button.add_theme_color_override(color_name, GameData.category_color(category, LINE_MIN_LUMINANCE))
 
 
 ## A small square of solid color, for the price picker's items.

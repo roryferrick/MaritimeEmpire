@@ -32,11 +32,12 @@ func close() -> void:
 
 
 ## follow returns the global point the popup should sit next to.
-func show_port(port_id: String, follow: Callable) -> void:
+func show_port(port_id: String, follow: Callable) -> PortPopup:
 	var popup: PortPopup = load(PORT_POPUP_PATH).instantiate()
 	popup.port_id = port_id
 	popup.follow = follow
 	open(popup)
+	return popup
 
 
 ## follow returns the global point the popup should sit next to.

@@ -13,6 +13,8 @@ const FONT_SIZE := 14
 const LABEL_WIDTH := 64.0
 const VALUE_WIDTH := 380.0
 const MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+## What a group of each kind is called (a pod otherwise).
+const GROUP_WORDS := {fish = "School", shark = "Sharks", seal = "Colony", sea_lion = "Colony", otter = "Raft"}
 
 ## Set before adding to the tree (an index in SeaLife.pods).
 var pod_index := -1
@@ -68,7 +70,7 @@ func _refresh() -> void:
 	_title.text = kind.plural
 	var shown := mini(int(pod.size), int(kind.shown))
 	var count := "%d %s" % [pod.size, kind.word if int(pod.size) != 1 else str(kind.word).trim_suffix("s")]
-	_row("Pod", "%s, the %s%s" % [count, pod.name, " (the map shows %d)" % shown if shown < int(pod.size) else ""])
+	_row(GROUP_WORDS.get(str(kind.kind), "Pod"), "%s, the %s%s" % [count, pod.name, " (the map shows %d)" % shown if shown < int(pod.size) else ""])
 	if state.migrating:
 		_row("Now", "Migrating from %s to %s: %d%% of the way, arriving about %s" % [_area(state.from), _area(state.area),
 			roundi(float(state.progress) * 100.0), _date(float(state.until))])

@@ -22,6 +22,13 @@ const TEXT_WIDTH := 600.0
 const SMALL_FONT := 14
 const ICON_SIZE := 56.0
 const TABS := ["Birds", "Sea animals", "Land animals", "Wonders"]
+## The sea animals' groups: [heading, note, kinds (data/sea_life.json kind)].
+const SEA_GROUPS := [
+	["Whales, dolphins and orcas", "Pods that spend parts of the year in their waters and migrate between them; whales and orcas come up to breathe and breach, dolphins leap.", ["whale", "orca", "dolphin"]],
+	["Seals, sea lions and otters", "Colonies along the coasts: seals and sea lions bob up to look about (sea lions porpoise along), otters float on their backs.", ["seal", "sea_lion", "otter"]],
+	["Sharks", "Alone or in twos and threes (hammerheads school round seamounts), showing a fin now and then; makos and great whites breach.", ["shark"]],
+	["Game fish", "Schools of the fish anglers chase: the salmon running in to their rivers, tuna, the billfish, mahi-mahi, tarpon and the rest, leaping clear now and then.", ["fish"]],
+]
 
 var _tabs := TabBar.new()
 var _list := VBoxContainer.new()
@@ -117,8 +124,11 @@ func _show(tab: int) -> void:
 				_bird_entry(id, birds.sea_ducks[id])
 		1:
 			var sea := SeaLife.shared()
-			for id: String in sea.species:
-				_sea_entry(sea, id)
+			for group: Array in SEA_GROUPS:
+				_heading(group[0], group[1])
+				for id: String in sea.species:
+					if (group[2] as Array).has(str(sea.species[id].kind)):
+						_sea_entry(sea, id)
 		2:
 			var land: Dictionary = Birds.shared().land_animals
 			for id: String in land:

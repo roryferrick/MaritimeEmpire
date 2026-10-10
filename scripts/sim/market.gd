@@ -78,6 +78,16 @@ func _half_life(port_id: String) -> float:
 	return float(GameData.markets.get("impact_half_life_s", 40)) * _state.port_sizes.impact_factor(port_id)
 
 
+## A unit of a commodity's profit carried from one port to another, as
+## best_cargo() works it out: the margin between the company's prices, with
+## the leg's bonuses for a ship of model_id on a profit, less the canal tolls
+## (a company's: this player's unless `of` says).
+func unit_profit(commodity_id: String, from_port: String, to_port: String, model_id := "", of: Company = null) -> float:
+	var sell: float = _state.company_sell_price(to_port, commodity_id, of)
+	var margin: float = sell - _state.company_buy_price(from_port, commodity_id, of)
+	return margin + _state.trade_bonus(from_port, to_port, margin, model_id, of) - sell * GameData.leg_toll_share(from_port, to_port)
+
+
 ## The commodity a ship of this model would load at one port to sell at the
 ## next, and its profit per unit there (after the canal tolls, and with the
 ## leg's bonuses on the profit, with a company's hubs and upgrades: this
