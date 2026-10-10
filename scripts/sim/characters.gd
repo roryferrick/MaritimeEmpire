@@ -5,26 +5,39 @@ extends RefCounted
 ## officers, its captain and mates (GameState.crew_of(): one officer for the
 ## smaller ships, up to four for the biggest), made up at random when the ship
 ## is bought. A character is {name, look}, look a choice (an index into
-## PARTS' options) for each part; Portrait draws them.
+## PARTS' options) for each part, plus the SLIDERS (0 to 100: height and
+## build); Portrait draws them in a clean cartoon style, the clothes drawn
+## over whatever body the sliders and the body choice make.
 
 ## The longest a character's name can be (the CEO editor's name box too).
 const MAX_NAME_LENGTH := 32
 
 ## The parts of a look, in the order the CEO screen lists them: [key, title,
-## option names]. Portrait draws each option.
+## option names]. Portrait draws each option. The body (male or female
+## build) is the first; the outfit parts lean to the sea (a captain's jacket,
+## sailor stripes, a pea coat, oilskins, sea boots, a sou'wester...) with
+## everyday clothes kept too.
 const PARTS := [
+	["body", "Body", ["Male", "Female"]],
 	["skin", "Skin", ["Porcelain", "Fair", "Light", "Light olive", "Olive", "Tan", "Bronze", "Brown", "Dark brown", "Deep"]],
-	["eyes", "Eyes", ["Round brown", "Round blue", "Round green", "Narrow brown", "Narrow hazel", "Wide blue", "Sleepy grey", "Lashes brown", "Lashes green", "Smiling"]],
+	["eye_shape", "Eye shape", ["Round", "Almond", "Narrow", "Wide", "Sleepy", "Lashes", "Smiling", "Squint"]],
+	["eye_color", "Eye color", ["Brown", "Dark brown", "Hazel", "Amber", "Blue", "Light blue", "Green", "Grey", "Violet"]],
 	["nose", "Nose", ["Button", "Long", "Wide", "Pointed", "Hooked", "Small", "Roman", "Snub", "Broad", "Freckled"]],
 	["mouth", "Mouth", ["Smile", "Grin", "Straight", "Smirk", "Laugh", "Surprised", "Frown", "Red lips", "Cheeky", "Gentle"]],
-	["hair", "Hair style", ["Bald", "Buzz cut", "Short", "Side part", "Long", "Bob", "Ponytail", "Curly", "Mohawk", "Bun"]],
+	["hair", "Hair style", ["Bald", "Buzz cut", "Short", "Side part", "Quiff", "Long", "Bob", "Ponytail", "Curly", "Braids", "Mohawk", "Bun", "Afro"]],
 	["hair_color", "Hair color", ["Black", "Dark brown", "Brown", "Light brown", "Auburn", "Ginger", "Strawberry blonde", "Blonde", "Platinum", "Grey", "White", "Blue", "Pink", "Green"]],
 	["facial_hair", "Facial hair", ["None", "Stubble", "Moustache", "Goatee", "Full beard", "Chinstrap", "Handlebar", "Soul patch", "Mutton chops", "Long beard"]],
-	["top", "Top", ["White tee", "Red tee", "Captain's jacket", "Grey hoodie", "Sailor stripes", "Green jumper", "Yellow polo", "Black suit", "Plaid flannel", "Hi-vis vest"]],
-	["bottoms", "Bottoms", ["Jeans", "Khakis", "Black trousers", "Navy shorts", "Cargo trousers", "White trousers", "Corduroys", "Red skirt", "Navy skirt", "Denim shorts"]],
-	["shoes", "Shoes", ["White trainers", "Black boots", "Brown boots", "Dress shoes", "Red trainers", "Sandals", "Yellow wellies", "Blue trainers", "Loafers", "Green wellies"]],
+	["top", "Top", ["Captain's jacket", "Sailor stripes", "Pea coat", "Yellow oilskin", "Fisherman's jumper", "Dress whites", "Deck tee", "Life vest", "Wetsuit", "Officer's shirt", "Tropical shirt", "Pirate coat",
+		"White tee", "Red tee", "Grey hoodie", "Black suit", "Plaid flannel", "Hi-vis vest"]],
+	["bottoms", "Bottoms", ["Navy trousers", "Sailor bell-bottoms", "Oilskin trousers", "Deck shorts", "Wetsuit legs", "Jeans", "Khakis", "Black trousers", "Cargo trousers", "Red skirt", "Navy skirt", "Denim shorts"]],
+	["shoes", "Shoes", ["Deck shoes", "Sea boots", "Yellow wellies", "Barefoot", "Black boots", "Brown boots", "White trainers", "Dress shoes", "Sandals", "Red trainers"]],
 	["eyewear", "Glasses", ["None", "Round", "Square", "Sunglasses", "Aviators", "Monocle", "Half-rims", "Cat-eye", "Goggles", "Eye patch"]],
-	["headwear", "Hat", ["None", "Captain's cap", "Beanie", "Baseball cap", "Bucket hat", "Cowboy hat", "Bandana", "Top hat", "Sailor cap", "Hard hat"]],
+	["headwear", "Hat", ["None", "Captain's cap", "Sailor cap", "Sou'wester", "Tricorne", "Bandana", "Watch cap", "Straw hat", "Bucket hat", "Baseball cap", "Top hat", "Hard hat", "Cowboy hat"]],
+]
+## The sliders of a look (0 to 100, 50 the middle): [key, title, low word, high word].
+const SLIDERS := [
+	["height", "Height", "Short", "Tall"],
+	["build", "Build", "Slight", "Broad"],
 ]
 ## How likely a random look is to have none of a part that can be left off.
 const NONE_CHANCES := {facial_hair = 0.55, eyewear = 0.6, headwear = 0.45}
@@ -68,15 +81,20 @@ static func option_name(key: String, index: int) -> String:
 	return ""
 
 
+## A look's slider (0 to 100; 50 when it has none: looks from before the sliders).
+static func slider(look: Dictionary, key: String) -> int:
+	var value: Variant = look.get(key, 50)
+	return clampi(int(value) if value is int or value is float else 50, 0, 100)
+
+
 static func random_name(rng: RandomNumberGenerator) -> String:
 	return "%s %s" % [FIRST_NAMES[rng.randi() % FIRST_NAMES.size()], LAST_NAMES[rng.randi() % LAST_NAMES.size()]]
 
 
-## A look with every part chosen at random (the parts that can be left off,
-## often none: NONE_CHANCES).
 ## A character as sent from elsewhere (a joining player's CEO), made safe: its
 ## name trimmed to MAX_NAME_LENGTH, its look's parts whole numbers within
-## their options (missing ones the first). {} if it has no name.
+## their options (missing ones the first) and its sliders within 0 to 100
+## (missing ones the middle). {} if it has no name.
 static func clean(character: Dictionary) -> Dictionary:
 	var name := str(character.get("name", "")).strip_edges().left(MAX_NAME_LENGTH)
 	if name.is_empty():
@@ -87,9 +105,15 @@ static func clean(character: Dictionary) -> Dictionary:
 		var key: String = part[0]
 		var value: Variant = (given as Dictionary).get(key, 0) if given is Dictionary else 0
 		look[key] = clampi(int(value) if value is int or value is float else 0, 0, (part[2] as Array).size() - 1)
+	for slide: Array in SLIDERS:
+		var key: String = slide[0]
+		look[key] = slider(given, key) if given is Dictionary else 50
 	return {name = name, look = look}
 
 
+## A look with every part chosen at random (the parts that can be left off,
+## often none: NONE_CHANCES; a female body never a random beard), and the
+## sliders mostly middling (the sum of two rolls).
 static func random_look(rng: RandomNumberGenerator) -> Dictionary:
 	var look := {}
 	for part: Array in PARTS:
@@ -99,6 +123,10 @@ static func random_look(rng: RandomNumberGenerator) -> Dictionary:
 			look[key] = 0 if rng.randf() < float(NONE_CHANCES[key]) else rng.randi_range(1, count - 1)
 		else:
 			look[key] = rng.randi() % count
+	if int(look.body) == 1:
+		look.facial_hair = 0
+	for slide: Array in SLIDERS:
+		look[slide[0]] = rng.randi_range(0, 50) + rng.randi_range(0, 50)
 	return look
 
 
