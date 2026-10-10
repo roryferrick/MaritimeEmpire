@@ -66,7 +66,7 @@ var _resort_clock := 0.0
 func _ready() -> void:
 	for sort: Sort in SORT_NAMES:
 		%SortOption.add_item(SORT_NAMES[sort], sort)
-	%SortOption.tooltip_text = "Earnings: each ship's profit over the last 10 minutes, best first (left to right), re-sorted every 30 seconds."
+	%SortOption.tooltip_text = "Earnings: each ship's profit over the last %s of game time (10 minutes of play), best first (left to right), re-sorted every 30 seconds." % GameState.recent_window_text()
 	for filter: Filter in FILTER_NAMES:
 		%FilterOption.add_item(FILTER_NAMES[filter], filter)
 	%SortOption.item_selected.connect(_rebuild.unbind(1))

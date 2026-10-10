@@ -30,11 +30,18 @@ func _init(for_ship: Ship) -> void:
 	size_flags_horizontal = SIZE_EXPAND_FILL
 	tooltip_text = ship.name
 
+	# The dot, the captain and the column beside them in a row; under the row,
+	# the whole tile wide, what it's earned.
+	var box := VBoxContainer.new()
+	box.mouse_filter = MOUSE_FILTER_IGNORE
+	box.set_anchors_and_offsets_preset(PRESET_FULL_RECT, PRESET_MODE_MINSIZE, PADDING)
+	box.add_theme_constant_override(&"separation", 2)
+	add_child(box)
 	var row := HBoxContainer.new()
 	row.mouse_filter = MOUSE_FILTER_IGNORE
-	row.set_anchors_and_offsets_preset(PRESET_FULL_RECT, PRESET_MODE_MINSIZE, PADDING)
+	row.size_flags_horizontal = SIZE_EXPAND_FILL
 	row.add_theme_constant_override(&"separation", 5)
-	add_child(row)
+	box.add_child(row)
 
 	_dot.custom_minimum_size = Vector2.ONE * DOT_RADIUS * 2.0
 	_dot.size_flags_vertical = SIZE_SHRINK_CENTER
@@ -60,12 +67,6 @@ func _init(for_ship: Ship) -> void:
 	_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_name.custom_minimum_size.x = 1  # Lets the name shrink (with an ellipsis) to fit the tile.
 	column.add_child(_name)
-	# What it's earned in the last 10 minutes, under its name.
-	_earned.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
-	_earned.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_earned.custom_minimum_size.x = 1
-	_earned.visible = false
-	column.add_child(_earned)
 	_info.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
 	_info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_info.custom_minimum_size.x = 1
@@ -78,6 +79,13 @@ func _init(for_ship: Ship) -> void:
 	column.add_child(_captain)
 	var bars := ShipBars.new(ship, true)
 	column.add_child(bars)
+	# What it's earned lately and over how long of game time, under it all, the tile's width.
+	_earned.add_theme_font_size_override(&"font_size", INFO_FONT_SIZE)
+	_earned.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_earned.custom_minimum_size.x = 1
+	_earned.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_earned.visible = false
+	box.add_child(_earned)
 	_update_info()
 
 
@@ -140,6 +148,6 @@ func _draw_dot() -> void:
 ## name, green or red; nothing for a ship that hasn't earned or spent.
 func show_earnings(amount: float) -> void:
 	_earned.visible = absf(amount) >= 1.0
-	_earned.text = "%s%s" % ["+" if amount > 0.0 else "", Fmt.money_short(roundi(amount))]
+	_earned.text = "%s%s in %s" % ["+" if amount > 0.0 else "", Fmt.money_short(roundi(amount)), GameState.recent_window_short()]
 	_earned.theme_type_variation = &"GainLabel" if amount > 0.0 else &"ErrorLabel"
-	_earned.tooltip_text = "Earned in the last 10 minutes"
+	_earned.tooltip_text = "Earned over the last %s of game time (10 minutes of play)" % GameState.recent_window_text()

@@ -55,6 +55,11 @@ class LanePainter : public RefCounted {
 	Lane &_lane(const String &from, const String &to);
 	Vector2 _screen(const Vector3 &p) const;
 	Vector2 _at_mile(const Lane &lane, double mile) const;
+	// A lane's point t of the way from one of its points to the next, as the
+	// ships sail it: straight in the map's projection (MapView._bent_sample()).
+	static Vector3 _between(const Vector3 &a, const Vector3 &b, double t);
+	// Longer than this on screen (px), a segment is drawn in pieces along that path.
+	double _subdivide_px = 16.0;
 	void _append_curve(const PackedVector3Array &curve);
 	void _append_middle(const Lane &lane, double start, double stop, bool curve_in);
 	void _draw_line(const RID &canvas, const Color &color, double width);

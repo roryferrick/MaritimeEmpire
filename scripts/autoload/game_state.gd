@@ -380,6 +380,24 @@ func calendar_time() -> int:
 	return calendar_time_at(play_time)
 
 
+## How long the recent-finances window (WINDOW_SECONDS of play) is in game
+## time, as the Ships tab says it: "8 days", "1 day" or "12 hours".
+func recent_window_text() -> String:
+	var hours := WINDOW_SECONDS * calendar_seconds_per_second() / 3600.0
+	if hours >= 47.0:
+		return "%d days" % roundi(hours / 24.0)
+	if hours >= 23.0:
+		return "1 day"
+	return "%d hours" % maxi(roundi(hours), 1)
+
+## The same, short, for a ship tile: "8d", "1d" or "12h".
+func recent_window_short() -> String:
+	var hours := WINDOW_SECONDS * calendar_seconds_per_second() / 3600.0
+	if hours >= 23.0:
+		return "%dd" % maxi(roundi(hours / 24.0), 1)
+	return "%dh" % maxi(roundi(hours), 1)
+
+
 ## The calendar date and time at a play time.
 func calendar_time_at(at_play_time: float) -> int:
 	if _calendar_start < 0:  # Parsed once: every ship asks every step.

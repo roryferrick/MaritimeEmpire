@@ -90,6 +90,24 @@ Vector2 LanePainter::_screen(const Vector3 &p) const {
 }
 
 // The lane's point `mile` along it on screen (between its points there).
+// Straight in Web Mercator between the two (longitude and northing lerped), as
+// MapView._bent_sample() places a ship between its lane's points, so the line
+// drawn and the dots on it agree even on a long open-ocean segment.
+Vector3 LanePainter::_between(const Vector3 &a, const Vector3 &b, double t) {
+	double lon_a = std::atan2((double)a.y, (double)a.x);
+	double lon_b = std::atan2((double)b.y, (double)b.x);
+	double d = lon_b - lon_a;
+	if (d > PI_D) {
+		d -= 2.0 * PI_D;
+	} else if (d < -PI_D) {
+		d += 2.0 * PI_D;
+	}
+	double lon = lon_a + d * t;
+	double m = std::atanh(std::clamp((double)a.z, -0.9999, 0.9999)) * (1.0 - t) + std::atanh(std::clamp((double)b.z, -0.9999, 0.9999)) * t;
+	double c = 1.0 / std::cosh(m);
+	return Vector3((real_t)(c * std::cos(lon)), (real_t)(c * std::sin(lon)), (real_t)std::tanh(m));
+}
+
 Vector2 LanePainter::_at_mile(const Lane &lane, double mile) const {
 	double length = lane.miles.back();
 	mile = std::clamp(mile, 0.0, length);
@@ -97,7 +115,7 @@ Vector2 LanePainter::_at_mile(const Lane &lane, double mile) const {
 	i = std::clamp(i, (int64_t)1, (int64_t)lane.miles.size() - 1);
 	double span = lane.miles[i] - lane.miles[i - 1];
 	double t = span > 0.0 ? (mile - lane.miles[i - 1]) / span : 1.0;
-	return _screen(lane.units[i - 1].lerp(lane.units[i], (real_t)t).normalized());
+	return _screen(_between(lane.units[i - 1], lane.units[i], t));
 }
 
 void LanePainter::_append_curve(const PackedVector3Array &curve) {
@@ -112,6 +130,7 @@ void LanePainter::_append_curve(const PackedVector3Array &curve) {
 // at stop), its chunks that can't be in view broken off with one hidden point each.
 void LanePainter::_append_middle(const Lane &lane, double start, double stop, bool curve_in) {
 	const int64_t count = (int64_t)lane.units.size();
+	int64_t prev_k = -2; // The lane point last pushed (so a segment is only split from its own start).
 	for (size_t c = 0; c < lane.centers.size(); c++) {
 		const int64_t first = (int64_t)c * _chunk;
 		if (lane.centers[c].dot(_toward) < std::cos(std::min(_view_angle + lane.spans[c], PI_D))) {
@@ -124,7 +143,20 @@ void LanePainter::_append_middle(const Lane &lane, double start, double stop, bo
 		for (int64_t k = first; k < last; k++) {
 			const double mile = lane.miles[k];
 			if ((mile > start || (start <= 0.0 && k == 0)) && (mile < stop || (!curve_in && k == count - 1))) {
-				_line.push_back(_screen(lane.units[k]));
+				Vector2 at = _screen(lane.units[k]);
+				// A long segment from the point before (the last one pushed) in
+				// pieces along the path the ships sail, so it bends with the globe as they do.
+				if (prev_k == k - 1 && !_line.empty() && _line.back().x > _hidden.x / 2.0f && at.x > _hidden.x / 2.0f) {
+					double far = (double)_line.back().distance_to(at);
+					if (far > _subdivide_px) {
+						int pieces = (int)std::min(std::ceil(far / _subdivide_px), 24.0);
+						for (int j = 1; j < pieces; j++) {
+							_line.push_back(_screen(_between(lane.units[k - 1], lane.units[k], (double)j / pieces)));
+						}
+					}
+				}
+				_line.push_back(at);
+				prev_k = k;
 			}
 		}
 	}

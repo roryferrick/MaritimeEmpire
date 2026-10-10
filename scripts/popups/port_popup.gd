@@ -285,7 +285,14 @@ func _add_market_cell(text: String, variation: StringName) -> void:
 	%MarketGrid.add_child(label)
 
 
-## "Gulls: Herring Gull (16), Yellow-legged Gull (8)": the gulls living at the port now.
+## "Gulls: Herring Gull (16), Yellow-legged Gull (8)": the gulls living at the
+## port now, each species once with all its flocks added up, the most first.
 func _update_birds() -> void:
-	var gulls := Wildlife.shared().birds_at(port_id, "gulls", float(GameState.calendar_time()))
+	var totals := {}  # Species id -> birds, in the order first met.
+	for entry: Dictionary in Wildlife.shared().birds_at(port_id, "gulls", float(GameState.calendar_time())):
+		totals[entry.id] = int(totals.get(entry.id, 0)) + int(entry.count)
+	var gulls := []
+	for id: String in totals:
+		gulls.append({id = id, count = totals[id]})
+	gulls.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.count) > int(b.count))
 	_birds_label.text = "Gulls: %s" % Birds.shared().counts_text(gulls) if not gulls.is_empty() else ""
