@@ -2194,9 +2194,10 @@ func follow_zoom() -> float:
 	return BIRD_DOT_PX / (BIRD_SMALLEST_SPAN * BIRD_SCALE) * SHIP_WORLD_ZOOM * FOLLOW_ZOOM_MARGIN
 
 ## Follows a ship: the view keeps it in the middle as it goes (along its lane,
-## into port and alongside), zooming to follow_zoom(), until the map is dragged
-## or zoomed, another ship is followed, or this is called again for the same
-## ship (which stops following it).
+## into port and alongside), zooming to follow_zoom(). Zooming (the wheel, the
+## + and - buttons and keys, pinching) keeps following, about the ship; a
+## drag or a click on the map, another ship followed, or this called again
+## for the same ship stops it.
 func follow_ship(ship: Ship) -> void:
 	if followed == ship:
 		followed = null
@@ -2266,7 +2267,7 @@ func zoom_by(factor: float, about := Vector2(-1.0, -1.0)) -> void:
 	if factor <= 0.0:
 		return
 	_zoom_goal = clampf(_zoom_goal * factor, _min_zoom(), MAX_ZOOM)
-	_zoom_about = about if about.x >= 0.0 else size / 2.0
+	_zoom_about = about if about.x >= 0.0 and followed == null else size / 2.0  # (Following: about the ship, in the middle.)
 	_fling = Vector2.ZERO
 
 ## The + and - keys zoom about the middle (for trackpads without gestures).
@@ -2291,13 +2292,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _gui_input(event: InputEvent) -> void:
 	var pinch := event as InputEventMagnifyGesture
 	if pinch:
-		followed = null
 		zoom_by(pinch.factor, pinch.position)
 		accept_event()
 		return
 	var swipe := event as InputEventPanGesture
 	if swipe:
-		followed = null
 		zoom_by(pow(ZOOM_STEP, -swipe.delta.y * SWIPE_ZOOM_RATE), swipe.position)
 		accept_event()
 		return
@@ -2308,8 +2307,7 @@ func _gui_input(event: InputEvent) -> void:
 				if button.pressed:
 					var step := ZOOM_STEP if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / ZOOM_STEP
 					_zoom_goal = clampf(_zoom_goal * step, _min_zoom(), MAX_ZOOM)
-					_zoom_about = button.position
-					followed = null
+					_zoom_about = size / 2.0 if followed != null else button.position  # (Following: about the ship.)
 					_fling = Vector2.ZERO
 			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT:
 				if button.pressed and _pressed_button == MOUSE_BUTTON_NONE:
@@ -2321,6 +2319,7 @@ func _gui_input(event: InputEvent) -> void:
 					_drag_samples.clear()
 				elif not button.pressed and button.button_index == _pressed_button:
 					if not _dragging and button.button_index == MOUSE_BUTTON_LEFT:
+						followed = null  # (A click anywhere lets the followed ship go.)
 						_click(button.position)
 					elif _dragging:
 						_fling = _drag_fling()
