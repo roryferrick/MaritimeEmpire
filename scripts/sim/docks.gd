@@ -7,8 +7,8 @@ extends RefCounted
 ## GameState._advance_docked()); ships waiting at a full port lie at the
 ## anchorage, and a ship with nothing to do comes in to a pier while the port
 ## has berths to spare (GameState._wake_waiting_ships()). A port's berths go by
-## its size band (game_config docks berths: 4, 6, 8 or 12 piers), or hub_berths
-## (12) at a port with any company's HQ or hub: each a kind (see berth_kinds()),
+## its size band (game_config docks berths: 6, 8, 10 or 14), or hub_berths
+## (14) at a port with any company's HQ or hub: each a kind (see berth_kinds()),
 ## now "L" everywhere but Small ports, so any ship the port takes fits any pier.
 
 
@@ -48,8 +48,8 @@ static func settings() -> Dictionary:
 ## ships (see needs_big_berth()), which two smaller ships can share (shares()).
 func berth_kinds(port_id: String) -> String:
 	if has_hub(port_id):
-		return str(settings().get("hub_berths", "LLLLLLLLLLLL"))
-	return str(settings().get("berths", {}).get(_state.port_sizes.band(port_id), "ssss"))
+		return str(settings().get("hub_berths", "LLLLLLLLLLLLLL"))
+	return str(settings().get("berths", {}).get(_state.port_sizes.band(port_id), "ssssss"))
 
 
 ## How many berths a port has now.

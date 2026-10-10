@@ -312,6 +312,11 @@ const LONE_PUSH_SLANT := 0.55
 ## Tugs moor along the inside of their marina's breakwater (see _jetty_pose()):
 ## the first this far (radians) round from where it meets the quay, each the
 ## next this far (dock units) on from the last.
+## The tugs' moorings along the inside of the jetty's arms run from this far
+## round from the entrance (radians) towards it (see _marina_layout()).
+const TUG_ARM_FROM := 0.95
+## Where a tug coming home makes for first, the land end of its arm (shares of the jetty's radius, x and y).
+const TUG_ARM_END := Vector2(0.33, 0.85)
 const TUG_MOOR_END := 0.12
 const TUG_MOOR_GAP := 0.6
 ## Ships further than this (px, scaled up zoomed in) off screen aren't drawn.
@@ -1762,9 +1767,11 @@ func _tug_work(tug: Ship) -> Dictionary:
 ## each)}. Pulling it in: in through the mouth as far as the tugs are ahead
 ## (just as they were coming in from sea: see _tow_track()), through the
 ## outer harbour and down the channel to where it comes round for its slot;
-## there they let go, easing to a stop out to the side, and it goes on in by
-## itself at a crawl, round into its slot and the last slide onto its pier,
-## while they lie there; then they go to their moorings. With no berth free
+## there they let go, easing to a stop beside it (inside the channel, clear of
+## the pier tips), and it goes on in by itself at a crawl, round into its slot
+## and the last slide onto its pier, while they lie there; then they go out
+## along the channel's middle and by their arm's land end to their moorings
+## (_tug_home_way()). With no berth free
 ## they cast off at the mouth, where their tow ends, and it glides on to its
 ## spot at the anchorage, as any ship coming in to wait does.
 func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, layout: Dictionary, anchoring: bool) -> Dictionary:
@@ -1814,14 +1821,23 @@ func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, lay
 	# lying there while it goes on in.
 	var forward := Vector2.from_angle(float(let_go[1]))
 	var open := signf((-(berth[1] as Vector2)).dot(forward.rotated(PI / 2.0)))
-	var stand := width / 2.0 + tug_length + TUG_HULL_GAP
+	# Side by side with it, clear of its hull; where the channel's too narrow for
+	# the second tug beside the first, it stops behind it instead.
+	var stand := width / 2.0 + tug_width / 2.0 + TUG_HULL_GAP
+	var room := float(layout.channel) / 2.0 - tug_width / 2.0 - 0.1
 	for i in team.size():
 		var side := 0.0 if team.size() == 1 else (1.0 if i == 0 else -1.0) * tug_width * TOW_Y_WIDTHS
-		var segments := [{kind = "follow", t0 = 0.0, t1 = pulled, ahead = ahead, side = side, side_to = open * (stand + i * (tug_width + TUG_MOOR_GAP)), past = tug_length, swing = tug_length}]
+		var beside := stand + i * (tug_width + TUG_MOOR_GAP)
+		var past := tug_length
+		if beside > room:
+			beside = maxf(minf(stand, room), tug_width)
+			past = tug_length + i * (tug_length + TUG_MOOR_GAP)
+		var segments := [{kind = "follow", t0 = 0.0, t1 = pulled, ahead = ahead, side = side, side_to = open * beside, past = past, swing = tug_length}]
 		work.tugs.append(segments)
 		var stopped := _work_pose(work, segments, pulled)
 		segments.append({kind = "hold", t0 = pulled, t1 = total, pose = stopped})
-		work.finish.append([stopped, [(stopped[0] as Vector2) + Vector2.from_angle(float(stopped[1])) * tug_length, stopped[1]]])
+		# Then out along the channel's middle to its moorings (see _lying_pose()).
+		work.finish.append([stopped, [Vector2((stopped[0] as Vector2).x + tug_length * 1.5, 0.0), 0.0]])
 	return work
 
 ## A tug's point pulling a ship in (see "follow" in _work_pose()), `d` along
@@ -2932,16 +2948,14 @@ const QUAY_WIDTH := 0.9
 const JETTY_WIDTH := 0.8
 const BERTH_GAP := 0.7
 const BERTH_ROOM := 0.6
-## The piers (dock units wide), the room in the channel before the first pier
-## (ship lengths: to turn into its slot), the channel between the pier tips (ship
+## The piers (dock units wide), the channel between the pier tips (ship
 ## lengths, at least this many ship widths), and the quay behind the basin
 ## (ship lengths, at least QUAY_STRIP_MIN) for the HQ and industry.
 ## The rocks round a marina (see _marina_layout()), each [how far out (jetty
 ## radii), which way (degrees off the sea way), how big (jetty radii)]; the
 ## first ROCK_SPOTS entries a port has (3 to 5 by its berths).
-const ROCK_SPOTS := [[0.74, 60.0, 0.12], [0.78, -66.0, 0.1], [0.6, 73.0, 0.09], [1.17, -60.0, 0.13], [1.16, 66.0, 0.11]]
+const ROCK_SPOTS := [[1.18, 60.0, 0.12], [1.22, -66.0, 0.1], [1.32, 72.0, 0.09], [1.17, -46.0, 0.13], [1.3, -58.0, 0.11]]
 const PIER_WIDTH := 0.6
-const TOP_ROOM_LENGTHS := 0.6
 const CHANNEL_LENGTHS := 1.2
 const CHANNEL_WIDTHS := 4.0
 const QUAY_STRIP_LENGTHS := 0.9
@@ -3312,11 +3326,12 @@ static func _longest_ship() -> float:
 ## curving out round the sea side with the entrance in its middle; behind the
 ## basin, on the land, the quay the HQ and industry stand on. Every pier's as
 ## long as the longest ship the port takes, and the port has one for each
-## berth (Docks.berth_kinds(): 4, 6, 8 or 12 as ports grow, 12 at a hub). A
-## ship moors in the slot between a pier and the next (or the land end),
-## alongside the deeper one's seaward face, bow to the wall. Tugs moor along
-## the seaward face of the first pier each side (the top of the closest
-## piers; see _jetty_pose()).
+## berth (Docks.berth_kinds(): 6, 8, 10 or 14 as ports grow, 14 at a hub),
+## one fewer than its berths each side. A ship moors in the slot seaward of
+## its pier's face, bow to the wall: the first each side along the first
+## pier's seaward face, open to the outer harbour, the rest between a pier and
+## the next, the last along the land end. Tugs moor along the inside of the
+## jetty's arms (see _jetty_pose()).
 ## {radius (the jetty's: the walls' outer edges, where it starts), inner (half
 ## the basin's width), corners (the basin's, from its seaward +y corner round
 ## the land end to -y), berths (one per kind: [where the middle of a ship
@@ -3345,38 +3360,48 @@ static func _marina_layout(kinds: String, hub: bool, canal := false) -> Dictiona
 	var per_side := PackedInt32Array([(count + 1) / 2, count / 2])  # +y side, -y side.
 	var slot := width + 2.0 * BERTH_GAP
 	var pitch := slot + PIER_WIDTH
-	var top := length * TOP_ROOM_LENGTHS
+	var top := slot  # The top slot each side: along the first pier's seaward face, open to the outer harbour.
 	var channel := maxf(length * CHANNEL_LENGTHS, width * CHANNEL_WIDTHS)
 	var half := length + channel / 2.0
 	var radius := half + QUAY_WIDTH
-	var depth := top + maxi(per_side[0], per_side[1]) * pitch
+	var depth := top + (maxi(per_side[0], per_side[1]) - 1) * pitch
 	var strip := maxf(length * QUAY_STRIP_LENGTHS, QUAY_STRIP_MIN)
 	var berth_list := []
 	var piers := []
-	var tugs := []
-	var tug := _berth_ship("tug")
 	for s in 2:
 		var side := 1.0 if s == 0 else -1.0
-		for k: int in per_side[s]:
-			var face := -(top + k * pitch)  # The pier's seaward face.
-			piers.append([side, face, face - PIER_WIDTH])
-			# Its slot, below it: the ship against the next pier's seaward face (or
-			# the land end's), the pier's middle along, bow to the wall.
-			var deeper := -(top + (k + 1) * pitch)
-			var middle := Vector2(deeper, side * (half - length / 2.0))
-			berth_list.append([middle, Vector2(0.0, side), Vector2.RIGHT, length, middle, kinds[s * per_side[0] + k]])
-			if k == 0:
-				# Tugs along its seaward face, from the tip in, bow to the channel.
-				var along := 0.0
-				while along + tug.x <= length - TUG_MOOR_GAP:
-					tugs.append([Vector2(face + BERTH_GAP + tug.y / 2.0, side * (half - length + along + tug.x / 2.0)), -side * PI / 2.0])
-					along += tug.x + TUG_MOOR_GAP
+		for j: int in per_side[s]:
+			# Berth j lies along pier j's seaward face (the last along the land end),
+			# the ship's middle at the face's middle, bow to the wall: its slot is
+			# seaward of the face, the first one open to the outer harbour.
+			var face := -(top + j * pitch)
+			if j < per_side[s] - 1:
+				piers.append([side, face, face - PIER_WIDTH])
+			var middle := Vector2(face, side * (half - length / 2.0))
+			berth_list.append([middle, Vector2(0.0, side), Vector2.RIGHT, length, middle, kinds[s * per_side[0] + j]])
+	# Tugs along the inside of the jetty's arms (see _jetty_pose()): the two arms
+	# by turns, from TUG_ARM_FROM round towards the entrance, TUG_MOOR_GAP apart,
+	# bow to the entrance.
 	var gap := asin(clampf(width * ENTRANCE_WIDTHS / 2.0 / radius, 0.05, 0.6))
-	# The rocks the birds perch on: in the outer harbour's corners inside the
-	# jetty's arms, and a couple just outside them (skipped where that's land),
-	# more and bigger at a bigger port, a ship's width or more across.
+	var tug := _berth_ship("tug")
+	var tugs := []
+	var off := radius - JETTY_WIDTH / 2.0 - tug.y / 2.0 - TUG_HULL_GAP
+	var step := (tug.x + TUG_MOOR_GAP) / off
+	var angles := PackedFloat32Array()
+	var a := TUG_ARM_FROM - step / 2.0
+	while a >= gap + TUG_MOOR_END + step / 2.0:
+		angles.append(a)
+		a -= step
+	if angles.is_empty():
+		angles.append(maxf(TUG_ARM_FROM - step / 2.0, gap + TUG_MOOR_END))
+	for k in angles.size():
+		for side: float in [1.0, -1.0]:
+			tugs.append([Vector2.from_angle(angles[k] * side) * off, angles[k] * side - side * PI / 2.0])
+	# The rocks the birds perch on: outside the jetty's arms, off to either side
+	# (skipped where that's land), more and bigger at a bigger port, a ship's
+	# width or more across.
 	var rocks := []
-	var rock_count := 3 if count <= 4 else (4 if count <= 6 else 5)
+	var rock_count := 3 if count <= 6 else (4 if count <= 8 else 5)
 	for k in rock_count:
 		var spot: Array = ROCK_SPOTS[k]
 		rocks.append([Vector2.from_angle(deg_to_rad(float(spot[1]))) * float(spot[0]) * radius, float(spot[2]) * radius, k % 3])
@@ -4282,11 +4307,14 @@ func _lying_pose(ship: Ship, at_time: float) -> Array:
 	var since: float = float(seen[1]) if not seen.is_empty() else -INF
 	if since == -INF or seen.size() > 2 and at_time >= float(seen[2]) or ship.berth >= 0 and ship.berth_phase != Ship.BERTH_IN:
 		return rest
-	var poses := [_keep_right(ship.docked_at, _entrance_pose(ship.docked_at, false, true)), rest]
+	var home := []  # A tug: to its moorings by way of its arm's land end (see _tug_home_way()).
+	if ship.is_tug():
+		home = _tug_home_way(ship.docked_at, _jetty_pose(ship.docked_at, int(_spot_slots.get(ship, 0)), ship)[0]).map(func(pose: Array) -> Array: return _local_to_screen(ship.docked_at, pose))
+	var poses := [_keep_right(ship.docked_at, _entrance_pose(ship.docked_at, false, true))] + home + [rest]
 	var off: Array = _glide_from.get(ship, [])
 	if not off.is_empty() and float(off[0]) == since:
 		# A tug that's just let go of the ship it brought in: from there.
-		poses = (off[1] as Array).map(func(pose: Array) -> Array: return _local_to_screen(ship.docked_at, pose)) + [rest]
+		poses = (off[1] as Array).map(func(pose: Array) -> Array: return _local_to_screen(ship.docked_at, pose)) + home + [rest]
 	# Coming round to face the wind on a turning circle as it comes up to its
 	# spot, slowing to a stop there (see _loosen()).
 	var length := (_model_look(ship.model_id)[7] as Rect2).size.x * dock_scale(ship.docked_at)
@@ -4425,11 +4453,11 @@ func _rest_pose(ship: Ship) -> Array:
 	return [anchor - Vector2.from_angle(facing) * half * _ship_scale(), facing]
 
 ## Where a tug moors in its port (dock units, [middle, facing]): along the
-## seaward face of the first pier each side, from the tip in, bow to the
-## channel (_marina_layout()'s tugs), by its slot (the first free one, kept
-## till it leaves: see _update_spots()); with those all taken, off to the
-## side inside the jetty's arms, by turns, from the land end towards the
-## entrance, bow towards it, TUG_MOOR_GAP between one and the next.
+## inside of the jetty's arms, the two by turns, from TUG_ARM_FROM round
+## towards the entrance, bow towards it, TUG_MOOR_GAP between one and the next
+## (_marina_layout()'s tugs), by its slot (the first free one, kept till it
+## leaves: see _update_spots()); with those all taken, on round towards the
+## arms' land ends.
 func _jetty_pose(port_id: String, slot: int, tug: Ship) -> Array:
 	var layout := _port_layout(port_id)
 	var moorings: Array = layout.tugs
@@ -4439,10 +4467,21 @@ func _jetty_pose(port_id: String, slot: int, tug: Ship) -> Array:
 	var spare := slot - moorings.size()
 	var off := float(layout.radius) - JETTY_WIDTH / 2.0 - look.size.y / 2.0 - TUG_HULL_GAP
 	var side := 1.0 if spare % 2 == 0 else -1.0
-	var along := PI / 2.0 - TUG_MOOR_END - (floorf(spare / 2.0) + 0.5) * (look.size.x + TUG_MOOR_GAP) / off
-	along = maxf(along, float(layout.gap) + 0.1)
+	var along := minf(TUG_ARM_FROM + (floorf(spare / 2.0) + 0.5) * (look.size.x + TUG_MOOR_GAP) / off, PI / 2.0 - TUG_MOOR_END)
 	var at := Vector2.from_angle(along * side) * off
 	return [at, along * side - side * PI / 2.0]
+
+## A tug's way to its moorings from just inside the entrance (dock poses): across
+## the outer harbour to the land end of its own arm, then along the arm to
+## its slot, bow to the entrance, so it never crosses the jetty, the basin's
+## corners or the pier tips (and leaves the same way back: _leaving_via()).
+func _tug_home_way(port_id: String, mooring: Vector2) -> Array:
+	var layout := _port_layout(port_id)
+	var radius := float(layout.radius)
+	var side := -1.0 if mooring.y < 0.0 else 1.0
+	var arm_end := Vector2(radius * TUG_ARM_END.x, side * radius * TUG_ARM_END.y)
+	var inside: Vector2 = layout.inside
+	return [[inside, (arm_end - inside).angle()], [arm_end, atan2(TUG_ARM_END.y, TUG_ARM_END.x) * side - side * PI / 2.0]]
 
 ## A port's slot-th anchor on screen, in one of its two anchorages (see
 ## _anchor_spots()), or if there are too few, one further out to sea past the
@@ -4980,12 +5019,13 @@ func _leaving_turn(ship: Ship) -> float:
 	return (_model_look(ship.model_id)[7] as Rect2).size.x * _ship_scale() * ANCHOR_TURN_LENGTHS
 
 ## The poses a ship sailing from port goes through between where it lay and
-## its lane: for a tug from its moorings on the jetty, out through its
-## marina's mouth (on its right-hand side, heading out).
+## its lane: for a tug from its moorings on the jetty's arm, along the arm to
+## just inside the entrance, then out through its marina's mouth (on its
+## right-hand side, heading out).
 func _leaving_via(ship: Ship) -> Array:
 	if not ship.is_tug() or not _left_from_anchor(ship) or ship.from_port.is_empty():
 		return []
-	return [_keep_right(ship.from_port, _entrance_pose(ship.from_port, false, false))]
+	return [_local_to_screen(ship.from_port, [_port_layout(ship.from_port).inside, 0.0]), _keep_right(ship.from_port, _entrance_pose(ship.from_port, false, false))]
 
 ## The curve between a ship's lane, `reach` nm from a port, and that port's
 ## harbour (see _harbour_pose()), from the lane in arriving and from the
@@ -9618,7 +9658,7 @@ func _draw_marina_lights(port_id: String, night: float, glow: Texture2D) -> void
 const TOWN_CELL := 3.2
 const TOWN_GAP := 0.6
 const TOWN_STREET_EVERY := 4
-const TOWN_ROWS := {4: 4, 6: 5, 8: 7, 12: 9}
+const TOWN_ROWS := {6: 4, 8: 5, 10: 7, 14: 9}
 const TOWN_SIDE_COLS := 2
 const TOWN_HALF_RADII := 1.6
 const TOWN_PARK_SHARE := 0.1
