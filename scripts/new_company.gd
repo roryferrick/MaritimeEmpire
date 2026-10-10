@@ -269,6 +269,7 @@ func _found() -> void:
 		rivals = _rivals,
 		rival_level = _rival_level,
 		seasons = %SeasonsToggle.button_pressed,
+		divine = %DivineToggle.button_pressed,
 		ceo = _ceo_page.ceo.duplicate(true),
 	})
 	if GameState.multiplayer_save:

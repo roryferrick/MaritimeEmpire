@@ -35,6 +35,9 @@ signal view_changed
 ## While choosing a region to unlock (choosing_region): a locked region's
 ## area was clicked (its markets.json id).
 signal region_clicked(region_id: String)
+## While choosing a divine power's target (choosing_divine): the target picked,
+## a (lon, lat) Vector2 for a point, a port id, a Ship, or null for nothing there.
+signal divine_target(target: Variant)
 
 const THEME_TYPE := &"MapView"
 ## A port's dot radius grows with its size (see PortSizes): PORT_RADIUS_MIN at
@@ -623,6 +626,12 @@ var choosing_region := false:
 		mouse_default_cursor_shape = CURSOR_ARROW
 ## The locked region lit up while choosing (its id), or "" (shown on the next frame).
 var hovered_region := ""
+## The divine power whose target is being chosen on the map (Divine.POWERS),
+## or "": clicks then pick a point, a port or a ship (divine_target) instead.
+var choosing_divine := "":
+	set(value):
+		choosing_divine = value
+		mouse_default_cursor_shape = CURSOR_CROSS if not value.is_empty() else CURSOR_ARROW
 ## The market regions' overlay (locked ones shaded: see RegionShade), and what
 ## it was last set for ([image ready, unlocked regions, choosing, hovered]).
 var _globe_regions := ShaderMaterial.new()
@@ -2468,6 +2477,9 @@ func _click(screen_pos: Vector2) -> void:
 		if not region.is_empty():
 			region_clicked.emit(region)
 		return
+	if not choosing_divine.is_empty() and str(Divine.POWERS[choosing_divine].target) == "point":
+		divine_target.emit(Geo.unproject(screen_to_world(screen_pos)))
+		return
 	var nearest_port := ""
 	var nearest_ship: Ship = null
 	var nearest_dist := INF
@@ -2493,6 +2505,13 @@ func _click(screen_pos: Vector2) -> void:
 				if dist <= maxf(SHIP_HIT_RADIUS * _ship_scale(), SHIP_HIT_MIN_PX) and dist < nearest_dist:
 					nearest_dist = dist
 					nearest_ship = ship
+	if not choosing_divine.is_empty():
+		match str(Divine.POWERS[choosing_divine].target):
+			"ship":
+				divine_target.emit(nearest_ship)
+			"port":
+				divine_target.emit(nearest_port if not nearest_port.is_empty() else marina_port)
+		return
 	if nearest_ship:
 		ship_clicked.emit(nearest_ship)
 	elif not nearest_port.is_empty():
@@ -5144,6 +5163,7 @@ func _draw_overlay() -> void:
 	if show_ships:
 		_draw_ships()
 		_draw_birds()
+		_draw_divine()
 		_draw_hub_alerts()
 
 ## Port labels, the HQ's and hubs' first and then in rank order, skipping any
@@ -7009,6 +7029,12 @@ func _draw_storms() -> void:
 			var baseline := center + Vector2(-width / 2.0, radius * 0.18 + STORM_FONT_SIZE)
 			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, 4, Color(0, 0, 0, 0.6 * alpha))
 			_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE, Color(1, 1, 1, 0.9 * alpha))
+			if storm.has("sender"):
+				var sent := "sent by %s" % storm.sender
+				var sent_width := font.get_string_size(sent, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE - 3).x
+				var under := baseline + Vector2((width - sent_width) / 2.0, STORM_FONT_SIZE)
+				_canvas.draw_string_outline(font, under, sent, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE - 3, 4, Color(0, 0, 0, 0.6 * alpha))
+				_canvas.draw_string(font, under, sent, HORIZONTAL_ALIGNMENT_LEFT, -1, STORM_FONT_SIZE - 3, DIVINE_GOLD * Color(1, 1, 1, 0.9 * alpha))
 
 ## A storm's center on screen and its radius there (px): [center, radius].
 func _storm_circle(storm: Dictionary) -> Array:
@@ -7145,6 +7171,138 @@ func _draw_lightning(storm: Dictionary, center: Vector2, radius: float, strength
 		for line: PackedVector2Array in [bolt, fork]:
 			_canvas.draw_polyline(line, Color(LIGHTNING_GLOW, 0.35 * fade), 6.0, true)
 			_canvas.draw_polyline(line, Color(LIGHTNING_CORE, fade), 2.2, true)
+
+# --- Divine Actions -----------------------------------------------------------
+
+const DIVINE_GOLD := Color(1.0, 0.85, 0.3)
+## A plague of gulls: this many gulls wheel over the port, this wide (marina radii).
+const PLAGUE_GULLS := 36
+const PLAGUE_REACH := 1.6
+## A deluge: this many rain streaks over the port each frame.
+const DELUGE_STREAKS := 40
+## The Kraken: its arms.
+const KRAKEN_ARMS := 7
+## A comet crossing the sky over its day (off one side to off the other), and its tail (px).
+const COMET_TAIL := 160.0
+
+## The effects of divine acts (GameState.divine.effects) over the map: gulls
+## wheeling over a plagued port, rain over a deluged one, a great flock's ring
+## over a sea-changed one, the Kraken's arms round a taken ship, lightning on
+## a struck hub, and the comet on its day.
+func _draw_divine() -> void:
+	var divine: Divine = GameState.divine
+	if not divine.on:
+		return
+	var t := GameState.play_time
+	var area := Rect2(Vector2.ZERO, size).grow(200.0)
+	for effect: Dictionary in divine.effects:
+		var kind := str(effect.kind)
+		if kind == "fair_winds":
+			continue
+		var center: Vector2
+		if kind == "kraken":
+			var ship := GameState.ship_by_id(int(effect.ship))
+			if ship == null:
+				continue
+			center = ship_screen_position(ship)
+		else:
+			center = port_screen_position(str(effect.port))
+		if not area.has_point(center):
+			continue
+		var reach := float(_port_layout(str(effect.port)).radius) * _ship_scale() if kind != "kraken" else 0.0
+		var since := t - float(effect.since)
+		match kind:
+			"plague":
+				_draw_gull_mob(center, maxf(reach * PLAGUE_REACH, 24.0), t, PLAGUE_GULLS, Color(0.95, 0.95, 0.95, 0.9))
+			"sea_change":
+				_draw_gull_mob(center, maxf(reach * 1.2, 18.0), t * 0.5, 20, DIVINE_GOLD * Color(1, 1, 1, 0.8))
+			"deluge":
+				_draw_rain(center, maxf(reach * 1.5, 24.0), t)
+			"kraken":
+				_draw_kraken(center, since, float(effect.until) - t)
+			"lightning":
+				_draw_strike(center, since, float(effect.until) - float(effect.since))
+	if divine.comet_up():
+		_lights_layer.queue_redraw()  # (The comet is drawn there, above the night: see _draw_lights().)
+
+
+## Gulls wheeling in a ring (each on its own circle, bobbing), as a mob of
+## small bent-wing marks.
+func _draw_gull_mob(center: Vector2, reach: float, t: float, count: int, color: Color) -> void:
+	var span := clampf(reach * 0.12, 4.0, 9.0)
+	for i in count:
+		var seed := float(i) * 1.618
+		var angle := t * (0.5 + fmod(seed, 0.5)) * (1.0 if i % 2 == 0 else -1.0) + seed * TAU
+		var r := reach * (0.4 + fmod(seed * 0.37, 0.6))
+		var at := center + Vector2.from_angle(angle) * r + Vector2(0.0, sin(t * 3.0 + seed) * 3.0)
+		var flap := sin(t * 10.0 + seed * 7.0) * 0.5
+		var wing := Vector2.from_angle(angle + PI / 2.0) * span
+		var lift := Vector2(0.0, -span * (0.35 + flap * 0.3))
+		_canvas.draw_polyline(PackedVector2Array([at - wing + lift, at, at + wing + lift]), color, 1.5, true)
+
+
+## Rain over a port: slanting streaks falling through a dark cloud.
+func _draw_rain(center: Vector2, reach: float, t: float) -> void:
+	_canvas.draw_circle(center, reach, Color(0.1, 0.12, 0.18, 0.35))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var fall := Vector2(-0.3, 1.0).normalized()
+	for i in DELUGE_STREAKS:
+		var where := center + Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * reach
+		if where.distance_to(center) > reach:
+			continue
+		var phase := fmod(t * 2.5 + rng.randf(), 1.0)
+		var at := where + fall * (phase - 0.5) * reach * 0.6
+		_canvas.draw_line(at, at + fall * clampf(reach * 0.12, 4.0, 12.0), Color(0.7, 0.8, 1.0, 0.6), 1.2, true)
+
+
+## The Kraken's arms rising round a ship and sinking back as the effect ends.
+func _draw_kraken(center: Vector2, since: float, left: float) -> void:
+	var rise := minf(since / 2.0, 1.0) * minf(left / 3.0, 1.0)
+	if rise <= 0.0:
+		return
+	var length := clampf(_ship_scale() * 44.0, 26.0, 120.0) * rise
+	var ink := Color(0.25, 0.12, 0.3, 0.95)
+	_canvas.draw_circle(center, length * 0.45, Color(0.1, 0.05, 0.15, 0.35 * rise))
+	for i in KRAKEN_ARMS:
+		var base := TAU * i / KRAKEN_ARMS + since * 0.3
+		var arm := PackedVector2Array([center + Vector2.from_angle(base) * length * 0.25])
+		for k in range(1, 7):
+			var s := float(k) / 6.0
+			var bend := sin(since * 2.0 + i * 1.3 + s * 4.0) * 0.6 * s
+			arm.append(center + Vector2.from_angle(base + bend) * length * (0.25 + s * 0.75))
+		_canvas.draw_polyline(arm, ink, maxf(length * 0.12 * (1.0 - 0.5 * rise), 2.0), true)
+		for k in range(2, 7, 2):
+			_canvas.draw_circle(arm[k], maxf(length * 0.04, 1.5), Color(0.9, 0.75, 0.8, 0.8))
+
+
+## A lightning strike on a hub: a bolt down from above, and a flash that fades.
+func _draw_strike(center: Vector2, since: float, length_s: float) -> void:
+	var fade := 1.0 - clampf(since / length_s, 0.0, 1.0)
+	if fade <= 0.0:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(floor(since * 8.0))
+	var top := center + Vector2(rng.randf_range(-30.0, 30.0), -220.0)
+	var bolt := PackedVector2Array([top])
+	for k in range(1, 9):
+		bolt.append(top.lerp(center, float(k) / 8.0) + Vector2(rng.randf_range(-18.0, 18.0), 0.0) * (1.0 if k < 8 else 0.0))
+	_canvas.draw_circle(center, 60.0 * fade, Color(1.0, 0.95, 0.7, 0.25 * fade))
+	_canvas.draw_polyline(bolt, Color(1.0, 0.9, 0.5, 0.5 * fade), 7.0, true)
+	_canvas.draw_polyline(bolt, Color(1.0, 1.0, 1.0, fade), 2.5, true)
+
+
+## The comet: a bright head with a long tail, crossing the top of the screen
+## over its day, left to right by the calendar's time of day (on screen, not on the globe).
+func _draw_comet(_t: float) -> void:
+	var across := fposmod(float(GameState.calendar_time()), 86400.0) / 86400.0 * 1.4 - 0.2
+	var head := Vector2(size.x * across, size.y * (0.08 + 0.08 * across))
+	var tail := head + Vector2(-COMET_TAIL, -COMET_TAIL * 0.35)
+	for i in 6:
+		var s := float(i) / 6.0
+		_canvas.draw_line(head.lerp(tail, s), head.lerp(tail, s + 1.0 / 6.0), Color(0.8, 0.9, 1.0, 0.5 * (1.0 - s)), 6.0 * (1.0 - s) + 1.0, true)
+	_canvas.draw_circle(head, 5.0, Color(1.0, 1.0, 0.9, 0.9))
+	_canvas.draw_circle(head, 11.0, Color(0.8, 0.9, 1.0, 0.25))
 
 # --- Seasonal ice --------------------------------------------------------
 
@@ -9550,6 +9708,8 @@ func _draw_lighthouse(port_id: String, layout: Dictionary, scale: float) -> void
 ## The lights in the dark (see _update_night()), over everything, drawn every frame.
 func _draw_lights() -> void:
 	_canvas = _lights_layer
+	if GameState.divine.comet_up():
+		_draw_comet(GameState.play_time)
 	if not _night_shown:
 		_lit_ships.clear()
 		return

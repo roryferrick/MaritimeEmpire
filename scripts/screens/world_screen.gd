@@ -54,6 +54,9 @@ func _ready() -> void:
 	_add_zoom_buttons()
 	_add_field_guide_button()
 	_add_achievements_button()
+	if GameState.divine.on:
+		_add_divine_button()
+	_map.divine_target.connect(_on_divine_target)
 
 
 func _process(_delta: float) -> void:
@@ -74,6 +77,10 @@ func _process(_delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not _map.choosing_divine.is_empty() and event.is_action_pressed(&"ui_cancel"):
+		_stop_divine()
+		get_viewport().set_input_as_handled()
+		return
 	if _map.choosing_region and event.is_action_pressed(&"ui_cancel"):
 		_stop_choosing()
 		get_viewport().set_input_as_handled()
@@ -423,6 +430,71 @@ func _add_achievements_button() -> void:
 	timer.autostart = true
 	timer.timeout.connect(_check_achievements)
 	add_child(timer)
+
+
+## Divine Actions (Divine): the bolt button under the trophy opens the panel;
+## a power with a target has the map pick it (choosing_divine), with a hint
+## at the top saying what to click, then it's done (GameState.divine_act()).
+var _divine_hint := Label.new()
+
+
+func _add_divine_button() -> void:
+	var button := Button.new()
+	button.tooltip_text = "Divine Actions"
+	button.focus_mode = Control.FOCUS_NONE
+	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	button.offset_right = $RoutesPanel.offset_left - 10.0
+	button.offset_left = button.offset_right - FIELD_GUIDE_BUTTON
+	button.offset_top = $RoutesPanel.offset_top + (FIELD_GUIDE_BUTTON + 8.0) * 2.0
+	button.offset_bottom = button.offset_top + FIELD_GUIDE_BUTTON
+	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	var bolt := DivinePanel.BoltIcon.new()
+	bolt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
+	button.add_child(bolt)
+	button.pressed.connect(func() -> void:
+		PopupHost.find(self).close()
+		_stop_divine()
+		var panel := DivinePanel.new()
+		panel.pick.connect(_start_divine)
+		add_child(panel))
+	add_child(button)
+	_divine_hint.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_divine_hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_divine_hint.offset_top = 12.0
+	_divine_hint.theme_type_variation = &"HeaderLabel"
+	_divine_hint.add_theme_color_override(&"font_color", MapView.DIVINE_GOLD)
+	_divine_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_divine_hint.visible = false
+	_divine_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_divine_hint)
+
+
+func _start_divine(power: String) -> void:
+	var target := str(Divine.POWERS[power].target)
+	if target == "none":
+		GameState.divine_act(power, null)
+		return
+	_map.choosing_divine = power
+	_divine_hint.text = "%s: click %s on the map  (Esc to cancel)" % [Divine.POWERS[power].name,
+		{point = "a point at sea", port = "a port", ship = "a rival's ship at sea"}[target]]
+	_divine_hint.visible = true
+
+
+func _stop_divine() -> void:
+	_map.choosing_divine = ""
+	_divine_hint.visible = false
+
+
+func _on_divine_target(target: Variant) -> void:
+	var power: String = _map.choosing_divine
+	if power.is_empty():
+		return
+	if target == null or (target is String and (target as String).is_empty()):
+		return  # Nothing there: keep choosing.
+	if target is Ship:
+		target = (target as Ship).id
+	_stop_divine()
+	GameState.divine_act(power, target)
 
 
 ## Whether the achievements have been checked once this session (see _check_achievements()).

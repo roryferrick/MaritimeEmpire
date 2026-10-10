@@ -150,6 +150,95 @@ static func _settings(rival: Company) -> Dictionary:
 	return SETTINGS.get(rival.ai, SETTINGS.normal)
 
 
+# --- Divine Actions ---------------------------------------------------------------
+
+## How often (game weeks, scaled by the difficulty's divine_every) a rival
+## looks to use a divine power, and how many times a power's price it keeps in
+## hand before it buys one.
+const DIVINE_WEEKS := {easy = 3.0, normal = 1.5, hard = 1.0}
+const DIVINE_CUSHION := 2.0
+
+## In a Divine Actions game: about once a week (or three, for an easy rival)
+## the rival picks on the richest other company, and uses the first power it
+## can afford twice over (so it keeps running) and that it has a target for,
+## trying them in a random order: a storm or the Kraken on one of that
+## company's ships at sea, a plague, a deluge or lightning on its busiest port
+## (its hub, for lightning), fair winds for its own fleet, calm seas where its
+## own ship is caught in a storm, a great flock on its own busiest port.
+func _divine(rival: Company, settings: Dictionary, mind: Dictionary) -> Array:
+	var divine: Divine = _state.divine
+	if not divine.on:
+		return []
+	if float(mind.get("divine", 0.0)) > _state.play_time:
+		return []
+	mind.divine = _state.play_time + divine.week_s() * float(DIVINE_WEEKS.get(rival.ai, 1.5)) * _rng.randf_range(0.6, 1.4)
+	var foes: Array = _state.all_companies().filter(func(each: Company) -> bool: return each != rival)
+	if foes.is_empty():
+		return []
+	foes.sort_custom(func(a: Company, b: Company) -> bool: return a.money > b.money)
+	var foe: Company = foes[0]
+	var order := Divine.ORDER.duplicate()
+	order.shuffle()
+	for power: String in order:
+		if rival.money < divine.price(power, rival) * DIVINE_CUSHION:
+			continue
+		var target: Variant = _divine_target(power, rival, foe)
+		if target == null and str(Divine.POWERS[power].target) != "none":
+			continue
+		if not divine.error(power, target, rival).is_empty():
+			continue
+		var text: String = _state.divine_act(power, target)
+		if text.is_empty():
+			continue
+		if power == "lightning":
+			_hubs_changed = true
+		return []  # (divine_act() logged it, in the rival's colour.)
+	return []
+
+
+## A rival's target for a power against a foe (see _divine()), or null if it has none.
+func _divine_target(power: String, rival: Company, foe: Company) -> Variant:
+	var at_sea: Array = _state.fleet(foe).filter(func(ship: Ship) -> bool:
+		return not ship.is_service() and not ship.is_docked() and not ship.is_lost() and not ship.is_carried() and not ship.is_towed())
+	match power:
+		"squall", "tempest", "wrath":
+			if at_sea.is_empty():
+				return null
+			var ship: Ship = at_sea[_rng.randi() % at_sea.size()]
+			return Geo.unproject(ship.world_position())
+		"kraken":
+			return int((at_sea[_rng.randi() % at_sea.size()] as Ship).id) if not at_sea.is_empty() else null
+		"plague", "deluge":
+			return _busiest_port(foe)
+		"sea_change":
+			return _busiest_port(rival)
+		"lightning":
+			var hubs: Array = foe.hubs.filter(func(hub: Hub) -> bool: return hub.level > 0)
+			return str((hubs[_rng.randi() % hubs.size()] as Hub).port_id) if not hubs.is_empty() else null
+		"calm_seas":
+			for ship: Ship in _state.fleet(rival):
+				if not ship.is_docked() and not ship.is_lost() and float(_state._storm_factors(ship)[0]) < 0.9:
+					return Geo.unproject(ship.world_position())
+			return null
+	return null
+
+
+## The port a company's ships are at and bound for most (its HQ if none), or "".
+func _busiest_port(who: Company) -> Variant:
+	var counts := {}
+	for ship: Ship in _state.fleet(who):
+		for port: String in [ship.docked_at, ship.to_port]:
+			if not port.is_empty():
+				counts[port] = int(counts.get(port, 0)) + 1
+	var best := who.home_port
+	var most := 0
+	for port: String in counts:
+		if int(counts[port]) > most:
+			most = int(counts[port])
+			best = port
+	return best if not best.is_empty() else null
+
+
 # --- Thinking -------------------------------------------------------------------
 
 ## One think: as the rival (see the top), what it does now. Then this player's
@@ -175,6 +264,7 @@ func _think(rival: Company, mind: Dictionary) -> void:
 		news.append_array(_spend(rival, settings))
 	if int(mind.thinks) % SERVICE_EVERY == 0:
 		news.append_array(_service_ships(rival, settings))
+	news.append_array(_divine(rival, settings, mind))
 	_save_up(rival, settings)
 	_state.company = mine
 	_state.ai_acting = null

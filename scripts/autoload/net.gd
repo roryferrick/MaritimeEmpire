@@ -86,7 +86,7 @@ const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_
 const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel",
 	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve", &"level_skill", &"upgrade_all",
 	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
-	&"rename_ship", &"set_prefs", &"unlock_region", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry"]
+	&"rename_ship", &"set_prefs", &"unlock_region", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act"]
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its
@@ -651,7 +651,7 @@ func _collect() -> Dictionary:
 		ships[ship.id] = data.duplicate(true)  # A copy: the ship's own tables (skills, ledger) change in place.
 	return {
 		t = GameState.play_time, speed = GameState.time_speed,
-		weather = GameState.weather.to_dict(false), market = GameState.market.to_dict(),
+		weather = GameState.weather.to_dict(false), market = GameState.market.to_dict(), divine = GameState.divine.to_dict(),
 		ports = GameState.port_sizes.to_dict(),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
 		ships = ships,
@@ -665,7 +665,7 @@ func _state_of(world: Dictionary) -> Dictionary:
 		ships[int(data.id)] = data
 	return {
 		t = float(world.get("play_time", 0.0)), speed = 1,
-		weather = world.get("weather", {}), market = world.get("market", {}),
+		weather = world.get("weather", {}), market = world.get("market", {}), divine = world.get("divine", {}),
 		ports = world.get("port_sizes", {}),
 		companies = world.get("companies", []),
 		ships = ships,
@@ -692,6 +692,10 @@ func _broadcast() -> void:
 	if market != _sent.market:
 		update.market = market
 		_sent.market = market.duplicate(true)
+	var divine := GameState.divine.to_dict()
+	if divine != _sent.get("divine", {}):
+		update.divine = divine
+		_sent.divine = divine.duplicate(true)
 	_full_clock += SYNC_S
 	var full_round := _full_clock >= FULL_SYNC_S
 	if full_round:
@@ -798,6 +802,8 @@ func _sync(packed: Array) -> void:
 		GameState.weather.from_dict(update.weather)
 	if update.has("market"):
 		GameState.market.from_dict(update.market)
+	if update.has("divine"):
+		GameState.divine.from_dict(update.divine)
 	if update.has("ports"):
 		GameState.port_sizes.apply_update(update.ports)
 	if update.has("companies"):

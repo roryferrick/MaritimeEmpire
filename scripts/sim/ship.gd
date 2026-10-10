@@ -526,8 +526,10 @@ func refill_phase_seconds() -> float:
 	return float(model().get("refill_phase_s", 5)) * _hub_stop_factor()
 
 
+## The hub's speed bonus, and in a Divine Actions game the port's blessings and
+## curses (its birds, a plague of gulls, the lamps by night, the first snow).
 func _hub_stop_factor() -> float:
-	return 1.0 - GameState.owner_of(self).hub_bonus(docked_at, "speed") if is_docked() else 1.0
+	return (1.0 - GameState.owner_of(self).hub_bonus(docked_at, "speed")) * GameState.divine.stop_factor(self) if is_docked() else 1.0
 
 
 ## A leg within the ship's range that it fits (the Seaway) and can sail on one

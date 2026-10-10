@@ -285,6 +285,8 @@ var canal_traffic := CanalTraffic.new(self)
 ## Commodity prices: drift and the impact of the player's own trades.
 var market := Market.new(self)
 var weather := Weather.new(self)
+## Divine Actions (the game mode chosen at founding: see Divine); off in most games.
+var divine := Divine.new(self)
 var seasonal := Seasons.new(self)
 var icebreaking := Icebreaking.new(self)
 ## Port sizes: how they grow and shrink, and what they change.
@@ -336,6 +338,7 @@ func _step(delta: float) -> void:
 	canal_traffic.step(delta)
 	port_sizes.step(delta)
 	weather.step(delta)
+	divine.step(delta)
 	_check_payday()
 	icebreaking.refresh()
 	if _ship_stepper == null and ClassDB.class_exists(&"ShipStepper"):
@@ -1164,12 +1167,12 @@ static func industry_name(commodity_id: String) -> String:
 ## one (see Hub.industry_bonus()).
 func company_buy_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
-	return market.buy_price(port_id, commodity_id) * (1.0 - (hub.industry_bonus(commodity_id, "buy") if hub else 0.0))
+	return market.buy_price(port_id, commodity_id) * (1.0 - (hub.industry_bonus(commodity_id, "buy") if hub else 0.0)) * divine.price_factor(port_id, false)
 
 
 func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
-	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(commodity_id, "sell") if hub else 0.0))
+	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(commodity_id, "sell") if hub else 0.0)) * divine.price_factor(port_id, true)
 
 
 ## Extra XP (e.g. 0.5 for +50%) a delivery of a commodity earns from a
@@ -1574,7 +1577,12 @@ func _storm_factors(ship: Ship) -> Array:
 		var at := Geo.unproject(ship.world_position())
 		var storm := weather.factors(at) if storms_out else [1.0, 1.0]
 		var ice := seasonal.factors(at) if ice_in else [1.0, 1.0]
+		if storms_out and divine.escorted(ship):
+			storm[1] = 1.0  # The sea's escorts shield it from the storm's wear (Divine).
 		ship.storm_factors = [float(storm[0]) * float(ice[0]), float(storm[1]) * float(ice[1])]
+	if divine.on:
+		# Its blessings (the birds following it, fair winds, sharks hurrying a rescuer) speed it up.
+		ship.storm_factors[0] = float(ship.storm_factors[0]) * divine.speed_factor(ship)
 	return ship.storm_factors
 
 
@@ -1775,6 +1783,42 @@ func _check_at_risk(ship: Ship) -> void:
 	if at_risk:
 		ship_at_risk.emit(ship)
 	ship_changed.emit(ship)
+
+
+## The Kraken takes a ship at sea (Divine): lost where it is, its engines wrecked.
+func lose_to_kraken(ship: Ship) -> void:
+	if ship.is_docked() or ship.is_lost():
+		return
+	ship.maintenance = 0.0
+	ship.risk_check_time = 0.0
+	_lose(ship, "taken by the Kraken")
+
+
+## Why this company (the acting one: a joined player's, a rival's) can't use a
+## divine power on a target now, or "" (see Divine.error()).
+func divine_act_error(power: String, target: Variant) -> String:
+	return divine.error(power, target, company)
+
+
+## This company uses a divine power on a target (a (lon, lat) Vector2, a port
+## id, a ship id, or null): the host does it for a joined player (a Net
+## command). Returns what was done, or "" if it couldn't be (see divine_act_error()).
+func divine_act(power: String, target: Variant) -> String:
+	if Net.command(&"divine_act", [power, target]):
+		return ""
+	var who := company
+	var why := divine.error(power, target, who)
+	if not why.is_empty():
+		if ai_acting == null:
+			ActivityLog.add(why, ActivityLog.Kind.BAD)
+		return ""
+	var text := divine.act(power, target, who)
+	var hit_me := divine.hits(power, target, company if Net.acting_for == null else Net.acting_for)
+	ActivityLog.add("%s %s." % [who.name, text], ActivityLog.Kind.BAD if hit_me and who != company else ActivityLog.Kind.INFO, company_color_value(who.color))
+	money_changed.emit(money)
+	if power == "lightning":
+		regions_changed.emit()
+	return text
 
 
 func _lose(ship: Ship, reason: String) -> void:
@@ -1997,6 +2041,11 @@ func _unload(ship: Ship) -> void:
 
 func _sell_cargo(ship: Ship) -> void:
 	var who := owner_of(ship)
+	var stolen := roundi(ship.cargo_payment * divine.stolen(ship))
+	if stolen > 0:  # The frigatebirds following it take their cut (Divine).
+		ship.cargo_payment -= stolen
+		if who == company and ai_acting == null:
+			ActivityLog.add("The frigatebirds following %s made off with %s of its sale at %s." % [ship.name, Fmt.money(stolen), GameData.port_name(ship.docked_at)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 	ship.stop_sale = ship.cargo_payment
 	ship.stop_cost = ship.cargo_cost
 	_add_money(who, ship.cargo_payment)
@@ -2022,6 +2071,7 @@ func _sell_cargo(ship: Ship) -> void:
 			stats.xp = float(stats.xp) + xp * bonus
 	ship.delivery_canals.clear()
 	var industry := industry_xp_bonus(ship.cargo_id, ship.cargo_from, ship.docked_at, who)
+	industry += divine.xp_bonus(ship.docked_at)  # (The omens: cherry blossom.)
 	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus + industry,
 		1.0 + (hub.company_xp_bonus() if hub else 0.0) + canal_bonus + industry)
 	if hub:
@@ -3434,6 +3484,7 @@ func save_summary(slot: int, online := multiplayer_save) -> Dictionary:
 		max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1])),
 		storms = str(data.get("storms", "none")),
 		seasons = bool(data.get("seasons", false)),
+		divine = bool((data.get("divine", {}) as Dictionary).get("on", false)),
 		money = int(mine.get("money", 0)),
 		date = calendar_time_at(float(data.get("play_time", 0.0))),
 		companies = maxi(list.size(), 1),
@@ -3477,6 +3528,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	storms = str(options.get("storms", "none"))
 	seasons = bool(options.get("seasons", false))
 	weather.clear()
+	divine.reset()
+	divine.on = bool(options.get("divine", false))
 	rivals.reset()
 	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
@@ -3521,6 +3574,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	storms = str(data.get("storms", "none"))
 	seasons = bool(data.get("seasons", false))
 	weather.from_dict(data.get("weather", {}))
+	divine.from_dict(data.get("divine", {}))
 	next_ship_id = int(data.get("next_ship_id", 1))
 	for ship_data: Dictionary in data.get("ships", []):
 		var ship := Ship.from_dict(ship_data)
@@ -3612,6 +3666,7 @@ func world_dict() -> Dictionary:
 		"storms": storms,
 		"seasons": seasons,
 		"weather": weather.to_dict(),
+		"divine": divine.to_dict(),
 		"market": market.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:

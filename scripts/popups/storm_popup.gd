@@ -74,6 +74,8 @@ func _refresh() -> void:
 	var intensity := Weather.intensity(storm)
 	var radius := float(storm.radius_nm)
 	_title.text = Weather.title(storm)
+	if storm.has("sender"):
+		_row("Sent by", "%s, by divine action: %s" % [storm.sender, str(Divine.POWERS.get(str(storm.get("divine", "")), {}).get("blurb", ""))], &"ErrorLabel")
 
 	# Strength from the center out (full across the core, fading to nothing at
 	# the edge), and what it does to ships.

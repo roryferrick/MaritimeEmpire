@@ -55,21 +55,23 @@ func _settings() -> Dictionary:
 
 
 func _level() -> Dictionary:
-	return _settings().get("levels", {}).get(_state.storms, {})
+	var level: Dictionary = _settings().get("levels", {}).get(_state.storms, {})
+	if level.is_empty() and _state.divine.on:
+		level = _settings().get("levels", {}).get("harsh", {})  # Divine storms in a game without weather: the harshest.
+	return level
 
 
-## True once storms act on ships: a save with storms, from min_company_level.
+## True once storms act on ships: a save with storms, from min_company_level;
+## in a Divine Actions game from the start (its storms are called down at any level).
 func active() -> bool:
-	return _state.storms != "none" and _state.world_level() >= int(_settings().get("min_company_level", 1))
+	return _state.divine.on or (_state.storms != "none" and _state.world_level() >= int(_settings().get("min_company_level", 1)))
 
 
 ## Forms, moves, builds up and fades the storms (in saves with storms).
 func step(delta: float) -> void:
 	_closed.clear()
-	if _state.storms == "none":
-		if not storms.is_empty():
-			storms.clear()
-		return
+	if _state.storms == "none" and not storms.is_empty():
+		storms = storms.filter(func(storm: Dictionary) -> bool: return storm.has("divine"))  # (Only divine storms, in a game without weather.)
 	for storm in storms:
 		_move(storm, delta)
 		storm.age += delta
@@ -79,6 +81,8 @@ func step(delta: float) -> void:
 	# so ships needn't ask about their ports when none is.
 	var close_at := float(_level().get("close_at", 2.0))
 	_can_close = storms.any(func(storm: Dictionary) -> bool: return TROPICAL.has(storm.kind) and intensity(storm) >= close_at)
+	if _state.storms == "none":
+		return
 	var month := _month()
 	var day_s := 86400.0 / float(_state.calendar_seconds_per_second())
 	var rate_factor := float(_level().get("rate", 1.0))
@@ -132,6 +136,47 @@ func _form(basin: Dictionary, day_s: float) -> void:
 	})
 
 
+## A storm called down by divine action (Divine.STORM_TIERS: squall, tempest or
+## wrath) at a (lon, lat) point by a company: a gale (the squall) or the
+## tropical kind of those waters (a hurricane west of 30 W, a typhoon from 100 E
+## round to the date line, a cyclone elsewhere and south of the equator), its
+## tier's size, life and power, drifting slowly from where it was called.
+func spawn_divine(tier: String, lon_lat: Vector2, sender: String) -> Dictionary:
+	var info: Dictionary = Divine.STORM_TIERS[tier]
+	var kind := "gale"
+	if bool(info.tropical):
+		if lon_lat.y < 0.0 or (lon_lat.x > 30.0 and lon_lat.x < 100.0):
+			kind = "cyclone"
+		elif lon_lat.x >= 100.0 or lon_lat.x < -170.0:
+			kind = "typhoon"
+		else:
+			kind = "hurricane"
+	var day_s := 86400.0 / float(_state.calendar_seconds_per_second())
+	var storm := {
+		id = "divine/%s/%d" % [tier, roundi(_state.play_time * 1000.0)],
+		track = [[lon_lat.x, lon_lat.y]],
+		track_at = 0.0,
+		name = str(Divine.POWERS[tier].name),
+		kind = kind,
+		basin = "divine",
+		lon = lon_lat.x,
+		lat = lon_lat.y,
+		age = 0.0,
+		life = float(info.days) * day_s,
+		radius_nm = float(info.radius_nm),
+		speed_nm = 5.0,
+		recurve_lat = absf(lon_lat.y) + 15.0,
+		veer = randf_range(-0.25, 0.25),
+		divine = tier,
+		sender = sender,
+		power = float(info.power),
+	}
+	storms.append(storm)
+	_closed.clear()
+	_can_close = true
+	return storm
+
+
 ## Tropical storms drift west and poleward, turning away east as they pass
 ## their recurve latitude (speeding up); gales run east, a little poleward.
 func _move(storm: Dictionary, delta: float) -> void:
@@ -154,6 +199,10 @@ func _move(storm: Dictionary, delta: float) -> void:
 ## How strong a storm is now (0..1): building up over the first part of its
 ## life and fading over the rest.
 static func intensity(storm: Dictionary) -> float:
+	if storm.has("divine"):
+		# Called down at full strength, holding it most of its life and fading at
+		# the end; its power (over 1 for Wrath) is beyond any natural storm's.
+		return (1.0 - pow(clampf(storm.age / storm.life, 0.0, 1.0), 4.0)) * float(storm.get("power", 1.0))
 	return pow(sin(PI * clampf(storm.age / storm.life, 0.0, 1.0)), 0.6)
 
 
@@ -187,7 +236,7 @@ func factors(lon_lat: Vector2) -> Array:
 		return [1.0, 1.0]
 	var strength: float = strongest_at(lon_lat)[1]
 	var level := _level()
-	return [1.0 - float(level.get("slow", 0.0)) * strength, 1.0 + (float(level.get("wear", 1.0)) - 1.0) * strength]
+	return [maxf(1.0 - float(level.get("slow", 0.0)) * strength, 0.05), 1.0 + (float(level.get("wear", 1.0)) - 1.0) * strength]  # (A divine storm can be over 1 strong.)
 
 
 ## The tropical storm closing a port (strong enough over it: the level's
