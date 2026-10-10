@@ -90,6 +90,20 @@ const MANGROVE_FROM := {rainforest = true, palm = true, acacia = true, grass = t
 ## snow-capped all along, whatever their latitude (Natural Earth names).
 const MOUNTAIN_SPACING := 0.42
 const SNOWY_RANGES := ["HIMALAYAS", "ANDES", "ALPS", "KARAKORAM RANGE", "HINDU KUSH", "PAMIRS", "TIAN SHAN", "KUNLUN MOUNTAINS", "CAUCASUS", "ROCKY MOUNTAINS", "SIERRA NEVADA", "CASCADE RANGE", "ALASKA RANGE", "SOUTHERN ALPS", "ZAGROS MOUNTAINS", "PYRENEES"]
+## Natural Earth's "ranges" that get no mountains and no label: everything
+## smaller than Spain's Sierra Nevada (22,400 km2 by its polygon: the Vosges,
+## the Jura, Calabria, the Black Hills, the Australian Alps...), and the bigger
+## ones that aren't really mountains (plateaus, escarpments, low hills: the
+## Hadhramaut, the Witwatersrand, Uruguay's Cuchilla Grande, Alberta's Birch
+## and Caribou hills, the Brazilian serras of the shield, the Mogollon Rim...).
+const DROPPED_RANGES := ["SHACKLETON RANGE", "AHMAR MTS.", "FLOOD RANGE", "MOYEN ATLAS", "FORD RANGES", "CENTRAL BRUHUI RANGE", "LEBOMBO MTS.", "MBANG MTS.",
+	"WASATCH RANGE", "HAMERSLEY RA.", "YAM ALIN’ RANGE", "SELWYN RA.", "AL JABAL AL AKHDAR", "AUSTRALIAN ALPS", "CALABRIA", "BLACK HILLS", "BUREINSKIY RA.",
+	"NAPIER MOUNTAINS", "VOSGES", "SUDETES MTS.", "ARDENNES", "CAMBRIAN MTS.", "JURA", "MAYA MTS.", "TORNGAT MTS.", "BÖHMERWALD", "ADMIRALTY MOUNTAINS", "HARZ",
+	"VATNAJÖKULL", "GREGORY RA.", "GRAMPIAN MTS.", "PRINCE ALBERT MOUNTAINS", "EXECUTIVE COMMITTEE RANGE", "QUEEN ALEXANDRA RANGE", "RUWENZORI RANGE", "ERZGEBIRGE",
+	"JONES MOUNTAINS", "LEBANON MTS.", "BLUE MTS.", "SCOTT MOUNTAINS",
+	"HADHRAMAUT", "WITWATERSRAND", "CUCHILLA GRANDE", "BIRCH MTS.", "CARIBOU MTS.", "DARLING RANGE", "S. DO CACHIMBO", "S. DOS GRADAÚS", "S. DOURADA",
+	"HARDANGER-VIDDA", "MOGOLLON RIM", "TUWAYQ MTS.", "SIWALIK HILLS", "SERRA DA IBIAPABA", "S. DO PIAUI", "SERRA ACARAÍ", "SERRA DE CURUPIRA", "TUMUC-HUMAC MTS.",
+	"WILHELMINA GEBERGTE", "CENTRAL HIGHLANDS", "JABAL BIN GHUNAYMAH", "GROOT KARASBERGE", "MUCHINGA MTS.", "CHAÎNE DES MONGOS", "KHASI HILLS"]
 ## Waves dot the sea beyond this latitude, north and south (the Southern
 ## Ocean's rough seas, game_config rough_seas, start at 60°S), this far apart
 ## (real degrees), at this share of the spots.
@@ -533,6 +547,8 @@ func _add_feature_labels(map: WorldMapData) -> void:
 	for feature: Dictionary in _read_geojson(REGIONS_PATH):
 		var props: Dictionary = feature.properties
 		var kind: Variant = REGION_KINDS.get(str(props.get("FEATURECLA", "")))
+		if kind == REGION_KINDS["Range/mtn"] and not _range_kept(str(props.get("NAME", ""))):
+			continue
 		if kind != null and props.get("NAME") != null:
 			_add_area_label(map, feature, str(props.NAME).to_upper(), kind, float(props.get("MIN_LABEL", 5.0)))
 	for feature: Dictionary in _read_geojson(LAKES_PATH):
@@ -797,7 +813,7 @@ static func _biome_neighbors(i: int, radius := 1) -> PackedInt32Array:
 func _add_decor(map: WorldMapData, biomes: PackedByteArray) -> void:
 	var ranges := []  # [bounds, polygon (lon/lat outline), snowy]
 	for feature: Dictionary in _read_geojson(REGIONS_PATH):
-		if str(feature.properties.get("FEATURECLA", "")) != "Range/mtn":
+		if str(feature.properties.get("FEATURECLA", "")) != "Range/mtn" or not _range_kept(str(feature.properties.get("NAME", ""))):
 			continue
 		var snowy := SNOWY_RANGES.has(str(feature.properties.get("NAME", "")).to_upper())
 		for polygon: Array in _feature_polygons(feature):
@@ -859,6 +875,11 @@ func _add_decor(map: WorldMapData, biomes: PackedByteArray) -> void:
 		lat += VEGETATION_SPACING
 	_add_polar_waves(map, biomes, add)
 	print("Decor: %d drawings of %d kinds" % [map.decor_positions.size(), map.decor_kind_names.size()])
+
+
+## Whether a Natural Earth range gets mountains and a label (see DROPPED_RANGES).
+static func _range_kept(name: String) -> bool:
+	return not DROPPED_RANGES.has(name.strip_edges().to_upper())
 
 
 ## The range ([bounds, outline, snowy]) a (lon, lat) is in, or [].

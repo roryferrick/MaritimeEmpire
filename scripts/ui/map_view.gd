@@ -2900,11 +2900,14 @@ func _draw_dock_layer() -> void:
 ## Each port is a marina (see Docks), grown out of its circle on the map: a
 ## rectangular basin dug into the land behind the coast, facing the sea
 ## (_port_sea_angle()), with piers reaching in from its two side walls like a
-## rib cage (half each side: 4 at a Small port, 6 at a Medium, 8 at a Large,
-## 12 at a Giant or at any company's HQ or hub), each as long as the longest
-## ship that can dock there, and a channel between their tips from the
-## entrance to the land end; a ship moors in the slot between a pier and the
-## next, along the deeper one's seaward face, bow to the wall. Behind the
+## rib cage, each as long as the longest ship that can dock there, and a
+## channel between their tips from the entrance to the land end; the slot
+## between one pier and the next is wide enough for two ships side by side,
+## each coming straight in, bow to the wall, one along each pier (the top
+## slot each side, open to the outer harbour, takes one): 6, 8, 10 or 14
+## berths by the port's band (14 at any company's HQ or hub). Ships lying
+## long term (idle, paused) moor at the port's pontoons (see the Towns note
+## and _lay_moorings()), not at the piers. Behind the
 ## basin is a stone quay for the HQ building and the industry plots. Round
 ## the sea side is a jetty, a breakwater with the entrance in the middle (red
 ## and green lights on its ends). Tugs moor along the first piers; ships
@@ -3091,6 +3094,9 @@ var _spot_cache := {}
 var _spot_tables := {}
 var _spot_slots := {}
 var _spot_keys := {}
+## Whether the ports' moorings have been laid (they need the map's land): the
+## ships lying at the anchorages before that are given their spots again.
+var _moorings_ready := false
 var _spots_frame := -1
 ## Set when any ship changes (docks, leaves, takes or gives up a berth): the
 ## spots are only looked at again then.
@@ -3377,27 +3383,46 @@ static func _marina_layout(kinds: String, hub: bool, canal := false) -> Dictiona
 	var count := kinds.length()
 	@warning_ignore("integer_division")
 	var per_side := PackedInt32Array([(count + 1) / 2, count / 2])  # +y side, -y side.
-	var slot := width + 2.0 * BERTH_GAP
-	var pitch := slot + PIER_WIDTH
-	var top := slot  # The top slot each side: along the first pier's seaward face, open to the outer harbour.
+	var slot := width + 2.0 * BERTH_GAP  # The top slot each side: one ship, along the first pier's seaward face, open to the outer harbour.
+	var double := 2.0 * width + 3.0 * BERTH_GAP  # Every other slot: two ships side by side, each straight in, bow to the wall.
+	var pitch := double + PIER_WIDTH
+	var top := slot
 	var channel := maxf(length * CHANNEL_LENGTHS, width * CHANNEL_WIDTHS)
 	var half := length + channel / 2.0
 	var radius := half + QUAY_WIDTH
-	var depth := top + (maxi(per_side[0], per_side[1]) - 1) * pitch
+	@warning_ignore("integer_division")
+	var deep := maxi(per_side[0], per_side[1]) / 2  # Double slots a side (the last one's land side is the basin's end wall).
+	var depth := top + deep * pitch
 	var strip := maxf(length * QUAY_STRIP_LENGTHS, QUAY_STRIP_MIN)
 	var berth_list := []
 	var piers := []
 	for s in 2:
 		var side := 1.0 if s == 0 else -1.0
-		for j: int in per_side[s]:
-			# Berth j lies along pier j's seaward face (the last along the land end),
-			# the ship's middle at the face's middle, bow to the wall: its slot is
-			# seaward of the face, the first one open to the outer harbour.
-			var face := -(top + j * pitch)
-			if j < per_side[s] - 1:
-				piers.append([side, face, face - PIER_WIDTH])
-			var middle := Vector2(face, side * (half - length / 2.0))
-			berth_list.append([middle, Vector2(0.0, side), Vector2.RIGHT, length, middle, kinds[s * per_side[0] + j]])
+		var count_here: int = per_side[s]
+		@warning_ignore("integer_division")
+		var piers_here: int = count_here / 2
+		var y := side * (half - length / 2.0)
+		# A berth: [its middle on its wall, along the wall, which way the ship lies
+		# off it, its length, its middle again, its kind, and the x of the lane it
+		# comes straight in along (and backs out along)]. The top berth lies along
+		# pier 0's seaward face; then each double slot j (between pier j-1's
+		# landward face and pier j's seaward face, or the end wall) takes two:
+		# one along its land side, one along its sea side, side by side.
+		var k := 0
+		berth_list.append([Vector2(-top, y), Vector2(0.0, side), Vector2.RIGHT, length, Vector2(-top, y), kinds[s * per_side[0] + k], -top + BERTH_GAP + width / 2.0])
+		k += 1
+		piers.append([side, -top, -top - PIER_WIDTH])
+		for j in range(1, piers_here + 1):
+			var sea_edge := -top - PIER_WIDTH - (j - 1) * pitch
+			var land_edge := sea_edge - double
+			if j < piers_here:
+				piers.append([side, land_edge, land_edge - PIER_WIDTH])
+			if k < count_here:
+				berth_list.append([Vector2(land_edge, y), Vector2(0.0, side), Vector2.RIGHT, length, Vector2(land_edge, y), kinds[s * per_side[0] + k], land_edge + BERTH_GAP + width / 2.0])
+				k += 1
+			if k < count_here:
+				berth_list.append([Vector2(sea_edge, y), Vector2(0.0, side), Vector2.LEFT, length, Vector2(sea_edge, y), kinds[s * per_side[0] + k], sea_edge - BERTH_GAP - width / 2.0])
+				k += 1
 	# Tugs along the inside of the jetty's arms (see _jetty_pose()): the two arms
 	# by turns, from TUG_ARM_FROM round towards the entrance, TUG_MOOR_GAP apart,
 	# bow to the entrance.
@@ -4212,9 +4237,16 @@ func _docked_screen_pose(ship: Ship) -> Array:
 				var anchoring := ship.depart_to.is_empty()
 				if anchoring:
 					var rest := _rest_pose(ship)
-					var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * dock_scale(port) * 0.5
-					if (rest[0] as Vector2).distance_to(poses[-1][0]) < maxf(length, mouth_room):
-						poses.pop_back()  # (Its spot's right by the mouth: straight there.)
+					var moorings := _moorings(port) if str((_spot_keys.get(ship, ["", ""]) as Array)[1]) == "moor" else []
+					var at_moor := int(_spot_slots.get(ship, 0))
+					if at_moor < moorings.size():
+						# To its pontoon: round the jetty and in to its slip (see _mooring_way()).
+						for pose: Array in _mooring_way(port, moorings[at_moor]):
+							poses.append(_local_to_screen(port, pose))
+					else:
+						var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * dock_scale(port) * 0.5
+						if (rest[0] as Vector2).distance_to(poses[-1][0]) < maxf(length, mouth_room):
+							poses.pop_back()  # (Its spot's right by the mouth: straight there.)
 					poses.append(rest)
 				# (Its way out kept like its way in, above, till the view or the wind changes.)
 				var key := [port, ship.berth, ship.berth_half, ship.model_id, "out", anchoring, plan.reverse, _upwind_time, float(layout.radius), _view_epoch]
@@ -4250,11 +4282,8 @@ func _keep_right(port_id: String, pose: Array) -> Array:
 ## (dock units, [middle, facing]): along the slot's middle line, bow to the
 ## wall, right where it's moored along the pier (see _slot_approach()).
 func _berth_off(berth: Array, ship: Ship) -> Array:
-	var layout := _port_layout(ship.docked_at)
-	var slot := float(layout.pitch) - float(layout.pier_width)
 	var moored := _berth_pose(berth, ship)
-	var face: Vector2 = berth[0]
-	return [Vector2(face.x + slot / 2.0, (moored[0] as Vector2).y), moored[1]]
+	return [Vector2(float(berth[6]), (moored[0] as Vector2).y), moored[1]]
 
 
 ## A ship's way in from just inside the entrance to its slot (dock units, as
@@ -4329,6 +4358,11 @@ func _lying_pose(ship: Ship, at_time: float) -> Array:
 	var home := []  # A tug: to its moorings by way of its arm's land end (see _tug_home_way()).
 	if ship.is_tug():
 		home = _tug_home_way(ship.docked_at, _jetty_pose(ship.docked_at, int(_spot_slots.get(ship, 0)), ship)[0]).map(func(pose: Array) -> Array: return _local_to_screen(ship.docked_at, pose))
+	elif str((_spot_keys.get(ship, ["", ""]) as Array)[1]) == "moor":
+		var moorings := _moorings(ship.docked_at)
+		var at := int(_spot_slots.get(ship, 0))
+		if at < moorings.size():  # To its pontoon: round the jetty and in to its slip (see _mooring_way()).
+			home = _mooring_way(ship.docked_at, moorings[at]).map(func(pose: Array) -> Array: return _local_to_screen(ship.docked_at, pose))
 	var poses := [_keep_right(ship.docked_at, _entrance_pose(ship.docked_at, false, true))] + home + [rest]
 	var off: Array = _glide_from.get(ship, [])
 	if not off.is_empty() and float(off[0]) == since:
@@ -4441,6 +4475,10 @@ func _anchor_local(ship: Ship) -> Vector2:
 	if not _spot_slots.has(ship):
 		return Vector2(NAN, NAN)
 	var port := ship.docked_at
+	if str((_spot_keys.get(ship, ["", ""]) as Array)[1]) == "moor":
+		var moorings := _moorings(port)
+		var at := int(_spot_slots[ship])
+		return (moorings[at][0] as Vector2) if at < moorings.size() else Vector2(NAN, NAN)
 	var spots := _anchor_spots(port, _anchor_pool(ship))
 	var slot := int(_spot_slots[ship])
 	if slot >= spots.size():
@@ -4462,6 +4500,11 @@ func _rest_pose(ship: Ship) -> Array:
 	if ship.is_tug():
 		return _local_to_screen(port, _jetty_pose(port, slot, ship))
 	var key: Array = _spot_keys[ship] if _spot_keys.has(ship) else [port, _anchor_pool(ship)]
+	if str(key[1]) == "moor":
+		var moorings := _moorings(port)
+		if slot < moorings.size():
+			var mooring: Array = moorings[slot]
+			return _local_to_screen(port, [mooring[0], mooring[1]])
 	var half: float = (_model_look(ship.model_id)[7] as Rect2).size.x / 2.0
 	var anchor := _anchor_screen_cached(ship, port, str(key[1]), slot)
 	var facing := _upwind_angle(port)
@@ -4779,6 +4822,13 @@ func _update_spots() -> void:
 	var first := _spots_frame < 0
 	_spots_frame = frame
 	_spots_dirty = false
+	if not _moorings_ready and not _land_cells.is_empty():
+		_moorings_ready = true
+		for ship: Ship in _spot_slots.keys():
+			if not ship.is_tug():
+				_free_spot(ship)  # (Given a mooring below if it fits one, and put there without a glide.)
+				if _dock_seen.has(ship):
+					_dock_seen[ship] = [_dock_seen[ship][0], -INF]
 	var alive := {}
 	for ship in GameState.ships:
 		if not ship.is_docked():
@@ -4797,8 +4847,14 @@ func _update_spots() -> void:
 			or ship.berth_phase == Ship.BERTH_OUT and ship.depart_to.is_empty()
 		if lies and not _spot_slots.has(ship):
 			var key := [port, _anchor_pool(ship)]
+			var slot := -1
+			if not ship.is_tug():
+				slot = _free_mooring(port, ship)  # Its long-term moorings first (see _lay_moorings()).
+				if slot >= 0:
+					key = [port, "moor"]
 			var taken: Dictionary = _spot_tables.get_or_add(key, {})
-			var slot := _free_anchor(port, key[1], taken)
+			if slot < 0:
+				slot = _free_anchor(port, key[1], taken)
 			taken[slot] = ship
 			_spot_slots[ship] = slot
 			_spot_keys[ship] = key
@@ -9828,6 +9884,26 @@ const TOWN_ROAD := Color(0.4, 0.4, 0.39)
 const TOWN_LANE := Color(0.85, 0.83, 0.78, 0.7)
 const TOWN_WALK := Color(0.78, 0.75, 0.68)
 const TOWN_LIGHTS_MIN_SCALE := 1.6
+## The long-term moorings (see _lay_moorings()): a pontoon's width and a
+## finger's (dock units), the water between two fingers beyond the ship's
+## beam, how much longer than the port's longest ship a finger is, how far
+## apart two pontoons must be (beyond their fingers), how often a street is
+## sampled for water, and the fewest slips a pontoon is worth.
+const MOOR_PONTOON_WIDTH := 0.8
+const MOOR_FINGER_WIDTH := 0.35
+const MOOR_SLIP_GAP := 0.9
+const MOOR_FINGER_EXTRA := 0.6
+const MOOR_ROW_CLEAR := 1.2
+const MOOR_SAMPLE := 0.5
+const MOOR_MIN_SLIPS := 2
+const MOOR_ATTACH := 5.5
+const MOOR_LANE_MARGIN := 2.5
+const MOOR_NEAR := 14.0
+const MOOR_WOOD := Color(0.8, 0.72, 0.58)
+const MOOR_CONCRETE := Color(0.74, 0.74, 0.72)
+const MOOR_EDGE := Color(0.3, 0.27, 0.22)
+const MOOR_FLOAT := Color(0.42, 0.4, 0.36)
+const MOOR_CLEAT := Color(0.2, 0.2, 0.2)
 const TOWN_STYLES := {
 	mediterranean = {walls = ["#e8dcc4", "#f0e6d2", "#e2cfae", "#d9c9a8", "#eadfca"], roofs = ["#c0603a", "#b8563a", "#c86a44", "#a84e32"], roof = "pitched", towers = 0.04, landmark = "church", lights = Color(1.0, 0.85, 0.55)},
 	north_europe = {walls = ["#c9b79c", "#b0433b", "#d9c28f", "#e8e0d0", "#8a6a4a", "#5a7a9a"], roofs = ["#5a4a44", "#4a3f3a", "#6b4a3a", "#3e3a44"], roof = "pitched", towers = 0.08, landmark = "church", lights = Color(1.0, 0.88, 0.62)},
@@ -10010,14 +10086,232 @@ func _town(port_id: String, layout: Dictionary) -> Dictionary:
 	while lamp_x > back:
 		lights.append(Vector2(lamp_x, 0.8))
 		lamp_x -= 3.0
+	# The streets that sit on the water (where the coast runs through the town's
+	# grid) become the port's long-term moorings: pontoons with finger slips,
+	# a lamp at each end (see _lay_moorings()); the roads keep to the land.
+	var moored := _lay_moorings(port_id, layout, roads)
+	roads = moored.roads
+	for pontoon: Array in moored.pontoons:
+		lights.append(pontoon[0])
+		lights.append(pontoon[1])
 	var segments := PackedVector2Array()
 	for light: Vector2 in lights:
 		segments.append(light - Vector2(0.11, 0.0))
 		segments.append(light + Vector2(0.11, 0.0))
-	var town := {key = key, buildings = buildings, parks = parks, lights = lights, light = style.lights, style = style_name, reach = reach, landmark = landmark_at, roads = roads}
+	var town := {key = key, buildings = buildings, parks = parks, lights = lights, light = style.lights, style = style_name, reach = reach, landmark = landmark_at, roads = roads,
+		pontoons = moored.pontoons, moorings = moored.moorings}
 	town.segments = segments
 	_towns[port_id] = town
 	return town
+
+## True where a marina draws its own ground: the quay (the land behind the
+## basin, HQ and industry and all), the basin, and the harbour inside the
+## jetty (water, but the ships' way in and out).
+static func _marina_ground(layout: Dictionary, p: Vector2) -> bool:
+	var radius := float(layout.radius)
+	if p.x >= _quay_inland(layout) - 0.5 and p.x <= 0.5 and absf(p.y) <= radius + 0.5:
+		return true
+	return p.x > -0.5 and p.length() <= radius + JETTY_WIDTH + 1.0
+
+## The port's long-term moorings, from its town's streets that sit on the water
+## (the coast runs through the town's grid at a port on a headland, a spit or
+## an island): each such run of street, if it's long enough, becomes a pontoon
+## (a floating walkway along the street's line) with finger piers out from
+## both sides, a slip between each finger and the next for a ship to come
+## straight in, bow to the pontoon, as long as the port's longest ship, every
+## finger and slip only where the water really is and clear of the marina's
+## own ground; pontoons keep clear of each other's fingers (the quay road and
+## the cross roads first, then the avenue and the streets). The roads are cut
+## down to their runs on land. Returns {roads, pontoons: [[a, b, fingers:
+## [[root, tip]...]]...], moorings: [[middle, facing, length]...]} in dock units.
+func _lay_moorings(port_id: String, layout: Dictionary, roads: Array) -> Dictionary:
+	var length := float(layout.length)
+	var width := float(layout.width)
+	var finger := length + MOOR_FINGER_EXTRA
+	var pitch := width + MOOR_SLIP_GAP + MOOR_FINGER_WIDTH
+	var kept_roads := []
+	var lines := []  # [a, b, priority]
+	var water := func(p: Vector2) -> bool:
+		return not _marina_ground(layout, p) and not _on_land(_dock_lon_lat(port_id, p))
+	for road: Array in roads:
+		var rect: Rect2 = road[0]
+		var kind: String = road[1]
+		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			continue
+		var along_x := rect.size.x >= rect.size.y
+		var start := rect.position.x if along_x else rect.position.y
+		var end := rect.end.x if along_x else rect.end.y
+		var mid := rect.get_center().y if along_x else rect.get_center().x
+		var runs := []  # [from, to, on water]
+		var s := start
+		var state := -1
+		var run_from := start
+		while s < end:
+			var wet: bool = water.call(Vector2(s, mid) if along_x else Vector2(mid, s))
+			var w := 1 if wet else 0
+			if w != state:
+				if state >= 0:
+					runs.append([run_from, s, state == 1])
+				state = w
+				run_from = s
+			s += MOOR_SAMPLE
+		runs.append([run_from, end, state == 1])
+		for run: Array in runs:
+			var from: float = run[0]
+			var to: float = run[1]
+			if not run[2]:
+				if to - from > 0.2:
+					kept_roads.append([Rect2(from, rect.position.y, to - from, rect.size.y) if along_x else Rect2(rect.position.x, from, rect.size.x, to - from), kind])
+			elif to - from >= pitch * MOOR_MIN_SLIPS + MOOR_FINGER_WIDTH:
+				var priority := 0 if kind == "road" and not along_x else (1 if kind == "road" else (2 if kind == "avenue" else 3))
+				lines.append([Vector2(from, mid) if along_x else Vector2(mid, from), Vector2(to, mid) if along_x else Vector2(mid, to), priority])
+	# And the side streets' lines along either side of the harbour, just outside
+	# the quay land (their fingers reaching back to it): where the water runs
+	# beside the marina (a port on a spit or a river mouth: Shanghai, say), a
+	# mooring field flanks it.
+	var radius := float(layout.radius)
+	var depth := float(layout.depth)
+	var rows := 1 if (layout.berths as Array).size() <= 8 else (2 if (layout.berths as Array).size() <= 10 else 3)
+	for row in rows:
+		for side: float in [-1.0, 1.0]:
+			# The first row's fingers reach back to the quay land, but never into the
+			# way ships round the jetty's end (JETTY_ROUND out: see _round_jetty()).
+			var y := side * (maxf(radius + 1.0, radius * JETTY_ROUND + MOOR_LANE_MARGIN) + finger + MOOR_PONTOON_WIDTH / 2.0 + row * (2.0 * finger + MOOR_PONTOON_WIDTH + MOOR_ROW_CLEAR))
+			var s := -depth - 1.0
+			var run_from := s
+			var state := -1
+			while s < -0.5:
+				var w := 1 if water.call(Vector2(s, y)) else 0
+				if w != state:
+					if state == 1 and s - run_from >= pitch * MOOR_MIN_SLIPS + MOOR_FINGER_WIDTH:
+						lines.append([Vector2(run_from, y), Vector2(s, y), 4, side, row])
+					state = w
+					run_from = s
+				s += MOOR_SAMPLE
+			if state == 1 and s - run_from >= pitch * MOOR_MIN_SLIPS + MOOR_FINGER_WIDTH:
+				lines.append([Vector2(run_from, y), Vector2(s, y), 4, side, row])
+	lines.sort_custom(func(a: Array, b: Array) -> bool:
+		if int(a[2]) != int(b[2]):
+			return int(a[2]) < int(b[2])
+		var row_a := int(a[4]) if a.size() > 4 else 0
+		var row_b := int(b[4]) if b.size() > 4 else 0
+		if row_a != row_b:
+			return row_a < row_b
+		return (a[0] as Vector2).distance_to(a[1]) > (b[0] as Vector2).distance_to(b[1]))
+	var side_rows := {}  # Side (+1/-1) -> the rows built so far (a row needs the one nearer the quay).
+	var pontoons := []
+	var moorings := []
+	var footprints: Array[Rect2] = []
+	var reach := MOOR_PONTOON_WIDTH / 2.0 + finger + MOOR_ROW_CLEAR
+	for line: Array in lines:
+		var a: Vector2 = line[0]
+		var b: Vector2 = line[1]
+		var footprint := Rect2(a, Vector2.ZERO).expand(b).grow(reach)
+		if int(line[2]) <= 3 and Geometry2D.get_closest_point_to_segment(Vector2.ZERO, a, b).length() > absf(_quay_inland(layout)) + MOOR_NEAR:
+			continue  # A street out by some other shore, far from the port.
+		if line.size() > 4 and int(line[4]) > 0 and int(side_rows.get(float(line[3]), 0)) < int(line[4]):
+			continue  # A side row only beyond a built row nearer the quay (no field floating off by itself).
+		var crowded := false
+		for other: Rect2 in footprints:
+			if other.intersects(footprint):
+				crowded = true
+				break
+		if crowded:
+			continue
+		var d := (b - a).normalized()
+		var normal := Vector2(-d.y, d.x)
+		var span := a.distance_to(b)
+		# Attached: land or the quay within MOOR_ATTACH to one side somewhere
+		# along it, or at an end (no pontoon floats off by itself out at sea).
+		var attached: bool = not water.call(a - d * 1.0) or not water.call(b + d * 1.0)
+		var s_check := 0.0
+		while not attached and s_check <= span:
+			var at := a + d * s_check
+			if not water.call(at + normal * MOOR_ATTACH) or not water.call(at - normal * MOOR_ATTACH):
+				attached = true
+			s_check += MOOR_SAMPLE * 2.0
+		if not attached:
+			continue
+		var fingers := []
+		var slips := []
+		for sign: float in [1.0, -1.0]:
+			var side := normal * sign
+			var roots := []  # [s, root] of each finger that stands in water.
+			var s := MOOR_FINGER_WIDTH / 2.0
+			while s <= span - MOOR_FINGER_WIDTH / 2.0:
+				var root := a + d * s + side * (MOOR_PONTOON_WIDTH / 2.0)
+				var tip := root + side * finger
+				if water.call(tip) and water.call(root + side * finger * 0.5):
+					roots.append([s, root])
+				else:
+					roots.append([s, Vector2.INF])
+				s += pitch
+			for i in range(1, roots.size()):
+				if (roots[i - 1][1] as Vector2) == Vector2.INF or (roots[i][1] as Vector2) == Vector2.INF:
+					continue
+				var middle := a + d * (float(roots[i - 1][0]) + pitch / 2.0) + side * (MOOR_PONTOON_WIDTH / 2.0 + 0.3 + length / 2.0)
+				if not water.call(middle) or not water.call(middle + side * length / 2.0):
+					continue
+				slips.append([middle, (-side).angle(), length, roots[i - 1][1], roots[i][1]])
+		if slips.size() < MOOR_MIN_SLIPS:
+			continue
+		# Only the fingers that bound a slip are built.
+		var used := {}
+		for slip: Array in slips:
+			for root: Vector2 in [slip[3], slip[4]]:
+				if not used.has(root):
+					used[root] = true
+					var side := (root - a).dot(normal)
+					fingers.append([root, root + normal * signf(side) * finger])
+			moorings.append([slip[0], slip[1], slip[2]])
+		pontoons.append([a, b, fingers])
+		footprints.append(footprint)
+		if line.size() > 4:
+			side_rows[float(line[3])] = maxi(int(side_rows.get(float(line[3]), 0)), int(line[4]) + 1)
+	return {roads = kept_roads, pontoons = pontoons, moorings = moorings}
+
+
+## A port's long-term moorings (see _lay_moorings()), or [] until its town is laid.
+func _moorings(port_id: String) -> Array:
+	var town := _town(port_id, _port_layout(port_id))
+	return town.get("moorings", []) if not town.is_empty() else []
+
+## The first free mooring at a port a ship fits (its index), or -1.
+func _free_mooring(port_id: String, ship: Ship) -> int:
+	var moorings := _moorings(port_id)
+	if moorings.is_empty():
+		return -1
+	var taken: Dictionary = _spot_tables.get([port_id, "moor"], {})
+	var length := (_model_look(ship.model_id)[7] as Rect2).size.x
+	for i in moorings.size():
+		if not taken.has(i) and length <= float(moorings[i][2]):
+			return i
+	return -1
+
+## A ship's way from just outside its port's entrance to its mooring (dock
+## poses): out round the jetty's end on the mooring's side, round the back of
+## the quay if the mooring is behind it, up to the slip's mouth and straight in.
+func _mooring_way(port_id: String, mooring: Array) -> Array:
+	var layout := _port_layout(port_id)
+	var radius := float(layout.radius)
+	var middle: Vector2 = mooring[0]
+	var facing := float(mooring[1])
+	var away := -Vector2.from_angle(facing)
+	var mouth := middle + away * (float(mooring[2]) / 2.0 + 1.5)
+	var stage := mouth + away * maxf(float(mooring[2]) * 0.8, 4.0)
+	var side := 1.0 if stage.y >= 0.0 else -1.0
+	var poses := [[Vector2(radius * 1.25, side * radius * 0.8), PI / 2.0 * side]]
+	var corner := Vector2(radius * 0.3, side * radius * 1.45)
+	var next := stage
+	if stage.x < _quay_inland(layout) - 1.0:
+		next = Vector2(_quay_inland(layout) - 2.0, side * (radius + 2.0))
+	poses.append([corner, (next - corner).angle()])
+	if next != stage:
+		poses.append([next, (stage - next).angle()])
+	poses.append([stage, (mouth - stage).angle()])
+	poses.append([mouth, facing])
+	return poses
+
 
 ## A port's town by day (see _draw_marina()): every block's shadow, then its
 ## walls, roof and rooftop in its style, and the parks' trees.
@@ -10027,6 +10321,7 @@ func _draw_town(port_id: String, layout: Dictionary, scale: float) -> void:
 		return
 	var rect_points := func(rect: Rect2) -> PackedVector2Array:
 		return _marina_polygon(port_id, _rect_points(rect))
+	_draw_pontoons(port_id, layout, town, scale)
 	for road: Array in town.get("roads", []):
 		var rect: Rect2 = road[0]
 		var kind: String = road[1]
@@ -10089,6 +10384,45 @@ func _draw_town(port_id: String, layout: Dictionary, scale: float) -> void:
 				if salt > 0.4:  # Roof gear: a tank or an air unit.
 					var at := top.position + Vector2(top.size.x * (0.25 + salt * 0.5), top.size.y * 0.3)
 					_canvas.draw_colored_polygon(rect_points.call(Rect2(at - Vector2(0.14, 0.14), Vector2(0.28, 0.28))), roof.darkened(0.35))
+
+## A port's pontoons (see _lay_moorings()): each a floating walkway with dark
+## floats under it, its finger piers with a cleat at each root, in wood at the
+## smaller ports and concrete at the bigger.
+func _draw_pontoons(port_id: String, layout: Dictionary, town: Dictionary, scale: float) -> void:
+	var deck := MOOR_WOOD if (layout.berths as Array).size() <= 8 else MOOR_CONCRETE
+	var pontoon_px := maxf(MOOR_PONTOON_WIDTH * scale, 1.5)
+	var finger_px := maxf(MOOR_FINGER_WIDTH * scale, 1.0)
+	for pontoon: Array in town.get("pontoons", []):
+		var a: Vector2 = pontoon[0]
+		var b: Vector2 = pontoon[1]
+		for finger: Array in pontoon[2]:
+			var root := _dock_point(port_id, finger[0])
+			var tip := _dock_point(port_id, finger[1])
+			_canvas.draw_line(root, tip, MOOR_EDGE, finger_px + 1.6, true)
+			_canvas.draw_line(root, tip, deck, finger_px, true)
+			if scale >= 3.0:
+				_canvas.draw_circle(root.lerp(tip, 0.08), maxf(0.12 * scale, 1.0), MOOR_CLEAT)
+				_canvas.draw_circle(root.lerp(tip, 0.92), maxf(0.12 * scale, 1.0), MOOR_CLEAT)
+		var pa := _dock_point(port_id, a)
+		var pb := _dock_point(port_id, b)
+		if scale >= 2.5:
+			var d := (b - a).normalized()
+			var s := 1.0
+			while s < a.distance_to(b) - 0.5:
+				var at := _dock_point(port_id, a + d * s)
+				_canvas.draw_circle(at, maxf(0.32 * scale, 1.2), MOOR_FLOAT)
+				s += 2.2
+		_canvas.draw_line(pa, pb, MOOR_EDGE, pontoon_px + 2.0, true)
+		_canvas.draw_line(pa, pb, deck, pontoon_px, true)
+		if scale >= 4.0:  # The planks' seams.
+			var d := (b - a).normalized()
+			var s := 0.6
+			while s < a.distance_to(b):
+				var at := a + d * s
+				var across := Vector2(-d.y, d.x) * MOOR_PONTOON_WIDTH * 0.45
+				_canvas.draw_line(_dock_point(port_id, at - across), _dock_point(port_id, at + across), MOOR_EDGE * Color(1, 1, 1, 0.35), 1.0, true)
+				s += 1.2
+
 
 ## A town's landmark (see TOWN_STYLES landmark), on its block.
 func _draw_landmark(port_id: String, what: String, rect: Rect2, wall: Color, roof: Color, scale: float, rect_points: Callable) -> void:

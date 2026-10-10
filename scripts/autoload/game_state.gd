@@ -1936,8 +1936,8 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 func _advance_docked(ship: Ship, delta: float) -> void:
 	# A cargo ship waiting at the anchorage comes in to a pier while the port has
 	# room to spare (and goes back out if it fills up: see below).
-	if ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE and not ship.is_service() and not ship.is_docking() and not ship.is_on_job() and docks.free_berths(ship.docked_at) > WAIT_AT_PIER_FREE + 1:
-		ship.berth_phase = Ship.BERTH_WAIT
+	if ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE and not ship.is_service() and not ship.is_docking() and not ship.is_on_job() and ship.is_running() and docks.free_berths(ship.docked_at) > WAIT_AT_PIER_FREE + 1:
+		ship.berth_phase = Ship.BERTH_WAIT  # (An idle or paused ship lies at the moorings: see _wake_waiting_ships().)
 	if not _advance_berth(ship, delta):
 		return
 	if ship.is_docking():
@@ -1966,8 +1966,8 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
 	else:
 		_set_hold(ship, "")
-	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE and docks.free_berths(ship.docked_at) < WAIT_AT_PIER_FREE:
-		_pull_out(ship, "")  # Done, but not going yet: it waits at its pier while the port has room, else off to the anchorage.
+	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE and (docks.free_berths(ship.docked_at) < WAIT_AT_PIER_FREE or not ship.is_running() and not ship.is_service()):
+		_pull_out(ship, "")  # Done, but not going yet: it waits at its pier while the port has room, else off to the moorings; an idle or paused ship always goes to the moorings.
 
 
 ## A cargo ship's berth: queuing for one, coming alongside, pulling out. True
@@ -3736,14 +3736,15 @@ func _without_retired_ports(data: Variant) -> Variant:
 	return data
 
 
-## Every WAKE_WAITING_S: a cargo ship lying at a port's anchorage (idle, or
-## waiting for a load) comes in to a pier while the port has room to spare
-## (more than WAIT_AT_PIER_FREE berths free), queuing for one like any other
-## (see _advance_berth()); it pulls out again if the port fills up (see
-## _advance_docked()). Ships lying idle are otherwise left alone by the step.
+## Every WAKE_WAITING_S: a running cargo ship lying at a port's moorings or
+## anchorage (waiting for a load, or for fuel money) comes in to a pier while
+## the port has room to spare (more than WAIT_AT_PIER_FREE berths free),
+## queuing for one like any other (see _advance_berth()); it pulls out again
+## if the port fills up (see _advance_docked()). An idle or paused ship stays
+## at the moorings, its long-term parking, till it has somewhere to go.
 func _wake_waiting_ships() -> void:
 	for ship in ships:
-		if ship.berth >= 0 or ship.berth_phase != Ship.BERTH_NONE or not ship.is_docked() or ship.is_service() or ship.is_on_job() or ship.is_docking() or ship.is_lost():
+		if ship.berth >= 0 or ship.berth_phase != Ship.BERTH_NONE or not ship.is_docked() or ship.is_service() or ship.is_on_job() or ship.is_docking() or ship.is_lost() or not ship.is_running():
 			continue
 		if docks.free_berths(ship.docked_at) > WAIT_AT_PIER_FREE + 1:
 			ship.berth_phase = Ship.BERTH_WAIT
