@@ -2221,6 +2221,18 @@ func focus_ship(ship: Ship, raised_px := 0.0) -> void:
 	_look_at(screen_to_world(size / 2.0 + Vector2(0.0, raised_px)))
 	_changed()
 
+## How many frames the overlay has drawn (see is_warm()).
+var _frames_drawn := 0
+
+## True once the map is warm: its land sorted into cells, the sea animals'
+## paths found, the wildlife and birds made, the fleet's lanes bent, the
+## regions' map ready and a few frames drawn (the loading screen waits for
+## this: LoadingScreen.open_game()).
+func is_warm() -> bool:
+	if _frames_drawn < 3 or _land_cells.is_empty() or _sea_warming or not _lanes_warm or not RegionMap.is_ready():
+		return false
+	return gray_mode or BirdLife.shared().ensure_built()
+
 ## The ship the view follows (see follow_ship()), or null.
 var followed: Ship = null
 ## Following a ship, the view zooms to a little past where the birds just
@@ -2871,8 +2883,8 @@ const MIN_HARBOUR_SPEED := 0.5
 ## A port's marina is drawn (and its dot not) once its radius on screen is this
 ## many px more than the dot's.
 const MARINA_OVER_DOT_PX := 2.0
-## No marina reaches further than this from its port (dock units, its quay and all).
-const MARINA_MAX_REACH := 60.0
+## No marina reaches further than this from its port (dock units, its quay, its town and all).
+const MARINA_MAX_REACH := 95.0
 ## Nor does a port's furthest anchor point (dock units: data/anchorages.json's
 ## 420 nm, plus the ship), for culling.
 const PORT_MAX_REACH := 300.0
@@ -3464,12 +3476,12 @@ func _update_marinas() -> void:
 			if not near.has_point(root) or not _marina_shown(port_id):
 				continue  # (Cheapest first: most ports are well off screen.)
 			var layout := _port_layout(port_id)
-			var reach := (float(layout.radius) * 1.5 + float(layout.slip[1] if not layout.slip.is_empty() else 0.0)) * _ship_scale()  # (The quay's square corners.)
+			var reach := MARINA_MAX_REACH * _ship_scale()  # (The quay's square corners and the town behind.)
 			if not view.grow(reach).has_point(root):
 				continue
 			shown[port_id] = true
 			var item := _marina_item(port_id, i)
-			var key := [_ship_scale(), _dock_flips.get(port_id, 1.0), _hq_look(port_id)]
+			var key := [_ship_scale(), _dock_flips.get(port_id, 1.0), _hq_look(port_id), _land_cells.is_empty()]  # (The town needs the land.)
 			if not is_same(item.get_meta(&"layout"), layout) or item.get_meta(&"key") != key:
 				item.set_meta(&"layout", layout)
 				item.set_meta(&"key", key)
@@ -3687,6 +3699,7 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	_draw_hq_building(port_id, layout)
 	_draw_industry(port_id, layout)
 	_draw_lighthouse(port_id, layout, scale)
+	_draw_town(port_id, layout, scale)
 	# The jetty: round the sea half, each side of the entrance, lit at its ends.
 	var gap: float = layout.gap
 	for side: float in [-1.0, 1.0]:
@@ -5086,6 +5099,8 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 
 func _draw_overlay() -> void:
 	_canvas = _overlay
+	_frames_drawn += 1
+	_lit_ships.clear()
 	if show_ships:
 		_draw_ships()
 		_draw_birds()
@@ -8712,7 +8727,9 @@ static func _oval(middle: Vector2, half: Vector2) -> PackedVector2Array:
 ## shorter as they beat up and down or fold) with dark tips, and its shadow
 ## below (`height` times as far off as usual). A raptor (one with a tail
 ## color) has broad wings with fingered tips (an osprey's bent at the wrist),
-## a fanned tail and a hooked bill; some have pale or chestnut shoulders.
+## a fanned tail and a hooked bill; some have pale or chestnut shoulders. A
+## falcon has swept pointed wings and a long narrow tail, a frigatebird long
+## angular wings, a forked tail and a scarlet throat.
 ## Leaves the canvas item's transform reset.
 static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Dictionary, wings: float, span: float, shadow := true, height := 1.0) -> void:
 	var colors: Dictionary = info.get("colors", {})
@@ -8732,7 +8749,9 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 	var bill: Color = parsed[3]
 	var raptor := colors.has("tail")
 	var wader := colors.has("legs")
-	var shape := _bird_shape(raptor or wader, raptor and str(info.get("behavior", "")) == "plunge")
+	var kind := str(info.get("kind", ""))
+	var frigate := kind == "Frigatebird"
+	var shape := _bird_shape(raptor or wader, raptor and str(info.get("behavior", "")) == "plunge", 3 if frigate else (4 if kind == "Falcon" else 0))
 	# The shapes are a bird a unit across: the wings (out to their beat) drawn
 	# scaled by its span along and its span times the beat across, the rest by its span.
 	var wingspan := Vector2(span, span * wings)
@@ -8744,10 +8763,10 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 		canvas.draw_set_transform(at + off, heading, wingspan)
 		canvas.draw_colored_polygon(shape.wing, dark)
 		canvas.draw_colored_polygon(shape.wing_mirrored, dark)
-		if raptor:
+		if raptor or frigate:
 			canvas.draw_set_transform(at + off, heading, whole)
 			canvas.draw_colored_polygon(shape.tail, dark)
-	if raptor:
+	if raptor or frigate:
 		canvas.draw_set_transform(at, heading, whole)
 		canvas.draw_colored_polygon(shape.tail, parsed[4])
 	canvas.draw_set_transform(at, heading, wingspan)
@@ -8768,6 +8787,8 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 	if raptor:
 		body = mantle.lerp(parsed[5], 0.2)
 	canvas.draw_colored_polygon(_bird_body, body)
+	if frigate:
+		canvas.draw_circle(Vector2(0.1, 0.0), 0.035, Color(0.85, 0.12, 0.16))  # The male's scarlet throat pouch.
 	if raptor:
 		# A big head and a short hooked bill.
 		canvas.draw_circle(Vector2(0.17, 0.0), 0.065, head)
@@ -8810,15 +8831,25 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 ## (see draw_bird()): {wing, wing_mirrored, tip, tip_mirrored, tail}. A gull or
 ## seabird's wings swept back to their tips; a raptor's broad and square (bent
 ## forward at the wrist for an osprey), the tips spread into fingers.
-static func _bird_shape(raptor: bool, bent: bool) -> Dictionary:
-	var key := 2 if bent else (1 if raptor else 0)
+## `special`: 3 a frigatebird (long angular wings, a long forked tail), 4 a
+## falcon (swept pointed wings, a long narrow tail).
+static func _bird_shape(raptor: bool, bent: bool, special := 0) -> Dictionary:
+	var key := special if special > 0 else (2 if bent else (1 if raptor else 0))
 	if _bird_shapes.has(key):
 		return _bird_shapes[key]
 	var half := 0.5
 	var wing: PackedVector2Array
 	var tip_part: PackedVector2Array
 	var tail := PackedVector2Array()
-	if raptor:
+	if special == 3:
+		wing = PackedVector2Array([Vector2(0.06, 0.0), Vector2(0.13, half * 0.42), Vector2(-0.02, half), Vector2(-0.1, half * 0.5), Vector2(-0.1, 0.0)])
+		tip_part = PackedVector2Array([Vector2(0.03, half * 0.7), Vector2(-0.02, half), Vector2(-0.07, half * 0.72)])
+		tail = PackedVector2Array([Vector2(-0.12, 0.025), Vector2(-0.44, 0.1), Vector2(-0.34, 0.0), Vector2(-0.44, -0.1), Vector2(-0.12, -0.025)])
+	elif special == 4:
+		wing = PackedVector2Array([Vector2(0.08, 0.0), Vector2(0.1, half * 0.4), Vector2(-0.06, half), Vector2(-0.13, half * 0.5), Vector2(-0.13, 0.0)])
+		tip_part = PackedVector2Array([Vector2(0.0, half * 0.7), Vector2(-0.06, half), Vector2(-0.11, half * 0.72)])
+		tail = PackedVector2Array([Vector2(-0.18, 0.045), Vector2(-0.4, 0.06), Vector2(-0.4, -0.06), Vector2(-0.18, -0.045)])
+	elif raptor:
 		var wrist := Vector2(0.11 if bent else 0.07, half * 0.5)
 		wing = PackedVector2Array([Vector2(0.07, 0.0), wrist, Vector2(0.03, half * 0.86), Vector2(-0.15, half * 0.86),
 			Vector2(-(0.1 if bent else 0.17), half * 0.5), Vector2(-0.13, 0.0)])
@@ -9554,3 +9585,379 @@ func _draw_marina_lights(port_id: String, night: float, glow: Texture2D) -> void
 	var halo := maxf(LIGHTHOUSE_RADIUS * scale * 4.0, 8.0)
 	_canvas.draw_texture_rect(glow, Rect2(tower - Vector2.ONE * halo, Vector2.ONE * halo * 2.0), false, Color(LIGHT_WHITE, 0.8 * night))
 	_canvas.draw_circle(tower, maxf(LIGHTHOUSE_RADIUS * scale * 0.3, 1.5), Color(LIGHT_WHITE, night))
+	_draw_town_lights(port_id, layout, night, glow, scale)
+
+# --- Towns ---------------------------------------------------------------------------
+
+## Every port has its town round its marina, just to look at: blocks of
+## buildings on a street grid behind the quay (inland of the lighthouse's
+## pad) and along the shore either side of the basin, as many as its size
+## band allows (TOWN_ROWS deep, the marina's width and more across), each
+## block only where the map's land is (so a town hugs its coast), a cross
+## street every few blocks, some blocks two cells long (halls and terraces;
+## grey warehouses along the waterfront). Seen from
+## above: each building its walls' color with its roof inset, pitched roofs
+## with a ridge (the sunny side lighter), flat roofs with a parapet and roof
+## gear, East Asian roofs stacked in tiers; a few tall buildings with long
+## shadows (more in the Americas and East Asia), parks between, and a landmark
+## near the waterfront in the local manner: a church tower, a minaret and
+## dome, a pagoda, a skyscraper, onion domes or a stupa. The look comes from
+## the port's market region and country (TOWN_STYLES, _town_style()): the
+## Mediterranean's pale walls and terracotta, the north's painted wood and
+## dark roofs, East Asia's grey tiles, the Middle East's and Africa's flat
+## sand-colored roofs, the Caribbean's pastels, North America's grid of grey
+## towers... Laid out once per port by a seed of its id (_town()), drawn into
+## its marina's item (_draw_town()); at night (and under storms) its windows
+## light up in the style's warmth over a glow (_draw_town_lights()). Roads
+## tie it together: a quay road behind the quay with a spine to the basin, a
+## spur to the HQ and a cross road past the industry plots, an avenue inland
+## through the middle of the town (a dashed line down it), a road along each
+## wide street and cross street, walkways along the narrow streets, and a
+## shore road along each side of the basin; street lamps line the quay road
+## and the avenue at night.
+const TOWN_CELL := 3.2
+const TOWN_GAP := 0.6
+const TOWN_STREET_EVERY := 4
+const TOWN_ROWS := {4: 4, 6: 5, 8: 7, 12: 9}
+const TOWN_SIDE_COLS := 2
+const TOWN_HALF_RADII := 1.6
+const TOWN_PARK_SHARE := 0.1
+const TOWN_SHADOW := Color(0.0, 0.0, 0.0, 0.22)
+const TOWN_PARK := Color(0.47, 0.62, 0.36)
+const TOWN_ROAD := Color(0.4, 0.4, 0.39)
+const TOWN_LANE := Color(0.85, 0.83, 0.78, 0.7)
+const TOWN_WALK := Color(0.78, 0.75, 0.68)
+const TOWN_LIGHTS_MIN_SCALE := 1.6
+const TOWN_STYLES := {
+	mediterranean = {walls = ["#e8dcc4", "#f0e6d2", "#e2cfae", "#d9c9a8", "#eadfca"], roofs = ["#c0603a", "#b8563a", "#c86a44", "#a84e32"], roof = "pitched", towers = 0.04, landmark = "church", lights = Color(1.0, 0.85, 0.55)},
+	north_europe = {walls = ["#c9b79c", "#b0433b", "#d9c28f", "#e8e0d0", "#8a6a4a", "#5a7a9a"], roofs = ["#5a4a44", "#4a3f3a", "#6b4a3a", "#3e3a44"], roof = "pitched", towers = 0.08, landmark = "church", lights = Color(1.0, 0.88, 0.62)},
+	east_asia = {walls = ["#d8d2c8", "#cfc8bc", "#e6e0d4", "#c8c4bc"], roofs = ["#5a6670", "#4c5660", "#6c3a34", "#3f4a52"], roof = "pagoda", towers = 0.18, landmark = "pagoda", lights = Color(1.0, 0.92, 0.65)},
+	japan = {walls = ["#e8e4dc", "#d6d0c6", "#dcd8d0"], roofs = ["#4e5a66", "#3c4650", "#6a4a3a", "#56606a"], roof = "pagoda", towers = 0.16, landmark = "pagoda", lights = Color(1.0, 0.93, 0.7)},
+	southeast_asia = {walls = ["#e6d9b8", "#d8c8a0", "#f0e8d0", "#c8d8c0"], roofs = ["#b8502e", "#9c4a2c", "#6a7a5a", "#8a5a3a"], roof = "pitched", towers = 0.12, landmark = "stupa", lights = Color(1.0, 0.86, 0.55)},
+	south_asia = {walls = ["#e8c8a0", "#f0d8b0", "#d8b890", "#c8d8e8", "#e8e0c0"], roofs = ["#c8b090", "#b89a7a", "#d0b8a0", "#a89880"], roof = "flat", towers = 0.1, landmark = "dome", lights = Color(1.0, 0.84, 0.5)},
+	middle_east = {walls = ["#e6d4b0", "#dcc8a2", "#efe0c0", "#d8c8a8"], roofs = ["#d8c6a0", "#cdb890", "#c4b088"], roof = "flat", towers = 0.14, landmark = "minaret", lights = Color(1.0, 0.86, 0.55)},
+	africa = {walls = ["#d8b890", "#c8a070", "#e0c8a0", "#b89a78", "#e8d8b8"], roofs = ["#b89060", "#a07850", "#8a6a48", "#c0a070"], roof = "flat", towers = 0.05, landmark = "dome", lights = Color(1.0, 0.82, 0.5)},
+	north_america = {walls = ["#b8b4ae", "#a8a4a0", "#c8c4bc", "#9a8a7a", "#8a9aa8"], roofs = ["#6a6a70", "#55555c", "#7a6a5a", "#5a6a74"], roof = "flat", towers = 0.3, landmark = "skyscraper", lights = Color(1.0, 0.9, 0.7)},
+	caribbean = {walls = ["#f2c6a8", "#a8d8e8", "#f0e48c", "#c8e8b0", "#f4a8b8", "#f8f0d8"], roofs = ["#c86a4a", "#8a6a4a", "#6a8aa0", "#a8603a"], roof = "pitched", towers = 0.04, landmark = "church", lights = Color(1.0, 0.86, 0.6)},
+	south_america = {walls = ["#e8c890", "#f0d8b8", "#d8a888", "#c8c8d8", "#e8e0c8"], roofs = ["#b85a3a", "#a04e32", "#c87048", "#8a4a3a"], roof = "pitched", towers = 0.12, landmark = "church", lights = Color(1.0, 0.86, 0.58)},
+	oceania = {walls = ["#e8e4dc", "#d8d4cc", "#c8b89c", "#b8c8d0"], roofs = ["#8a8a90", "#a0a0a6", "#6a7a8a", "#b85a3a"], roof = "pitched", towers = 0.1, landmark = "skyscraper", lights = Color(1.0, 0.9, 0.66)},
+	russia = {walls = ["#c8c0b0", "#b8b0a8", "#d8c8a8", "#9ab0c0", "#e0d8c8"], roofs = ["#4a5a6a", "#5a6a7a", "#6a4a3a", "#3a4a5a"], roof = "pitched", towers = 0.08, landmark = "onion", lights = Color(1.0, 0.88, 0.6)},
+	arctic = {walls = ["#b0433b", "#d9c28f", "#e8e0d0", "#4a7a9a", "#8a9a60"], roofs = ["#3e3a44", "#5a4a44", "#4a5a6a"], roof = "pitched", towers = 0.0, landmark = "none", lights = Color(1.0, 0.9, 0.66)},
+	antarctica = {walls = ["#e0603a", "#4a8ab0", "#e8e8e8"], roofs = ["#c0c8d0", "#b0b8c0"], roof = "flat", towers = 0.0, landmark = "none", lights = Color(1.0, 0.95, 0.8)},
+}
+const TOWN_REGION_STYLES := {east_asia = "east_asia", southeast_asia = "southeast_asia", south_asia = "south_asia", middle_east = "middle_east",
+	east_africa = "africa", west_africa = "africa", mediterranean = "mediterranean", north_europe = "north_europe", na_east = "north_america",
+	na_west = "north_america", great_lakes = "north_america", gulf_caribbean = "caribbean", south_america = "south_america", oceania = "oceania",
+	russia_far_east = "russia", arctic = "arctic", antarctica = "antarctica"}
+const TOWN_COUNTRY_STYLES := {"Japan": "japan", "United States": "north_america", "Canada": "north_america", "Egypt": "middle_east", "Libya": "middle_east",
+	"Tunisia": "middle_east", "Algeria": "middle_east", "Morocco": "middle_east", "Israel": "middle_east", "Lebanon": "middle_east", "Syria": "middle_east",
+	"Turkey": "middle_east", "Russia": "russia", "Norway": "north_europe", "Iceland": "north_europe", "Greenland": "arctic"}
+## Each port's town as laid out (see _town()): port id -> {key, buildings
+## ([rect (dock units), wall, roof, height (1 low, 2+ tall), kind, salt]),
+## parks ([middle, radius]), lights (PackedVector2Array), light (Color),
+## style (name), reach (dock units inland)}.
+var _towns := {}
+
+## A port's architecture (a TOWN_STYLES key): by its country where that
+## tells, else its market region.
+static func _town_style(port_id: String) -> String:
+	var country := str(GameData.get_port(port_id).get("country", ""))
+	if TOWN_COUNTRY_STYLES.has(country):
+		return TOWN_COUNTRY_STYLES[country]
+	return str(TOWN_REGION_STYLES.get(str(GameData.port_region(port_id).get("id", "")), "mediterranean"))
+
+## How far inland (dock units, past the quay) a port's town can reach.
+static func _town_rows(layout: Dictionary) -> int:
+	return int(TOWN_ROWS.get((layout.berths as Array).size(), 7))
+
+## A port's town, laid out once (and again if its marina changes size): see
+## the Towns note above. Needs the map's land (empty till it's sorted).
+func _town(port_id: String, layout: Dictionary) -> Dictionary:
+	var key := [port_id, layout.radius, layout.depth]
+	if _towns.has(port_id) and _towns[port_id].key == key:
+		return _towns[port_id]
+	if _land_cells.is_empty():
+		return {}
+	var style_name := _town_style(port_id)
+	var style: Dictionary = TOWN_STYLES[style_name]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(port_id)
+	var radius := float(layout.radius)
+	var half := float(layout.inner)
+	var depth := float(layout.depth)
+	var inland := _quay_inland(layout)
+	var rows := _town_rows(layout)
+	var cells := []  # [middle, size (Vector2), waterfront (bool)]
+	# Behind the quay: rows of blocks the town's width across, a street between
+	# each and a wider one every TOWN_STREET_EVERY.
+	var wide := radius * TOWN_HALF_RADII
+	var x := inland - LIGHTHOUSE_ROOM - 1.5 - TOWN_CELL / 2.0
+	for r in rows:
+		var columns := maxi(floori(wide * 2.0 / TOWN_CELL), 1)
+		var c := 0
+		while c < columns:
+			if (c + 1) % (TOWN_STREET_EVERY + 1) == 0:
+				c += 1  # A cross street.
+				continue
+			var y := -wide + TOWN_CELL * (c + 0.5)
+			# Now and then two cells make one long block (a hall, a terrace, a warehouse on the waterfront).
+			var long := c + 1 < columns and (c + 2) % (TOWN_STREET_EVERY + 1) != 0 and rng.randf() < (0.5 if r == 0 else 0.2)
+			if long:
+				cells.append([Vector2(x, y + TOWN_CELL / 2.0), Vector2(TOWN_CELL, TOWN_CELL * 2.0), r == 0])
+				c += 2
+			else:
+				cells.append([Vector2(x, y), Vector2.ONE * TOWN_CELL, r == 0])
+				c += 1
+		x -= TOWN_CELL + (TOWN_GAP if (r + 1) % TOWN_STREET_EVERY != 0 else TOWN_GAP * 2.0)
+	# Along the shore either side of the basin, back from the walls.
+	for side: float in [-1.0, 1.0]:
+		for c in TOWN_SIDE_COLS:
+			var y := side * (half + 1.5 + TOWN_CELL * (c + 0.5) + (TOWN_GAP if c > 0 else 0.0))
+			var cx := -depth + TOWN_CELL / 2.0
+			while cx < -1.0:
+				cells.append([Vector2(cx, y), Vector2.ONE * TOWN_CELL, c == 0])
+				cx += TOWN_CELL + TOWN_GAP
+	var buildings := []
+	var parks := []
+	var lights := PackedVector2Array()
+	var reach := 0.0
+	var roads := []  # [rect (dock units), kind: "road", "avenue" or "walk"]
+	var landmark_at := -1
+	var waterfront := []
+	for i in cells.size():
+		var middle: Vector2 = cells[i][0]
+		if not _on_land(_dock_lon_lat(port_id, middle)):
+			continue  # In the water: the town keeps to its coast.
+		reach = maxf(reach, -middle.x + TOWN_CELL / 2.0)
+		if rng.randf() < TOWN_PARK_SHARE:
+			parks.append([middle, TOWN_CELL * rng.randf_range(0.25, 0.4)])
+			continue
+		if cells[i][2]:
+			waterfront.append(buildings.size())
+		var room: Vector2 = (cells[i][1] as Vector2) - Vector2.ONE * TOWN_GAP
+		var warehouse: bool = cells[i][2] and room.y > room.x * 1.5 and rng.randf() < 0.7
+		var size := Vector2(room.x * rng.randf_range(0.62, 1.0), room.y * rng.randf_range(0.62, 1.0)) if not warehouse else room * Vector2(0.9, 0.96)
+		var rect := Rect2(middle - size / 2.0, size)
+		var tall := not warehouse and room.y <= room.x * 1.5 and rng.randf() < float(style.towers)
+		var height := rng.randf_range(2.0, 3.2) if tall else (0.7 if warehouse else rng.randf_range(0.8, 1.3))
+		var wall := Color.from_string(str((style.walls as Array)[rng.randi() % (style.walls as Array).size()]), Color.GRAY)
+		var roof := Color.from_string(str((style.roofs as Array)[rng.randi() % (style.roofs as Array).size()]), Color.DIM_GRAY)
+		if tall:
+			roof = roof.darkened(0.15)
+		if warehouse:
+			wall = Color("#9a9690")
+			roof = Color("#8a8c90").lerp(roof, 0.25)
+		buildings.append([rect, wall, roof, height, "tall" if tall else ("warehouse" if warehouse else str(style.roof)), rng.randf()])
+		var windows := 3 if tall else rng.randi_range(1, 2)
+		for w in windows:
+			lights.append(Vector2(rng.randf_range(rect.position.x + 0.3, rect.end.x - 0.3), rng.randf_range(rect.position.y + 0.3, rect.end.y - 0.3)))
+	# The landmark: on the waterfront, near the middle, in place of a block.
+	if str(style.landmark) != "none" and not waterfront.is_empty():
+		var best := -1
+		var nearest := INF
+		for index: int in waterfront:
+			var y: float = absf((buildings[index][0] as Rect2).get_center().y - rng.randf_range(-radius * 0.5, radius * 0.5))
+			if y < nearest:
+				nearest = y
+				best = index
+		if best >= 0:
+			landmark_at = best
+			var block: Array = buildings[best]
+			var rect: Rect2 = block[0]
+			var size := Vector2.ONE * (TOWN_CELL - TOWN_GAP)
+			buildings[best] = [Rect2(rect.get_center() - size / 2.0, size), block[1], block[2], 2.6 if str(style.landmark) == "skyscraper" else 1.8, "landmark:" + str(style.landmark), block[5]]
+			lights.append(rect.get_center())
+	# The roads: the quay road along the back of the quay (behind the lighthouse's
+	# pad), with a spine across the quay strip to the basin, a spur to the HQ and
+	# a cross road past the industry plots; the avenue from the quay road inland
+	# through the middle of the town to its back; a road along each wide street
+	# and each cross street, walkways along the narrow ones; and a shore road
+	# along each side of the basin's walls, back to the quay road.
+	var quay_road_x := inland - LIGHTHOUSE_ROOM - 1.3
+	var back := -reach - 0.5
+	var near := -(depth + QUAY_WIDTH)
+	var far := inland
+	roads.append([Rect2(quay_road_x, -wide, 1.0, wide * 2.0), "road"])
+	roads.append([Rect2(quay_road_x, -0.4, near - quay_road_x, 0.8), "road"])
+	roads.append([Rect2(quay_road_x, -radius * 0.5 - 0.35, far + HQ_MARGIN - quay_road_x, 0.7), "road"])
+	roads.append([Rect2(far + HQ_MARGIN * 0.6, 0.4, 0.7, radius - HQ_MARGIN - 0.4), "road"])
+	roads.append([Rect2(back, -0.6, quay_road_x - back, 1.2), "avenue"])
+	var sx := inland - LIGHTHOUSE_ROOM - 1.5 - TOWN_CELL / 2.0
+	for r in rows:
+		var street_gap := TOWN_GAP if (r + 1) % TOWN_STREET_EVERY != 0 else TOWN_GAP * 2.0
+		var street_x := sx - TOWN_CELL / 2.0 - street_gap
+		if r < rows - 1:
+			if street_gap > TOWN_GAP:
+				roads.append([Rect2(street_x + 0.1, -wide, street_gap - 0.2, wide * 2.0), "road"])
+			else:
+				roads.append([Rect2(street_x + street_gap / 2.0 - 0.15, -wide, 0.3, wide * 2.0), "walk"])
+		sx -= TOWN_CELL + street_gap
+	var columns := maxi(floori(wide * 2.0 / TOWN_CELL), 1)
+	for c in columns:
+		if (c + 1) % (TOWN_STREET_EVERY + 1) == 0:
+			var y := -wide + TOWN_CELL * (c + 0.5)
+			roads.append([Rect2(back, y - 0.45, quay_road_x - back, 0.9), "road"])
+	for side: float in [-1.0, 1.0]:
+		var y := side * (half + 0.75)
+		roads.append([Rect2(-depth, y - 0.35, depth - 0.5, 0.7), "road"])
+		roads.append([Rect2(quay_road_x, minf(y, 0.0) - 0.35, -depth - quay_road_x, absf(y) + 0.7), "walk"])
+	# Street lamps along the quay road and the avenue.
+	var lamp_y := -wide + 1.0
+	while lamp_y < wide:
+		lights.append(Vector2(quay_road_x + 1.15, lamp_y))
+		lamp_y += 3.0
+	var lamp_x := quay_road_x - 1.5
+	while lamp_x > back:
+		lights.append(Vector2(lamp_x, 0.8))
+		lamp_x -= 3.0
+	var segments := PackedVector2Array()
+	for light: Vector2 in lights:
+		segments.append(light - Vector2(0.11, 0.0))
+		segments.append(light + Vector2(0.11, 0.0))
+	var town := {key = key, buildings = buildings, parks = parks, lights = lights, light = style.lights, style = style_name, reach = reach, landmark = landmark_at, roads = roads}
+	town.segments = segments
+	_towns[port_id] = town
+	return town
+
+## A port's town by day (see _draw_marina()): every block's shadow, then its
+## walls, roof and rooftop in its style, and the parks' trees.
+func _draw_town(port_id: String, layout: Dictionary, scale: float) -> void:
+	var town := _town(port_id, layout)
+	if town.is_empty():
+		return
+	var rect_points := func(rect: Rect2) -> PackedVector2Array:
+		return _marina_polygon(port_id, _rect_points(rect))
+	for road: Array in town.get("roads", []):
+		var rect: Rect2 = road[0]
+		var kind: String = road[1]
+		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+			continue
+		_canvas.draw_colored_polygon(rect_points.call(rect), TOWN_WALK if kind == "walk" else TOWN_ROAD)
+		if kind == "avenue":
+			var x := rect.position.x + 0.5
+			while x < rect.end.x - 0.8:
+				_canvas.draw_colored_polygon(rect_points.call(Rect2(x, rect.get_center().y - 0.05, 0.8, 0.1)), TOWN_LANE)
+				x += 1.6
+	# Shadows first (every building's, so no block's shadow lies over another's roof).
+	for block: Array in town.buildings:
+		var rect: Rect2 = block[0]
+		var height: float = block[3]
+		var shadow := Rect2(rect.position + Vector2(0.28, 0.28) * height, rect.size)
+		_canvas.draw_colored_polygon(rect_points.call(shadow), TOWN_SHADOW)
+	for park: Array in town.parks:
+		var at := _dock_point(port_id, park[0])
+		var r: float = float(park[1]) * scale
+		_canvas.draw_circle(at, r, TOWN_PARK)
+		_canvas.draw_circle(at + Vector2(r * 0.4, -r * 0.3), r * 0.55, TOWN_PARK.lightened(0.12))
+	for block: Array in town.buildings:
+		var rect: Rect2 = block[0]
+		var wall: Color = block[1]
+		var roof: Color = block[2]
+		var height: float = block[3]
+		var kind: String = block[4]
+		var salt: float = block[5]
+		_canvas.draw_colored_polygon(rect_points.call(rect), wall)
+		var top := rect.grow(-0.14)
+		if kind.begins_with("landmark:"):
+			_draw_landmark(port_id, kind.trim_prefix("landmark:"), rect, wall, roof, scale, rect_points)
+			continue
+		match kind:
+			"pitched":
+				# Two slopes either side of a ridge along the longer way, the sunny one lighter.
+				var along_x := top.size.x >= top.size.y
+				var a := Rect2(top.position, Vector2(top.size.x, top.size.y / 2.0) if along_x else Vector2(top.size.x / 2.0, top.size.y))
+				var b := Rect2(top.position + (Vector2(0.0, top.size.y / 2.0) if along_x else Vector2(top.size.x / 2.0, 0.0)), a.size)
+				_canvas.draw_colored_polygon(rect_points.call(a), roof.lightened(0.12))
+				_canvas.draw_colored_polygon(rect_points.call(b), roof.darkened(0.1))
+			"pagoda":
+				_canvas.draw_colored_polygon(rect_points.call(top), roof)
+				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.35)), roof.lightened(0.18))
+				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.6)), roof)
+			"warehouse":
+				_canvas.draw_colored_polygon(rect_points.call(top), roof)
+				var ribs := maxi(int(top.size.y / 0.7), 2)
+				for k in ribs:
+					var y := top.position.y + top.size.y * (k + 0.5) / ribs
+					_canvas.draw_colored_polygon(rect_points.call(Rect2(top.position.x + 0.1, y - 0.08, top.size.x - 0.2, 0.16)), roof.darkened(0.18))
+			"tall":
+				_canvas.draw_colored_polygon(rect_points.call(top), roof)
+				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.3)), roof.lightened(0.14))
+				_canvas.draw_colored_polygon(rect_points.call(Rect2(top.get_center() - Vector2(0.18, 0.18), Vector2(0.36, 0.36))), roof.darkened(0.3))
+			_:
+				_canvas.draw_colored_polygon(rect_points.call(top), roof)
+				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.22)), roof.lightened(0.07))
+				if salt > 0.4:  # Roof gear: a tank or an air unit.
+					var at := top.position + Vector2(top.size.x * (0.25 + salt * 0.5), top.size.y * 0.3)
+					_canvas.draw_colored_polygon(rect_points.call(Rect2(at - Vector2(0.14, 0.14), Vector2(0.28, 0.28))), roof.darkened(0.35))
+
+## A town's landmark (see TOWN_STYLES landmark), on its block.
+func _draw_landmark(port_id: String, what: String, rect: Rect2, wall: Color, roof: Color, scale: float, rect_points: Callable) -> void:
+	var middle := rect.get_center()
+	match what:
+		"church":
+			# A nave with a pitched roof and a square tower at its inland end.
+			var nave := Rect2(rect.position + Vector2(rect.size.x * 0.1, rect.size.y * 0.3), Vector2(rect.size.x * 0.8, rect.size.y * 0.4))
+			_canvas.draw_colored_polygon(rect_points.call(Rect2(nave.position, Vector2(nave.size.x, nave.size.y / 2.0))), roof.lightened(0.12))
+			_canvas.draw_colored_polygon(rect_points.call(Rect2(nave.position + Vector2(0.0, nave.size.y / 2.0), Vector2(nave.size.x, nave.size.y / 2.0))), roof.darkened(0.1))
+			var tower := Rect2(rect.position + Vector2(rect.size.x * 0.08, rect.size.y * 0.25), Vector2.ONE * rect.size.y * 0.5)
+			_canvas.draw_colored_polygon(rect_points.call(Rect2(tower.position + Vector2(0.4, 0.4), tower.size)), TOWN_SHADOW)
+			_canvas.draw_colored_polygon(rect_points.call(tower), wall.lightened(0.1))
+			_canvas.draw_colored_polygon(rect_points.call(tower.grow(-0.2)), roof.darkened(0.2))
+		"minaret":
+			var dome := Rect2(middle - Vector2(0.75, 0.75), Vector2(1.5, 1.5))
+			_canvas.draw_colored_polygon(rect_points.call(dome.grow(0.15)), wall.lightened(0.08))
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.72 * scale, Color("#3f8f7a"))
+			_canvas.draw_circle(_dock_point(port_id, middle + Vector2(-0.2, -0.2)), 0.3 * scale, Color("#6fb8a0"))
+			var at := rect.position + Vector2(0.45, 0.45)
+			_canvas.draw_circle(_dock_point(port_id, at + Vector2(0.4, 0.4)), 0.34 * scale, TOWN_SHADOW)
+			_canvas.draw_circle(_dock_point(port_id, at), 0.3 * scale, wall.lightened(0.15))
+			_canvas.draw_circle(_dock_point(port_id, at), 0.14 * scale, roof.darkened(0.3))
+		"pagoda":
+			for tier in 3:
+				var size := rect.size * (0.9 - tier * 0.26)
+				var box := Rect2(middle - size / 2.0, size)
+				_canvas.draw_colored_polygon(rect_points.call(box), roof.darkened(0.1 + tier * 0.08) if tier % 2 == 0 else wall)
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.12 * scale, Color("#c8a040"))
+		"skyscraper":
+			_canvas.draw_colored_polygon(rect_points.call(Rect2(rect.position + Vector2(0.9, 0.9), rect.size)), TOWN_SHADOW)
+			for tier in 3:
+				var box := rect.grow(-0.12 - tier * 0.32)
+				_canvas.draw_colored_polygon(rect_points.call(box), (Color("#6a7a8a") if tier % 2 == 0 else Color("#8a9aaa")).lightened(tier * 0.05))
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.1 * scale, Color(1.0, 0.3, 0.2))
+		"onion":
+			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), wall.lightened(0.1))
+			for k in 4:
+				var at := middle + Vector2.from_angle(k * TAU / 4.0 + PI / 4.0) * rect.size.x * 0.28
+				_canvas.draw_circle(_dock_point(port_id, at), 0.26 * scale, Color("#2f6ab0") if k % 2 == 0 else Color("#c8a040"))
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.4 * scale, Color("#c8a040"))
+			_canvas.draw_circle(_dock_point(port_id, middle + Vector2(-0.1, -0.1)), 0.16 * scale, Color("#e8d080"))
+		"stupa":
+			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), wall.lightened(0.1))
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.8 * scale, Color("#e8e2d0"))
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.5 * scale, Color("#d8b050"))
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.18 * scale, Color("#f0d070"))
+		"dome":
+			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), wall.lightened(0.1))
+			_canvas.draw_circle(_dock_point(port_id, middle), 0.7 * scale, Color("#e8e8ee"))
+			_canvas.draw_circle(_dock_point(port_id, middle + Vector2(-0.18, -0.18)), 0.3 * scale, Color("#ffffff"))
+		_:
+			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), roof)
+
+## A town's lights at night (see _draw_marina_lights()): a warm glow over
+## the whole town, and its windows lit (once they're big enough to see).
+func _draw_town_lights(port_id: String, layout: Dictionary, night: float, glow: Texture2D, scale: float) -> void:
+	var town := _town(port_id, layout)
+	if town.is_empty():
+		return
+	var inland := _quay_inland(layout)
+	var reach: float = town.reach
+	var tint: Color = town.light
+	# Everything in dock units under the marina's own transform (as _dock_point()
+	# maps them): one glow, and all the windows as one run of dashes.
+	_canvas.draw_set_transform(port_screen_position(port_id), _port_sea_angle(port_id) + _port_turn(port_id), Vector2(scale, scale * float(_dock_flips.get(port_id, 1.0))))
+	var across := (reach + inland) * 1.6
+	var along := float(layout.radius) * TOWN_HALF_RADII * 2.4
+	_canvas.draw_texture_rect(glow, Rect2(-(reach - inland) / 2.0 - across / 2.0, -along / 2.0, across, along), false, Color(tint, 0.35 * night))
+	if scale >= TOWN_LIGHTS_MIN_SCALE and not (town.segments as PackedVector2Array).is_empty():
+		_canvas.draw_multiline(town.segments, Color(tint, 0.9 * night), maxf(0.22, 1.2 / scale))
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)

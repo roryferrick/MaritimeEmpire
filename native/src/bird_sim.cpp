@@ -165,6 +165,7 @@ void BirdSim::setup(const Array &colonies, const Dictionary &species, double mig
 		s.span = info.get("span", 1.0);
 		String kind = info.get("kind", "");
 		s.night_heron = kind == "Night heron";
+		s.frigate = kind == "Frigatebird";
 		s.crane = kind == "Crane";
 		s.hide = String(info.get("behavior", "")) == "hide";
 		Array follow = info.get("follow", Array());
@@ -320,7 +321,16 @@ void BirdSim::_where(Colony &colony, double cal) {
 	colony.where = found->second.first;
 	colony.progress = found->second.second;
 	if (!first && was != colony.where) {
-		_where_changes++;
+		// Its own birds are worked out again (their epoch); the still layer is
+		// drawn again only if any of them are on it (a change far away costs nothing here).
+		colony.changes++;
+		for (int i = 0; i < colony.count; i++) {
+			int b = colony.first_bird + i;
+			if (b < (int)_still_drawn.size() && _still_drawn[b]) {
+				_where_changes++;
+				break;
+			}
+		}
 	}
 }
 
@@ -427,6 +437,21 @@ BirdSim::V2 BirdSim::_target(const Plan &plan, const Bird &bird, double now) con
 // breakwater), taken in order so the rocks fill first. Each bird has its own
 // while there are as many slots as perching birds; past that, two share one,
 // and only meet if both perch at once.
+// BirdLife._paddle(): along a slow wandering line it only moves along while it
+// paddles (a stretch every so often, sitting and bobbing between), within about a km.
+void BirdSim::_paddle(double now, int64_t seed, V2 &out, double &heading) {
+	const double rate = 0.04, speed = 0.012, km = 1.0;
+	double phase = (double)(seed % 101) / 101.0 * TAU_D;
+	double u = now * speed + speed / rate * 0.9 * std::sin(now * rate + phase);
+	double a = (double)(seed % 17) / 17.0 * TAU_D;
+	double b = (double)(seed % 23) / 23.0 * TAU_D;
+	out = { (std::sin(u + a) + 0.35 * std::sin(2.7 * u + b)) * km + std::sin(now * 0.05 + (double)(seed % 13)) * 0.15,
+		(std::cos(0.8 * u + b) + 0.35 * std::cos(2.3 * u + a)) * km + std::cos(now * 0.04 + (double)(seed % 7)) * 0.15 };
+	double vx = std::cos(u + a) + 0.945 * std::cos(2.7 * u + b);
+	double vy = -0.8 * std::sin(0.8 * u + b) - 0.805 * std::sin(2.3 * u + a);
+	heading = std::atan2(vy, vx);
+}
+
 BirdSim::V2 BirdSim::_perch(const std::vector<V2> &slots, int order, V2 fallback) {
 	const int64_t n = (int64_t)slots.size();
 	if (n == 0) {
@@ -580,8 +605,10 @@ BirdSim::Plan BirdSim::_plan(int index, bool away, int64_t k, double start, doub
 			V2 spot = _offset(out, { b.x * SEABIRD_ROAM_KM, b.y * SEABIRD_ROAM_KM });
 			int64_t ship = _ship_near(spot, SEABIRD_FOLLOW_KM, bird.seed + k);
 			if (night) {
-				plan.act = A_SWIM;
+				plan.act = info.frigate ? A_GLIDE : A_SWIM; // (A frigatebird never settles on the water.)
 				plan.place = spot;
+				plan.radius = 8.0 + 17.0 * _mix(bird.seed + k * 11);
+				plan.has_radius = true;
 			} else if (roll < 0.35 && ship >= 0) {
 				Array parts;
 				parts.push_back("follow");
@@ -602,8 +629,10 @@ BirdSim::Plan BirdSim::_plan(int index, bool away, int64_t k, double start, doub
 				plan.radius = 8.0 + 17.0 * _mix(bird.seed + k * 11);
 				plan.has_radius = true;
 			} else {
-				plan.act = A_SWIM;
+				plan.act = info.frigate ? A_GLIDE : A_SWIM;
 				plan.place = spot;
+				plan.radius = 8.0 + 17.0 * _mix(bird.seed + k * 11);
+				plan.has_radius = true;
 			}
 			break;
 		}
@@ -717,8 +746,11 @@ BirdSim::State BirdSim::_doing(Plan &plan, const Bird &bird, const Colony &colon
 			s.wings = flap;
 			return s;
 		case A_SWIM: {
-			V2 drift = { std::sin(now * 0.05 + (double)(seed % 13)) * 0.4, std::cos(now * 0.04 + (double)(seed % 7)) * 0.4 };
-			s.pos = _offset(target, drift);
+			// Sitting on the water, bobbing, and now and then paddling about.
+			V2 paddled;
+			double facing;
+			_paddle(now, seed, paddled, facing);
+			s.pos = _offset(target, paddled);
 			s.mode = M_SWIM;
 			if (plan.dives) {
 				double cycle = std::fmod(since / (20.0 + (double)(seed % 9)) + plan.dive_phase, 1.0);
@@ -726,7 +758,7 @@ BirdSim::State BirdSim::_doing(Plan &plan, const Bird &bird, const Colony &colon
 					s.mode = M_DIVE;
 				}
 			}
-			s.heading = plan.facing + 0.2 * std::sin(now * 0.3 + (double)(seed % 5));
+			s.heading = facing + 0.2 * std::sin(now * 0.3 + (double)(seed % 5));
 			s.wings = 0.2;
 			return s;
 		}
@@ -791,7 +823,7 @@ BirdSim::State BirdSim::_spell_state(int index, bool away, double now, double ca
 		fixed.state = plan.still;
 		fixed.until = plan.start + length;
 		fixed.since = now;
-		fixed.epoch = _where_changes;
+		fixed.epoch = colony.changes;
 		return plan.still;
 	}
 	State state = _doing(plan, bird, colony, since, now);
@@ -855,12 +887,12 @@ BirdSim::State BirdSim::_migrating(int index, double now) {
 BirdSim::State BirdSim::state(int index, double now, double cal) {
 	// Standing, perched, resting or asleep: just so till its spell ends (or a
 	// colony sets off somewhere or arrives).
-	const Fixed &fixed = _fixed[index];
-	if (now < fixed.until && now >= fixed.since && fixed.epoch == _where_changes) {
-		return fixed.state;
-	}
 	Bird &bird = _birds[index];
 	Colony &colony = _colonies[bird.colony];
+	const Fixed &fixed = _fixed[index];
+	if (now < fixed.until && now >= fixed.since && fixed.epoch == colony.changes) {
+		return fixed.state;
+	}
 	_where(colony, cal);
 	State s;
 	if (colony.where == W_TO_HOME || colony.where == W_TO_AWAY) {
@@ -1339,7 +1371,7 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 			_stats[9]++;
 			// Skipped while all it can do till its spell ends is out of view.
 			Bound &bound = _bounds[b];
-			if (now >= bound.until || bound.epoch != _where_changes) {
+			if (now >= bound.until || bound.epoch != colony.changes) {
 				_stats[3]++;
 				if (!_bound(b, now, cal, bound)) {
 					bound.x0 = -1.0e9;
@@ -1348,7 +1380,7 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 					bound.y1 = 1.0e9;
 					bound.until = now + 1.0;
 				}
-				bound.epoch = _where_changes;
+				bound.epoch = colony.changes;
 			}
 			if (!meets(bound)) {
 				continue;
@@ -1357,7 +1389,7 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 			State s = state(b, now, cal);
 			if (still) {
 				const Fixed &fixed = _fixed[b];
-				double until = fixed.epoch == _where_changes ? fixed.until : -INFINITY;
+				double until = fixed.epoch == colony.changes ? fixed.until : -INFINITY;
 				if (until < now + still_s) {
 					continue;
 				}

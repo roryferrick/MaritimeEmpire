@@ -470,6 +470,7 @@ func colony_where(colony: Dictionary, cal: float) -> Array:
 		colony.where = _seasons[months_key]
 		if not was.is_empty() and was[0] != colony.where[0]:
 			where_changes += 1
+			colony.changes = int(colony.get("changes", 0)) + 1  # (Its own birds are worked out again: see BirdLife.)
 	return colony.where
 
 

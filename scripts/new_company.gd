@@ -273,4 +273,4 @@ func _found() -> void:
 	})
 	if GameState.multiplayer_save:
 		Net.host_error = Net.host(MainMenu.host_settings)  # Friends can join it; the game says if it couldn't.
-	get_tree().change_scene_to_file(GAME_SCENE)
+	LoadingScreen.open_game(get_tree())

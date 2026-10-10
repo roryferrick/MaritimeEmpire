@@ -26,6 +26,8 @@ static var page := ""
 ## names and chat)}, used when a multiplayer game opens (see Net.host()).
 static var host_settings := {name = "", password = "", max_players = 4, steam = true, filter = true}
 
+## Whether the loading screen has shown since the game opened (see _ready()).
+static var _booted := false
 ## The slot DeleteDialog is asking about.
 var _deleting := 0
 
@@ -36,6 +38,10 @@ func _ready() -> void:
 	%DeleteDialog.confirmed.connect(_delete)
 	_warm_up()
 	Net.leave()  # Back at the title screen: no longer hosting or joined.
+	if not _booted:
+		# The game's opening: a loading screen till the scenes are loaded and the world's art built.
+		_booted = true
+		LoadingScreen.show_until(get_tree(), _scenes_loaded, true)
 	if Net.invited_lobby != 0:  # A Steam invite accepted while playing: join it now.
 		get_tree().change_scene_to_file.call_deferred(JOIN_SCENE)
 		return
@@ -145,7 +151,7 @@ func _continue(slot: int) -> void:
 		if not error.is_empty():
 			GameState.in_session = false
 	if error.is_empty():
-		get_tree().change_scene_to_file(GAME_SCENE)
+		LoadingScreen.open_game(get_tree())
 	else:
 		%ErrorDialog.dialog_text = error
 		%ErrorDialog.popup_centered()
@@ -249,6 +255,14 @@ func _add_copyright() -> void:
 	licences.offset_right = 60.0
 	licences.pressed.connect(func() -> void: add_child(Licences.new()))
 	add_child(licences)
+
+
+## True once _warm_up()'s scenes are loaded.
+static func _scenes_loaded() -> bool:
+	for path: String in [GAME_SCENE, NEW_COMPANY_SCENE]:
+		if not ResourceLoader.has_cached(path) and ResourceLoader.load_threaded_get_status(path) != ResourceLoader.THREAD_LOAD_LOADED:
+			return false
+	return true
 
 
 ## Loads the game and new company scenes in the background, once, while the

@@ -107,10 +107,10 @@ func _show(tab: int) -> void:
 			_heading("Gulls", "Over every port, over grain and livestock carriers, and now and then over other ships and sea animals: most at dawn and dusk, few at night, more in the breeding season and round ships loading or unloading.")
 			for id: String in birds.gulls:
 				_bird_entry(id, birds.gulls[id])
-			_heading("Seabirds", "Out at sea they take up following ships for a few hours at a time, where they are that season: condors along the coasts, albatrosses and shearwaters over the open ocean, terns and pelicans nearer land.")
+			_heading("Seabirds", "Out at sea they take up following ships for a few hours at a time, where they are that season: condors along the coasts, albatrosses and shearwaters over the open ocean, terns and pelicans nearer land, frigatebirds hanging high over tropical coasts (never settling on the water). Those that sit on the sea paddle about now and then.")
 			for id: String in birds.seabirds:
 				_bird_entry(id, birds.seabirds[id])
-			_heading("Eagles, hawks and the osprey", "Along the shore at ports, by day, each hunting its own way: sea eagles sit on a perch and swoop out to snatch fish off the water, the osprey hovers and plunges in feet first, golden eagles soar high and stoop, buzzards hang on the wind over the land, Harris's hawks hunt in packs, goshawks dash out from cover, and Swainson's hawks pass over in great circling kettles on their way to and from Argentina.")
+			_heading("Eagles, hawks, falcons and the osprey", "Along the shore at ports, by day, each hunting its own way: sea eagles sit on a perch and swoop out to snatch fish off the water, the osprey hovers and plunges in feet first, golden eagles and peregrines soar high and stoop, gyrfalcons and brown falcons hang on the wind, buzzards hang on the wind over the land, Harris's hawks hunt in packs, goshawks dash out from cover, and Swainson's hawks pass over in great circling kettles on their way to and from Argentina.")
 			for id: String in birds.raptors:
 				_bird_entry(id, birds.raptors[id])
 			_heading("Cormorants", "About ports by day and night: standing on the breakwater (holding their wings out to dry), swimming low and diving long for fish, and flying past low over the water in Vs.")

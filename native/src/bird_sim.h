@@ -54,6 +54,7 @@ private:
 		String id;
 		double span = 1.0;
 		bool night_heron = false;
+		bool frigate = false; // Never settles on the water.
 		bool hide = false;
 		bool crane = false;
 		double follow = 0.3;
@@ -76,6 +77,9 @@ private:
 		int64_t where_hour = INT64_MIN;
 		int where = W_HOME;
 		double progress = 0.0;
+		// How many times it has set off or arrived: its birds' kept states and
+		// bounds are from before a change (see Fixed, Bound epoch).
+		int64_t changes = 0;
 	};
 
 	struct Bird {
@@ -170,6 +174,7 @@ private:
 	HashMap<String, int> _species_index;
 	double _migrate_days = 10.0;
 	int64_t _where_changes = 0;
+	// (Counted only when a colony with birds on the still layer changes: that layer is drawn again then.)
 	// Season by home months, for the calendar hour.
 	int64_t _season_hour = INT64_MIN;
 	std::unordered_map<int, std::pair<int, double>> _seasons;
@@ -212,6 +217,8 @@ private:
 	static V2 _offset(V2 spot, V2 km);
 	// A perched bird's spot on its port's breakwater: its own (see Bird.perch_home).
 	static V2 _perch(const std::vector<V2> &slots, int order, V2 fallback);
+	// Where a bird on the water has paddled to (km east and north of its spot) and the way it faces (BirdLife._paddle()).
+	static void _paddle(double now, int64_t seed, V2 &out, double &heading);
 	static double _distance_km(V2 a, V2 b);
 	static double _local_hour(double lon, double unix);
 	static double _chance(const Array &parts);

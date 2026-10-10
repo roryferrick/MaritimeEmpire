@@ -43,6 +43,11 @@ const NIGHT := Vector2(5.5, 20.0)
 ## How fast (radians a second) and how high birds circle, soar, glide and hunt.
 const CIRCLE_SPEED := {circle = 0.12, soar = 0.06, glide = 0.035, hunt = 0.09}
 const CIRCLE_HEIGHT := {circle = 1.3, soar = 2.2, glide = 1.0, hunt = 1.6}
+## A bird on the water paddles about this far (km) from its spot, in stretches
+## PADDLE_RATE (radians a second of the swell between sitting and paddling) apart, at PADDLE_SPEED along its line.
+const PADDLE_KM := 1.0
+const PADDLE_RATE := 0.04
+const PADDLE_SPEED := 0.012
 ## What a bird does without moving (see _spell_state()).
 const STILL := {stand = true, perch = true, rest = true, sleep = true}
 ## A bird's last place is trusted for this long (s) to fly on from; older, it
@@ -64,7 +69,7 @@ var _last := {}
 ## Birds joining their colony's V: bird index -> [where it was, when it started].
 var _joining := {}
 ## Birds keeping still: bird index -> [their state, till when, from when,
-## Wildlife.where_changes then] (see bird_state()).
+## its colony's changes then: see Wildlife.colony_where()] (see bird_state()).
 var _fixed := {}
 const NO_FIX := [null, -INF, INF, -1]
 ## Each port's spots (MapView: the spots provider), by port id.
@@ -209,12 +214,12 @@ func bird_state(index: int, now: float, cal: float) -> Dictionary:
 		return native.bird_state(index, now, cal)
 	# Standing, perched, resting or asleep: just so till its spell ends (or a
 	# colony sets off somewhere or arrives).
-	var fixed: Array = _fixed.get(index, NO_FIX)
-	if now < float(fixed[1]) and now >= float(fixed[2]) and int(fixed[3]) == Wildlife.shared().where_changes:
-		return fixed[0]
 	var bird: Dictionary = birds[index]
 	var wildlife := Wildlife.shared()
 	var colony: Dictionary = wildlife.colonies[bird.colony]
+	var fixed: Array = _fixed.get(index, NO_FIX)
+	if now < float(fixed[1]) and now >= float(fixed[2]) and int(fixed[3]) == int(colony.get("changes", 0)):
+		return fixed[0]
 	var where := wildlife.colony_where(colony, cal)
 	var state: Dictionary
 	if where[0] == "to_home" or where[0] == "to_away":
@@ -247,7 +252,8 @@ func bird_state(index: int, now: float, cal: float) -> Dictionary:
 ## resting or asleep), as of its last bird_state(); -INF if it's moving.
 func still_until(index: int) -> float:
 	var fixed: Array = _fixed.get(index, NO_FIX)
-	return float(fixed[1]) if int(fixed[3]) == Wildlife.shared().where_changes else -INF
+	var colony: Dictionary = Wildlife.shared().colonies[(birds[index] as Dictionary).colony]
+	return float(fixed[1]) if int(fixed[3]) == int(colony.get("changes", 0)) else -INF
 
 
 ## Where a bird can be till its spell ends, so a map can skip it while that's
@@ -333,7 +339,7 @@ func _spell_state(index: int, bird: Dictionary, colony: Dictionary, away: bool, 
 	# cormorant drying its wings): kept, not worked out again every frame.
 	var since := now - float(plan.start)
 	if since >= float(plan.travel) and plan.has("still"):
-		_fixed[index] = [plan.still, float(plan.start) + length, now, Wildlife.shared().where_changes]
+		_fixed[index] = [plan.still, float(plan.start) + length, now, int(colony.get("changes", 0))]
 		return plan.still
 	var state := _doing(plan, bird, colony, since, now)
 	if since >= float(plan.travel) and STILL.has(plan.act) and not (plan.act == "perch" and cls == "cormorants"):
@@ -435,9 +441,11 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 			var out := Wildlife._offset(base, Wildlife._disc_n(bird.seed + (k / 6) * 104729) * range_km * 0.6)
 			var spot := Wildlife._offset(out, Wildlife._disc_n(bird.seed + k * 7) * SEABIRD_ROAM_KM)
 			var ship: Ship = _ship_near(spot, SEABIRD_FOLLOW_KM, bird.seed + k)
+			var frigate: bool = str(info.get("kind", "")) == "Frigatebird"  # (Never settles on the water: it stays aloft.)
 			if night:
-				plan.act = "swim"
+				plan.act = "glide" if frigate else "swim"
 				plan.place = spot
+				plan.radius = lerpf(8.0, 25.0, Wildlife._mix(bird.seed + k * 11))
 			elif roll < 0.35 and ship != null and Birds.chance(["follow", ship.id, colony.species]) < float(info.get("follow", [0.3])[0]) + 0.3:
 				plan.act = "follow"
 				plan.ship = ship
@@ -446,8 +454,9 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 				plan.place = spot
 				plan.radius = lerpf(8.0, 25.0, Wildlife._mix(bird.seed + k * 11))
 			else:
-				plan.act = "swim"
+				plan.act = "glide" if frigate else "swim"
 				plan.place = spot
+				plan.radius = lerpf(8.0, 25.0, Wildlife._mix(bird.seed + k * 11))
 	plan.facing = Wildlife._mix(bird.seed + k * 13) * TAU
 	# Worked out once a spell, not every frame: which way it circles and how
 	# fast, where on its circle it starts, how high, its own rhythm for
@@ -478,6 +487,20 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 	plan.travel = minf(distance / float(SPEED_KMS[cls]), length * TRAVEL_SHARE)
 	return plan
 
+
+## Where a bird on the water has paddled to (km east and north of its spot)
+## and the way it faces: along a slow wandering line it only moves along
+## while it paddles (a stretch every so often, PADDLE_RATE; sitting and bobbing
+## between), within about PADDLE_KM of its spot. (As BirdSim::_paddle().)
+static func _paddle(now: float, seed: int) -> Array:
+	var phase := float(seed % 101) / 101.0 * TAU
+	var u := now * PADDLE_SPEED + PADDLE_SPEED / PADDLE_RATE * 0.9 * sin(now * PADDLE_RATE + phase)
+	var a := float(seed % 17) / 17.0 * TAU
+	var b := float(seed % 23) / 23.0 * TAU
+	var along := Vector2(sin(u + a) + 0.35 * sin(2.7 * u + b), cos(0.8 * u + b) + 0.35 * cos(2.3 * u + a)) * PADDLE_KM
+	var velocity := Vector2(cos(u + a) + 0.945 * cos(2.7 * u + b), -0.8 * sin(0.8 * u + b) - 0.805 * sin(2.3 * u + a))
+	var bob := Vector2(sin(now * 0.05 + seed % 13), cos(now * 0.04 + seed % 7)) * 0.15
+	return [along + bob, velocity.angle()]
 
 ## Where a spell's activity is at a time (the start of it, where it flies to).
 ## A perched bird's own slot (`order`: its place in its port's perching order)
@@ -553,14 +576,15 @@ func _doing(plan: Dictionary, bird: Dictionary, colony: Dictionary, into: float,
 		"follow":
 			return {pos = target, heading = NAN, mode = "follow", height = 1.2, wings = flap, splash = 0.0}
 		"swim":
-			var drift := Vector2(sin(now * 0.05 + seed % 13), cos(now * 0.04 + seed % 7)) * 0.4
-			var pos := Wildlife._offset(target, drift)
+			# Sitting on the water, bobbing, and now and then paddling about (see _paddle()).
+			var paddle := _paddle(now, seed)
+			var pos := Wildlife._offset(target, paddle[0])
 			var mode := "swim"
 			if plan.get("dives", false):
 				var cycle := fmod(since / (20.0 + seed % 9) + float(plan.dive_phase), 1.0)
 				if cycle > 0.6:
 					mode = "dive"
-			return {pos = pos, heading = float(plan.facing) + 0.2 * sin(now * 0.3 + seed % 5), mode = mode, height = 0.0, wings = 0.2, splash = 0.0}
+			return {pos = pos, heading = float(paddle[1]) + 0.2 * sin(now * 0.3 + seed % 5), mode = mode, height = 0.0, wings = 0.2, splash = 0.0}
 		"stand":
 			return {pos = target, heading = float(plan.facing), mode = "stand", height = 0.0, wings = 0.0, splash = 0.0}
 		"stalk":

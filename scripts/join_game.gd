@@ -82,7 +82,7 @@ func _ready() -> void:
 	Net.join_status.connect(func(text: String) -> void: _status.text = text)
 	Net.join_failed.connect(_on_failed)
 	Net.join_choose.connect(_show_choice)
-	Net.joined.connect(func() -> void: get_tree().change_scene_to_file(GAME_SCENE))
+	Net.joined.connect(func() -> void: LoadingScreen.open_game(get_tree()))
 	if player_name.is_empty():
 		player_name = Net.steam_name()
 	Net.start_browsing()

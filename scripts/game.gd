@@ -157,6 +157,10 @@ func show_ship_on_map(ship: Ship) -> void:
 	%WorldScreen.open_ship_popup(ship)
 
 
+## True once the World map is warm (see MapView.is_warm(); the loading screen waits for it).
+func is_warm() -> bool:
+	return (%WorldScreen.find_child("MapView") as MapView).is_warm()
+
 ## The ship the World map is following (see MapView.follow_ship()), or null.
 func followed_ship() -> Ship:
 	return (%WorldScreen.find_child("MapView") as MapView).followed
