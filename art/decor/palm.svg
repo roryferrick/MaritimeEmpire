@@ -1,9 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<path d="M24,62 Q26,46 22,30 M42,60 Q40,46 44,34" fill="none" stroke="#8a5f38" stroke-width="3.4" stroke-linecap="round"/>
-<path d="M24,62 Q26,46 22,30 M42,60 Q40,46 44,34" fill="none" stroke="#3a3128" stroke-width="0.8" opacity="0.5"/>
-<g stroke="#3a3128" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="#3f9a4a">
-<path d="M22,30 Q12,24 4,30 Q14,28 22,32 Z"/><path d="M22,30 Q30,20 40,24 Q30,26 22,32 Z"/><path d="M22,30 Q18,18 22,10 Q22,22 24,30 Z"/><path d="M22,30 Q12,34 8,42 Q16,34 22,32 Z"/>
-<path d="M44,34 Q54,28 62,34 Q52,32 44,36 Z"/><path d="M44,34 Q36,26 28,30 Q36,32 44,36 Z"/><path d="M44,34 Q48,24 46,16 Q44,26 42,34 Z"/></g>
-<circle cx="22" cy="32" r="2" fill="#6b4a2a"/><circle cx="44" cy="36" r="2" fill="#6b4a2a"/>
+<ellipse cx="34.2" cy="34.2" rx="20.0" ry="16.0" fill="#000000" opacity="0.18"/>
+<path d="M32.0,32.0 L43.0,31.8 L53.6,36.4 L42.0,36.5 Z" fill="#49a855" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L52.5,36.2" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L41.7,39.8 L47.6,51.6 L37.5,43.2 Z" fill="#3f9a4a" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L46.8,50.6" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L34.1,42.8 L31.4,54.0 L29.3,42.7 Z" fill="#49a855" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L31.5,52.9" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L26.0,42.9 L15.4,50.7 L21.9,39.3 Z" fill="#3f9a4a" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L16.3,49.8" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L21.7,36.0 L10.2,35.3 L21.0,31.2 Z" fill="#49a855" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L11.3,35.1" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L20.2,28.0 L10.7,19.0 L23.0,23.3 Z" fill="#3f9a4a" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L11.7,19.6" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L26.3,22.6 L25.0,11.1 L30.9,21.1 Z" fill="#49a855" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L25.4,12.2" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L33.9,19.6 L41.1,8.7 L39.0,21.6 Z" fill="#3f9a4a" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L40.7,9.9" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<path d="M32.0,32.0 L40.3,24.8 L51.3,21.5 L42.6,29.0 Z" fill="#49a855" stroke="#3a3128" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L50.4,22.0" fill="none" stroke="#2c6e36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+<circle cx="32.0" cy="32.0" r="4.5" fill="#8a5f38" stroke="#3a3128" stroke-width="1.2"/>
+<circle cx="33.0" cy="33.0" r="1.5" fill="#c08a3a" />
+<circle cx="30.5" cy="31.5" r="1.5" fill="#c08a3a" />
 </svg>

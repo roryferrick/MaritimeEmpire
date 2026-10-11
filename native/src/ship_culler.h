@@ -21,7 +21,10 @@ namespace godot {
 // (MapView._ship_maybe_in_view(), _on_lane_in_view()), run natively, so a big
 // fleet's few ships on screen don't cost a loop over every ship in GDScript
 // each frame. The lanes' chunks (MapView._chunk_caps()) are asked of the map
-// once a lane and kept.
+// once a lane and kept. Zoomed out, a cargo ship plainly on its lane that's
+// too small to make out (sort()'s dots) is drawn here as a dot in its colour
+// where it is on its lane, all of them as one batch of triangles, and left
+// out of the ships for the map to draw.
 class ShipCuller : public RefCounted {
 	GDCLASS(ShipCuller, RefCounted)
 
@@ -54,6 +57,11 @@ class ShipCuller : public RefCounted {
 
 	Lane &_lane(const String &from, const String &to);
 	bool _lane_in_view(const String &from, const String &to, double mile, bool plain);
+	// A lane's point t of the way from one of its points to the next, as the
+	// ships sail it: straight in the map's projection (MapView._bent_sample()).
+	static Vector3 _between(const Vector3 &a, const Vector3 &b, double t);
+	// A lane's point `mile` along it on the unit sphere.
+	static Vector3 _at_mile(const Lane &lane, double mile);
 
 protected:
 	static void _bind_methods();

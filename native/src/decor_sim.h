@@ -9,6 +9,7 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/rid.hpp>
 
 #include <cstdint>
@@ -29,6 +30,10 @@ class DecorSim : public RefCounted {
 	PackedFloat64Array _room;
 	PackedByteArray _regions;
 	std::vector<RID> _textures;
+	// One texture holding all of them (see set_atlas()), and where each is in it.
+	RID _atlas;
+	Vector2 _atlas_size;
+	std::vector<Rect2> _atlas_regions;
 	// The season (see set_seasons()): each kind's texture before and now (and
 	// in the snow), per hemisphere, how far the change has come, and the snow line.
 	PackedInt32Array _before[2], _now[2], _snow[2];
@@ -48,6 +53,10 @@ public:
 	void setup(const PackedVector2Array &positions, const PackedVector3Array &units, const PackedInt32Array &kinds, const PackedInt32Array &tiers,
 			const PackedFloat64Array &room, const Array &textures, double bucket);
 	void set_regions(const PackedByteArray &regions);
+	// Every drawing's art in one texture of atlas_size px (regions: a Rect2
+	// for each of setup()'s textures, px), so all the drawings in view go
+	// down as one batch of triangles: one call, one draw call.
+	void set_atlas(const RID &atlas, const Array &regions, const Vector2 &atlas_size);
 	// The season's textures (indexes into setup()'s textures) by kind: before
 	// and now (drawings change over from one to the other as mix goes 0 to 1,
 	// each at its own moment), and in the snow (beyond snow_lat degrees from the

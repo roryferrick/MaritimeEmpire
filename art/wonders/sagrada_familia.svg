@@ -1,11 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<rect x="10" y="40" width="44" height="20" fill="#cbb48a" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<g fill="#d8c296" stroke="#3a3128" stroke-width="1.8" stroke-linejoin="round">
-<path d="M12,40 L13,14 L15,8 L17,14 L18,40 Z"/><path d="M20,40 L21,10 L23,4 L25,10 L26,40 Z"/>
-<path d="M38,40 L39,10 L41,4 L43,10 L44,40 Z"/><path d="M46,40 L47,14 L49,8 L51,14 L52,40 Z"/>
-<path d="M28,40 L29,18 L32,12 L35,18 L36,40 Z"/></g>
-<g fill="#c8402e"><circle cx="15" cy="8" r="1.6"/><circle cx="23" cy="4" r="1.6"/><circle cx="41" cy="4" r="1.6"/><circle cx="49" cy="8" r="1.6"/></g>
-<path d="M14,20 L17,20 M22,18 L25,18 M40,18 L43,18 M48,20 L51,20 M14,28 L17,28 M22,26 L25,26 M40,26 L43,26 M48,28 L51,28" stroke="#3a3128" stroke-width="1"/>
-<path d="M28,60 L28,50 Q32,44 36,50 L36,60 Z" fill="#5a4630"/>
+<path d="M0.0,0.0 L64.0,0.0 L64.0,64.0 L0.0,64.0 Z" fill="#cfc4a8" />
+<path d="M23.0,11.0 L47.0,11.0 L47.0,31.0 L59.0,31.0 L59.0,43.0 L47.0,43.0 L47.0,61.0 L23.0,61.0 L23.0,43.0 L11.0,43.0 L11.0,31.0 L23.0,31.0 Z" fill="#000000" opacity="0.2"/>
+<path d="M20.0,8.0 L44.0,8.0 L44.0,28.0 L56.0,28.0 L56.0,40.0 L44.0,40.0 L44.0,58.0 L20.0,58.0 L20.0,40.0 L8.0,40.0 L8.0,28.0 L20.0,28.0 Z" fill="#d9b88a" stroke="#3a3128" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="25.0" cy="11.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="24.0" cy="10.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="23.4" cy="9.4" r="0.9" fill="#f0d0a0" />
+<circle cx="33.0" cy="11.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="32.0" cy="10.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="31.4" cy="9.4" r="0.9" fill="#f0d0a0" />
+<circle cx="41.0" cy="11.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="40.0" cy="10.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="39.4" cy="9.4" r="0.9" fill="#f0d0a0" />
+<circle cx="25.0" cy="57.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="24.0" cy="56.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="23.4" cy="55.4" r="0.9" fill="#f0d0a0" />
+<circle cx="33.0" cy="57.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="32.0" cy="56.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="31.4" cy="55.4" r="0.9" fill="#f0d0a0" />
+<circle cx="41.0" cy="57.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="40.0" cy="56.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="39.4" cy="55.4" r="0.9" fill="#f0d0a0" />
+<circle cx="11.0" cy="31.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="10.0" cy="30.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="9.4" cy="29.4" r="0.9" fill="#f0d0a0" />
+<circle cx="11.0" cy="39.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="10.0" cy="38.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="9.4" cy="37.4" r="0.9" fill="#f0d0a0" />
+<circle cx="55.0" cy="31.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="54.0" cy="30.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="53.4" cy="29.4" r="0.9" fill="#f0d0a0" />
+<circle cx="55.0" cy="39.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="54.0" cy="38.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="53.4" cy="37.4" r="0.9" fill="#f0d0a0" />
+<circle cx="29.0" cy="31.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="28.0" cy="30.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="27.4" cy="29.4" r="0.9" fill="#f0d0a0" />
+<circle cx="37.0" cy="31.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="36.0" cy="30.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="35.4" cy="29.4" r="0.9" fill="#f0d0a0" />
+<circle cx="29.0" cy="39.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="28.0" cy="38.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="27.4" cy="37.4" r="0.9" fill="#f0d0a0" />
+<circle cx="37.0" cy="39.0" r="2.6" fill="#000000" opacity="0.2"/>
+<circle cx="36.0" cy="38.0" r="2.6" fill="#b88a5a" stroke="#3a3128" stroke-width="0.9" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="35.4" cy="37.4" r="0.9" fill="#f0d0a0" />
+<circle cx="32.0" cy="34.0" r="4.5" fill="#a07040" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="32.0" cy="34.0" r="1.5" fill="#f2c230" />
 </svg>

@@ -96,6 +96,11 @@ func _ready() -> void:
 ## Ship changes (and money, for the mega buttons) are only noted as they come;
 ## the tab catches up once a frame, and only while it's open.
 func _process(delta: float) -> void:
+	var t_x := Time.get_ticks_usec()
+	_process_timed(delta)
+	MapView._prof("proc.ships_screen", t_x)
+
+func _process_timed(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
 	_resort_clock += delta

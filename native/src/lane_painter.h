@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/callable.hpp>
+#include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
@@ -20,10 +21,11 @@ namespace godot {
 // in view; else its points on screen from where its curve out of its first
 // port's harbour ends to where its curve into its last port's begins (the
 // same as LaneMath.lane_on_screen()), the curves themselves (worked out by
-// the map, only for a lane with a port near the view, and only asked for
-// then) before and after, cut into the runs on the near side of the globe
-// (LaneMath.visible_runs()) and drawn as lines. The lanes' points on the
-// sphere and their chunks are asked of the map once a lane and kept.
+// the map, only while marinas can show and only for a lane with a port on
+// or near the screen, and only asked for then) before and after, cut into
+// the runs on the near side of the globe (LaneMath.visible_runs()), all of
+// them tessellated into one antialiased triangle batch (one draw call). The lanes' points on
+// the sphere and their chunks are asked of the map once a lane and kept.
 class LanePainter : public RefCounted {
 	GDCLASS(LanePainter, RefCounted)
 
@@ -39,6 +41,16 @@ class LanePainter : public RefCounted {
 
 	HashMap<String, Lane> _lanes;
 	bool _forget = false;
+	// The lanes of the pass as last given (draw()'s epoch), each resolved to
+	// its Lane: resolving them is string keys and lookups, every frame otherwise.
+	struct Entry {
+		Lane *lane = nullptr;
+		Color color;
+		bool both_ways = false;
+		String from, to;
+	};
+	std::vector<Entry> _entries;
+	int64_t _entries_epoch = -1;
 	Callable _lane_provider;
 	Callable _ends_provider;
 	int64_t _chunk = 32;
@@ -49,8 +61,12 @@ class LanePainter : public RefCounted {
 	double _radius = 1.0;
 	Vector2 _middle;
 	double _view_angle = 0.0;
-	double _near_angle = 0.0;
 	std::vector<Vector2> _line;
+	// The run being tessellated, and the pass's batch (see _emit_run()).
+	std::vector<Vector2> _run;
+	std::vector<Color> _batch_colors;
+	std::vector<Vector2> _batch_points;
+	std::vector<int32_t> _batch_indices;
 
 	Lane &_lane(const String &from, const String &to);
 	Vector2 _screen(const Vector3 &p) const;
@@ -63,6 +79,7 @@ class LanePainter : public RefCounted {
 	void _append_curve(const PackedVector3Array &curve);
 	void _append_middle(const Lane &lane, double start, double stop, bool curve_in);
 	void _draw_line(const RID &canvas, const Color &color, double width);
+	void _emit_run(const Color &color, double width);
 
 protected:
 	static void _bind_methods();

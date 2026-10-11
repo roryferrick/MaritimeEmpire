@@ -93,6 +93,11 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	var t_x := Time.get_ticks_usec()
+	_process_timed(delta)
+	MapView._prof("proc.finances_screen", t_x)
+
+func _process_timed(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
 	_clock += delta

@@ -16,6 +16,15 @@ using namespace godot;
 namespace {
 constexpr real_t PI_F = 3.14159265358979f;
 constexpr real_t TAU_F = 6.28318530717959f;
+constexpr double PI_D = 3.141592653589793;
+constexpr double TAU_D = 6.283185307179586;
+
+// GDScript's lerp_angle().
+real_t lerp_angle(real_t from, real_t to, real_t weight) {
+	double difference = std::fmod((double)to - (double)from, TAU_D);
+	double distance = std::fmod(2.0 * difference, TAU_D) - difference;
+	return (real_t)((double)from + distance * (double)weight);
+}
 constexpr real_t SEA_ART_ASPECT = 128.0f / 48.0f;
 constexpr double SEA_SURFACE_S = 3.0;
 constexpr double SEA_BREACH_S = 2.4;
@@ -23,8 +32,10 @@ constexpr double SEA_LEAP_S = 1.0;
 const Color SEA_SPLASH(0.94f, 0.98f, 1.0f);
 const Color SEA_SHADOW(0.62f, 0.78f, 0.9f, 0.5f);
 
+} // namespace
+
 // What's needed to draw this frame.
-struct Frame {
+struct SeaPainter::Frame {
 	RID canvas;
 	Vector3 right, up, toward;
 	real_t radius;
@@ -104,7 +115,6 @@ struct Frame {
 		}
 	}
 };
-} // namespace
 
 // MapView._sea_event(): how far (0..1) into a breach or surfacing an animal
 // is now, or -1; its roll for each slot kept till the next.
@@ -146,7 +156,55 @@ double SeaPainter::_event(int64_t pod, int64_t animal, const String &what, int64
 // ([every, chance] or []), surface (likewise)}]; params: right, up, toward,
 // radius, middle (the view), play_time, scale, mask (PackedByteArray),
 // mask_size (Vector2i).
-void SeaPainter::draw(const RID &canvas, const Array &pods, const Array &kinds, const Dictionary &params) {
+void SeaPainter::set_count(int64_t count) {
+	if ((int64_t)_pods.size() != count) {
+		_pods.resize((size_t)std::max(count, (int64_t)0));
+	}
+}
+
+// A pod as the map last worked it out: where it is (unit), the cap it stays
+// within till it's worked out again (cap, and margin radians round it: its
+// area while it stays there), which way it goes (east, north), its species'
+// place in draw_pods()' kinds and how many animals show.
+void SeaPainter::set_pod(int64_t index, const Vector3 &unit, const Vector3 &cap, double margin, const Vector2 &heading, int64_t kind, int64_t shown) {
+	if (index < 0) {
+		return;
+	}
+	if (index >= (int64_t)_pods.size()) {
+		_pods.resize((size_t)index + 1);
+	}
+	Pod &pod = _pods[(size_t)index];
+	pod.known = true;
+	pod.unit = unit;
+	pod.cap = cap;
+	pod.margin = (real_t)margin;
+	pod.heading = heading;
+	pod.kind = (int32_t)kind;
+	pod.shown = (int32_t)shown;
+}
+
+// The pods that could be in view (their caps reach within view_angle radians
+// of the view's middle, toward), and any not worked out yet.
+PackedInt32Array SeaPainter::near(const Dictionary &params) {
+	Vector3 toward = params["toward"];
+	double view_angle = params["view_angle"];
+	PackedInt32Array out;
+	for (size_t i = 0; i < _pods.size(); i++) {
+		const Pod &pod = _pods[i];
+		if (!pod.known || pod.cap.dot(toward) >= std::cos(std::min(view_angle + (double)pod.margin, PI_D))) {
+			out.push_back((int32_t)i);
+		}
+	}
+	return out;
+}
+
+// The pass: every pod in view (its cap near, its place on the near side of
+// the globe and within `view`, a Rect2) drawn with its animals, facing its
+// heading on screen (MapView._heading_angle()), eased round to it. `kinds`
+// as MapView._sea_kinds; params: right, up, toward, radius, middle,
+// view_angle, view, play_time, scale, mask, mask_size, hit_min_px. Returns
+// the pods drawn for the map's clicks: [index, x, y, reach px] each.
+PackedFloat32Array SeaPainter::draw_pods(const RID &canvas, const Array &kinds, const Dictionary &params) {
 	Frame frame;
 	frame.canvas = canvas;
 	frame.right = params["right"];
@@ -158,71 +216,107 @@ void SeaPainter::draw(const RID &canvas, const Array &pods, const Array &kinds, 
 	Vector2i mask_size = params["mask_size"];
 	frame.mask_w = mask_size.x;
 	frame.mask_h = mask_size.y;
+	double view_angle = params["view_angle"];
+	Rect2 view = params["view"];
 	double t = params["play_time"];
 	real_t scale = (real_t)(double)params["scale"];
-	static const String BREACH = "breach";
-	static const String SURFACE = "surface";
-	for (int64_t p = 0; p < pods.size(); p++) {
-		Array pod = pods[p];
-		int64_t index = pod[0];
-		Vector2 center = pod[1];
-		real_t angle = (real_t)(double)pod[2];
-		Dictionary kind = kinds[(int64_t)pod[3]];
-		int64_t shown = pod[4];
-		RID texture = kind["texture"];
-		RID silhouette = kind["silhouette"];
+	real_t hit_min = (real_t)(double)params.get("hit_min_px", 10.0);
+	PackedFloat32Array hits;
+	for (size_t i = 0; i < _pods.size(); i++) {
+		Pod &pod = _pods[i];
+		if (!pod.known || pod.kind < 0 || pod.kind >= kinds.size()) {
+			continue;
+		}
+		if (pod.cap.dot(frame.toward) < std::cos(std::min(view_angle + (double)pod.margin, PI_D))) {
+			continue;
+		}
+		if (pod.unit.dot(frame.toward) < 0.0f) {
+			continue;
+		}
+		Vector2 center = frame.middle + Vector2(pod.unit.dot(frame.right), -pod.unit.dot(frame.up)) * frame.radius;
+		if (!view.has_point(center)) {
+			continue;
+		}
+		real_t target = pod.angle;
+		if (pod.heading != Vector2()) {
+			double lon = std::atan2((double)pod.unit.y, (double)pod.unit.x);
+			Vector3 east((real_t)-std::sin(lon), (real_t)std::cos(lon), 0.0f);
+			Vector3 along = east * pod.heading.x + pod.unit.cross(east) * pod.heading.y;
+			Vector2 way(along.dot(frame.right), -along.dot(frame.up));
+			target = way != Vector2() ? way.angle() : Vector2(pod.heading.x, -pod.heading.y).angle();
+		}
+		pod.angle = pod.angled ? lerp_angle(pod.angle, target, 0.08f) : target;
+		pod.angled = true;
+		Dictionary kind = kinds[pod.kind];
 		real_t length = (real_t)(double)kind["length_px"] * scale;
 		real_t spacing = (real_t)(double)kind["spacing_px"] * scale;
-		bool dolphin = kind["leap"]; // (A leap, as a dolphin's; else a breach.)
-		bool blows = kind["blow"];
-		Array breach = kind["breach"];
-		Array surface = kind["surface"];
-		for (int64_t j = 0; j < shown; j++) {
-			// Its place in the group (spread round the middle, drifting a little).
-			Vector2 spot = Vector2::from_angle(j * 2.39996f) * spacing * std::sqrt((real_t)j) * 0.9f;
-			spot += Vector2((real_t)std::sin(t * 0.7 + j * 1.3), (real_t)std::cos(t * 0.5 + j * 0.9)) * spacing * 0.15f;
-			Vector2 at = center + spot.rotated(angle);
-			real_t facing = angle + (real_t)(std::sin(t * 1.4 + j * 2.1) * 0.12);
-			if (!texture.is_valid() || !frame.on_water(at, facing, length)) {
-				continue; // Never drawn over land, even partly.
-			}
-			frame.sprite(silhouette, at, facing, length, 1.0f, SEA_SHADOW);
-			if (!breach.is_empty()) {
-				double up = _event(index, j, BREACH, 1, breach[0], breach[1], dolphin ? SEA_LEAP_S : SEA_BREACH_S, t);
-				// A leap or breach reaches out ahead and up the screen (and
-				// splashes round it): only where all that is water too.
-				Vector2 reach = at + Vector2::from_angle(facing) * length * (dolphin ? 0.7f : 0.0f) - Vector2(0.0f, length * (dolphin ? 0.7f : 0.25f));
-				if (up >= 0.0 && frame.on_water(reach, facing, length * 1.6f)) {
-					real_t u = (real_t)up;
-					if (dolphin) {
-						real_t arc = MIN(u / 0.8f, 1.0f);
-						if (u < 0.8f) {
-							Vector2 ahead = Vector2::from_angle(facing) * (arc - 0.5f) * length * 1.4f;
-							frame.sprite(texture, at + ahead - Vector2(0.0f, std::sin(PI_F * arc) * length * 0.7f), facing - (arc - 0.5f) * 0.5f, length, 1.0f + 0.25f * std::sin(PI_F * arc), Color(1, 1, 1));
-						}
-						if (u > 0.7f) {
-							frame.splash(at + Vector2::from_angle(facing) * length * 0.7f, length * 0.6f, (u - 0.7f) / 0.3f);
-						}
-					} else {
-						real_t rise = std::sin(PI_F * MIN(u / 0.7f, 1.0f));
-						if (u < 0.7f) {
-							frame.sprite(texture, at - Vector2(0.0f, rise * length * 0.25f), facing, length, 1.0f + 0.6f * rise, Color(1, 1, 1));
-						}
-						if (u > 0.55f) {
-							frame.splash(at, length * 0.9f, (u - 0.55f) / 0.45f);
-						}
+		real_t reach = spacing * std::sqrt((real_t)pod.shown) + length * 0.5f;
+		hits.push_back((float)i);
+		hits.push_back(center.x);
+		hits.push_back(center.y);
+		hits.push_back(MAX(reach, hit_min));
+		_draw_pod(frame, (int64_t)i, center, pod.angle, kind, pod.shown, t, scale);
+	}
+	return hits;
+}
+
+// A pod's animals (MapView._draw_sea_animal() for each).
+void SeaPainter::_draw_pod(const Frame &frame, int64_t index, Vector2 center, real_t angle, const Dictionary &kind, int64_t shown, double t, real_t scale) {
+	static const String BREACH = "breach";
+	static const String SURFACE = "surface";
+	RID texture = kind["texture"];
+	RID silhouette = kind["silhouette"];
+	real_t length = (real_t)(double)kind["length_px"] * scale;
+	real_t spacing = (real_t)(double)kind["spacing_px"] * scale;
+	bool dolphin = kind["leap"]; // (A leap, as a dolphin's; else a breach.)
+	bool blows = kind["blow"];
+	Array breach = kind["breach"];
+	Array surface = kind["surface"];
+	for (int64_t j = 0; j < shown; j++) {
+		// Its place in the group (spread round the middle, drifting a little).
+		Vector2 spot = Vector2::from_angle(j * 2.39996f) * spacing * std::sqrt((real_t)j) * 0.9f;
+		spot += Vector2((real_t)std::sin(t * 0.7 + j * 1.3), (real_t)std::cos(t * 0.5 + j * 0.9)) * spacing * 0.15f;
+		Vector2 at = center + spot.rotated(angle);
+		real_t facing = angle + (real_t)(std::sin(t * 1.4 + j * 2.1) * 0.12);
+		if (!texture.is_valid() || !frame.on_water(at, facing, length)) {
+			continue; // Never drawn over land, even partly.
+		}
+		frame.sprite(silhouette, at, facing, length, 1.0f, SEA_SHADOW);
+		if (!breach.is_empty()) {
+			double up = _event(index, j, BREACH, 1, breach[0], breach[1], dolphin ? SEA_LEAP_S : SEA_BREACH_S, t);
+			// A leap or breach reaches out ahead and up the screen (and
+			// splashes round it): only where all that is water too.
+			Vector2 reach = at + Vector2::from_angle(facing) * length * (dolphin ? 0.7f : 0.0f) - Vector2(0.0f, length * (dolphin ? 0.7f : 0.25f));
+			if (up >= 0.0 && frame.on_water(reach, facing, length * 1.6f)) {
+				real_t u = (real_t)up;
+				if (dolphin) {
+					real_t arc = MIN(u / 0.8f, 1.0f);
+					if (u < 0.8f) {
+						Vector2 ahead = Vector2::from_angle(facing) * (arc - 0.5f) * length * 1.4f;
+						frame.sprite(texture, at + ahead - Vector2(0.0f, std::sin(PI_F * arc) * length * 0.7f), facing - (arc - 0.5f) * 0.5f, length, 1.0f + 0.25f * std::sin(PI_F * arc), Color(1, 1, 1));
 					}
-					continue;
+					if (u > 0.7f) {
+						frame.splash(at + Vector2::from_angle(facing) * length * 0.7f, length * 0.6f, (u - 0.7f) / 0.3f);
+					}
+				} else {
+					real_t rise = std::sin(PI_F * MIN(u / 0.7f, 1.0f));
+					if (u < 0.7f) {
+						frame.sprite(texture, at - Vector2(0.0f, rise * length * 0.25f), facing, length, 1.0f + 0.6f * rise, Color(1, 1, 1));
+					}
+					if (u > 0.55f) {
+						frame.splash(at, length * 0.9f, (u - 0.55f) / 0.45f);
+					}
 				}
+				continue;
 			}
-			if (!surface.is_empty()) {
-				double up = _event(index, j, SURFACE, 2, surface[0], surface[1], SEA_SURFACE_S, t);
-				if (up >= 0.0) {
-					real_t u = (real_t)up;
-					frame.sprite(texture, at, facing, length, 1.0f, Color(1, 1, 1, std::sin(PI_F * u) * 0.95f));
-					if (blows && u > 0.15f && u < 0.75f) {
-						frame.blow(at + Vector2::from_angle(facing) * length * 0.32f, length, (u - 0.15f) / 0.6f);
-					}
+		}
+		if (!surface.is_empty()) {
+			double up = _event(index, j, SURFACE, 2, surface[0], surface[1], SEA_SURFACE_S, t);
+			if (up >= 0.0) {
+				real_t u = (real_t)up;
+				frame.sprite(texture, at, facing, length, 1.0f, Color(1, 1, 1, std::sin(PI_F * u) * 0.95f));
+				if (blows && u > 0.15f && u < 0.75f) {
+					frame.blow(at + Vector2::from_angle(facing) * length * 0.32f, length, (u - 0.15f) / 0.6f);
 				}
 			}
 		}
@@ -230,5 +324,8 @@ void SeaPainter::draw(const RID &canvas, const Array &pods, const Array &kinds, 
 }
 
 void SeaPainter::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("draw", "canvas", "pods", "kinds", "params"), &SeaPainter::draw);
+	ClassDB::bind_method(D_METHOD("set_count", "count"), &SeaPainter::set_count);
+	ClassDB::bind_method(D_METHOD("set_pod", "index", "unit", "cap", "margin", "heading", "kind", "shown"), &SeaPainter::set_pod);
+	ClassDB::bind_method(D_METHOD("near", "params"), &SeaPainter::near);
+	ClassDB::bind_method(D_METHOD("draw_pods", "canvas", "kinds", "params"), &SeaPainter::draw_pods);
 }

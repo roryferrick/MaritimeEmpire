@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<path d="M22,62 L26,50 L38,50 L42,62 Z" fill="#8c8a80" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<rect x="27" y="44" width="10" height="6" fill="#d8d4c8" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<path d="M28,44 L29,22 L35,22 L36,44 Z" fill="#f0ede4" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<path d="M8,18 L56,18 L56,22 L36,23 L28,23 L8,22 Z" fill="#f0ede4" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="32" cy="13" r="4.5" fill="#f0ede4" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<path d="M30,28 L31,42 M34,28 L33,42" stroke="#c8c4b8" stroke-width="1"/>
+<path d="M0.0,0.0 L64.0,0.0 L64.0,64.0 L0.0,64.0 Z" fill="#6f9a52" />
+<path d="M54.9,41.1 L46.4,53.2 L32.3,58.0 L18.2,53.6 L9.3,41.7 L9.1,26.9 L17.6,14.8 L31.7,10.0 L45.8,14.4 L54.7,26.3 Z" fill="#5f8a46" stroke="#3a3128" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M44.4,42.5 L37.0,48.1 L27.8,48.4 L20.1,43.2 L17.0,34.4 L19.6,25.5 L27.0,19.9 L36.2,19.6 L43.9,24.8 L47.0,33.6 Z" fill="#7fa55a" />
+<path d="M29.0,29.0 L41.0,29.0 L41.0,41.0 L29.0,41.0 Z" fill="#000000" opacity="0.2"/>
+<path d="M40.3,35.4 L35.4,40.3 L28.6,40.3 L23.7,35.4 L23.7,28.6 L28.6,23.7 L35.4,23.7 L40.3,28.6 Z" fill="#d8d2c6" stroke="#3a3128" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M12.0,32.0 L52.0,32.0" fill="none" stroke="#3a3128" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M12.0,32.0 L52.0,32.0" fill="none" stroke="#efe9dc" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,22.0 L32.0,44.0" fill="none" stroke="#3a3128" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,22.0 L32.0,44.0" fill="none" stroke="#efe9dc" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="32.0" cy="30.0" r="3.2" fill="#efe9dc" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
 </svg>

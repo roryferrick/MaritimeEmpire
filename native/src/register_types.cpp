@@ -21,6 +21,7 @@
 #include "sea_painter.h"
 #include "ship_culler.h"
 #include "ship_stepper.h"
+#include "town_mesh.h"
 
 using namespace godot;
 
@@ -42,6 +43,7 @@ static void initialize_maritime_native(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(GustPainter);
 	GDREGISTER_CLASS(SeaPainter);
 	GDREGISTER_CLASS(GlobeTiles);
+	GDREGISTER_CLASS(TownMesh);
 }
 
 static void uninitialize_maritime_native(ModuleInitializationLevel p_level) {

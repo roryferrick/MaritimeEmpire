@@ -65,8 +65,10 @@ const SHORE_SEAWARD := 3.0
 const SHIP_HIT_RADIUS := 6.0
 ## However small ships are drawn, a click this close (px) still picks one.
 const SHIP_HIT_MIN_PX := 7.0
-## Ships shorter than this on screen (px) are drawn as dots (see _draw_tiny_ship()).
-const TINY_SHIP_PX := 2.5
+## Ships shorter than this on screen (px) are drawn as dots (see
+## _draw_tiny_ship(); cargo ships plainly on their lanes by the native fleet
+## pass, all in one batch: see _fleet_pass()).
+const TINY_SHIP_PX := 4.0
 ## Storms (see _draw_storms(); their cloud is the sky's, globe.gdshader): how
 ## strong a tropical storm is before its eye clears (the shader's too), and
 ## from what on-screen radius its name is shown.
@@ -420,16 +422,27 @@ const LAND_CELL_DEG := 1.0
 ## are worked out again (see _lane_pieces()): the globe's turn changes them
 ## by a hair over that.
 const LANE_CURVE_DRIFT := 1.0
+## How long (ms) a frame may spend working out harbour curves (see _lane_curve_memo()).
+const LANE_CURVE_MS := 1.5
+var _lane_curve_frame := -1
+var _lane_curve_spent := 0.0
 ## Width of the dark edge round ocean, sea and strait names.
 const SEA_LABEL_OUTLINE := 3
 ## Width of the dark edge round ocean, sea and strait names.
 const ACTIVE_LANE_WIDTH := 1.5
+## The native lane pass drops a lane's point while the line through its
+## neighbours passes within this (px) of it: zoomed out, a great circle's many
+## points go (the line never leaves its path by a third of a pixel); a bend
+## round a coast stays.
+const ACTIVE_LANE_MIN_PX := 0.35
+## How often (s) the fleet's lanes are gathered again (a loop over every ship; a new leg's lane shows within this).
+const ACTIVE_LANES_REFRESH_S := 1.0
 ## Canals (data/canals.json): the channel's width in projected degrees (at
 ## least CANAL_MIN_WIDTH px), and each lock chamber's length and the width of
 ## each of its two lanes (one per direction), drawn from LOCK_MIN_ZOOM (pixels
 ## per degree). Ships in a canal keep to the right-hand lane.
-const CANAL_WIDTH := 0.02
-const CANAL_MIN_WIDTH := 4.0
+const CANAL_WIDTH := 0.028
+const CANAL_MIN_WIDTH := 5.0
 ## Winter sea ice (see IceArt, _update_ice()): how often (s) where the ice is
 ## gets checked, its sheet, crack, broken-ice and open-channel colors, how
 ## many cracks each frozen circle has, an icebreaker channel's width
@@ -701,6 +714,7 @@ static var _land_test: Object = null
 static var _land_task := -1
 ## The fleet's lanes (see _active_lanes()), and when (ms) they were worked out.
 var _active_lanes_cache := []
+var _active_lanes_epoch := 0  # (Up each time they change: see _draw_active_lanes().)
 ## True once every active lane is bent both ways (see _warm_lanes()).
 var _lanes_warm := false
 var _active_lanes_time := -1
@@ -734,6 +748,10 @@ var _draw_order: Array[Ship] = []
 ## ship -> [where, angle]. Ships drawn as dots aren't in it.
 var _ship_hulls := {}
 var _draw_order_dirty := true
+## Each ship's length (dock units) and dot colour by its place in _draw_order (see _fleet_pass()).
+var _order_lengths := PackedFloat32Array()
+var _order_colors := PackedColorArray()
+var _order_colors_gray := false
 var _model_looks := {}
 ## Docked-ship dot images (see _dot_image()).
 var _dock_dot_fill := _dot_image(0.0)
@@ -749,6 +767,17 @@ var _feature_labels := []
 var _feature_order := PackedInt32Array()
 var _feature_fonts := {}
 var _labels_key := []
+var _port_text_sizes := {}  # Port id -> its name's size (px) at PORT_FONT_SIZE.
+## The frame the labels were last placed afresh: dragging or zooming, they're
+## placed again every LABEL_REPLACE_FRAMES, and between those each stays with
+## its anchor (see _shift_labels()).
+var _labels_placed_frame := -100
+const LABEL_REPLACE_FRAMES := 4
+## The labels' atlas (see LabelAtlas) and the layer over _static_layer they're
+## drawn from it on, all of a frame's in one batch (see _draw_label_layer()).
+var _label_atlas: LabelAtlas = null
+var _label_layer := Control.new()
+var _label_batch := PolyBatch.new()
 ## Placed price boxes: [port id, rect, rows], rows being [name, figure, color,
 ## figure width]; each port's box worked out for the current prices (port id ->
 ## {rows, size, score}, or null for no box), when that was (msec), and a count
@@ -761,7 +790,7 @@ var _price_epoch := 0
 ## what their looks were last worked out for (see _update_port_styles()).
 var _port_painter: Object = null
 var _port_styles_key := []
-var _port_styles_sizes := []
+var _port_styles_radii := PackedFloat32Array()  # (Each port's dot's radius, to a tenth of a px, as last looked at.)
 var _port_styles_time := -1000000
 ## Label text sizes, measured once (see _label_size()).
 var _label_sizes := {}
@@ -835,7 +864,6 @@ var _land_sim: Object = null
 var _fauna_hits := []
 ## Route lines' curves' reaches along their lanes (see _lane_pieces()), for one zoom.
 var _lane_reach_memo := {}
-var _lane_reach_zoom := -1.0
 var _weather_layer := Control.new()
 ## The storm whose popup is open, and the one under the mouse (Weather.key()s; "" for none).
 var selected_storm := ""
@@ -865,6 +893,9 @@ var _sea_warming := true
 ## Land drawings: a texture per kind (WorldMapData.decor_kind_names), and the
 ## drawings by DECOR_BUCKET-degree cell, so only those near the view are looked at.
 static var _decor_textures: Array[Texture2D] = []
+## All of them in one texture, and where each is in it (see _build_decor_atlas()).
+static var _decor_atlas: ImageTexture = null
+static var _decor_atlas_regions: Array = []
 static var _wildlife_art := {}
 ## The rocks' art (see _rock_texture()).
 static var _rock_art: Array[Texture2D] = []
@@ -1082,6 +1113,8 @@ func _exit_tree() -> void:
 		GameState.berth_route = Callable()
 
 func _ready() -> void:
+	ambience = Ambience.new(self)
+	add_child(ambience)  # The World map's sound: sea, harbours, storms, horns and the animals in view (see Ambience).
 	clip_contents = true
 	mouse_filter = MOUSE_FILTER_STOP
 	resized.connect(_on_resized)
@@ -1215,24 +1248,49 @@ func _ready() -> void:
 	_sky.material = _globe_sky
 	RenderingServer.canvas_item_set_custom_rect(_sky.get_canvas_item(), true, NEVER_CULLED)
 	add_child(_sky)
-	for layer: Control in [_weather_layer, _canal_layer, _static_layer, _still_birds, _overlay]:
+	for layer: Control in [_weather_layer, _canal_layer, _static_layer, _label_layer, _still_birds, _overlay]:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
-	_decor_layer.draw.connect(_draw_decor)
+	var label_material := ShaderMaterial.new()
+	label_material.shader = LabelAtlas.LABEL_SHADER
+	_label_layer.material = label_material
+	_label_layer.draw.connect(_draw_label_layer)
+	_label_atlas = LabelAtlas.new()
+	add_child(_label_atlas)
+	_preload_label_atlas()
+	_decor_layer.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		_draw_decor()
+		_prof("decor", t0))
 	_decor_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_fauna_layer.draw.connect(_draw_wildlife)
+	_fauna_layer.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		_draw_wildlife()
+		_prof("wildlife", t0))
 	_fauna_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_wonder_layer.draw.connect(_draw_wonders)
+	_wonder_layer.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		_draw_wonders()
+		_prof("wonders", t0))
 	_wonder_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_load_decor()
 	_start_land_cells()  # (For bending lanes round harbours: see _bent_lane().)
 	_weather_layer.draw.connect(_draw_weather_layer)
-	_canal_layer.draw.connect(_draw_canal_layer)
+	_canal_layer.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		_draw_canal_layer()
+		_prof("canals", t0))
 	_static_layer.draw.connect(_draw_static_layer)
 	_overlay.draw.connect(_draw_overlay)
-	_still_birds.draw.connect(_draw_still_birds)
-	_dock_layer.draw.connect(_draw_dock_layer)
+	_still_birds.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		_draw_still_birds()
+		_prof("still_birds", t0))
+	_dock_layer.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		_draw_dock_layer()
+		_prof("dock_layer", t0))
 	_add_night_layers()
 	_dock_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# Docked ships are drawn on the dock layer only on the gray map (as dots): redraw it for them only there.
@@ -1250,15 +1308,29 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
+	var t_all := Time.get_ticks_usec()
+	_process_timed(delta)
+	_prof("process.total", t_all)
+
+func _process_timed(delta: float) -> void:
+	var t0 := Time.get_ticks_usec()
 	_ease_view(delta)
 	_track_followed()
 	_update_regions()
 	_update_sky()
 	_update_seasons()
 	_update_night()
+	_prof("process.view", t0)
+	if _label_atlas != null:
+		_label_atlas.render(get_viewport().get_final_transform().get_scale().x)  # (Once, and again if the window's scale changes.)
 	if _layers_stale:
 		_flush_layers()  # (After the view eased: see _redraw_layers().)
+	if _marinas_pending:
+		_update_marinas()  # (The marinas that waited their turn.)
+	_warm_towns()
+	t0 = Time.get_ticks_usec()
 	Wildlife.shared().step(delta)
+	_prof("process.wildlife", t0)
 	if _wildlife_shown:
 		_fauna_layer.queue_redraw()  # The wildlife going about its life.
 	if not show_ships:
@@ -1268,8 +1340,12 @@ func _process(delta: float) -> void:
 	# Made ahead, off the main thread, so the first look at a port's birds
 	# doesn't wait for them; and the lanes bent a few at a time (see _warm_lanes()).
 	if not gray_mode:
+		var t_b := Time.get_ticks_usec()
 		BirdLife.shared().ensure_built()
+		_prof("process.birds", t_b)
+	t0 = Time.get_ticks_usec()
 	_warm_lanes()
+	_prof("process.warm_lanes", t0)
 	_weather_layer.queue_redraw()
 	_canal_layer.queue_redraw()
 	_overlay.queue_redraw()
@@ -1279,7 +1355,9 @@ func _process(delta: float) -> void:
 	_ice_clock += delta
 	if _ice_clock >= ICE_REFRESH_S:
 		_ice_clock = 0.0
+		var t_i := Time.get_ticks_usec()
 		_update_ice()
+		_prof("process.ice", t_i)
 	if _track_icebreakers():
 		for node in _ice_arts:
 			node.queue_redraw()
@@ -1290,7 +1368,9 @@ func _process(delta: float) -> void:
 		_static_clock = 0.0
 		_static_layer.queue_redraw()
 		_dock_layer.queue_redraw()  # Ports grow and shrink, and their rings with them.
+		t0 = Time.get_ticks_usec()
 		_update_marinas()
+		_prof("process.marinas", t0)
 
 ## The world art's meshes, made once and shared by every map (the World map's
 ## and the route screen's): {sea (the whole sphere), south_cap, land, biome,
@@ -1383,21 +1463,25 @@ func _tiles_shown() -> bool:
 
 ## The art's mesh, or zoomed in, only its tiles in view (see _tiled()).
 func _draw_tiled(canvas: CanvasItem, whole: ArrayMesh, tiles: Array, texture: Texture2D, modulate := Color.WHITE) -> void:
+	var t_a := Time.get_ticks_usec()
 	if not _art_tiled or tiles.is_empty():
 		canvas.draw_mesh(whole, texture, Transform2D.IDENTITY, modulate)
-		return
-	for tile: Array in tiles:
-		if _tile_in_view(tile):
-			canvas.draw_mesh(tile[0], texture, Transform2D.IDENTITY, modulate)
+	else:
+		for tile: Array in tiles:
+			if _tile_in_view(tile):
+				canvas.draw_mesh(tile[0], texture, Transform2D.IDENTITY, modulate)
+	_prof("art.tiled", t_a)
 
 ## The same for line segments (the coast, borders and rivers).
 func _draw_tiled_lines(canvas: CanvasItem, whole: PackedVector2Array, tiles: Array, color: Color) -> void:
+	var t_a := Time.get_ticks_usec()
 	if not _art_tiled or tiles.is_empty():
 		canvas.draw_multiline(whole, color, -1.0)
-		return
-	for tile: Array in tiles:
-		if _tile_in_view(tile):
-			canvas.draw_multiline(tile[0], color, -1.0)
+	else:
+		for tile: Array in tiles:
+			if _tile_in_view(tile):
+				canvas.draw_multiline(tile[0], color, -1.0)
+	_prof("art.lines", t_a)
 
 ## The art's tiles (see _shared_meshes), or {} if they weren't made.
 func _art_tiles() -> Dictionary:
@@ -2251,12 +2335,14 @@ var _frames_drawn := 0
 
 ## True once the map is warm: its land sorted into cells, the sea animals'
 ## paths found, the wildlife and birds made, the fleet's lanes bent, the
-## regions' map ready and a few frames drawn (the loading screen waits for
-## this: LoadingScreen.open_game()).
+## ports' towns laid out, the regions' map ready and a few frames drawn (the
+## loading screen waits for this: LoadingScreen.open_game()).
 func is_warm() -> bool:
 	if _frames_drawn < 3 or _land_cells.is_empty() or _sea_warming or not _lanes_warm or not RegionMap.is_ready():
 		return false
-	return gray_mode or BirdLife.shared().ensure_built()
+	if gray_mode:
+		return true
+	return _towns_warm and BirdLife.shared().ensure_built()
 
 ## The ship the view follows (see follow_ship()), or null.
 var followed: Ship = null
@@ -2589,6 +2675,7 @@ func _web_zoom() -> float:
 	return log(_zoom * Geo.WORLD_WIDTH / 256.0) / log(2.0)
 
 func _changed() -> void:
+	var t_c := Time.get_ticks_usec()
 	_view_lon = wrapf(_view_lon, -180.0, 180.0)
 	_view_lat = clampf(_view_lat, -MAX_VIEW_LAT, MAX_VIEW_LAT)
 	_orient()
@@ -2632,6 +2719,7 @@ func _changed() -> void:
 	queue_redraw()
 	_redraw_layers()
 	view_changed.emit()
+	_prof("changed", t_c)
 
 ## Eases the zoom towards the wheel's goal, and keeps a flung globe turning,
 ## slowing to a stop.
@@ -2780,11 +2868,19 @@ func _flush_layers() -> void:
 func _draw_weather_layer() -> void:
 	_canvas = _weather_layer
 	if show_ships:
+		var t0 := Time.get_ticks_usec()
 		_draw_sea_life()  # Under the ice and storms: they swim beneath both.
+		_prof("weather.sea_life", t0)
+		t0 = Time.get_ticks_usec()
 		_draw_ice()
 		_draw_route_labels()
+		_prof("weather.ice_labels", t0)
+		t0 = Time.get_ticks_usec()
 		_draw_storms()
+		_prof("weather.storms", t0)
+		t0 = Time.get_ticks_usec()
 		_draw_gusts()
+		_prof("weather.gusts", t0)
 
 ## Gusts of wind (see Wind): short pale streaks blowing the way the wind does
 ## there, each drifting along and fading in and out over GUST_CYCLE_S of play,
@@ -2871,20 +2967,137 @@ func _draw_static_layer() -> void:
 		_price_epoch += 1
 	var key := [_center, _zoom, size, GameState.hubs.map(func(hub: Hub) -> String: return hub.port_id), selected_port, _price_epoch, dimmed_ports]
 	if key != _labels_key:
-		_labels_key = key
-		var placed_labels: Array[Rect2] = []
-		var boxed := _place_price_boxes(placed_labels)
-		_price_boxes = boxed[0]
-		_port_labels = _place_port_labels(placed_labels, boxed[1])
-		_country_labels = _place_country_labels(placed_labels)
-		_feature_labels = [] if gray_mode else _place_feature_labels(placed_labels)
+		var frame := Engine.get_process_frames()
+		# Dragging or zooming (only the view changed), the labels placed a few
+		# frames ago stay, each moved with its anchor: placing them afresh
+		# every frame is a loop over every port near the view.
+		if not _labels_key.is_empty() and key.slice(2) == _labels_key.slice(2) and frame - _labels_placed_frame < LABEL_REPLACE_FRAMES:
+			_labels_key = key
+			_shift_labels()
+		else:
+			_labels_key = key
+			_labels_placed_frame = frame
+			var placed_labels: Array[Rect2] = []
+			var tp := Time.get_ticks_usec()
+			var boxed := _place_price_boxes(placed_labels)
+			_price_boxes = boxed[0]
+			_prof("place.prices", tp)
+			tp = Time.get_ticks_usec()
+			_port_labels = _place_port_labels(placed_labels, boxed[1])
+			_prof("place.ports", tp)
+			tp = Time.get_ticks_usec()
+			_country_labels = _place_country_labels(placed_labels)
+			_prof("place.countries", tp)
+			tp = Time.get_ticks_usec()
+			_feature_labels = [] if gray_mode else _place_feature_labels(placed_labels)
+			_prof("place.features", tp)
+	var t0 := Time.get_ticks_usec()
 	_draw_feature_labels()
 	_draw_country_labels()
+	_prof("static.labels", t0)
+	t0 = Time.get_ticks_usec()
 	if show_ships and show_active_lanes:
 		_draw_active_lanes()
+	_prof("static.lanes", t0)
+	t0 = Time.get_ticks_usec()
 	_draw_route()
 	_draw_ports(_port_labels)
+	_prof("static.ports", t0)
+	t0 = Time.get_ticks_usec()
 	_draw_price_boxes()
+	_prof("static.prices", t0)
+	_label_layer.queue_redraw()  # (The labels from the atlas, over all that: see _draw_label_layer().)
+
+## The labels placed last (see _draw_static_layer()) moved with their anchors
+## (a port's under its dot, a country's or feature's on its spot) as the view
+## moves: the same ones, till they're placed afresh.
+func _shift_labels() -> void:
+	var font := get_theme_default_font()
+	for label: Array in _port_labels:
+		label[1] = _port_label_rect(font, GameData.get_port(label[0]))
+	for label: Array in _country_labels:
+		var rect: Rect2 = label[1]
+		label[1] = Rect2(_unit_to_screen(_country_units[label[2]]) - rect.size / 2.0, rect.size)
+	for label: Array in _feature_labels:
+		var rect: Rect2 = label[1]
+		label[1] = Rect2(_unit_to_screen(_feature_units[label[0]]) + (label[2] as Vector2), rect.size)
+	for box: Array in _price_boxes:
+		var rect: Rect2 = box[1]
+		box[1] = Rect2(port_screen_position(box[0]) + (box[3] as Vector2), rect.size)
+
+## Every name the map can label (the ports', the countries', the features')
+## into the atlas, once: rendered at the first frame (see LabelAtlas.render()).
+func _preload_label_atlas() -> void:
+	var font := get_theme_default_font()
+	for port: Dictionary in GameData.ports:
+		_label_atlas.add(font, PORT_FONT_SIZE, 0, GameData.port_name(port.id))
+	var data := GameData.world_map
+	for text: String in data.label_names:
+		_label_atlas.add(font, COUNTRY_FONT_SIZE, 0, text)
+	for i in data.feature_label_names.size():
+		var kind := data.feature_label_kinds[i]
+		var style: Array = FEATURE_STYLES[kind]
+		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
+			_label_atlas.add(_feature_font(kind), style[0], SEA_LABEL_OUTLINE, _feature_text(i))
+		_label_atlas.add(_feature_font(kind), style[0], 0, _feature_text(i))
+
+## Whether a label's in the atlas (drawn from it by _draw_label_layer(), not
+## glyph by glyph where it's placed).
+func _label_in_atlas(font: Font, font_size: int, text: String) -> bool:
+	return _label_atlas != null and _label_atlas.cell(font, font_size, 0, text).size != Vector2.ZERO
+
+## The labels placed this view (see _draw_static_layer()) as quads from the
+## atlas, all in one batch: a sea name's outline under it, a drop shadow under
+## a port's name. Rounded to the window's pixels, so each is as sharp as drawn
+## directly. (Any not in the atlas was drawn with the static layer.)
+func _draw_label_layer() -> void:
+	if _label_atlas == null:
+		return
+	var t_l := Time.get_ticks_usec()
+	var pixels := get_viewport().get_final_transform().get_scale().x
+	_label_batch.clear()
+	var bounds := Rect2(Vector2.ZERO, size)
+	var data := GameData.world_map
+	var outline_color := _color(&"sea_label_outline")
+	for label: Array in _feature_labels:
+		var rect: Rect2 = label[1]
+		if not bounds.intersects(rect):
+			continue
+		var kind := data.feature_label_kinds[label[0]]
+		var style: Array = FEATURE_STYLES[kind]
+		var font := _feature_font(kind)
+		var text := _feature_text(label[0])
+		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
+			_label_quad(font, style[0], SEA_LABEL_OUTLINE, text, rect.position, outline_color, pixels)
+		_label_quad(font, style[0], 0, text, rect.position, _color(style[1]), pixels)
+	var font := get_theme_default_font()
+	var country := _color(&"country_label")
+	for label: Array in _country_labels:
+		var rect: Rect2 = label[1]
+		if bounds.intersects(rect):
+			_label_quad(font, COUNTRY_FONT_SIZE, 0, label[0], rect.position, country, pixels)
+	var shadow := _color(&"label_shadow")
+	var label_color := _color(&"label")
+	var dimmed := _color(&"port_dimmed")
+	for label: Array in _port_labels:
+		var rect: Rect2 = label[1]
+		if not bounds.intersects(rect):
+			continue
+		var text: String = GameData.port_name(label[0])
+		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
+		if _label_quad(font, PORT_FONT_SIZE, 0, text, rect.position + Vector2(1, 1), shadow, pixels):
+			_label_quad(font, PORT_FONT_SIZE, 0, text, rect.position, color, pixels)
+	_label_batch.flush(_label_layer, _label_atlas.get_texture())
+	_prof("labels.layer", t_l)
+
+## A label's quad from the atlas at `at` (its text's top left), or false if it isn't in.
+func _label_quad(font: Font, font_size: int, outline: int, text: String, at: Vector2, color: Color, pixels: float) -> bool:
+	var cell := _label_atlas.cell(font, font_size, outline, text)
+	if cell.size == Vector2.ZERO:
+		return false
+	var pos := ((at - Vector2.ONE * (LabelAtlas.PAD + outline)) * pixels).round() / pixels
+	_label_batch.textured_region(Rect2(pos, cell.size), color, _label_atlas.uv(cell))
+	return true
 
 func _draw_dock_layer() -> void:
 	if not show_ships:
@@ -3025,7 +3238,7 @@ const HQ_MARGIN := 0.6
 ## (dock units), the cut through the quay (as wide), and how far along its canal
 ## (degrees) to look for where it leaves.
 const CANAL_SIDE := 5.0
-const CANAL_CUT_WIDTH := 3.0
+const CANAL_CUT_WIDTH := 4.0
 const CANAL_EXIT_DEG := 0.25
 ## Ships keep to the right-hand side of a harbour entrance, this many widths
 ## (of the widest ship the marina takes) off its middle.
@@ -3137,6 +3350,8 @@ var _hq_regions := {}
 ## whose marina is being drawn into its item (its dock points come out in dock
 ## units, unturned; see _dock_point()), or "".
 var _marina_items := {}
+## The towns' triangles built natively (TownMesh), when the library's there.
+var _town_mesher: Object = null
 ## True once the view's changed this frame and the layers are to draw again
 ## (see _redraw_layers()).
 var _layers_stale := false
@@ -3526,19 +3741,35 @@ func _marina_shown(port_id: String) -> bool:
 		_marinas_shown[port_id] = float(_port_layout(port_id).radius) * _ship_scale() >= _port_radius(port_id) + MARINA_OVER_DOT_PX
 	return _marinas_shown[port_id]
 
+## How many marinas are drawn into their items in one frame (the rest wait a frame: see _update_marinas()).
+const MARINA_RECORDS_PER_FRAME := 1
+## Zooming, a marina drawn at a zoom this far off (the log of the ratio: log 2,
+## twice or half) is drawn again even before the zoom settles (see _update_marinas()).
+const MARINA_RESCALE_LOG := 0.6931
+var _marinas_pending := false
+
 ## Every port's marina in view (see the section's description). Each is drawn
 ## once into its own canvas item (_marina_items), in dock units at the zoom
 ## it's drawn at, and then only moved and turned with the view: dragging the
 ## map doesn't draw them again, only zooming (so lines keep their width in px),
 ## a port changing size or becoming a hub, or its HQ building growing.
+## The ports near the view whose marinas may show (natively narrowed by the
+## dots' looks, once those are known): their places in GameData.ports.
+func marinas_in_view(near: Rect2) -> PackedInt32Array:
+	if _port_painter == null or _port_styles_key.is_empty():
+		return _ports_near_view()
+	return _port_painter.marinas(_ports_near_view(), {right = _right, up = _up, toward = _toward, radius = _radius(),
+		middle = size / 2.0, near = near, scale = _ship_scale(), over_dot_px = MARINA_OVER_DOT_PX})
+
 func _update_marinas() -> void:
 	var shown := {}
+	var recorded := 0
+	_marinas_pending = false
 	if show_ships and docks_shown() and _any_marina_shown():
 		var view := Rect2(Vector2.ZERO, size)
 		var near := view.grow(MARINA_MAX_REACH * _ship_scale())
 		# (Natively narrowed to the ports whose marinas may show, once the dots' looks are known.)
-		var ports: PackedInt32Array = _port_painter.marinas(_ports_near_view(), {right = _right, up = _up, toward = _toward, radius = _radius(),
-			middle = size / 2.0, near = near, scale = _ship_scale(), over_dot_px = MARINA_OVER_DOT_PX}) if _port_painter != null and not _port_styles_key.is_empty() else _ports_near_view()
+		var ports := marinas_in_view(near)
 		for i in ports:
 			var port_id: String = GameData.ports[i].id
 			var root := port_screen_position(port_id)
@@ -3550,12 +3781,33 @@ func _update_marinas() -> void:
 				continue
 			shown[port_id] = true
 			var item := _marina_item(port_id, i)
-			var key := [_ship_scale(), _dock_flips.get(port_id, 1.0), _hq_look(port_id), _land_cells.is_empty()]  # (The town needs the land.)
-			if not is_same(item.get_meta(&"layout"), layout) or item.get_meta(&"key") != key:
-				item.set_meta(&"layout", layout)
-				item.set_meta(&"key", key)
-				item.queue_redraw()
+			var key := [_dock_flips.get(port_id, 1.0), _hq_look(port_id), _land_cells.is_empty(), _shadow_key()]  # (The town needs the land; the shadows the sun.)
 			var pivot := item.get_parent() as Node2D  # (Moved and turned, not the item: a Control turned draws again.)
+			var scale := _ship_scale()
+			var recorded_scale := float(item.get_meta(&"scale", 0.0))
+			var stale: bool = not is_same(item.get_meta(&"layout"), layout) or item.get_meta(&"key") != key
+			# Zooming, a marina drawn at another zoom is stretched to this one by
+			# its pivot, and drawn again once the zoom settles (or when it's
+			# twice as far off): drawing every marina in view again every frame
+			# of a zoom was most of the frame.
+			var rescale: bool = not stale and recorded_scale > 0.0 and recorded_scale != scale
+			if stale or (rescale and (not _zooming() or absf(log(scale / recorded_scale)) > MARINA_RESCALE_LOG)):
+				if recorded >= MARINA_RECORDS_PER_FRAME:
+					_marinas_pending = true  # (Drawn next frame: a town is a lot to draw at once.)
+					if item.get_meta(&"layout").is_empty():
+						_show_marina_item(item, false)  # (Nothing drawn in it yet: nothing to show.)
+						continue
+					if recorded_scale > 0.0:
+						pivot.scale = Vector2.ONE * (scale / recorded_scale)  # (As it was, stretched, till its turn.)
+				else:
+					recorded += 1
+					item.set_meta(&"layout", layout)
+					item.set_meta(&"key", key)
+					item.set_meta(&"scale", scale)
+					item.queue_redraw()
+					pivot.scale = Vector2.ONE
+			elif rescale:
+				pivot.scale = Vector2.ONE * (scale / recorded_scale)
 			pivot.position = root
 			pivot.rotation = _port_sea_angle(port_id) + _port_turn(port_id)
 			_show_marina_item(item, true)
@@ -3585,7 +3837,13 @@ func _marina_item(port_id: String, order: int) -> Control:
 	item.mouse_filter = MOUSE_FILTER_IGNORE
 	item.set_meta(&"layout", {})
 	item.set_meta(&"key", [])
-	item.draw.connect(_record_marina.bind(port_id, item))
+	item.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		var _lay := _town(port_id, _port_layout(port_id))
+		_prof("marina_lay", t0)
+		t0 = Time.get_ticks_usec()
+		_record_marina(port_id, item)
+		_prof("marina_record", t0))
 	var at := 0
 	for child in _dock_layer.get_children():
 		if int(child.get_meta(&"order", -1)) < order:
@@ -3599,6 +3857,28 @@ func _marina_item(port_id: String, order: int) -> Control:
 	_dock_layer.move_child(pivot, at)
 	_marina_items[port_id] = item
 	return item
+
+## Lays out every port's town (see _town()) under the loading screen (the map
+## isn't warm till they're laid: see is_warm()), TOWN_WARM_MS of them a frame,
+## so the first look at a port's marina draws it at once, not after laying its
+## town out (a few ms: a hitch as a port scrolls in).
+const TOWN_WARM_MS := 8.0
+var _towns_warm := false
+var _town_warm_cursor := 0
+func _warm_towns() -> void:
+	if _towns_warm or _land_cells.is_empty() or _dragging or _zooming() or _marinas_pending or _layers_stale:
+		return
+	var start := Time.get_ticks_usec()
+	var ports := GameData.ports
+	while _town_warm_cursor < ports.size():
+		var port_id: String = ports[_town_warm_cursor].id
+		_town_warm_cursor += 1
+		var layout := _port_layout(port_id)
+		if not (_towns.has(port_id) and _towns[port_id].key == [port_id, layout.radius, layout.depth]):
+			_town(port_id, layout)
+			if Time.get_ticks_usec() - start >= TOWN_WARM_MS * 1000.0:
+				return
+	_towns_warm = true
 
 ## Draws a port's marina into its canvas item, in dock units (mirrored with its
 ## layout) at the zoom now, unturned: the item turns and moves it into place.
@@ -3684,9 +3964,7 @@ func _draw_industry(port_id: String, layout: Dictionary) -> void:
 		if texture == null:
 			continue
 		var shadow := _marina_polygon(port_id, _rect_points(plot.grow(-plot.size.x * 0.04)))
-		var drop := Vector2(0.5, 0.5) * scale
-		if port_id == _recording_marina:
-			drop = drop.rotated(-(_port_sea_angle(port_id) + _port_turn(port_id)))
+		var drop := _shadow_drop(port_id, 0.7)
 		for i in shadow.size():
 			shadow[i] += drop
 		_canvas.draw_colored_polygon(shadow, Color(0, 0, 0, 0.22))
@@ -3738,7 +4016,9 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	var water := _color(&"ocean")
 	var scale := _ship_scale()
 	var clear := radius + JETTY_WIDTH / 2.0
-	_canvas.draw_colored_polygon(_marina_polygon(port_id, _arc(clear, -PI, PI).slice(0, -1)), water)
+	_batch.clear()
+	_batch.poly(_marina_polygon(port_id, _arc(clear, -PI, PI).slice(0, -1)), water)  # (Convex: a fan, not a triangulation.)
+	_batch.flush(_canvas)
 	var inland := _quay_inland(layout)
 	# The land: the quay behind the basin, with the lighthouse's pad behind the industry.
 	var land := PackedVector2Array([Vector2(0.0, radius), Vector2(inland, radius), Vector2(inland, radius * 0.8), Vector2(inland - LIGHTHOUSE_ROOM, radius * 0.8),
@@ -3755,20 +4035,30 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 		_canvas.draw_line(cut_screen[2], cut_screen[3], QUAY_EDGE, 1.0, true)
 	# The piers, each from its wall in.
 	var pier_length: float = layout.pier
+	var pier_edges: Array[PackedVector2Array] = []
 	for pier: Array in layout.piers:
 		var side: float = pier[0]
 		var rect := PackedVector2Array([Vector2(pier[1], side * half), Vector2(pier[1], side * (half - pier_length)), Vector2(pier[2], side * (half - pier_length)), Vector2(pier[2], side * half)])
 		var points := _marina_polygon(port_id, rect)
-		_canvas.draw_colored_polygon(points, QUAY_COLOR)
+		_batch.poly(points, QUAY_COLOR)
 		points.append(points[0])
+		pier_edges.append(points)
+	_batch.flush(_canvas)
+	for points: PackedVector2Array in pier_edges:
 		_canvas.draw_polyline(points, QUAY_EDGE, 1.0, true)
 	# The basin's edge (its three walls), and the land's outer edge.
 	_canvas.draw_polyline(_marina_polygon(port_id, PackedVector2Array([Vector2(0.0, half), Vector2(-depth, half), Vector2(-depth, -half), Vector2(0.0, -half)])), QUAY_EDGE, 1.0, true)
 	_canvas.draw_polyline(_marina_polygon(port_id, land), QUAY_EDGE, 1.0, true)
+	var t_m := Time.get_ticks_usec()
 	_draw_hq_building(port_id, layout)
 	_draw_industry(port_id, layout)
+	_prof("marina.hq_industry", t_m)
+	t_m = Time.get_ticks_usec()
 	_draw_lighthouse(port_id, layout, scale)
+	_prof("marina.lighthouse", t_m)
+	t_m = Time.get_ticks_usec()
 	_draw_town(port_id, layout, scale)
+	_prof("marina.town", t_m)
 	# The jetty: round the sea half, each side of the entrance, lit at its ends.
 	var gap: float = layout.gap
 	for side: float in [-1.0, 1.0]:
@@ -3891,9 +4181,7 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 	var box := _bounds(foot)
 	# Its shadow, the taller the longer.
 	var height := 0.3 + 0.22 * level
-	var drop := Vector2(0.7, 0.7) * height * dock_scale(port_id)  # (Down and to the right on screen.)
-	if port_id == _recording_marina:
-		drop = drop.rotated(-(_port_sea_angle(port_id) + _port_turn(port_id)))  # (Its item turns it into place.)
+	var drop := _shadow_drop(port_id, height)  # (Away from the sun: see _update_shadow_dir().)
 	var shadow := _marina_polygon(port_id, foot)
 	for i in shadow.size():
 		shadow[i] += drop
@@ -5217,10 +5505,18 @@ func _draw_overlay() -> void:
 	_frames_drawn += 1
 	_lit_ships.clear()
 	if show_ships:
+		var t0 := Time.get_ticks_usec()
 		_draw_ships()
+		_prof("overlay.ships", t0)
+		t0 = Time.get_ticks_usec()
 		_draw_birds()
+		_prof("overlay.birds", t0)
+		t0 = Time.get_ticks_usec()
 		_draw_divine()
 		_draw_hub_alerts()
+		_prof("overlay.rest", t0)
+	if _night_shown:
+		_lights_layer.queue_redraw()  # (The ships' lights are drawn where the ships were drawn this frame: never a frame behind as the map drags.)
 
 ## Port labels, the HQ's and hubs' first and then in rank order, skipping any
 ## that would overlap one already placed, after `labels` (those of the ports
@@ -5269,7 +5565,10 @@ func _place_port_labels(placed: Array[Rect2], labels := []) -> Array:
 
 ## Where a port's name goes: centered under its dot.
 func _port_label_rect(font: Font, port: Dictionary) -> Rect2:
-	var text_size := _label_size(font, port.name, PORT_FONT_SIZE)
+	var text_size: Vector2 = _port_text_sizes.get(port.id, Vector2.INF)  # (Kept by port: measured, or even looked up by text, costs.)
+	if text_size == Vector2.INF:
+		text_size = _label_size(font, port.name, PORT_FONT_SIZE)
+		_port_text_sizes[port.id] = text_size
 	return Rect2(port_screen_position(port.id) + Vector2(-text_size.x / 2.0, _port_radius(port.id) + 2.0), text_size)
 
 ## Something about the price boxes changed: work them out and place them again.
@@ -5316,7 +5615,7 @@ func _place_price_boxes(placed: Array[Rect2]) -> Array:
 			continue
 		placed.append(rect.grow(LABEL_PADDING))
 		placed.append(label.grow(LABEL_PADDING))
-		boxes.append([port.id, rect, box.rows])
+		boxes.append([port.id, rect, box.rows, rect.position - port_screen_position(port.id)])
 		labels.append([port.id, label])
 	return [boxes, labels]
 
@@ -5458,7 +5757,7 @@ func _label_size(font: Font, text: String, font_size: int) -> Vector2:
 		_label_sizes[key] = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	return _label_sizes[key]
 
-## Country names that fit around the port labels already placed: [text, rect] pairs.
+## Country names that fit around the port labels already placed: [text, rect, index].
 func _place_country_labels(placed: Array[Rect2]) -> Array:
 	var data := GameData.world_map
 	if _country_units.is_empty():
@@ -5481,11 +5780,11 @@ func _place_country_labels(placed: Array[Rect2]) -> Array:
 		if not bounds.encloses(rect) or _overlaps(rect, placed):
 			continue
 		placed.append(rect.grow(LABEL_PADDING))
-		labels.append([text, rect])
+		labels.append([text, rect, i])
 	return labels
 
 ## Named geography labels that fit around the ones already placed, most
-## important kind first (FEATURE_PRIORITY): [index, rect] pairs. Each shows
+## important kind first (FEATURE_PRIORITY): [index, rect, offset from its spot]. Each shows
 ## from its min zoom plus its kind's zoom offset (FEATURE_STYLES).
 func _place_feature_labels(placed: Array[Rect2]) -> Array:
 	var data := GameData.world_map
@@ -5542,19 +5841,22 @@ func _place_feature_labels(placed: Array[Rect2]) -> Array:
 			var rect := Rect2(center + nudge * text_size - text_size / 2.0, text_size)
 			if bounds.encloses(rect) and not _overlaps(rect, placed):
 				placed.append(rect.grow(LABEL_PADDING))
-				labels.append([i, rect])
+				labels.append([i, rect, rect.position - center])
 				break
 	return labels
 
 func _draw_feature_labels() -> void:
 	var data := GameData.world_map
+	var bounds := Rect2(Vector2.ZERO, size)
 	for label: Array in _feature_labels:
 		var kind := data.feature_label_kinds[label[0]]
 		var style: Array = FEATURE_STYLES[kind]
 		var font := _feature_font(kind)
 		var rect: Rect2 = label[1]
-		var baseline := rect.position + Vector2(0, font.get_ascent(style[0]))
 		var text := _feature_text(label[0])
+		if not bounds.intersects(rect) or _label_in_atlas(font, style[0], text):
+			continue  # (Off screen since it was placed, or drawn from the atlas: see _draw_label_layer().)
+		var baseline := rect.position + Vector2(0, font.get_ascent(style[0]))
 		# Pale sea names get a dark edge, so they read over shallow (light) water too.
 		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
 			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, style[0], SEA_LABEL_OUTLINE,
@@ -5578,14 +5880,42 @@ func _draw_country_labels() -> void:
 	var font := get_theme_default_font()
 	var color := _color(&"country_label")
 	var ascent := font.get_ascent(COUNTRY_FONT_SIZE)
+	var bounds := Rect2(Vector2.ZERO, size)
 	for label: Array in _country_labels:
 		var rect: Rect2 = label[1]
+		if not bounds.intersects(rect) or _label_in_atlas(font, COUNTRY_FONT_SIZE, label[0]):
+			continue  # (Off screen since it was placed, or drawn from the atlas: see _draw_label_layer().)
 		_canvas.draw_string(font, rect.position + Vector2(0, ascent), label[0], HORIZONTAL_ALIGNMENT_LEFT, -1, COUNTRY_FONT_SIZE, color)
 
+## True if a label's rect overlaps any placed so far. The placed rects are
+## sorted into PLACED_CELL_PX cells of the screen as they come (the array is
+## only ever appended to while one round of placing runs), so each test looks
+## at a few cells, not every rect: hundreds of labels a frame while the map
+## drags were a hundred thousand rect tests.
+const PLACED_CELL_PX := 96.0
+var _placed_cells := {}  # Vector2i cell -> PackedInt32Array of indices into the placed array.
+var _placed_for: Array[Rect2] = []  # The array the cells were built for.
+var _placed_indexed := 0
+
 func _overlaps(rect: Rect2, placed: Array[Rect2]) -> bool:
-	for other in placed:
-		if rect.intersects(other):
-			return true
+	if not is_same(placed, _placed_for) or placed.size() < _placed_indexed:
+		_placed_for = placed
+		_placed_cells.clear()
+		_placed_indexed = 0
+	while _placed_indexed < placed.size():
+		var other := placed[_placed_indexed]
+		for cx in range(floori(other.position.x / PLACED_CELL_PX), floori(other.end.x / PLACED_CELL_PX) + 1):
+			for cy in range(floori(other.position.y / PLACED_CELL_PX), floori(other.end.y / PLACED_CELL_PX) + 1):
+				var cell := Vector2i(cx, cy)
+				if not _placed_cells.has(cell):
+					_placed_cells[cell] = PackedInt32Array()
+				_placed_cells[cell].append(_placed_indexed)
+		_placed_indexed += 1
+	for cx in range(floori(rect.position.x / PLACED_CELL_PX), floori(rect.end.x / PLACED_CELL_PX) + 1):
+		for cy in range(floori(rect.position.y / PLACED_CELL_PX), floori(rect.end.y / PLACED_CELL_PX) + 1):
+			for index: int in _placed_cells.get(Vector2i(cx, cy), PackedInt32Array()):
+				if rect.intersects(placed[index]):
+					return true
 	return false
 
 func _port_radius(port_id: String) -> float:
@@ -5664,10 +5994,13 @@ func _draw_ports(labels: Array) -> void:
 			var width := HQ_RING_WIDTH if entry[0].is_hq else HUB_RING_WIDTH
 			_canvas.draw_arc(port_screen_position(port_id), radius + width / 2.0, 0.0, TAU, clampi(int(radius), 32, 128), entry[1], width, true)
 			radius += width
+	var bounds := Rect2(Vector2.ZERO, size)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
-		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
 		var text: String = GameData.port_name(label[0])
+		if not bounds.intersects(rect) or _label_in_atlas(font, PORT_FONT_SIZE, text):
+			continue  # (Off screen since it was placed, or drawn from the atlas: see _draw_label_layer().)
+		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
 		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
 		_canvas.draw_string(font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
@@ -5677,15 +6010,21 @@ func _draw_ports(labels: Array) -> void:
 ## hubs, the ports' sizes, the colors. Dragging the map doesn't change them.
 func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, locked_fill: Color) -> void:
 	var key := [selectable_ports, dimmed_ports, shining_ports, GameState.regions.duplicate(), hub_ports.keys(), fill, dimmed, locked_fill]
-	var sizes: Array = GameState.port_sizes._sizes.values() if Time.get_ticks_msec() - _port_styles_time >= STATIC_REFRESH_S * 1000.0 else _port_styles_sizes
 	var now := Time.get_ticks_msec()
-	# (Ports grow a little all the time: looked at again as often as the ports are drawn when the view's still.)
-	var due := now - _port_styles_time >= STATIC_REFRESH_S * 1000.0
-	if key == _port_styles_key and (not due or sizes == _port_styles_sizes):
+	# (Ports grow a little all the time: their dots' sizes are looked at again
+	# as often as the ports are drawn when the view's still, to a tenth of a
+	# px; the looks are worked out again only when one's changed.)
+	var seen := _port_styles_radii
+	if key != _port_styles_key or now - _port_styles_time >= STATIC_REFRESH_S * 1000.0:
+		_port_styles_time = now
+		seen = PackedFloat32Array()
+		seen.resize(GameData.ports.size())
+		for i in GameData.ports.size():
+			seen[i] = snappedf(_port_radius(GameData.ports[i].id), 0.1)
+	if key == _port_styles_key and seen == _port_styles_radii:
 		return
 	_port_styles_key = key
-	_port_styles_sizes = sizes
-	_port_styles_time = now
+	_port_styles_radii = seen
 	var count := GameData.ports.size()
 	var radii := PackedFloat32Array()
 	var layout_radii := PackedFloat32Array()
@@ -5741,12 +6080,16 @@ func _draw_active_lanes() -> void:
 	var lanes := _active_lanes()
 	if _lane_painter == null and ClassDB.class_exists(&"LanePainter"):
 		_lane_painter = ClassDB.instantiate(&"LanePainter")
-		_lane_painter.setup({chunk = LANE_CHUNK, min_px = LINE_MIN_PX, hidden = HIDDEN})
+		_lane_painter.setup({chunk = LANE_CHUNK, min_px = ACTIVE_LANE_MIN_PX, hidden = HIDDEN})
 		_lane_painter.set_providers(_lane_chunks, _lane_ends)
 	if _lane_painter != null:
-		# (All of them natively: a big fleet's are drawn again every frame the map's dragged.)
+		# (All of them natively, as one batch of triangles: a big fleet's are
+		# drawn again every frame the map's dragged. Harbour curves only while
+		# marinas can show, for lanes with a port on or near the screen: see
+		# _lane_curve_ends().)
 		_lane_painter.draw(_canvas.get_canvas_item(), lanes, {toward = _toward, right = _right, up = _up, radius = _radius(), middle = size / 2.0,
-			view_angle = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0)), near_angle = asin(minf(size.length() / _radius(), 1.0)), width = ACTIVE_LANE_WIDTH})
+			view_angle = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0)), width = ACTIVE_LANE_WIDTH, epoch = _active_lanes_epoch,
+			curves = docks_shown() and _any_marina_shown(), near = Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)})
 		return
 	for lane: Array in lanes:
 		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH, lane[3])
@@ -5756,9 +6099,10 @@ func _draw_active_lanes() -> void:
 ## the view's still works them out afresh), not every frame it's dragged.
 func _active_lanes() -> Array:
 	var now := Time.get_ticks_msec()
-	if now - _active_lanes_time < STATIC_REFRESH_S * 500.0 and _active_lanes_time >= 0:
+	if now - _active_lanes_time < ACTIVE_LANES_REFRESH_S * 1000.0 and _active_lanes_time >= 0:
 		return _active_lanes_cache
 	_active_lanes_time = now
+	var t_a := Time.get_ticks_usec()
 	_lanes_warm = false  # (New legs may want bending: see _warm_lanes().)
 	var others := {}  # "A-B" (sorted) and company -> [from, to, color]
 	var lanes := {}  # "A-B" (sorted) -> [from, to, color]
@@ -5795,7 +6139,11 @@ func _active_lanes() -> Array:
 				into[key] = [leg[0], leg[1], color, false]
 			elif into[key][0] != leg[0]:
 				into[key][3] = true  # (Sailed both ways: the way back's harbour curves too.)
-	_active_lanes_cache = others.values() + lanes.values()
+	var fresh: Array = others.values() + lanes.values()
+	if fresh != _active_lanes_cache:
+		_active_lanes_cache = fresh
+		_active_lanes_epoch += 1  # (The native pass resolves the lanes again: see LanePainter.)
+	_prof("lanes.active", t_a)
 	return _active_lanes_cache
 
 ## A lane from one port to another as ships sail it: where a port's marina
@@ -5881,12 +6229,20 @@ func _lane_curve_ends(from_port: String, to_port: String) -> Array:
 ## each frame.
 func _lane_curve_memo(sea_lane, from_port: String, to_port: String, shows: Array) -> Array:
 	var length: float = sea_lane.length()
-	if _lane_reach_zoom != _zoom:
-		_lane_reach_zoom = _zoom
-		_lane_reach_memo.clear()
 	var memo_key := "%s>%s %s %s" % [from_port, to_port, shows[0], shows[1]]
 	var memo: Array = _lane_reach_memo.get(memo_key, [])
 	if memo.is_empty() or (_center - (memo[2] as Vector2)).length() > LANE_CURVE_DRIFT:
+		# Only LANE_CURVE_MS of them a frame (when marinas first show, every
+		# lane near wants its curves at once): the rest straight in till the
+		# next frame (the static layer's drawn again then).
+		var frame := Engine.get_process_frames()
+		if frame != _lane_curve_frame:
+			_lane_curve_frame = frame
+			_lane_curve_spent = 0.0
+		if _lane_curve_spent >= LANE_CURVE_MS:
+			_static_layer.queue_redraw()
+			return [PackedFloat32Array([0.0, 0.0]), [PackedVector3Array(), PackedVector3Array()], _center]
+		var t_c := Time.get_ticks_usec()
 		var ends := []
 		for i in 2:
 			var port := to_port if i == 0 else from_port
@@ -5914,6 +6270,8 @@ func _lane_curve_memo(sea_lane, from_port: String, to_port: String, shows: Array
 				on_globe.append(_screen_unit(p))
 			memo[1][i] = on_globe
 		_lane_reach_memo[memo_key] = memo
+		_lane_curve_spent += (Time.get_ticks_usec() - t_c) / 1000.0
+		_prof("lanes.curves", t_c)
 	return memo
 
 ## A lane's harbour curves for the native lane pass (LanePainter's ends
@@ -6682,10 +7040,23 @@ func _fleet_pass(order: Array[Ship]) -> Dictionary:
 	if _ship_culler != null:
 		var margin := (SHIP_CULL_MARGIN + PORT_MAX_REACH) * _ship_scale()
 		var tight := SHIP_CULL_MARGIN * _ship_scale() + 8.0
+		# Each ship's length and its dot's colour (by its place in `order`), for
+		# the dots the pass draws itself: worked out when the order's made.
+		if _order_colors.size() != order.size() or _order_colors_gray != gray_mode:
+			_order_colors_gray = gray_mode
+			_order_colors.resize(order.size())
+			_order_lengths.resize(order.size())
+			for i in order.size():
+				var look := _model_look(order[i].model_id)
+				_order_colors[i] = (look[0] as Color) * _ship_fade(order[i])
+				_order_lengths[i] = (look[7] as Rect2).size.x
+		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		return _ship_culler.sort(order, {view_epoch = _view_epoch, toward = _toward, view_angle = asin(minf((size.length() / 2.0 + margin) / _radius(), 1.0)),
 			tight_angle = asin(minf((size.length() / 2.0 + tight) / _radius(), 1.0)), end_zone_nm = HARBOUR_END_ZONE_NM,
 			end_slack_angle = asin(minf(MARINA_MAX_REACH * 2.0 * _ship_scale() / _radius(), 1.0)),
-			docks_shown = docks_shown(), mine = GameState.company, port_shown = _port_ships_shown})
+			docks_shown = docks_shown(), mine = GameState.company, port_shown = _port_ships_shown,
+			dots = true, dots_canvas = _canvas.get_canvas_item(), right = _right, up = _up, radius = _radius(), middle = size / 2.0,
+			screen = Rect2(Vector2.ZERO, size), scale = _ship_scale(), dot_px = TINY_SHIP_PX, lengths = _order_lengths, colors = _order_colors})
 	var draw := PackedInt32Array()
 	var plain := PackedByteArray()
 	var carried := PackedInt32Array()
@@ -6790,14 +7161,15 @@ func _ships_biggest_first() -> Array[Ship]:
 	if _draw_order.size() == GameState.ships.size() and not _draw_order_dirty:
 		return _draw_order
 	_draw_order_dirty = false
-	var order: Array[Ship] = GameState.ships.duplicate()
-	var index := {}
-	for i in order.size():
-		index[order[i]] = i
-	order.sort_custom(func(a: Ship, b: Ship) -> bool:
-		var length_a := float(a.model().get("map_size", [0])[0])
-		var length_b := float(b.model().get("map_size", [0])[0])
-		return length_a > length_b if length_a != length_b else index[a] < index[b])
+	_order_colors.clear()  # (Worked out again for the new order: see _fleet_pass().)
+	# (Sorted on keys worked out once: a comparison asking each ship's model costs.)
+	var keys := []
+	for i in GameState.ships.size():
+		keys.append([-float((GameState.ships[i] as Ship).model().get("map_size", [0])[0]), i])
+	keys.sort()
+	var order: Array[Ship] = []
+	for key: Array in keys:
+		order.append(GameState.ships[key[1]])
 	_draw_order = order
 	return order
 
@@ -6875,10 +7247,23 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		_draw_mooring_ropes(ship)  # Moored: tied up to the bollards.
 	_ship_hulls[ship] = [at, angle]
-	_canvas.draw_set_transform(at, angle, Vector2.ONE * _ship_scale())
+	var scale := _ship_scale()
+	var rect7: Rect2 = look[7]
+	# Its shadow on the water, away from the sun (the hull's shape, dark), then
+	# the ship rolling with the sea (see _ship_roll()): narrower as it heels,
+	# shifted a little to the side it leans, its superstructure more.
+	var roll := _ship_roll(ship, at)
+	var lean := sin(roll)
+	if rect7.size.y * scale >= SHADOW_MIN_PX:
+		_canvas.draw_set_transform(at + _shadow_dir * rect7.size.y * scale * SHIP_SHADOW_WIDTHS + Vector2.from_angle(angle + PI / 2.0) * lean * rect7.size.y * scale * 0.3, angle, Vector2.ONE * scale)
+		var dark := PackedColorArray([Color(0, 0, 0, SHIP_SHADOW_ALPHA * fade.a)])
+		_canvas.draw_primitive(look[3], dark, PackedVector2Array())
+		_canvas.draw_primitive(look[4], dark, PackedVector2Array())
+	var sideways := Vector2.from_angle(angle + PI / 2.0) * lean * rect7.size.y * scale * ROLL_SHIFT
+	_canvas.draw_set_transform(at + sideways, angle, Vector2(scale, scale * (1.0 - ROLL_NARROW * absf(lean))))
 	var art: Dictionary = look[6]
 	if not art.is_empty():
-		_draw_ship_art(ship, art, look[7], color, fade)
+		_draw_ship_art(ship, art, look[7], color, fade, lean)
 		if fade.a < 1.0:
 			var rect: Rect2 = look[7]
 			_canvas.draw_circle(Vector2(rect.position.x + rect.size.y * 0.5, 0.0), rect.size.y * 0.42, GameState.company_color_value(GameState.owner_of(ship).color))
@@ -6891,6 +7276,47 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	_canvas.draw_primitive(look[3], colors, PackedVector2Array())
 	_canvas.draw_primitive(look[4], colors, PackedVector2Array())
 	_canvas.draw_polyline(look[5], outline, 1.0)
+
+## A ship's shadow: cast this many of its widths away from the sun, this
+## dark, once the ship is this wide on screen; and its roll: how far it shifts
+## sideways (widths) and narrows as it heels, how much further its
+## superstructure goes, and how the sea rolls it (radians): a calm swell
+## always, more in a wind and much more in a storm.
+const SHADOW_MIN_PX := 3.0
+const SHIP_SHADOW_WIDTHS := 0.35
+const SHIP_SHADOW_ALPHA := 0.28
+const ROLL_SHIFT := 0.08
+const ROLL_NARROW := 0.14
+const ROLL_TOWER := 0.12
+const ROLL_CALM := 0.06
+const ROLL_DOCKED := 0.025
+const ROLL_WIND := 0.22
+const ROLL_STORM := 0.7
+const ROLL_WIND_FULL := 22.0
+const SEA_STATE_REFRESH_S := 2.0
+var _sea_states := {}  # Ship -> [until (ticks msec), roll amplitude].
+
+## How far a ship rolls now (radians, signed): two swells at its own phase,
+## their size from the sea where it is (the wind, the storms), looked at
+## again every SEA_STATE_REFRESH_S; at its berth or anchor just a ripple.
+func _ship_roll(ship: Ship, at: Vector2) -> float:
+	var now := Time.get_ticks_msec()
+	var kept: Array = _sea_states.get(ship, [])
+	var amplitude: float
+	if not kept.is_empty() and now < int(kept[0]):
+		amplitude = float(kept[1])
+	else:
+		if ship.is_docked():
+			amplitude = ROLL_DOCKED + ROLL_STORM * 0.3 * _storm_strength_at_port(ship.docked_at)
+		else:
+			var lon_lat := Geo.unproject(screen_to_world(at))
+			var wind := Wind.at(lon_lat, GameState.play_time, GameState.weather.storms).length()
+			var storm := float(GameState.weather.strongest_at(lon_lat)[1]) if not GameState.weather.storms.is_empty() else 0.0
+			amplitude = ROLL_CALM + ROLL_WIND * clampf(wind / ROLL_WIND_FULL, 0.0, 1.0) + ROLL_STORM * storm
+		_sea_states[ship] = [now + int(SEA_STATE_REFRESH_S * 1000.0), amplitude]
+	var t := now / 1000.0
+	var phase := float(ship.id) * 1.7
+	return amplitude * (0.7 * sin(t * 1.3 + phase) + 0.3 * sin(t * 2.9 + phase * 0.6))
 
 ## How a ship's drawing is faded: not at all for the player's own, a little
 ## for another player's (multiplayer).
@@ -6905,8 +7331,10 @@ func _draw_tiny_ship(at: Vector2, color: Color) -> void:
 
 ## The hull in the model's color, the cargo (cut off behind how full the hold
 ## is, in CARGO_STEPS steps, any cargo showing at least one) and the details.
-func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade := Color.WHITE) -> void:
+func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade := Color.WHITE, lean := 0.0) -> void:
 	_canvas.draw_texture_rect(art.hull, rect, false, color)
+	# Its superstructure and details lean further than the hull as it rolls (they stand up).
+	rect = Rect2(rect.position + Vector2(0.0, lean * rect.size.y * ROLL_TOWER), rect.size)
 	var level := ship.cargo_level()
 	if art.has("cargo") and level > 0.0:
 		var zone: Vector2 = art.zone
@@ -7434,6 +7862,57 @@ static func _load_decor() -> void:
 		# _local_zoom()), worked out once: they never move, and there are many.
 		_decor_units.append(_unit(p))
 		_decor_room.append(data.decor_clearance[i] / cosh(deg_to_rad(p.y)) if i < data.decor_clearance.size() else INF)
+	_build_decor_atlas()
+
+## The land drawings' art in one texture (for DecorSim.set_atlas()): drawn
+## from it, all the drawings in view go down as one draw call, not one a
+## drawing (sorted by depth, they come one art after another). Each sits in
+## DECOR_ATLAS_PAD px of clear space, so its smaller mipmaps never pick up a
+## neighbour. Rows, tallest first.
+const DECOR_ATLAS_WIDTH := 2048
+const DECOR_ATLAS_MAX_HEIGHT := 4096
+const DECOR_ATLAS_PAD := 16
+static func _build_decor_atlas() -> void:
+	var images := []
+	for texture in _decor_textures:
+		var image: Image = texture.get_image() if texture != null else null
+		if image != null:
+			if image.is_compressed():
+				image.decompress()
+			image.convert(Image.FORMAT_RGBA8)
+		images.append(image)
+	var order := range(images.size()).filter(func(i: int) -> bool: return images[i] != null)
+	order.sort_custom(func(a: int, b: int) -> bool: return (images[a] as Image).get_height() > (images[b] as Image).get_height())
+	var places := {}
+	var x := 0
+	var y := 0
+	var row_h := 0
+	for i: int in order:
+		var image: Image = images[i]
+		var w := image.get_width() + 2 * DECOR_ATLAS_PAD
+		var h := image.get_height() + 2 * DECOR_ATLAS_PAD
+		if x + w > DECOR_ATLAS_WIDTH:
+			y += row_h
+			x = 0
+			row_h = 0
+		places[i] = Vector2i(x, y)
+		x += w
+		row_h = maxi(row_h, h)
+	var height := y + row_h
+	if places.is_empty() or height > DECOR_ATLAS_MAX_HEIGHT:
+		return  # (Drawn from their own textures.)
+	var atlas := Image.create_empty(DECOR_ATLAS_WIDTH, height, false, Image.FORMAT_RGBA8)
+	var regions := []
+	regions.resize(images.size())
+	regions.fill(Rect2())
+	for i: int in places:
+		var image: Image = images[i]
+		var at: Vector2i = places[i] + Vector2i.ONE * DECOR_ATLAS_PAD
+		atlas.blit_rect(image, Rect2i(Vector2i.ZERO, image.get_size()), at)
+		regions[i] = Rect2(Vector2(at), Vector2(image.get_size()))
+	atlas.generate_mipmaps()
+	_decor_atlas = ImageTexture.create_from_image(atlas)
+	_decor_atlas_regions = regions
 
 ## The drawings on the land (WorldMapData decor: mountains, stands of trees,
 ## grass, scrub, cacti, rocks, dunes, polar waves), on the full-color map
@@ -7487,6 +7966,8 @@ func _draw_decor() -> void:
 		_decor_native = ClassDB.instantiate(&"DecorSim")
 		_decor_native.setup(data.decor_positions, _decor_units, PackedInt32Array(Array(data.decor_kinds)), PackedInt32Array(Array(data.decor_tiers)),
 			_decor_room, textures, DECOR_BUCKET)
+		if _decor_atlas != null and _decor_native.has_method(&"set_atlas"):
+			_decor_native.set_atlas(_decor_atlas.get_rid(), _decor_atlas_regions, Vector2(_decor_atlas.get_size()))
 		if not _season.is_empty() and _decor_native.has_method(&"set_seasons"):
 			_decor_native.set_seasons(_season[0], _season[1])
 	if _decor_native != null:
@@ -7775,6 +8256,19 @@ func home_screen_position(kind: String, index: int) -> Vector2:
 ## _sea_leaps(), _sea_blows()).
 ## The selected or hovered pod's year of routes shows dashed (SEA_ROUTE_COLOR).
 const SEA_LIFE_MIN_ZOOM := 10.0
+## How long (s of play) a pod's worked-out state is kept (see _draw_sea_life()).
+const POD_STATE_S := 0.4
+var _pod_states := {}  # Pod index -> [calendar time it's stale at near the view, when its stay ends, state].
+## How many pods are looked at a frame for a stay that's ended, and how many
+## of those are worked out afresh (see _draw_sea_life()).
+const POD_SCAN_PER_FRAME := 48
+const POD_MOVES_PER_FRAME := 6
+var _pod_cursor := 0
+## The pods the library drew this frame: [index, x, y, reach] each (see _pod_hit_list()).
+var _pod_hit_data := PackedFloat32Array()
+var _sea_longest := 0.0
+## No sea life while even the longest animal is under this (px): nothing to see.
+const SEA_LIFE_MIN_PX := 3.0
 const SEA_ART_DIR := "res://art/sea/"
 const SEA_ART_ASPECT := 128.0 / 48.0
 const SEA_SHADOW := Color(0.62, 0.78, 0.9, 0.5)
@@ -7792,22 +8286,91 @@ const SEA_HIT_MIN_PX := 12.0
 ## it's up at the surface, breaching or leaping.
 func _draw_sea_life() -> void:
 	_pod_hits.clear()
+	_pod_hit_data = PackedFloat32Array()
 	if gray_mode or _zoom < SEA_LIFE_MIN_ZOOM or _sea_warming:  # (They show once their paths are found.)
 		return
 	var sea := SeaLife.shared()
-	var now := float(GameState.calendar_time())
-	var view := Rect2(Vector2.ZERO, size).grow(80.0)
 	var scale := _animal_scale()
+	if _sea_longest_px(sea) * scale < SEA_LIFE_MIN_PX:
+		return  # (Even the biggest animal's too small to make out.)
+	var now := float(GameState.calendar_time())
 	for highlight in [selected_pod, _hovered_pod]:
 		if highlight >= 0 and highlight < sea.pods.size():
 			_draw_pod_routes(sea, highlight)
+	if _sea_painter == null and ClassDB.class_exists(&"SeaPainter"):
+		_sea_painter = ClassDB.instantiate(&"SeaPainter")
+	if _sea_painter == null:
+		_draw_sea_life_in_gdscript(sea, now, scale)
+		return
+	# The pods natively (SeaPainter: the same ones, the same ways). Each is
+	# worked out here (where it is, which way: sea.state()) when it's near the
+	# view and its last state is POD_STATE_S old, and wherever it is once its
+	# stay in an area ends (looked at a few a frame, in turn); the library
+	# keeps them, finds the ones in view and draws them.
+	_sea_painter.set_count(sea.pods.size())
+	var params := {right = _right, up = _up, toward = _toward, radius = _radius(), middle = size / 2.0,
+		view_angle = asin(minf((size.length() / 2.0 + 80.0) / _radius(), 1.0)), view = Rect2(Vector2.ZERO, size).grow(80.0),
+		play_time = GameState.play_time, scale = scale, mask = sea._mask, mask_size = sea._mask_size, hit_min_px = SEA_HIT_MIN_PX}
+	for i: int in _sea_painter.near(params):
+		var kept: Array = _pod_states.get(i, [])
+		if kept.is_empty() or now >= float(kept[0]):
+			_refresh_pod(sea, i, now)
+	var scanned := 0
+	var moved := 0
+	while scanned < POD_SCAN_PER_FRAME and moved < POD_MOVES_PER_FRAME and not sea.pods.is_empty():
+		_pod_cursor = (_pod_cursor + 1) % sea.pods.size()
+		scanned += 1
+		var kept: Array = _pod_states.get(_pod_cursor, [])
+		if not kept.is_empty() and now >= float(kept[1]):
+			_refresh_pod(sea, _pod_cursor, now)
+			moved += 1
+	_pod_hit_data = _sea_painter.draw_pods(_canvas.get_canvas_item(), _sea_kinds, params)
+	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+## A pod worked out afresh (see _draw_sea_life()): its state kept till it's
+## POD_STATE_S old (for while it's near the view) and till its stay ends
+## (wherever it is), and given to the library with the cap it stays within
+## meanwhile (its area while it stays there; just its spot on the move).
+func _refresh_pod(sea: SeaLife, i: int, now: float) -> void:
+	var pod: Dictionary = sea.pods[i]
+	var kind: Dictionary = sea.species[pod.species]
+	var state := sea.state(i, now)
+	var refresh_at := now + POD_STATE_S * float(GameState.calendar_seconds_per_second())
+	var unit := _unit(Geo.project(state.pos))
+	var cap := unit
+	var margin := 0.0
+	var until := refresh_at
+	if not state.migrating:
+		var area: Dictionary = sea.areas[state.area]
+		cap = _unit(Geo.project(Vector2(float(area.lon), float(area.lat))))
+		margin = deg_to_rad(float(area.radius_nm) / 60.0 + 0.1)
+		until = float(state.until)
+	_pod_states[i] = [refresh_at, until, state]
+	_sea_painter.set_pod(i, unit, cap, margin, state.heading, _sea_kind_index(pod.species, kind), mini(int(pod.size), int(kind.shown)))
+
+## The longest any sea animal is drawn (length_px), for skipping them all when
+## even that's under SEA_LIFE_MIN_PX.
+func _sea_longest_px(sea: SeaLife) -> float:
+	if _sea_longest <= 0.0:
+		for kind: Dictionary in sea.species.values():
+			_sea_longest = maxf(_sea_longest, float(kind.get("length_px", 0.0)))
+	return _sea_longest
+
+## The pods drawn this frame, for clicks: [index, middle on screen, reach px] each
+## (from the library's hits, when it drew them).
+func _pod_hit_list() -> Array:
+	if _pod_hits.is_empty() and not _pod_hit_data.is_empty():
+		for k in range(0, _pod_hit_data.size() - 3, 4):
+			_pod_hits.append([int(_pod_hit_data[k]), Vector2(_pod_hit_data[k + 1], _pod_hit_data[k + 2]), float(_pod_hit_data[k + 3])])
+	return _pod_hits
+
+## The sea life drawn in GDScript, without the library: every pod looked at,
+## its animals drawn one by one (see _draw_sea_animal()).
+func _draw_sea_life_in_gdscript(sea: SeaLife, now: float, scale: float) -> void:
+	var view := Rect2(Vector2.ZERO, size).grow(80.0)
 	# A pod staying in an area is within its radius till it leaves (its state's
 	# until): skipped till then while that area's out of view.
 	var box := _screen_lon_lat_box(80.0)
-	# The animals natively (SeaPainter: the same ones, the same ways), where the library's there.
-	if _sea_painter == null and ClassDB.class_exists(&"SeaPainter"):
-		_sea_painter = ClassDB.instantiate(&"SeaPainter")
-	var native_pods := []
 	for i in sea.pods.size():
 		var bound: Array = _pod_bounds.get(i, NO_POD_BOUND)
 		if now < float(bound[1]):
@@ -7816,7 +8379,16 @@ func _draw_sea_life() -> void:
 				continue
 		var pod: Dictionary = sea.pods[i]
 		var kind: Dictionary = sea.species[pod.species]
-		var state := sea.state(i, now)
+		# Its state (where it is, which way) kept for POD_STATE_S: pods crawl, and
+		# working it out means walking its path.
+		var kept: Array = _pod_states.get(i, [])
+		var state: Dictionary
+		if not kept.is_empty() and now < float(kept[0]):
+			state = kept[2]
+		else:
+			state = sea.state(i, now)
+			var refresh_at := now + POD_STATE_S * float(GameState.calendar_seconds_per_second())
+			_pod_states[i] = [refresh_at, refresh_at, state]
 		if state.migrating:
 			_pod_bounds.erase(i)
 		else:
@@ -7833,14 +8405,8 @@ func _draw_sea_life() -> void:
 		var spacing := float(kind.spacing_px) * scale
 		var reach := spacing * sqrt(float(shown)) + float(kind.length_px) * scale * 0.5
 		_pod_hits.append([i, center, maxf(reach, SEA_HIT_MIN_PX)])
-		if _sea_painter != null:
-			native_pods.append([i, center, angle, _sea_kind_index(pod.species, kind), shown])
-			continue
 		for j in shown:
 			_draw_sea_animal(i, j, kind, center, angle, spacing, scale)
-	if _sea_painter != null and not native_pods.is_empty():
-		_sea_painter.draw(_canvas.get_canvas_item(), native_pods, _sea_kinds, {right = _right, up = _up, toward = _toward, radius = _radius(),
-			middle = size / 2.0, play_time = GameState.play_time, scale = scale, mask = sea._mask, mask_size = sea._mask_size})
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 ## A sea animal species' place in _sea_kinds (what SeaPainter draws it with), added the first time.
@@ -8018,7 +8584,7 @@ func _draw_pod_routes(sea: SeaLife, pod: int) -> void:
 func _pod_at(screen_pos: Vector2) -> int:
 	var best := -1
 	var best_share := INF
-	for hit: Array in _pod_hits:
+	for hit: Array in _pod_hit_list():
 		var share := (hit[1] as Vector2).distance_to(screen_pos) / float(hit[2])
 		if share <= 1.0 and share < best_share:
 			best_share = share
@@ -8028,7 +8594,7 @@ func _pod_at(screen_pos: Vector2) -> int:
 ## Where a pod's middle is on screen (local to this control), as last drawn,
 ## or Vector2.INF if it isn't in view.
 func pod_screen_position(pod: int) -> Vector2:
-	for hit: Array in _pod_hits:
+	for hit: Array in _pod_hit_list():
 		if hit[0] == pod:
 			return hit[1]
 	return Vector2.INF
@@ -8982,7 +9548,7 @@ static func _oval(middle: Vector2, half: Vector2) -> PackedVector2Array:
 ## below (`height` times as far off as usual). A raptor (one with a tail
 ## color) has broad wings with fingered tips (an osprey's bent at the wrist),
 ## a fanned tail and a hooked bill; some have pale or chestnut shoulders. A
-## falcon has swept pointed wings and a long narrow tail, a frigatebird long
+## falcon has swept pointed wings and a long narrow tail, a frigatebird long, narrow
 ## angular wings, a forked tail and a scarlet throat.
 ## Leaves the canvas item's transform reset.
 static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Dictionary, wings: float, span: float, shadow := true, height := 1.0) -> void:
@@ -9040,9 +9606,13 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 	var body := mantle.lerp(head, 0.25)
 	if raptor:
 		body = mantle.lerp(parsed[5], 0.2)
-	canvas.draw_colored_polygon(_bird_body, body)
 	if frigate:
-		canvas.draw_circle(Vector2(0.1, 0.0), 0.035, Color(0.85, 0.12, 0.16))  # The male's scarlet throat pouch.
+		canvas.draw_set_transform(at, heading, Vector2(span, span * 0.5))  # A slim body, as in life.
+		canvas.draw_colored_polygon(_bird_body, body)
+		canvas.draw_set_transform(at, heading, whole)
+		canvas.draw_circle(Vector2(0.1, 0.0), 0.028, Color(0.85, 0.12, 0.16))  # The male's scarlet throat pouch.
+	else:
+		canvas.draw_colored_polygon(_bird_body, body)
 	if raptor:
 		# A big head and a short hooked bill.
 		canvas.draw_circle(Vector2(0.17, 0.0), 0.065, head)
@@ -9077,8 +9647,8 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 			canvas.draw_circle(Vector2(0.34, 0.0), 0.018, Color.from_string(str(colors.throat), head))
 		canvas.draw_line(Vector2(0.34, 0.0), Vector2(0.42, 0.0), bill, maxf(span * 0.02, 1.0) / span)
 	else:
-		canvas.draw_circle(Vector2(0.17, 0.0), 0.055, head)
-		canvas.draw_line(Vector2(0.21, 0.0), Vector2(0.36 if long_bill else 0.27, 0.0), bill, maxf(span * 0.03, 1.0) / span)
+		canvas.draw_circle(Vector2(0.17, 0.0), 0.04 if frigate else 0.055, head)  # (A frigatebird: a small head and a long hooked bill.)
+		canvas.draw_line(Vector2(0.21, 0.0), Vector2(0.36 if long_bill or frigate else 0.27, 0.0), bill, maxf(span * (0.02 if frigate else 0.03), 1.0) / span)
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 ## A bird's wings, wingtips and (a raptor's) tail a unit across, made once
@@ -9096,9 +9666,10 @@ static func _bird_shape(raptor: bool, bent: bool, special := 0) -> Dictionary:
 	var tip_part: PackedVector2Array
 	var tail := PackedVector2Array()
 	if special == 3:
-		wing = PackedVector2Array([Vector2(0.06, 0.0), Vector2(0.13, half * 0.42), Vector2(-0.02, half), Vector2(-0.1, half * 0.5), Vector2(-0.1, 0.0)])
-		tip_part = PackedVector2Array([Vector2(0.03, half * 0.7), Vector2(-0.02, half), Vector2(-0.07, half * 0.72)])
-		tail = PackedVector2Array([Vector2(-0.12, 0.025), Vector2(-0.44, 0.1), Vector2(-0.34, 0.0), Vector2(-0.44, -0.1), Vector2(-0.12, -0.025)])
+		# A frigatebird's wings: long and narrow, angled at the wrist (a W in the sky), as in life.
+		wing = PackedVector2Array([Vector2(0.03, 0.0), Vector2(0.07, half * 0.42), Vector2(-0.015, half), Vector2(-0.04, half * 0.5), Vector2(-0.035, 0.0)])
+		tip_part = PackedVector2Array([Vector2(0.01, half * 0.7), Vector2(-0.015, half), Vector2(-0.035, half * 0.72)])
+		tail = PackedVector2Array([Vector2(-0.12, 0.018), Vector2(-0.44, 0.075), Vector2(-0.42, 0.045), Vector2(-0.3, 0.0), Vector2(-0.42, -0.045), Vector2(-0.44, -0.075), Vector2(-0.12, -0.018)])
 	elif special == 4:
 		wing = PackedVector2Array([Vector2(0.08, 0.0), Vector2(0.1, half * 0.4), Vector2(-0.06, half), Vector2(-0.13, half * 0.5), Vector2(-0.13, 0.0)])
 		tip_part = PackedVector2Array([Vector2(0.0, half * 0.7), Vector2(-0.06, half), Vector2(-0.11, half * 0.72)])
@@ -9647,6 +10218,21 @@ var _lights_layer := Control.new()
 ## Towards the sun (the sub-solar point on the unit sphere), and whether the night shows at all.
 var _sun := Vector3(1.0, 0.0, 0.0)
 var _night_shown := false
+## Each port's night (0 day to 1), kept while the sun stands still enough (see _draw_lights()).
+var _port_nights := PackedFloat32Array()
+var _port_nights_sun := Vector3.ZERO
+
+## True if any of the view (its middle and corners) is in the night.
+func _any_night_in_view() -> bool:
+	for corner: Vector2 in [size / 2.0, Vector2.ZERO, Vector2(size.x, 0.0), size, Vector2(0.0, size.y)]:
+		if _night_at(_unit(screen_to_world(corner))) >= 0.03:
+			return true
+	return false
+## Which way shadows fall on screen (a unit vector times their length for a
+## unit of height: longer with the sun low), from the sun's place over the
+## view's middle (see _update_shadow_dir()); down and to the right by default.
+var _shadow_dir := Vector2(0.7, 0.7)
+var _last_shadow_key := []
 ## The storms this frame, for the lights: [where on the unit sphere, radius (radians), strength] each.
 var _storm_shade := []
 ## The ships drawn this frame where it's dark: [at, angle, length px, width px, how dark] each.
@@ -9669,7 +10255,10 @@ func _add_night_layers() -> void:
 		rect.visible = false
 	_lights_layer.mouse_filter = MOUSE_FILTER_IGNORE
 	_lights_layer.set_anchors_preset(PRESET_FULL_RECT)
-	_lights_layer.draw.connect(_draw_lights)
+	_lights_layer.draw.connect(func() -> void:
+		var t0 := Time.get_ticks_usec()
+		_draw_lights()
+		_prof("lights", t0))
 	# The first dark under the lanes and ports (before _static_layer), the
 	# second and the lights over everything.
 	add_child(_night)
@@ -9691,6 +10280,7 @@ func _update_night() -> void:
 	var hours := fposmod(float(unix), 86400.0) / 3600.0
 	var lon := deg_to_rad((12.0 - hours) * 15.0 + GameState.clock_longitude())  # (The clock is the home port's local time.)
 	_sun = Vector3(cos(tilt) * cos(lon), cos(tilt) * sin(lon), sin(tilt))
+	_update_shadow_dir()
 	_storm_shade.clear()
 	for storm: Dictionary in GameState.weather.storms:
 		_storm_shade.append([_unit(Geo.project(Vector2(storm.lon, storm.lat))), float(storm.radius_nm) / Geo.EARTH_RADIUS_NM, Weather.intensity(storm)])
@@ -9702,6 +10292,38 @@ func _update_night() -> void:
 		material.set_shader_parameter(&"radius", _radius())
 		material.set_shader_parameter(&"sun", _sun)
 	_lights_layer.queue_redraw()
+
+## Shadows fall away from the sun: its direction on screen from the view's
+## middle (the sun's unit vector's part along the ground there), their length
+## by its height (long at dawn and dusk, short at noon; by night a soft
+## moonlight length).
+func _update_shadow_dir() -> void:
+	var center := _unit(screen_to_world(size / 2.0))
+	var elevation := center.dot(_sun)
+	var along := _sun - center * elevation
+	if along.length() < 0.001:
+		_shadow_dir = Vector2(0.7, 0.7)
+		return
+	var screen_sun := (_unit_to_screen((center + along.normalized() * 0.002).normalized()) - _unit_to_screen(center)).normalized()
+	var length := 1.2 if elevation <= 0.05 else clampf(sqrt(1.0 - elevation * elevation) / elevation * 0.45, 0.25, 2.2)
+	_shadow_dir = -screen_sun * length
+	var key := _shadow_key()
+	if key != _last_shadow_key:  # (The marinas are drawn again with their shadows moved.)
+		_last_shadow_key = key
+		_update_marinas()
+
+## A building's shadow offset in a marina's item (dock units times the dock
+## scale, in screen px): the sun's direction, turned back if the marina is being
+## recorded (its item turns it into place).
+func _shadow_drop(port_id: String, height: float) -> Vector2:
+	var drop := _shadow_dir * height * dock_scale(port_id)
+	if port_id == _recording_marina:
+		drop = drop.rotated(-(_port_sea_angle(port_id) + _port_turn(port_id)))
+	return drop
+
+## The shadows' direction, coarsely, for the marina items' keys (they're drawn again when it changes enough).
+func _shadow_key() -> Array:
+	return [roundi(_shadow_dir.angle() / 0.2), roundi(_shadow_dir.length() * 3.0)]
 
 ## How dark it is at a point on the unit sphere (0 day, 1 the dead of night): as the shader.
 func _night_at(unit: Vector3) -> float:
@@ -9729,6 +10351,44 @@ func _note_lit_ship(at: Vector2, angle: float, look: Array) -> void:
 	if night > 0.03:
 		var size_px: Vector2 = (look[7] as Rect2).size * _ship_scale()
 		_lit_ships.append([at, angle, size_px.x, size_px.y, night])
+
+## A marina smaller than this on screen (its jetty's radius, px) shows a town's glow at night, not its lamps.
+const MARINA_LIGHTS_MIN_PX := 40.0
+## The towns' glows at night: one quad of the glow texture per lit port, as one multimesh (see _draw_lights()).
+static var _glow_mm: MultiMesh = null
+static var _town_glow_texture: Texture2D = null
+
+static func _glow_multimesh() -> MultiMesh:
+	if _glow_mm == null:
+		var mesh := ArrayMesh.new()
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector2Array([Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5)])
+		arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)])
+		arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2, 0, 2, 3])
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		_glow_mm = MultiMesh.new()
+		_glow_mm.transform_format = MultiMesh.TRANSFORM_2D
+		_glow_mm.use_colors = true
+		_glow_mm.mesh = mesh
+		_glow_mm.instance_count = 400
+	return _glow_mm
+
+## A town's glow from afar: the glow with a bright core (the lamps' dot in the same picture).
+static func _town_glow() -> Texture2D:
+	if _town_glow_texture == null:
+		var gradient := Gradient.new()
+		gradient.offsets = PackedFloat32Array([0.0, 0.16, 0.2, 0.5, 1.0])
+		gradient.colors = PackedColorArray([Color(1.0, 1.0, 1.0, 1.0), Color(1.0, 1.0, 1.0, 1.0), Color(1.0, 1.0, 1.0, 0.75), Color(1.0, 1.0, 1.0, 0.25), Color(1.0, 1.0, 1.0, 0.0)])
+		var texture := GradientTexture2D.new()
+		texture.width = 64
+		texture.height = 64
+		texture.fill = GradientTexture2D.FILL_RADIAL
+		texture.fill_from = Vector2(0.5, 0.5)
+		texture.fill_to = Vector2(1.0, 0.5)
+		texture.gradient = gradient
+		_town_glow_texture = texture
+	return _town_glow_texture
 
 static func _glow() -> Texture2D:
 	if _glow_texture == null:
@@ -9766,8 +10426,10 @@ func _draw_lights() -> void:
 	_canvas = _lights_layer
 	if GameState.divine.comet_up():
 		_draw_comet(GameState.play_time)
+	var t_ships := Time.get_ticks_usec()
 	if not _night_shown:
 		_lit_ships.clear()
+		_hide_marina_lights({})
 		return
 	var glow := _glow()
 	# The ships: their decks' glow, their navigation lights, a few deck lamps.
@@ -9788,60 +10450,184 @@ func _draw_lights() -> void:
 		var lamps := clampi(int(length / 6.0), 1, 6)
 		for k in lamps:
 			_canvas.draw_circle(Vector2(lerpf(-length * 0.3, length * 0.3, (k + 0.5) / lamps), 0.0), dot * 0.7, Color(LIGHT_WARM, 0.9 * night))
+	_prof("lights.ships", t_ships)
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 	_lit_ships.clear()
-	# The ports: their marinas' lights, or their towns' glow from afar.
+	# The ports: their marinas' lights, or their towns' glow from afar. By day
+	# over the whole view with no storm, nothing to do; else each port's night
+	# is kept while the sun stands still enough (_port_nights), and the towns'
+	# glows and dots go down as two triangle batches, not two calls a port.
+	if _storm_shade.is_empty() and not _any_night_in_view():
+		_hide_marina_lights({})
+		return
+	_marina_lights_shown.clear()
+	_marina_light_records = 0
+	if _port_nights.size() != GameData.ports.size() or _sun.angle_to(_port_nights_sun) > 0.03:
+		_port_nights.resize(GameData.ports.size())
+		for i in GameData.ports.size():
+			_port_nights[i] = _night_at(_unit(GameData.port_position(str((GameData.ports[i] as Dictionary).id))))
+		_port_nights_sun = _sun
+	var marinas := _any_marina_shown() and float(_marina_layout(str(Docks.settings().get("hub_berths", "LLLLLLLLLLLLLL")), true).radius) * _ship_scale() >= MARINA_LIGHTS_MIN_PX  # (Too small for lamps to show: a glow, like a town afar.)
+	var lit := 0
+	var mm := _glow_multimesh()
 	for index in _ports_near_view():
-		var port_id := str((GameData.ports[index] as Dictionary).id)
-		var at := port_screen_position(port_id)
-		if _is_hidden(at):
+		var night := _port_nights[index]
+		if night < 0.03 and not marinas:
 			continue
-		var unit := _unit(GameData.port_position(port_id))
-		var night := _night_at(unit)
-		if _marina_shown(port_id):
-			var dark := _dark_at(unit)  # (Its lights come on under a storm too.)
+		var port_id := str((GameData.ports[index] as Dictionary).id)
+		if marinas and _marina_shown(port_id):
+			var at := port_screen_position(port_id)
+			if _is_hidden(at):
+				continue
+			var dark := maxf(night, _storm_dark_at(_unit(GameData.port_position(port_id))))  # (Its lights come on under a storm too.)
 			if dark >= 0.03:
+				var t_m := Time.get_ticks_usec()
 				_draw_marina_lights(port_id, dark, glow)
+				_prof("lights.marinas", t_m)
 		elif night >= 0.03:
+			var at := port_screen_position(port_id)
+			if _is_hidden(at):
+				continue
 			var r := float(TOWN_GLOW_PX.get(GameState.port_sizes.band(port_id), 10.0))
-			_canvas.draw_texture_rect(glow, Rect2(at - Vector2.ONE * r, Vector2.ONE * r * 2.0), false, Color(LIGHT_WARM, 0.75 * night))
-			_canvas.draw_circle(at, maxf(r * 0.18, 1.2), Color(LIGHT_WARM, night))
+			if lit >= mm.instance_count:
+				mm.instance_count = lit + 64
+			mm.set_instance_transform_2d(lit, Transform2D(0.0, Vector2.ONE * r * 2.0, 0.0, at))
+			mm.set_instance_color(lit, Color(LIGHT_WARM, 0.8 * night))
+			lit += 1
+	mm.visible_instance_count = lit
+	if lit > 0:
+		_canvas.draw_multimesh(mm, _town_glow())
+	_hide_marina_lights(_marina_lights_shown)
 
 ## A marina's lights at night: the entrance's red and green, lamps along the
 ## quay (over the HQ and the industry), and the lighthouse's beam sweeping round.
 func _draw_marina_lights(port_id: String, night: float, glow: Texture2D) -> void:
 	var layout := _port_layout(port_id)
 	var scale := _ship_scale()
+	var t_l := Time.get_ticks_usec()
+	_show_marina_lights(port_id, layout, night, glow, scale)
+	_prof("lights.item", t_l)
+	t_l = Time.get_ticks_usec()
+	# The lighthouse's beam sweeping round (two beams, opposite), each frame.
+	var tower := _dock_point(port_id, _lighthouse_spot(layout))
+	var turn := TAU * fposmod(GameState.play_time / LIGHTHOUSE_TURN_S, 1.0)
+	var reach := float(layout.radius) * LIGHTHOUSE_BEAM_RADII * scale
+	var colors := PackedColorArray([Color(LIGHT_WHITE, 0.55 * night), Color(LIGHT_WHITE, 0.0), Color(LIGHT_WHITE, 0.0), Color(LIGHT_WHITE, 0.0)])
+	for k in 2:
+		var dir := Vector2.from_angle(_dock_angle(port_id, turn + k * PI))
+		_canvas.draw_primitive(PackedVector2Array([tower, tower + dir.rotated(-0.1) * reach, tower + dir * reach * 1.06, tower + dir.rotated(0.1) * reach]), colors, PackedVector2Array())
+	_prof("lights.beams", t_l)
+
+## A marina's steady lights (the entrance's red and green, the lamps along the
+## quay, the lighthouse's halo and lantern, the town's glow and its windows)
+## as a canvas item of its own over the lights layer: drawn once in dock
+## units, moved, turned and scaled into place each frame by its pivot and
+## faded by the night through modulate, so a big port's thousand lamps and
+## windows aren't set again every frame (circles and polygons are costly to
+## set). Drawn again when its town's laid out again or the zoom's moved a
+## step of MARINA_LIGHTS_ZOOM_STEP (the lamps' least sizes are px); one
+## marina's a frame. Hidden with the rest of a port's lights (see _hide_marina_lights()).
+var _marina_light_items := {}
+var _marina_lights_shown := {}
+var _marina_light_records := 0
+const MARINA_LIGHTS_ZOOM_STEP := 1.5
+func _show_marina_lights(port_id: String, layout: Dictionary, night: float, glow: Texture2D, scale: float) -> void:
+	var item: Control = _marina_light_items.get(port_id)
+	if item == null:
+		item = Control.new()
+		item.mouse_filter = MOUSE_FILTER_IGNORE
+		item.use_parent_material = true
+		item.draw.connect(func() -> void: _record_marina_lights(item))
+		var pivot := Node2D.new()
+		pivot.add_child(item)
+		_lights_layer.add_child(pivot)
+		_marina_light_items[port_id] = item
+		if not _lights_layer.visibility_changed.is_connected(_lights_visibility_changed):
+			_lights_layer.visibility_changed.connect(_lights_visibility_changed)
+	var town := _town(port_id, layout)
+	var key := [port_id, roundi(log(scale) / log(MARINA_LIGHTS_ZOOM_STEP)), _dock_flips.get(port_id, 1.0), layout.radius, layout.depth, town.is_empty()]
+	var recorded := item.has_meta(&"key")
+	if not recorded or item.get_meta(&"key") != key:
+		if _marina_light_records >= 1:
+			if not recorded:
+				_set_marina_lights_shown(item, false)  # (Nothing drawn in it yet: its turn next frame.)
+				return
+		else:
+			_marina_light_records += 1
+			item.set_meta(&"key", key)
+			item.set_meta(&"scale", scale)
+			item.set_meta(&"glow", glow)
+			item.queue_redraw()
+	var pivot := item.get_parent() as Node2D
+	pivot.position = port_screen_position(port_id)
+	pivot.rotation = _port_sea_angle(port_id) + _port_turn(port_id)
+	pivot.scale = Vector2(scale, scale * float(_dock_flips.get(port_id, 1.0)))
+	item.modulate = Color(1.0, 1.0, 1.0, night)
+	_set_marina_lights_shown(item, true)
+	_marina_lights_shown[port_id] = true
+
+func _record_marina_lights(item: Control) -> void:
+	if not item.has_meta(&"key"):
+		return
+	var t0 := Time.get_ticks_usec()
+	var key: Array = item.get_meta(&"key")
+	var port_id: String = key[0]
+	var scale := float(item.get_meta(&"scale", 1.0))
+	var glow: Texture2D = item.get_meta(&"glow")
+	var layout := _port_layout(port_id)
 	var radius: float = layout.radius
 	var gap: float = layout.gap
+	# (Everything in dock units: the pivot scales and flips it. What has a
+	# least size in px is sized for the zoom it's drawn at.)
 	for side: float in [-1.0, 1.0]:
-		var p := _dock_point(port_id, Vector2.from_angle(gap * side) * radius)
+		var p := Vector2.from_angle(gap * side) * radius
 		var tint: Color = ENTRANCE_LIGHTS[0 if side < 0.0 else 1]
-		var halo := maxf(JETTY_WIDTH * scale * 1.8, 5.0)
-		_canvas.draw_texture_rect(glow, Rect2(p - Vector2.ONE * halo, Vector2.ONE * halo * 2.0), false, Color(tint, 0.7 * night))
-		_canvas.draw_circle(p, maxf(JETTY_WIDTH * scale * 0.45, 1.2), Color(tint, night))
+		var halo := maxf(JETTY_WIDTH * 1.8, 5.0 / scale)
+		item.draw_texture_rect(glow, Rect2(p - Vector2.ONE * halo, Vector2.ONE * halo * 2.0), false, Color(tint, 0.7))
+		item.draw_circle(p, maxf(JETTY_WIDTH * 0.45, 1.2 / scale), tint)
 	# The quay's lamps: a warm glow the length of the quay behind the basin.
 	var inland := _quay_inland(layout)
 	var depth := float(layout.depth) + QUAY_WIDTH
-	var quay_mid := _dock_point(port_id, Vector2((inland - depth) / 2.0, 0.0))
-	_canvas.draw_set_transform(quay_mid, _dock_angle(port_id, 0.0), Vector2.ONE)
-	var along := radius * 2.2 * scale
-	var across := (-inland - depth) * 2.0 * scale
-	_canvas.draw_texture_rect(glow, Rect2(-across / 2.0, -along / 2.0, across, along), false, Color(LIGHT_WARM, 0.4 * night))
-	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
-	# The lighthouse: its beam sweeping round (two beams, opposite), and its lantern.
-	var tower := _dock_point(port_id, _lighthouse_spot(layout))
-	var turn := TAU * fposmod(GameState.play_time / LIGHTHOUSE_TURN_S, 1.0)
-	var reach := radius * LIGHTHOUSE_BEAM_RADII * scale
-	for k in 2:
-		var dir := Vector2.from_angle(_dock_angle(port_id, turn + k * PI))
-		var points := PackedVector2Array([tower, tower + dir.rotated(-0.1) * reach, tower + dir * reach * 1.06, tower + dir.rotated(0.1) * reach])
-		var colors := PackedColorArray([Color(LIGHT_WHITE, 0.55 * night), Color(LIGHT_WHITE, 0.0), Color(LIGHT_WHITE, 0.0), Color(LIGHT_WHITE, 0.0)])
-		_canvas.draw_polygon(points, colors)
-	var halo := maxf(LIGHTHOUSE_RADIUS * scale * 4.0, 8.0)
-	_canvas.draw_texture_rect(glow, Rect2(tower - Vector2.ONE * halo, Vector2.ONE * halo * 2.0), false, Color(LIGHT_WHITE, 0.8 * night))
-	_canvas.draw_circle(tower, maxf(LIGHTHOUSE_RADIUS * scale * 0.3, 1.5), Color(LIGHT_WHITE, night))
-	_draw_town_lights(port_id, layout, night, glow, scale)
+	var along := radius * 2.2
+	var across := (-inland - depth) * 2.0
+	item.draw_texture_rect(glow, Rect2((inland - depth) / 2.0 - across / 2.0, -along / 2.0, across, along), false, Color(LIGHT_WARM, 0.4))
+	# The lighthouse's halo and lantern (its beam is drawn each frame: see _draw_marina_lights()).
+	var tower := _lighthouse_spot(layout)
+	var halo := maxf(LIGHTHOUSE_RADIUS * 4.0, 8.0 / scale)
+	item.draw_texture_rect(glow, Rect2(tower - Vector2.ONE * halo, Vector2.ONE * halo * 2.0), false, Color(LIGHT_WHITE, 0.8))
+	item.draw_circle(tower, maxf(LIGHTHOUSE_RADIUS * 0.3, 1.5 / scale), LIGHT_WHITE)
+	# The town: one glow, and all its windows as one run of dashes in its style's warmth.
+	var town := _town(port_id, layout)
+	if not town.is_empty():
+		var reach: float = town.reach
+		var tint: Color = town.light
+		var town_across := (reach + inland) * 1.6
+		var town_along := radius * TOWN_HALF_RADII * 2.4
+		item.draw_texture_rect(glow, Rect2(-(reach - inland) / 2.0 - town_across / 2.0, -town_along / 2.0, town_across, town_along), false, Color(tint, 0.35))
+		if scale >= TOWN_LIGHTS_MIN_SCALE and not (town.segments as PackedVector2Array).is_empty():
+			item.draw_multiline(town.segments, Color(tint, 0.9), maxf(0.22, 1.2 / scale))
+	_prof("lights.record", t0)
+
+func _set_marina_lights_shown(item: Control, shown: bool) -> void:
+	if bool(item.get_meta(&"shown", true)) != shown:
+		item.set_meta(&"shown", shown)
+		RenderingServer.canvas_item_set_visible(item.get_canvas_item(), shown)
+
+## Showing or hiding the map (another tab and back) sets every light item's
+## visibility on the server to the map's, whatever _set_marina_lights_shown()
+## set it to: so their record of it follows, and the next frame hides those
+## not in view (else they stay shown where they last were).
+func _lights_visibility_changed() -> void:
+	var shown := _lights_layer.is_visible_in_tree()
+	for item: Control in _marina_light_items.values():
+		item.set_meta(&"shown", shown)
+	_lights_layer.queue_redraw()
+
+## Hides every marina's lights but those shown this frame.
+func _hide_marina_lights(shown: Dictionary) -> void:
+	for port_id: String in _marina_light_items:
+		if not shown.has(port_id):
+			_set_marina_lights_shown(_marina_light_items[port_id], false)
 
 # --- Towns ---------------------------------------------------------------------------
 
@@ -9864,7 +10650,7 @@ func _draw_marina_lights(port_id: String, night: float, glow: Texture2D) -> void
 ## sand-colored roofs, the Caribbean's pastels, North America's grid of grey
 ## towers... Laid out once per port by a seed of its id (_town()), drawn into
 ## its marina's item (_draw_town()); at night (and under storms) its windows
-## light up in the style's warmth over a glow (_draw_town_lights()). Roads
+## light up in the style's warmth over a glow (_record_marina_lights()). Roads
 ## tie it together: a quay road behind the quay with a spine to the basin, a
 ## spur to the HQ and a cross road past the industry plots, an avenue inland
 ## through the middle of the town (a dashed line down it), a road along each
@@ -10002,8 +10788,8 @@ func _town(port_id: String, layout: Dictionary) -> Dictionary:
 	var waterfront := []
 	for i in cells.size():
 		var middle: Vector2 = cells[i][0]
-		if not _on_land(_dock_lon_lat(port_id, middle)):
-			continue  # In the water: the town keeps to its coast.
+		if not _on_land(_dock_lon_lat(port_id, middle)) or _on_other_marina(port_id, middle):
+			continue  # In the water (the town keeps to its coast), or on a neighbouring port's quay.
 		reach = maxf(reach, -middle.x + TOWN_CELL / 2.0)
 		if rng.randf() < TOWN_PARK_SHARE:
 			parks.append([middle, TOWN_CELL * rng.randf_range(0.25, 0.4)])
@@ -10271,6 +11057,131 @@ func _lay_moorings(port_id: String, layout: Dictionary, roads: Array) -> Diction
 	return {roads = kept_roads, pontoons = pontoons, moorings = moorings}
 
 
+## A point of a port's marina (dock units) as another port's dock units.
+func _local_of(other_id: String, lon_lat: Vector2) -> Vector2:
+	var info := GameData.get_port(other_id)
+	var lat := float(info.get("lat", 0.0))
+	var ground := Vector2(wrapf(lon_lat.x - float(info.get("lon", 0.0)), -180.0, 180.0) * cos(deg_to_rad(lat)), -(lon_lat.y - lat)) * SHIP_WORLD_ZOOM
+	var local := ground.rotated(-_port_sea_angle(other_id))
+	local.y *= float(_dock_flips.get(other_id, 1.0))
+	return local
+
+## True if a point of a port's marina (dock units) lies on a neighbouring
+## port's own ground (its quay, basin or harbour: see _marina_ground()), so
+## Rijeka's town never stands on Koper's quay.
+func _on_other_marina(port_id: String, local: Vector2) -> bool:
+	var lon_lat := _dock_lon_lat(port_id, local)
+	if not _marina_neighbours.has(port_id):
+		var here := GameData.get_port(port_id)
+		var at := Vector2(float(here.get("lon", 0.0)), float(here.get("lat", 0.0)))
+		var near := PackedStringArray()
+		for other: Dictionary in GameData.ports:
+			if other.id != port_id and Geo.distance_nm(at, Vector2(float(other.get("lon", 0.0)), float(other.get("lat", 0.0)))) < 2.0 * MARINA_MAX_REACH * 60.0 / SHIP_WORLD_ZOOM:
+				near.append(str(other.id))
+		_marina_neighbours[port_id] = near
+	for other: String in _marina_neighbours[port_id]:
+		if _marina_ground(_port_layout(other), _local_of(other, lon_lat)):
+			return true
+	return false
+
+## Each port's neighbours near enough for their marinas to meet (see _on_other_marina()).
+var _marina_neighbours := {}
+## Many small flat shapes drawn as one triangle array (one draw call, and one
+## call into the rendering server, instead of hundreds): a town's blocks, a
+## pontoon's fingers, the ports' lights at night. Shapes are convex (fans).
+class PolyBatch:
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+
+	func clear() -> void:
+		points.clear()
+		colors.clear()
+		uvs.clear()
+		indices.clear()
+
+	## A convex polygon in one colour.
+	func poly(p: PackedVector2Array, color: Color) -> void:
+		var base := points.size()
+		var n := p.size()
+		points.append_array(p)
+		var fill := PackedColorArray()
+		fill.resize(n)
+		fill.fill(color)
+		colors.append_array(fill)
+		uvs.resize(base + n)
+		if n == 4:
+			indices.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
+			return
+		for i in range(1, n - 1):
+			indices.append(base)
+			indices.append(base + i)
+			indices.append(base + i + 1)
+
+	## Everything so far as a mesh (2D, coloured triangles), for drawing again and again.
+	func to_mesh() -> ArrayMesh:
+		var mesh := ArrayMesh.new()
+		if indices.is_empty():
+			return mesh
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = points
+		arrays[Mesh.ARRAY_COLOR] = colors
+		arrays[Mesh.ARRAY_INDEX] = indices
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_2D_VERTICES)
+		return mesh
+
+	## A line as a thin quad.
+	func line(a: Vector2, b: Vector2, color: Color, width: float) -> void:
+		var n := (b - a).normalized().orthogonal() * width / 2.0
+		poly(PackedVector2Array([a + n, b + n, b - n, a - n]), color)
+
+	## A filled circle as a fan.
+	func disc(center: Vector2, r: float, color: Color, steps := 8) -> void:
+		var p := PackedVector2Array()
+		for i in steps:
+			p.append(center + Vector2.from_angle(TAU * i / steps) * r)
+		poly(p, color)
+
+	## A textured quad (the whole texture over the rect).
+	func textured(rect: Rect2, color: Color) -> void:
+		var base := points.size()
+		for corner: Vector2 in [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]:
+			points.append(corner)
+			colors.append(color)
+		uvs.append_array(PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]))
+		indices.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
+
+	## A quad showing the part of the texture `region` (0 to 1 each way) covers.
+	func textured_region(rect: Rect2, color: Color, region: Rect2) -> void:
+		var base := points.size()
+		for corner: Vector2 in [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]:
+			points.append(corner)
+			colors.append(color)
+		uvs.append_array(PackedVector2Array([region.position, Vector2(region.end.x, region.position.y), region.end, Vector2(region.position.x, region.end.y)]))
+		indices.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
+
+	## Draws everything so far on a canvas item (as one command) and clears.
+	func flush(canvas: CanvasItem, texture: Texture2D = null) -> void:
+		if indices.is_empty():
+			return
+		RenderingServer.canvas_item_add_triangle_array(canvas.get_canvas_item(), indices, points, colors, uvs, PackedInt32Array(), PackedFloat32Array(), texture.get_rid() if texture != null else RID())
+		clear()
+
+var _batch := PolyBatch.new()
+
+## How long (ms) each part of the map's frame work took since last cleared (for probes: MapView.profile).
+static var profile := {}
+## Set to time the map and game parts into `profile` (ms summed per part).
+static var profiling := false
+static func _prof(name: String, start_usec: int) -> void:
+	if not profiling:
+		return
+	profile[name] = float(profile.get(name, 0.0)) + (Time.get_ticks_usec() - start_usec) / 1000.0
+## The World map's sound (see Ambience).
+var ambience: Ambience = null
+
 ## A port's long-term moorings (see _lay_moorings()), or [] until its town is laid.
 func _moorings(port_id: String) -> Array:
 	var town := _town(port_id, _port_layout(port_id))
@@ -10319,42 +11230,86 @@ func _draw_town(port_id: String, layout: Dictionary, scale: float) -> void:
 	var town := _town(port_id, layout)
 	if town.is_empty():
 		return
-	var rect_points := func(rect: Rect2) -> PackedVector2Array:
-		return _marina_polygon(port_id, _rect_points(rect))
+	_batch.clear()
+	var t_p := Time.get_ticks_usec()
 	_draw_pontoons(port_id, layout, town, scale)
+	_prof("marina.pontoons", t_p)
+	# The town itself: its mesh (see _town_mesh()) scaled into the item.
+	var flip := float(_dock_flips.get(port_id, 1.0))
+	var dock := dock_scale(port_id)
+	_canvas.draw_mesh(_town_mesh(port_id, town, flip), null, Transform2D(0.0, Vector2(dock, dock * flip), 0.0, Vector2.ZERO))
+
+## A town's blocks, roads, parks and landmark as one mesh in dock units (see
+## PolyBatch), built once and kept with the town (its buildings never move;
+## the shadows go with the sun, so it's built again when that's moved enough:
+## _shadow_key()), so drawing the marina again (at a new zoom, or as it
+## scrolls in) costs one call, not thousands.
+func _town_mesh(port_id: String, town: Dictionary, flip: float) -> ArrayMesh:
+	var turn := _port_sea_angle(port_id) + _port_turn(port_id)
+	var key := [flip, _shadow_key(), roundi(turn / 0.3)]
+	if town.has("mesh") and town.mesh_key == key:
+		return town.mesh
+	var t0 := Time.get_ticks_usec()
+	var batch := PolyBatch.new()
+	var drop := (_shadow_dir * 0.4).rotated(-turn)  # (Per unit of height, in the item's frame.)
+	drop.y *= flip
+	if _town_mesher == null and ClassDB.class_exists(&"TownMesh"):
+		_town_mesher = ClassDB.instantiate(&"TownMesh")
+	if _town_mesher != null:
+		# Natively (TownMesh: the same shapes in the same order), the landmark's details after.
+		var built: Dictionary = _town_mesher.build(town.get("roads", []), town.buildings, town.parks, drop,
+			{walk = TOWN_WALK, road = TOWN_ROAD, lane = TOWN_LANE, shadow = TOWN_SHADOW, park = TOWN_PARK})
+		batch.points = built.points
+		batch.colors = built.colors
+		batch.indices = built.indices
+		batch.uvs.resize(batch.points.size())
+		for i: int in built.landmarks:
+			var block: Array = town.buildings[i]
+			_draw_landmark(batch, str(block[4]).trim_prefix("landmark:"), block[0], block[1], block[2])
+	else:
+		_build_town_batch(batch, town, drop)
+	var mesh := batch.to_mesh()
+	town.mesh = mesh
+	town.mesh_key = key
+	_prof("marina.town_mesh", t0)
+	return mesh
+
+## The town's triangles in GDScript (without the library): see TownMesh.
+func _build_town_batch(batch: PolyBatch, town: Dictionary, drop: Vector2) -> void:
 	for road: Array in town.get("roads", []):
 		var rect: Rect2 = road[0]
 		var kind: String = road[1]
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			continue
-		_canvas.draw_colored_polygon(rect_points.call(rect), TOWN_WALK if kind == "walk" else TOWN_ROAD)
+		batch.poly(_rect_points(rect), TOWN_WALK if kind == "walk" else TOWN_ROAD)
 		if kind == "avenue":
 			var x := rect.position.x + 0.5
 			while x < rect.end.x - 0.8:
-				_canvas.draw_colored_polygon(rect_points.call(Rect2(x, rect.get_center().y - 0.05, 0.8, 0.1)), TOWN_LANE)
+				batch.poly(_rect_points(Rect2(x, rect.get_center().y - 0.05, 0.8, 0.1)), TOWN_LANE)
 				x += 1.6
 	# Shadows first (every building's, so no block's shadow lies over another's roof).
 	for block: Array in town.buildings:
 		var rect: Rect2 = block[0]
 		var height: float = block[3]
-		var shadow := Rect2(rect.position + Vector2(0.28, 0.28) * height, rect.size)
-		_canvas.draw_colored_polygon(rect_points.call(shadow), TOWN_SHADOW)
+		var shadow := _rect_points(rect)
+		for i in shadow.size():
+			shadow[i] += drop * height
+		batch.poly(shadow, TOWN_SHADOW)
 	for park: Array in town.parks:
-		var at := _dock_point(port_id, park[0])
-		var r: float = float(park[1]) * scale
-		_canvas.draw_circle(at, r, TOWN_PARK)
-		_canvas.draw_circle(at + Vector2(r * 0.4, -r * 0.3), r * 0.55, TOWN_PARK.lightened(0.12))
+		var at: Vector2 = park[0]
+		var r := float(park[1])
+		batch.disc(at, r, TOWN_PARK, 20)
+		batch.disc(at + Vector2(r * 0.4, -r * 0.3), r * 0.55, TOWN_PARK.lightened(0.12), 20)
 	for block: Array in town.buildings:
 		var rect: Rect2 = block[0]
 		var wall: Color = block[1]
 		var roof: Color = block[2]
-		var height: float = block[3]
 		var kind: String = block[4]
 		var salt: float = block[5]
-		_canvas.draw_colored_polygon(rect_points.call(rect), wall)
+		batch.poly(_rect_points(rect), wall)
 		var top := rect.grow(-0.14)
 		if kind.begins_with("landmark:"):
-			_draw_landmark(port_id, kind.trim_prefix("landmark:"), rect, wall, roof, scale, rect_points)
+			_draw_landmark(batch, kind.trim_prefix("landmark:"), rect, wall, roof)
 			continue
 		match kind:
 			"pitched":
@@ -10362,28 +11317,28 @@ func _draw_town(port_id: String, layout: Dictionary, scale: float) -> void:
 				var along_x := top.size.x >= top.size.y
 				var a := Rect2(top.position, Vector2(top.size.x, top.size.y / 2.0) if along_x else Vector2(top.size.x / 2.0, top.size.y))
 				var b := Rect2(top.position + (Vector2(0.0, top.size.y / 2.0) if along_x else Vector2(top.size.x / 2.0, 0.0)), a.size)
-				_canvas.draw_colored_polygon(rect_points.call(a), roof.lightened(0.12))
-				_canvas.draw_colored_polygon(rect_points.call(b), roof.darkened(0.1))
+				batch.poly(_rect_points(a), roof.lightened(0.12))
+				batch.poly(_rect_points(b), roof.darkened(0.1))
 			"pagoda":
-				_canvas.draw_colored_polygon(rect_points.call(top), roof)
-				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.35)), roof.lightened(0.18))
-				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.6)), roof)
+				batch.poly(_rect_points(top), roof)
+				batch.poly(_rect_points(top.grow(-0.35)), roof.lightened(0.18))
+				batch.poly(_rect_points(top.grow(-0.6)), roof)
 			"warehouse":
-				_canvas.draw_colored_polygon(rect_points.call(top), roof)
+				batch.poly(_rect_points(top), roof)
 				var ribs := maxi(int(top.size.y / 0.7), 2)
 				for k in ribs:
 					var y := top.position.y + top.size.y * (k + 0.5) / ribs
-					_canvas.draw_colored_polygon(rect_points.call(Rect2(top.position.x + 0.1, y - 0.08, top.size.x - 0.2, 0.16)), roof.darkened(0.18))
+					batch.poly(_rect_points(Rect2(top.position.x + 0.1, y - 0.08, top.size.x - 0.2, 0.16)), roof.darkened(0.18))
 			"tall":
-				_canvas.draw_colored_polygon(rect_points.call(top), roof)
-				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.3)), roof.lightened(0.14))
-				_canvas.draw_colored_polygon(rect_points.call(Rect2(top.get_center() - Vector2(0.18, 0.18), Vector2(0.36, 0.36))), roof.darkened(0.3))
+				batch.poly(_rect_points(top), roof)
+				batch.poly(_rect_points(top.grow(-0.3)), roof.lightened(0.14))
+				batch.poly(_rect_points(Rect2(top.get_center() - Vector2(0.18, 0.18), Vector2(0.36, 0.36))), roof.darkened(0.3))
 			_:
-				_canvas.draw_colored_polygon(rect_points.call(top), roof)
-				_canvas.draw_colored_polygon(rect_points.call(top.grow(-0.22)), roof.lightened(0.07))
+				batch.poly(_rect_points(top), roof)
+				batch.poly(_rect_points(top.grow(-0.22)), roof.lightened(0.07))
 				if salt > 0.4:  # Roof gear: a tank or an air unit.
 					var at := top.position + Vector2(top.size.x * (0.25 + salt * 0.5), top.size.y * 0.3)
-					_canvas.draw_colored_polygon(rect_points.call(Rect2(at - Vector2(0.14, 0.14), Vector2(0.28, 0.28))), roof.darkened(0.35))
+					batch.poly(_rect_points(Rect2(at - Vector2(0.14, 0.14), Vector2(0.28, 0.28))), roof.darkened(0.35))
 
 ## A port's pontoons (see _lay_moorings()): each a floating walkway with dark
 ## floats under it, its finger piers with a cleat at each root, in wood at the
@@ -10398,11 +11353,11 @@ func _draw_pontoons(port_id: String, layout: Dictionary, town: Dictionary, scale
 		for finger: Array in pontoon[2]:
 			var root := _dock_point(port_id, finger[0])
 			var tip := _dock_point(port_id, finger[1])
-			_canvas.draw_line(root, tip, MOOR_EDGE, finger_px + 1.6, true)
-			_canvas.draw_line(root, tip, deck, finger_px, true)
+			_batch.line(root, tip, MOOR_EDGE, finger_px + 1.6)
+			_batch.line(root, tip, deck, finger_px)
 			if scale >= 3.0:
-				_canvas.draw_circle(root.lerp(tip, 0.08), maxf(0.12 * scale, 1.0), MOOR_CLEAT)
-				_canvas.draw_circle(root.lerp(tip, 0.92), maxf(0.12 * scale, 1.0), MOOR_CLEAT)
+				_batch.disc(root.lerp(tip, 0.08), maxf(0.12 * scale, 1.0), MOOR_CLEAT)
+				_batch.disc(root.lerp(tip, 0.92), maxf(0.12 * scale, 1.0), MOOR_CLEAT)
 		var pa := _dock_point(port_id, a)
 		var pb := _dock_point(port_id, b)
 		if scale >= 2.5:
@@ -10410,88 +11365,71 @@ func _draw_pontoons(port_id: String, layout: Dictionary, town: Dictionary, scale
 			var s := 1.0
 			while s < a.distance_to(b) - 0.5:
 				var at := _dock_point(port_id, a + d * s)
-				_canvas.draw_circle(at, maxf(0.32 * scale, 1.2), MOOR_FLOAT)
+				_batch.disc(at, maxf(0.32 * scale, 1.2), MOOR_FLOAT)
 				s += 2.2
-		_canvas.draw_line(pa, pb, MOOR_EDGE, pontoon_px + 2.0, true)
-		_canvas.draw_line(pa, pb, deck, pontoon_px, true)
+		_batch.line(pa, pb, MOOR_EDGE, pontoon_px + 2.0)
+		_batch.line(pa, pb, deck, pontoon_px)
 		if scale >= 4.0:  # The planks' seams.
 			var d := (b - a).normalized()
 			var s := 0.6
 			while s < a.distance_to(b):
 				var at := a + d * s
 				var across := Vector2(-d.y, d.x) * MOOR_PONTOON_WIDTH * 0.45
-				_canvas.draw_line(_dock_point(port_id, at - across), _dock_point(port_id, at + across), MOOR_EDGE * Color(1, 1, 1, 0.35), 1.0, true)
+				_batch.line(_dock_point(port_id, at - across), _dock_point(port_id, at + across), MOOR_EDGE * Color(1, 1, 1, 0.35), 1.0)
 				s += 1.2
-
+	_batch.flush(_canvas)
 
 ## A town's landmark (see TOWN_STYLES landmark), on its block.
-func _draw_landmark(port_id: String, what: String, rect: Rect2, wall: Color, roof: Color, scale: float, rect_points: Callable) -> void:
+func _draw_landmark(batch: PolyBatch, what: String, rect: Rect2, wall: Color, roof: Color) -> void:
 	var middle := rect.get_center()
 	match what:
 		"church":
 			# A nave with a pitched roof and a square tower at its inland end.
 			var nave := Rect2(rect.position + Vector2(rect.size.x * 0.1, rect.size.y * 0.3), Vector2(rect.size.x * 0.8, rect.size.y * 0.4))
-			_canvas.draw_colored_polygon(rect_points.call(Rect2(nave.position, Vector2(nave.size.x, nave.size.y / 2.0))), roof.lightened(0.12))
-			_canvas.draw_colored_polygon(rect_points.call(Rect2(nave.position + Vector2(0.0, nave.size.y / 2.0), Vector2(nave.size.x, nave.size.y / 2.0))), roof.darkened(0.1))
+			batch.poly(_rect_points(Rect2(nave.position, Vector2(nave.size.x, nave.size.y / 2.0))), roof.lightened(0.12))
+			batch.poly(_rect_points(Rect2(nave.position + Vector2(0.0, nave.size.y / 2.0), Vector2(nave.size.x, nave.size.y / 2.0))), roof.darkened(0.1))
 			var tower := Rect2(rect.position + Vector2(rect.size.x * 0.08, rect.size.y * 0.25), Vector2.ONE * rect.size.y * 0.5)
-			_canvas.draw_colored_polygon(rect_points.call(Rect2(tower.position + Vector2(0.4, 0.4), tower.size)), TOWN_SHADOW)
-			_canvas.draw_colored_polygon(rect_points.call(tower), wall.lightened(0.1))
-			_canvas.draw_colored_polygon(rect_points.call(tower.grow(-0.2)), roof.darkened(0.2))
+			batch.poly(_rect_points(Rect2(tower.position + Vector2(0.4, 0.4), tower.size)), TOWN_SHADOW)
+			batch.poly(_rect_points(tower), wall.lightened(0.1))
+			batch.poly(_rect_points(tower.grow(-0.2)), roof.darkened(0.2))
 		"minaret":
 			var dome := Rect2(middle - Vector2(0.75, 0.75), Vector2(1.5, 1.5))
-			_canvas.draw_colored_polygon(rect_points.call(dome.grow(0.15)), wall.lightened(0.08))
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.72 * scale, Color("#3f8f7a"))
-			_canvas.draw_circle(_dock_point(port_id, middle + Vector2(-0.2, -0.2)), 0.3 * scale, Color("#6fb8a0"))
+			batch.poly(_rect_points(dome.grow(0.15)), wall.lightened(0.08))
+			batch.disc(middle, 0.72, Color("#3f8f7a"), 20)
+			batch.disc(middle + Vector2(-0.2, -0.2), 0.3, Color("#6fb8a0"), 20)
 			var at := rect.position + Vector2(0.45, 0.45)
-			_canvas.draw_circle(_dock_point(port_id, at + Vector2(0.4, 0.4)), 0.34 * scale, TOWN_SHADOW)
-			_canvas.draw_circle(_dock_point(port_id, at), 0.3 * scale, wall.lightened(0.15))
-			_canvas.draw_circle(_dock_point(port_id, at), 0.14 * scale, roof.darkened(0.3))
+			batch.disc(at + Vector2(0.4, 0.4), 0.34, TOWN_SHADOW, 20)
+			batch.disc(at, 0.3, wall.lightened(0.15), 20)
+			batch.disc(at, 0.14, roof.darkened(0.3), 20)
 		"pagoda":
 			for tier in 3:
 				var size := rect.size * (0.9 - tier * 0.26)
 				var box := Rect2(middle - size / 2.0, size)
-				_canvas.draw_colored_polygon(rect_points.call(box), roof.darkened(0.1 + tier * 0.08) if tier % 2 == 0 else wall)
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.12 * scale, Color("#c8a040"))
+				batch.poly(_rect_points(box), roof.darkened(0.1 + tier * 0.08) if tier % 2 == 0 else wall)
+			batch.disc(middle, 0.12, Color("#c8a040"), 20)
 		"skyscraper":
-			_canvas.draw_colored_polygon(rect_points.call(Rect2(rect.position + Vector2(0.9, 0.9), rect.size)), TOWN_SHADOW)
+			batch.poly(_rect_points(Rect2(rect.position + Vector2(0.9, 0.9), rect.size)), TOWN_SHADOW)
 			for tier in 3:
 				var box := rect.grow(-0.12 - tier * 0.32)
-				_canvas.draw_colored_polygon(rect_points.call(box), (Color("#6a7a8a") if tier % 2 == 0 else Color("#8a9aaa")).lightened(tier * 0.05))
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.1 * scale, Color(1.0, 0.3, 0.2))
+				batch.poly(_rect_points(box), (Color("#6a7a8a") if tier % 2 == 0 else Color("#8a9aaa")).lightened(tier * 0.05))
+			batch.disc(middle, 0.1, Color(1.0, 0.3, 0.2), 20)
 		"onion":
-			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), wall.lightened(0.1))
+			batch.poly(_rect_points(rect.grow(-0.14)), wall.lightened(0.1))
 			for k in 4:
 				var at := middle + Vector2.from_angle(k * TAU / 4.0 + PI / 4.0) * rect.size.x * 0.28
-				_canvas.draw_circle(_dock_point(port_id, at), 0.26 * scale, Color("#2f6ab0") if k % 2 == 0 else Color("#c8a040"))
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.4 * scale, Color("#c8a040"))
-			_canvas.draw_circle(_dock_point(port_id, middle + Vector2(-0.1, -0.1)), 0.16 * scale, Color("#e8d080"))
+				batch.disc(at, 0.26, Color("#2f6ab0") if k % 2 == 0 else Color("#c8a040"), 20)
+			batch.disc(middle, 0.4, Color("#c8a040"), 20)
+			batch.disc(middle + Vector2(-0.1, -0.1), 0.16, Color("#e8d080"), 20)
 		"stupa":
-			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), wall.lightened(0.1))
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.8 * scale, Color("#e8e2d0"))
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.5 * scale, Color("#d8b050"))
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.18 * scale, Color("#f0d070"))
+			batch.poly(_rect_points(rect.grow(-0.14)), wall.lightened(0.1))
+			batch.disc(middle, 0.8, Color("#e8e2d0"), 20)
+			batch.disc(middle, 0.5, Color("#d8b050"), 20)
+			batch.disc(middle, 0.18, Color("#f0d070"), 20)
 		"dome":
-			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), wall.lightened(0.1))
-			_canvas.draw_circle(_dock_point(port_id, middle), 0.7 * scale, Color("#e8e8ee"))
-			_canvas.draw_circle(_dock_point(port_id, middle + Vector2(-0.18, -0.18)), 0.3 * scale, Color("#ffffff"))
+			batch.poly(_rect_points(rect.grow(-0.14)), wall.lightened(0.1))
+			batch.disc(middle, 0.7, Color("#e8e8ee"), 20)
+			batch.disc(middle + Vector2(-0.18, -0.18), 0.3, Color("#ffffff"), 20)
 		_:
-			_canvas.draw_colored_polygon(rect_points.call(rect.grow(-0.14)), roof)
-
+			batch.poly(_rect_points(rect.grow(-0.14)), roof)
 ## A town's lights at night (see _draw_marina_lights()): a warm glow over
 ## the whole town, and its windows lit (once they're big enough to see).
-func _draw_town_lights(port_id: String, layout: Dictionary, night: float, glow: Texture2D, scale: float) -> void:
-	var town := _town(port_id, layout)
-	if town.is_empty():
-		return
-	var inland := _quay_inland(layout)
-	var reach: float = town.reach
-	var tint: Color = town.light
-	# Everything in dock units under the marina's own transform (as _dock_point()
-	# maps them): one glow, and all the windows as one run of dashes.
-	_canvas.draw_set_transform(port_screen_position(port_id), _port_sea_angle(port_id) + _port_turn(port_id), Vector2(scale, scale * float(_dock_flips.get(port_id, 1.0))))
-	var across := (reach + inland) * 1.6
-	var along := float(layout.radius) * TOWN_HALF_RADII * 2.4
-	_canvas.draw_texture_rect(glow, Rect2(-(reach - inland) / 2.0 - across / 2.0, -along / 2.0, across, along), false, Color(tint, 0.35 * night))
-	if scale >= TOWN_LIGHTS_MIN_SCALE and not (town.segments as PackedVector2Array).is_empty():
-		_canvas.draw_multiline(town.segments, Color(tint, 0.9 * night), maxf(0.22, 1.2 / scale))
-	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)

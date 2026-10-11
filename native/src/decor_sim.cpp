@@ -5,6 +5,8 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/math.hpp>
+#include <godot_cpp/variant/packed_color_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
@@ -31,10 +33,24 @@ void DecorSim::setup(const PackedVector2Array &positions, const PackedVector3Arr
 		int row = (int)UtilityFunctions::floori((double)p.y / bucket);
 		_buckets[_cell(column, row)].push_back((int32_t)i);
 	}
+	// Each cell's drawings by tier, the lowest first: a pass stops at the
+	// first tier no kind shows at its zoom (zoomed out, that's most of them).
+	for (auto &entry : _buckets) {
+		std::stable_sort(entry.second.begin(), entry.second.end(), [&](int32_t a, int32_t b) { return _tiers[a] < _tiers[b]; });
+	}
 }
 
 void DecorSim::set_regions(const PackedByteArray &regions) {
 	_regions = regions;
+}
+
+void DecorSim::set_atlas(const RID &atlas, const Array &regions, const Vector2 &atlas_size) {
+	_atlas = atlas;
+	_atlas_size = atlas_size;
+	_atlas_regions.clear();
+	for (int64_t i = 0; i < regions.size(); i++) {
+		_atlas_regions.push_back(regions[i]);
+	}
 }
 
 void DecorSim::set_seasons(const Dictionary &north, const Dictionary &south) {
@@ -68,6 +84,10 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 	Vector2i rows = params["rows"];
 	PackedByteArray locked = params["locked"];
 	bool check_locks = !locked.is_empty() && !_regions.is_empty();
+	int max_tier = 0;
+	for (int64_t k = 0; k < kind_tiers.size(); k++) {
+		max_tier = std::max(max_tier, (int)kind_tiers[k]);
+	}
 	struct Shown {
 		Vector2 at;
 		int kind;
@@ -83,6 +103,9 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 				continue;
 			}
 			for (int32_t i : found->second) {
+				if (_tiers[i] >= max_tier) {
+					break; // (The rest of the cell is of higher tiers still: see setup().)
+				}
 				int kind = _kinds[i];
 				if (_tiers[i] >= kind_tiers[kind]) {
 					continue; // Too small to show (or thinned out at this size), or an animal.
@@ -129,18 +152,65 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 	}
 	std::stable_sort(shown.begin(), shown.end(), [](const Shown &a, const Shown &b) { return a.at.y < b.at.y; });
 	RenderingServer *rs = RenderingServer::get_singleton();
+	const bool batched = _atlas.is_valid() && _atlas_size.x > 0.0f && _atlas_size.y > 0.0f;
+	PackedVector2Array points, uvs;
+	PackedColorArray colors;
+	PackedInt32Array indices;
+	if (batched) {
+		points.resize((int64_t)shown.size() * 4);
+		uvs.resize((int64_t)shown.size() * 4);
+		colors.resize((int64_t)shown.size() * 4);
+		colors.fill(Color(1, 1, 1, 1));
+		indices.resize((int64_t)shown.size() * 6);
+	}
+	int64_t quads = 0;
+	Vector2 *pw = batched ? points.ptrw() : nullptr;
+	Vector2 *uw = batched ? uvs.ptrw() : nullptr;
+	int32_t *iw = batched ? indices.ptrw() : nullptr;
 	for (const Shown &item : shown) {
 		if (item.texture < 0 || item.texture >= (int)_textures.size() || !_textures[item.texture].is_valid()) {
 			continue;
 		}
 		real_t side = (real_t)item.side;
-		rs->canvas_item_add_texture_rect(canvas, Rect2(item.at - Vector2(side / 2.0f, side * 0.92f), Vector2(side, side)), _textures[item.texture], false);
+		Rect2 rect(item.at - Vector2(side / 2.0f, side * 0.92f), Vector2(side, side));
+		if (batched && item.texture < (int)_atlas_regions.size() && _atlas_regions[item.texture].has_area()) {
+			const Rect2 &region = _atlas_regions[item.texture];
+			Vector2 uv0 = region.position / _atlas_size;
+			Vector2 uv1 = region.get_end() / _atlas_size;
+			int64_t v = quads * 4;
+			pw[v] = rect.position;
+			pw[v + 1] = Vector2(rect.get_end().x, rect.position.y);
+			pw[v + 2] = rect.get_end();
+			pw[v + 3] = Vector2(rect.position.x, rect.get_end().y);
+			uw[v] = uv0;
+			uw[v + 1] = Vector2(uv1.x, uv0.y);
+			uw[v + 2] = uv1;
+			uw[v + 3] = Vector2(uv0.x, uv1.y);
+			int64_t t = quads * 6;
+			iw[t] = (int32_t)v;
+			iw[t + 1] = (int32_t)v + 1;
+			iw[t + 2] = (int32_t)v + 2;
+			iw[t + 3] = (int32_t)v;
+			iw[t + 4] = (int32_t)v + 2;
+			iw[t + 5] = (int32_t)v + 3;
+			quads++;
+		} else {
+			rs->canvas_item_add_texture_rect(canvas, rect, _textures[item.texture], false);
+		}
+	}
+	if (quads > 0) {
+		points.resize(quads * 4);
+		uvs.resize(quads * 4);
+		colors.resize(quads * 4);
+		indices.resize(quads * 6);
+		rs->canvas_item_add_triangle_array(canvas, indices, points, colors, uvs, PackedInt32Array(), PackedFloat32Array(), _atlas);
 	}
 }
 
 void DecorSim::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("setup", "positions", "units", "kinds", "tiers", "room", "textures", "bucket"), &DecorSim::setup);
 	ClassDB::bind_method(D_METHOD("set_regions", "regions"), &DecorSim::set_regions);
+	ClassDB::bind_method(D_METHOD("set_atlas", "atlas", "regions", "atlas_size"), &DecorSim::set_atlas);
 	ClassDB::bind_method(D_METHOD("set_seasons", "north", "south"), &DecorSim::set_seasons);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "params"), &DecorSim::draw);
 }

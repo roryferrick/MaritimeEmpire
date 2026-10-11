@@ -261,7 +261,7 @@ public:
 	State state(int index, double now, double cal);
 	Dictionary bird_state(int index, double now, double cal);
 	Dictionary doing_counts(int colony, double now, double cal);
-	Dictionary following(int64_t ship, Vector2 at, double now, double cal);
+	Dictionary following(int64_t ship, Vector2 at, double now, double cal, int64_t cap = 0, int64_t max_states = 0);
 	int64_t where_changes() const { return _where_changes; }
 	void forget_spots();
 	bool draw(const RID &canvas, bool still, const Dictionary &params);

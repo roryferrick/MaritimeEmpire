@@ -198,6 +198,8 @@ var _top_speed := 0.0
 var _fuel_per_s := 0.0
 var _wear_per_s := 0.0
 var _stats_dirty := true
+## The fuel the birds following it save (a share; see GameState.bird_boosts()).
+var bird_fuel_saving := 0.0
 ## _kind(), once looked up (-1 until then).
 var _kind_cache := -1
 ## The leg the cached length and zones are for (see _update_leg()).
@@ -464,7 +466,7 @@ func _refresh_stats() -> void:
 	# raises its profit instead; see GameState.trade_bonus()).
 	var mega_fuel := 1.0 - (float(settings.get("recovery_fuel_saving", 0.5)) if has_mega and is_recovery() else 0.0)
 	_top_speed = float(data.get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency")) * mega_fuel
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency")) * mega_fuel * (1.0 - bird_fuel_saving)
 	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability"))
 	_stats_dirty = false
 

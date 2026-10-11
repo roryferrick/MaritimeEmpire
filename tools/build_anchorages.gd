@@ -35,6 +35,10 @@ const MARGIN_NM := 1.0
 const SHIP_WORLD_ZOOM := 75.0
 const SHIP_SIZE := 0.245
 const BOW_LENGTH_FACTOR := 0.6
+## Water no ship anchors in (lon west, lat south, lon east, lat north): the
+## Strait of Messina, a shipping passage too narrow for parked ships.
+const EXCLUDE_BOXES := [[15.45, 37.95, 15.80, 38.40]]
+
 ## The funnel in front of the harbour mouth no ship anchors in: this far
 ## either side of the way to sea (degrees), out to this share of how far out
 ## the ways in from the lanes start (MapView.HARBOUR_REACH times the mouth's
@@ -124,6 +128,12 @@ func _ready() -> void:
 			all = _spots(at, bearing, swing_nm, swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm),
 			small = _spots(at, bearing, small_swing_nm, small_swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm),
 		}
+		for pool: String in spots:
+			spots[pool] = (spots[pool] as Array).filter(func(spot: Array) -> bool:
+				for box: Array in EXCLUDE_BOXES:
+					if float(spot[0]) >= float(box[0]) and float(spot[0]) <= float(box[2]) and float(spot[1]) >= float(box[1]) and float(spot[1]) <= float(box[3]):
+						return false
+				return true)
 		out[port.id] = spots
 		if spots.all.size() < 8 or spots.small.size() < 12:
 			short.append("%s (%d, %d)" % [port.id, spots.all.size(), spots.small.size()])

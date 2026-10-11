@@ -57,9 +57,18 @@ func _ready() -> void:
 	if GameState.divine.on:
 		_add_divine_button()
 	_map.divine_target.connect(_on_divine_target)
+	if _map.ambience != null:  # The bird that's calling, top left (see SoundTracker).
+		var tracker := SoundTracker.new(_map)
+		add_child(tracker)
+		_map.ambience.call_started.connect(tracker.show_call)
 
 
 func _process(_delta: float) -> void:
+	var t_x := Time.get_ticks_usec()
+	_process_timed(_delta)
+	MapView._prof("proc.world_screen", t_x)
+
+func _process_timed(_delta: float) -> void:
 	var available := GameState.regions_available()
 	_unlock_button.visible = available > 0 and not _map.choosing_region
 	_unlock_button.text = "Unlock a region (%d)" % available if available > 1 else "Unlock a region"

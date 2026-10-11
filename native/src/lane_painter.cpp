@@ -8,6 +8,8 @@
 #include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -40,6 +42,8 @@ void LanePainter::set_providers(const Callable &lanes, const Callable &ends) {
 // bending lanes afresh when the ports' zones have changed.)
 void LanePainter::forget_lanes() {
 	_forget = true;
+	_entries.clear();
+	_entries_epoch = -1;
 }
 
 LanePainter::Lane &LanePainter::_lane(const String &from, const String &to) {
@@ -162,21 +166,27 @@ void LanePainter::_append_middle(const Lane &lane, double start, double stop, bo
 	}
 }
 
-// LaneMath.visible_runs(), drawn: the line's runs on the near side of the
-// globe (each at least two points), without points closer than _min_px to the
-// last one kept (each run's ends always kept), each as one smooth line.
+// LaneMath.visible_runs(), batched: the line's runs on the near side of the
+// globe (each at least two points), simplified (a point is dropped while the
+// line through its neighbours passes within _min_px of it: zoomed out, a
+// great circle's many points go, a bend round a coast stays; each run's ends
+// always kept), each tessellated into the pass's one triangle batch (see
+// _emit_run()).
 void LanePainter::_draw_line(const RID &canvas, const Color &color, double width) {
-	RenderingServer *rs = RenderingServer::get_singleton();
-	PackedColorArray colors;
-	colors.push_back(color);
-	const double min_sq = _min_px * _min_px;
+	const double tol_sq = _min_px * _min_px;
 	const int64_t count = (int64_t)_line.size();
-	PackedVector2Array run;
+	_run.clear();
+	bool held = false; // A point kept back: dropped if the next keeps the line within _min_px of it.
+	Vector2 candidate;
 	auto finish = [&]() {
-		if (run.size() >= 2) {
-			rs->canvas_item_add_polyline(canvas, run, colors, (real_t)width, true);
+		if (held) {
+			_run.push_back(candidate);
+			held = false;
 		}
-		run = PackedVector2Array();
+		if (_run.size() >= 2) {
+			_emit_run(color, width);
+		}
+		_run.clear();
 	};
 	for (int64_t i = 0; i < count; i++) {
 		const Vector2 &p = _line[(size_t)i];
@@ -184,25 +194,127 @@ void LanePainter::_draw_line(const RID &canvas, const Color &color, double width
 			finish();
 			continue;
 		}
-		const bool run_ends = i + 1 >= count || _line[(size_t)i + 1].x <= _hidden.x / 2.0f;
-		if (min_sq > 0.0 && run.size() > 0 && !run_ends && run[run.size() - 1].distance_squared_to(p) < min_sq) {
+		if (_run.empty()) {
+			_run.push_back(p);
 			continue;
 		}
-		run.push_back(p);
+		if (!held) {
+			candidate = p;
+			held = true;
+			continue;
+		}
+		const Vector2 &a = _run.back();
+		const Vector2 d = p - a;
+		const real_t len_sq = d.length_squared();
+		const Vector2 c = candidate - a;
+		real_t dev_sq;
+		if (len_sq > 1.0e-6f) {
+			const real_t cross = d.x * c.y - d.y * c.x;
+			const real_t along = d.dot(c);
+			dev_sq = (along < 0.0f || along > len_sq) ? MIN(c.length_squared(), (candidate - p).length_squared()) : cross * cross / len_sq;
+		} else {
+			dev_sq = c.length_squared();
+		}
+		if (dev_sq <= tol_sq) {
+			candidate = p; // (The held point lies on the line to this one: dropped.)
+		} else {
+			_run.push_back(candidate);
+			candidate = p;
+		}
 	}
 	finish();
 	_line.clear();
 }
 
+// A run as a ribbon `width` wide with a feather a pixel wide fading out
+// each side (antialiased like a polyline), its corners mitred (clamped at
+// sharp turns): four vertices a point, six triangles a segment, appended to
+// the batch.
+void LanePainter::_emit_run(const Color &color, double width) {
+	const int64_t n = (int64_t)_run.size();
+	const real_t half = (real_t)(width / 2.0);
+	const real_t feather = 1.0f;
+	Color clear = color;
+	clear.a = 0.0f;
+	const int32_t base = (int32_t)_batch_points.size();
+	for (int64_t i = 0; i < n; i++) {
+		Vector2 dir_in = i > 0 ? (_run[(size_t)i] - _run[(size_t)i - 1]).normalized() : Vector2();
+		Vector2 dir_out = i < n - 1 ? (_run[(size_t)i + 1] - _run[(size_t)i]).normalized() : Vector2();
+		Vector2 t = dir_in + dir_out;
+		if (t.length_squared() < 1.0e-12f) {
+			t = dir_out.length_squared() > 0.0f ? dir_out : dir_in;
+		}
+		t.normalize();
+		Vector2 nrm(-t.y, t.x);
+		real_t scale = 1.0f;
+		if (i > 0 && i < n - 1) {
+			real_t c = nrm.dot(Vector2(-dir_out.y, dir_out.x));
+			scale = 1.0f / std::max(c, 0.5f);
+		}
+		const Vector2 &p = _run[(size_t)i];
+		Vector2 outer = nrm * (half + feather) * scale;
+		Vector2 inner = nrm * half * scale;
+		_batch_points.push_back(p - outer);
+		_batch_colors.push_back(clear);
+		_batch_points.push_back(p - inner);
+		_batch_colors.push_back(color);
+		_batch_points.push_back(p + inner);
+		_batch_colors.push_back(color);
+		_batch_points.push_back(p + outer);
+		_batch_colors.push_back(clear);
+	}
+	for (int64_t i = 1; i < n; i++) {
+		const int32_t a = base + (int32_t)(4 * (i - 1));
+		const int32_t b = base + (int32_t)(4 * i);
+		for (int32_t s = 0; s < 3; s++) {
+			_batch_indices.push_back(a + s);
+			_batch_indices.push_back(b + s);
+			_batch_indices.push_back(b + s + 1);
+			_batch_indices.push_back(a + s);
+			_batch_indices.push_back(b + s + 1);
+			_batch_indices.push_back(a + s + 1);
+		}
+	}
+}
+
 // The pass: `lanes` the lanes to draw, each [from_port, to_port, color, sailed
 // both ways (the way back's curves too)]; params: toward, right, up (Vector3),
 // radius, middle (Vector2), view_angle (radians from the view's middle a
-// lane's chunk can show within), near_angle (the same for a port whose
-// harbour curves could show), width. Returns how many lanes were drawn.
+// lane's chunk can show within), curves (whether any port's marina can show
+// at this zoom: only then are a lane's harbour curves asked of the map, and
+// only for a port on screen or within `near`, a Rect2), width, epoch (a
+// count the map raises when `lanes` changes: they're resolved to their
+// Lanes once an epoch). All the lanes go down as one batch of triangles
+// (one call into the rendering server, one draw call). Returns how many
+// lanes were drawn.
 int64_t LanePainter::draw(const RID &canvas, const Array &lanes, const Dictionary &params) {
 	if (_forget) {
 		_forget = false;
 		_lanes.clear();
+		_entries.clear();
+		_entries_epoch = -1;
+	}
+	int64_t epoch = params.get("epoch", -1);
+	if (epoch < 0 || epoch != _entries_epoch || _entries.size() != (size_t)lanes.size()) {
+		// (Every lane put in first, then pointed to: the map's lanes don't move once in.)
+		_entries.clear();
+		for (int64_t i = 0; i < lanes.size(); i++) {
+			Array entry = lanes[i];
+			if (entry.size() < 3) {
+				continue;
+			}
+			Entry e;
+			e.from = entry[0];
+			e.to = entry[1];
+			e.color = entry[2];
+			e.both_ways = entry.size() > 3 && (bool)entry[3];
+			_lane(e.from, e.to);
+			_entries.push_back(e);
+		}
+		for (Entry &e : _entries) {
+			e.lane = &_lane(e.from, e.to);
+		}
+		_entries_epoch = epoch;
 	}
 	_toward = params.get("toward", Vector3());
 	_right = params.get("right", Vector3());
@@ -210,19 +322,19 @@ int64_t LanePainter::draw(const RID &canvas, const Array &lanes, const Dictionar
 	_radius = params.get("radius", 1.0);
 	_middle = params.get("middle", Vector2());
 	_view_angle = params.get("view_angle", 0.0);
-	_near_angle = params.get("near_angle", 0.0);
+	bool curves = params.get("curves", false);
+	Rect2 near = params.get("near", Rect2());
 	double width = params.get("width", 1.5);
 	int64_t drawn = 0;
-	for (int64_t i = 0; i < lanes.size(); i++) {
-		Array entry = lanes[i];
-		if (entry.size() < 3) {
-			continue;
-		}
-		String from = entry[0];
-		String to = entry[1];
-		Color color = entry[2];
-		bool both_ways = entry.size() > 3 && (bool)entry[3];
-		Lane &lane = _lane(from, to);
+	_batch_points.clear();
+	_batch_colors.clear();
+	_batch_indices.clear();
+	for (const Entry &e : _entries) {
+		const String &from = e.from;
+		const String &to = e.to;
+		const Color &color = e.color;
+		bool both_ways = e.both_ways;
+		Lane &lane = *e.lane;
 		if (!lane.valid) {
 			continue;
 		}
@@ -232,10 +344,14 @@ int64_t LanePainter::draw(const RID &canvas, const Array &lanes, const Dictionar
 		// Its ports' harbour curves, where a port's near the view (the map says
 		// whether its marina shows, and keeps the curves).
 		Array ends;
-		bool from_near = lane.units.front().dot(_toward) >= std::cos(std::min(_near_angle, PI_D));
-		bool to_near = lane.units.back().dot(_toward) >= std::cos(std::min(_near_angle, PI_D));
-		if ((from_near || to_near) && _ends_provider.is_valid()) {
-			ends = _ends_provider.call(from, to);
+		if (curves && _ends_provider.is_valid()) {
+			Vector2 from_at = _screen(lane.units.front());
+			Vector2 to_at = _screen(lane.units.back());
+			bool from_near = from_at.x > _hidden.x / 2.0f && near.has_point(from_at);
+			bool to_near = to_at.x > _hidden.x / 2.0f && near.has_point(to_at);
+			if (from_near || to_near) {
+				ends = _ends_provider.call(from, to);
+			}
 		}
 		double reach_in = 0.0, reach_out = 0.0;
 		PackedVector3Array curve_in, curve_out;
@@ -274,6 +390,18 @@ int64_t LanePainter::draw(const RID &canvas, const Array &lanes, const Dictionar
 				_draw_line(canvas, color, width);
 			}
 		}
+	}
+	if (!_batch_indices.empty()) {
+		PackedVector2Array points;
+		PackedColorArray colors;
+		PackedInt32Array indices;
+		points.resize((int64_t)_batch_points.size());
+		colors.resize((int64_t)_batch_colors.size());
+		indices.resize((int64_t)_batch_indices.size());
+		std::copy(_batch_points.begin(), _batch_points.end(), points.ptrw());
+		std::copy(_batch_colors.begin(), _batch_colors.end(), colors.ptrw());
+		std::copy(_batch_indices.begin(), _batch_indices.end(), indices.ptrw());
+		RenderingServer::get_singleton()->canvas_item_add_triangle_array(canvas, indices, points, colors);
 	}
 	return drawn;
 }

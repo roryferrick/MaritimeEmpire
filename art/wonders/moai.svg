@@ -1,11 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<g stroke="#3a3128" stroke-width="2" stroke-linejoin="round">
-<path d="M6,58 L6,30 Q6,24 12,24 L18,24 Q20,30 19,40 L20,58 Z" fill="#8e8a84"/>
-<path d="M24,58 L24,22 Q24,14 32,14 L40,14 Q43,22 41,34 L42,58 Z" fill="#9b9790"/>
-<path d="M46,58 L46,32 Q46,26 52,26 L57,26 Q59,32 58,42 L59,58 Z" fill="#8e8a84"/></g>
-<rect x="26" y="9" width="14" height="6" rx="2" fill="#b8573d" stroke="#3a3128" stroke-width="1.6"/>
-<path d="M27,24 L33,24 M38,24 L41,24 M8,32 L12,32 M48,33 L52,33" stroke="#3a3128" stroke-width="1.8"/>
-<path d="M36,24 L37,32 L34,33 M16,32 L17,38 M55,33 L56,39" fill="none" stroke="#3a3128" stroke-width="1.4"/>
-<path d="M30,38 L38,38 M9,42 L15,42 M49,44 L55,44" stroke="#3a3128" stroke-width="1.4"/>
+<path d="M0.0,0.0 L64.0,0.0 L64.0,64.0 L0.0,64.0 Z" fill="#6f9a52" />
+<rect x="6.0" y="30.0" width="52.0" height="10.0" fill="#8a8a80" stroke="#3a3128" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+<ellipse cx="14.0" cy="29.0" rx="3.2" ry="5.0" fill="#000000" opacity="0.2"/>
+<ellipse cx="12.0" cy="27.0" rx="3.2" ry="5.0" fill="#9a9080" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ellipse cx="12.0" cy="24.5" rx="2.4" ry="1.4" fill="#7a7068" />
+<rect x="11.0" y="26.0" width="2.0" height="4.0" fill="#b0a898" />
+<ellipse cx="22.0" cy="29.0" rx="3.2" ry="5.0" fill="#000000" opacity="0.2"/>
+<ellipse cx="20.0" cy="27.0" rx="3.2" ry="5.0" fill="#9a9080" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ellipse cx="20.0" cy="24.5" rx="2.4" ry="1.4" fill="#7a7068" />
+<rect x="19.0" y="26.0" width="2.0" height="4.0" fill="#b0a898" />
+<ellipse cx="30.0" cy="29.0" rx="3.2" ry="5.0" fill="#000000" opacity="0.2"/>
+<ellipse cx="28.0" cy="27.0" rx="3.2" ry="5.0" fill="#9a9080" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ellipse cx="28.0" cy="24.5" rx="2.4" ry="1.4" fill="#7a7068" />
+<rect x="27.0" y="26.0" width="2.0" height="4.0" fill="#b0a898" />
+<ellipse cx="38.0" cy="29.0" rx="3.2" ry="5.0" fill="#000000" opacity="0.2"/>
+<ellipse cx="36.0" cy="27.0" rx="3.2" ry="5.0" fill="#9a9080" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ellipse cx="36.0" cy="24.5" rx="2.4" ry="1.4" fill="#7a7068" />
+<rect x="35.0" y="26.0" width="2.0" height="4.0" fill="#b0a898" />
+<ellipse cx="46.0" cy="29.0" rx="3.2" ry="5.0" fill="#000000" opacity="0.2"/>
+<ellipse cx="44.0" cy="27.0" rx="3.2" ry="5.0" fill="#9a9080" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ellipse cx="44.0" cy="24.5" rx="2.4" ry="1.4" fill="#7a7068" />
+<rect x="43.0" y="26.0" width="2.0" height="4.0" fill="#b0a898" />
+<ellipse cx="54.0" cy="29.0" rx="3.2" ry="5.0" fill="#000000" opacity="0.2"/>
+<ellipse cx="52.0" cy="27.0" rx="3.2" ry="5.0" fill="#9a9080" stroke="#3a3128" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<ellipse cx="52.0" cy="24.5" rx="2.4" ry="1.4" fill="#7a7068" />
+<rect x="51.0" y="26.0" width="2.0" height="4.0" fill="#b0a898" />
+<path d="M0.0,48.0 L64.0,44.0 L64.0,64.0 L0.0,64.0 Z" fill="#5c9fd4" />
 </svg>

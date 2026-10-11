@@ -244,6 +244,18 @@ const LAKE_SALT_PANS: Array[String] = ["Lake Eyre North", "Lake Eyre South", "La
 	"Lake Torrens", "Lake Frome", "Lake Amadeus", "Lake Carnegie", "Chott el Djerid", "Chott Melrhir"]
 ## Rivers and straits too narrow for the grid to see. Carved as water, like
 ## the canals in data/canals.json. Each is a list of [lon, lat] points.
+## Passages dredged out of the land itself (not just the lane grid): each a
+## course (lon, lat) and a width (nm) cut from every land polygon it crosses,
+## so the coast as drawn, the sea grid and the lanes all leave room for two
+## of the biggest ships abreast through the Strait of Messina, the Bosporus
+## and the Dardanelles, and the St. Lawrence between Quebec and Lake Ontario
+## (see _dredge()). The real channels are far narrower; the ships are far bigger than life.
+const DREDGES := [
+	["Strait of Messina", [[15.74, 38.38], [15.68, 38.31], [15.66, 38.25], [15.62, 38.18], [15.60, 38.10], [15.57, 38.00], [15.60, 37.92]], 13.0],
+	["Bosporus", [[29.16, 41.26], [29.12, 41.21], [29.08, 41.16], [29.05, 41.11], [29.02, 41.06], [28.99, 41.01], [28.97, 40.96]], 13.0],
+	["Dardanelles", [[26.10, 39.98], [26.15, 40.00], [26.27, 40.07], [26.40, 40.15], [26.45, 40.22], [26.55, 40.30], [26.68, 40.41], [26.80, 40.48]], 13.0],
+	["St. Lawrence", [[-71.10, 46.86], [-71.40, 46.76], [-71.90, 46.56], [-72.30, 46.40], [-72.70, 46.27], [-73.15, 46.02], [-73.30, 45.74], [-73.50, 45.56], [-73.70, 45.43], [-74.10, 45.31], [-74.50, 45.12], [-74.85, 45.03], [-75.20, 44.82], [-75.55, 44.63], [-75.90, 44.46], [-76.20, 44.29], [-76.50, 44.19], [-76.80, 44.12]], 13.0],
+]
 const CHANNELS := {
 	"Strait of Gibraltar": [[-6.2, 35.95], [-5.6, 35.97], [-5.2, 36.0]],
 	"Dardanelles": [[26.15, 40.00], [26.27, 40.07], [26.40, 40.15], [26.45, 40.22], [26.55, 40.30], [26.68, 40.41], [26.80, 40.48]],
@@ -375,7 +387,91 @@ func _read_land_rings() -> Array:
 			for i in range(1, polygon.size()):
 				holes.append(_to_points(polygon[i]))
 			polygons.append({"outline": _to_points(polygon[0]), "holes": holes})
+	# _dredge(polygons) is off for now: the cut Eurasia polygon loses its land north of about 46 N in the
+	# tiled triangulation (Germany, France, Quebec drew as water); the DREDGES still carve the lanes' grid (see _build_grid()).
 	return polygons
+
+
+## Cuts the DREDGES out of the land polygons (lon, lat): each course buffered
+## to its width (round ends) in the map's projection, clipped out of every
+## outline it meets; an outline cut in two becomes two polygons, each
+## keeping the holes inside it.
+func _dredge(polygons: Array) -> Array:
+	for dredge: Array in DREDGES:
+		var course := _project_all(_to_points(dredge[1]))
+		var lat := 0.0
+		for p: Array in dredge[1]:
+			lat += float(p[1]) / (dredge[1] as Array).size()
+		var radius := float(dredge[2]) / 60.0 / 2.0 / maxf(cos(deg_to_rad(lat)), 0.1)
+		var corridors := Geometry2D.offset_polyline(course, radius, Geometry2D.JOIN_ROUND, Geometry2D.END_ROUND)
+		var box := Rect2(course[0], Vector2.ZERO)
+		for p in course:
+			box = box.expand(p)
+		box = box.grow(radius * 2.0)
+		var out := []
+		var cut := 0
+		for polygon: Dictionary in polygons:
+			var outline := _project_all(polygon.outline)
+			var touches := false
+			for p in outline:
+				if box.has_point(p):
+					touches = true
+					break
+			if not touches:
+				out.append(polygon)
+				continue
+			var pieces := [outline]
+			for corridor: PackedVector2Array in corridors:
+				var next := []
+				for piece: PackedVector2Array in pieces:
+					next.append_array(Geometry2D.clip_polygons(piece, corridor))
+				pieces = next
+			# The clipper winds its output its own way (outers one way, holes the
+			# other, whatever the input): the biggest piece is an outer, and every
+			# piece wound like it is too.
+			var outers := []
+			var inners := []
+			var biggest := PackedVector2Array()
+			var biggest_area := -1.0
+			for piece: PackedVector2Array in pieces:
+				if piece.size() < 3:
+					continue
+				var area := _bounds(piece).get_area()
+				if area > biggest_area:
+					biggest_area = area
+					biggest = piece
+			var outer_wound := Geometry2D.is_polygon_clockwise(biggest) if not biggest.is_empty() else false
+			for piece: PackedVector2Array in pieces:
+				if piece.size() < 3:
+					continue
+				if Geometry2D.is_polygon_clockwise(piece) == outer_wound:
+					outers.append(piece)
+				else:
+					inners.append(piece)
+			if outers.size() == 1 and inners.is_empty() and outers[0].size() == outline.size():
+				out.append(polygon)
+				continue
+			cut += 1
+			for outer: PackedVector2Array in outers:
+				var holes := []
+				for hole: PackedVector2Array in polygon.holes:
+					if Geometry2D.is_point_in_polygon(Geo.project(hole[0]), outer):
+						holes.append(hole)
+				for inner: PackedVector2Array in inners:
+					if Geometry2D.is_point_in_polygon(inner[0], outer):
+						holes.append(_unproject_all(inner))
+				out.append({"outline": _unproject_all(outer), "holes": holes})
+		print("Dredged %s: %d land polygons cut" % [dredge[0], cut])
+		polygons = out
+	return polygons
+
+
+func _unproject_all(points: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	out.resize(points.size())
+	for i in points.size():
+		out[i] = Geo.unproject(points[i])
+	return out
 
 
 func _to_points(ring: Array) -> PackedVector2Array:
@@ -1625,6 +1721,8 @@ func _build_grid(land_polygons: Array) -> void:
 			_fill_rings(lake_rings, Geo.WORLD_WIDTH)
 
 	var channels: Array = CHANNELS.values().map(_to_points)
+	for dredge: Array in DREDGES:
+		channels.append(_to_points(dredge[1]))  # (The dredged passages, at least in the lanes' grid.)
 	for canal in _canals:
 		channels.append(canal.path)
 	for channel: PackedVector2Array in channels:

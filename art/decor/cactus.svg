@@ -1,10 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<g stroke="#3a3128" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="#5f9a54">
-<path d="M26,62 L26,18 Q32,12 38,18 L38,62 Z"/>
-<path d="M26,40 L18,40 Q14,40 14,36 L14,26 Q17,22 20,26 L20,34 L26,34 Z"/>
-<path d="M38,32 L46,32 L46,22 Q49,18 52,22 L52,36 Q52,40 48,40 L38,40 Z"/></g>
-<path d="M32,18 L32,62 M17,27 L17,37 M49,23 L49,37" stroke="#3f7a3a" stroke-width="1.2"/>
-<path d="M28,22 L30,22 M34,30 L36,30 M28,44 L30,44 M34,52 L36,52" stroke="#f2ecd0" stroke-width="1"/>
-<circle cx="32" cy="15" r="2.4" fill="#e26a8a" stroke="#3a3128" stroke-width="1"/>
+<ellipse cx="34.2" cy="34.2" rx="16.0" ry="13.0" fill="#000000" opacity="0.18"/>
+<path d="M32.0,32.0 L20.0,28.0" fill="none" stroke="#3a3128" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L20.0,28.0" fill="none" stroke="#5a9a4a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="20.0" cy="28.0" r="5.0" fill="#5a9a4a" stroke="#3a3128" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L43.0,25.0" fill="none" stroke="#3a3128" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L43.0,25.0" fill="none" stroke="#5a9a4a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="43.0" cy="25.0" r="4.5" fill="#5a9a4a" stroke="#3a3128" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32.0,32.0 L38.0,43.0" fill="none" stroke="#3a3128" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L38.0,43.0" fill="none" stroke="#5a9a4a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="38.0" cy="43.0" r="4.0" fill="#5a9a4a" stroke="#3a3128" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="32.0" cy="32.0" r="8.0" fill="#5a9a4a" stroke="#3a3128" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M34.0,32.0 L39.0,32.0" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M33.4,33.4 L36.9,36.9" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,34.0 L32.0,39.0" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M30.6,33.4 L27.1,36.9" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M30.0,32.0 L25.0,32.0" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M30.6,30.6 L27.1,27.1" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,30.0 L32.0,25.0" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M33.4,30.6 L36.9,27.1" fill="none" stroke="#3f7a36" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="30.0" cy="30.0" r="2.5" fill="#8fc47a" opacity="0.6"/>
+<circle cx="32.0" cy="32.0" r="1.4" fill="#e8d070" />
 </svg>

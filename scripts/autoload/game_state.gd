@@ -329,18 +329,27 @@ func _process(delta: float) -> void:
 		return
 	# Fast forward runs whole extra steps rather than one longer one, so ships
 	# arrive, dock and break down exactly as they would at 1x.
+	var t_sim := Time.get_ticks_usec()
 	for step in time_speed:
 		_step(delta)
+	MapView._prof("sim", t_sim)
 
 
 func _step(delta: float) -> void:
 	play_time += delta
+	var t_s := Time.get_ticks_usec()
 	canal_traffic.step(delta)
 	port_sizes.step(delta)
 	weather.step(delta)
 	divine.step(delta)
+	MapView._prof("sim.world", t_s)
+	t_s = Time.get_ticks_usec()
 	_check_payday()
+	MapView._prof("sim.payday", t_s)
+	t_s = Time.get_ticks_usec()
 	icebreaking.refresh()
+	MapView._prof("sim.ice", t_s)
+	t_s = Time.get_ticks_usec()
 	if _ship_stepper == null and ClassDB.class_exists(&"ShipStepper"):
 		_ship_stepper = ClassDB.instantiate(&"ShipStepper")
 		_ship_stepper.setup(self, {open_sea_zone = Ship.OPEN_SEA_ZONE, min_recovery_speed = MIN_RECOVERY_SPEED_FACTOR,
@@ -350,8 +359,14 @@ func _step(delta: float) -> void:
 	else:
 		for ship in ships:
 			_advance(ship, delta)
+	MapView._prof("sim.ships", t_s)
+	t_s = Time.get_ticks_usec()
 	_roll_breakdowns(delta)
+	MapView._prof("sim.breakdowns", t_s)
+	t_s = Time.get_ticks_usec()
 	rivals.step(delta)
+	MapView._prof("sim.rivals", t_s)
+	t_s = Time.get_ticks_usec()
 	_storm_warning_clock += delta
 	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
 		_storm_warning_clock = 0.0
@@ -366,6 +381,7 @@ func _step(delta: float) -> void:
 	if _wake_clock >= WAKE_WAITING_S:
 		_wake_clock = 0.0
 		_wake_waiting_ships()
+	MapView._prof("sim.rest", t_s)
 
 
 ## The clock (the calendar's time of day) is the home port's local time: the
@@ -508,7 +524,17 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 
 
 func owned_count(model_id: String) -> int:
-	return fleet().filter(func(ship: Ship) -> bool: return ship.model_id == model_id).size()
+	# (Asked for every model at once, often: counted once a frame.)
+	var frame := Engine.get_process_frames()
+	if frame != _owned_counts_frame:
+		_owned_counts_frame = frame
+		_owned_counts.clear()
+		for ship in fleet():
+			_owned_counts[ship.model_id] = int(_owned_counts.get(ship.model_id, 0)) + 1
+	return int(_owned_counts.get(model_id, 0))
+
+var _owned_counts := {}
+var _owned_counts_frame := -1
 
 
 ## What the next ship of this model costs: its first_price if it has one and
@@ -1476,6 +1502,11 @@ func sell_ship(ship: Ship) -> String:
 
 
 func _advance(ship: Ship, delta: float) -> void:
+	var t_x := Time.get_ticks_usec()
+	_advance_timed(ship, delta)
+	MapView._prof("sim.advance", t_x)
+
+func _advance_timed(ship: Ship, delta: float) -> void:
 	# A ship waiting in port for a full load, not due another look: nothing to do.
 	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _short_of_load(ship) and ship.is_docked() \
 			and ship.berth_phase == Ship.BERTH_NONE:
@@ -1494,16 +1525,24 @@ func _advance(ship: Ship, delta: float) -> void:
 	var on_job := ship.is_on_job()  # (Asked once: this runs for every ship, every step.)
 	if not ship.worked and (not ship.is_docked() and not ship.is_lost() or on_job or ship.is_docking()):
 		ship.worked = true
+	var t_v := Time.get_ticks_usec()
 	if ship.is_icebreaker():
 		_advance_icebreaker(ship, delta)
+		MapView._prof("advance.icebreaker", t_v)
 	elif on_job and ship.is_tug():
 		_advance_tug_job(ship, delta)
+		MapView._prof("advance.tug", t_v)
 	elif on_job:
 		_advance_job(ship, delta)
+		MapView._prof("advance.job", t_v)
 	elif ship.is_docked():
 		_advance_docked(ship, delta)
+		MapView._prof("advance.docked", t_v)
 	elif not ship.is_lost() and _sail(ship, delta) and ship.traveled_nm >= ship.leg_length():
 		_arrive(ship, ship.to_port)
+		MapView._prof("advance.sail_arrive", t_v)
+	else:
+		MapView._prof("advance.sail", t_v)
 
 
 ## Wears, burns fuel and moves a ship along its current lane. Returns false if
@@ -1562,6 +1601,12 @@ func _sail(ship: Ship, delta: float) -> bool:
 ## ice where it is (see Weather.factors() and Seasons.factors()); [1, 1] in
 ## port or when neither is active.
 func _storm_factors(ship: Ship) -> Array:
+	var t_x := Time.get_ticks_usec()
+	var out := _storm_factors_timed(ship)
+	MapView._prof("sim.storm_factors", t_x)
+	return out
+
+func _storm_factors_timed(ship: Ship) -> Array:
 	if ship.is_docked() or ship.from_port.is_empty():
 		return [1.0, 1.0]
 	# Storms drift and ice comes and goes slowly: each ship looks again only
@@ -1574,16 +1619,65 @@ func _storm_factors(ship: Ship) -> Array:
 	var storms_out := weather.active() and not weather.storms.is_empty()
 	var ice_in := seasonal.active() and not seasonal.zones_now().is_empty()
 	if storms_out or ice_in:
+		var t_f := Time.get_ticks_usec()
 		var at := Geo.unproject(ship.world_position())
 		var storm := weather.factors(at) if storms_out else [1.0, 1.0]
+		MapView._prof("storm.weather", t_f)
+		t_f = Time.get_ticks_usec()
 		var ice := seasonal.factors(at) if ice_in else [1.0, 1.0]
+		MapView._prof("storm.ice", t_f)
 		if storms_out and divine.escorted(ship):
 			storm[1] = 1.0  # The sea's escorts shield it from the storm's wear (Divine).
 		ship.storm_factors = [float(storm[0]) * float(ice[0]), float(storm[1]) * float(ice[1])]
+	# The birds following it (see BirdBoosts): faster, wearing less, and the storm's
+	# slowing and wearing shrugged off in part (its fuel saving is in Ship.fuel_per_s()).
+	var t_b := Time.get_ticks_usec()
+	var boosts := bird_boosts(ship)
+	MapView._prof("storm.birds", t_b)
+	if not boosts.is_empty():
+		var shelter := float(boosts.storm)
+		if storms_out and shelter > 0.0:
+			ship.storm_factors[0] = lerpf(float(ship.storm_factors[0]), 1.0, shelter) if float(ship.storm_factors[0]) < 1.0 else float(ship.storm_factors[0])
+			ship.storm_factors[1] = lerpf(float(ship.storm_factors[1]), 1.0, shelter) if float(ship.storm_factors[1]) > 1.0 else float(ship.storm_factors[1])
+		ship.storm_factors[0] = float(ship.storm_factors[0]) * (1.0 + float(boosts.speed))
+		ship.storm_factors[1] = float(ship.storm_factors[1]) * (1.0 - float(boosts.wear))
 	if divine.on:
 		# Its blessings (the birds following it, fair winds, sharks hurrying a rescuer) speed it up.
 		ship.storm_factors[0] = float(ship.storm_factors[0]) * divine.speed_factor(ship)
 	return ship.storm_factors
+
+
+## What the birds following a ship give it (BirdBoosts.total(): {speed, wear,
+## fuel, storm} shares), looked at again every BIRD_BOOST_REFRESH_S; {} with
+## no birds. Sets the ship's fuel saving too (Ship.bird_fuel_saving).
+const BIRD_BOOST_REFRESH_S := 5.0
+## How many of a species the boosts count at most (they saturate: BirdBoosts.EXTRA_PER_BIRD up to 3),
+## and how many birds are looked at closely for one ship (a big colony that all planned to follow it is a hitch).
+const BIRD_BOOST_COUNT_CAP := 8
+const BIRD_BOOST_LOOK_CAP := 40
+var _bird_boosts := {}  # Ship -> [until (play time), boosts].
+
+func bird_boosts(ship: Ship) -> Dictionary:
+	var kept: Array = _bird_boosts.get(ship, [])
+	if not kept.is_empty() and play_time < float(kept[0]):
+		return kept[1]
+	var boosts := {}
+	if not ship.is_service():
+		var t_f := Time.get_ticks_usec()
+		var following: Array = BirdLife.shared().following(ship, BIRD_BOOST_COUNT_CAP, BIRD_BOOST_LOOK_CAP)  # (The boosts saturate at a few birds: see BirdBoosts.)
+		MapView._prof("birds.following", t_f)
+		if not following.is_empty():
+			t_f = Time.get_ticks_usec()
+			boosts = BirdBoosts.total(following)
+			MapView._prof("birds.total", t_f)
+			if float(boosts.speed) <= 0.0 and float(boosts.wear) <= 0.0 and float(boosts.fuel) <= 0.0 and float(boosts.storm) <= 0.0:
+				boosts = {}
+	var saving := float(boosts.get("fuel", 0.0))
+	if saving != ship.bird_fuel_saving:
+		ship.bird_fuel_saving = saving
+		ship.invalidate_stats()
+	_bird_boosts[ship] = [play_time + BIRD_BOOST_REFRESH_S, boosts]
+	return boosts
 
 
 ## Where a ship may sail to this step: no closer than STORM_OFFSHORE_NM to a
@@ -1775,6 +1869,11 @@ func _season_warnings() -> void:
 
 ## Flags a ship that no longer has the fuel (or maintenance) to finish its leg.
 func _check_at_risk(ship: Ship) -> void:
+	var t_x := Time.get_ticks_usec()
+	_check_at_risk_timed(ship)
+	MapView._prof("sim.at_risk", t_x)
+
+func _check_at_risk_timed(ship: Ship) -> void:
 	var seconds := ship.leg_seconds(ship.from_port, ship.to_port, ship.traveled_nm, ship.leg_length(), ship.maintenance)
 	var at_risk := ship.fuel < ship.fuel_per_s() * seconds
 	if at_risk == ship.at_risk:
@@ -1878,6 +1977,11 @@ func _roll_breakdowns(delta: float) -> void:
 
 
 func _arrive(ship: Ship, port: String, paid := true) -> void:
+	var t_x := Time.get_ticks_usec()
+	_arrive_timed(ship, port, paid)
+	MapView._prof("sim.arrive", t_x)
+
+func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 	ship.weather_wait = ""
 	ship.ice_wait = ""
 	ship.at_risk = false
@@ -2031,9 +2135,16 @@ func _berth_seconds(ship: Ship, coming_in: bool) -> float:
 ## Halfway through a stop: sells the cargo it brought (if any), then loads its
 ## next one for where it's going (if it's running a route).
 func _unload(ship: Ship) -> void:
+	var t_x := Time.get_ticks_usec()
+	_unload_timed(ship)
+	MapView._prof("sim.unload", t_x)
+
+func _unload_timed(ship: Ship) -> void:
 	ship.unloaded = true
 	if not ship.cargo_id.is_empty():
+		var t_u := Time.get_ticks_usec()
 		_sell_cargo(ship)
+		MapView._prof("unload.sell", t_u)
 	if ship.is_running():
 		_load_cargo(ship, ship.route[ship.next_route_index()])
 	ship_changed.emit(ship)
@@ -2050,14 +2161,18 @@ func _sell_cargo(ship: Ship) -> void:
 	ship.stop_cost = ship.cargo_cost
 	_add_money(who, ship.cargo_payment)
 	_record(ship, "income", ship.cargo_payment)
+	var t_s := Time.get_ticks_usec()
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
+	MapView._prof("sell.trade", t_s)
 	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
 	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
 	var fee := port_fee(ship.docked_at, ship.cargo_payment - ship.cargo_cost, who)
 	if fee > 0:
 		_add_money(who, -fee)
 		_record(ship, "port_fees", fee)
+	var t_e := Time.get_ticks_usec()
 	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll, fee)
+	MapView._prof("sell.sold", t_e)
 	var hub := hub_at(ship.docked_at, who)
 	var xp := Progression.xp_for_cargo(ship.cargo_qty, ship.cargo_id, ship.cargo_leg_nm)
 	# Cargo that came through canals earns their XP bonuses on top of the hub's.
@@ -2335,6 +2450,11 @@ func _set_hold(ship: Ship, reason: String) -> void:
 ## Sails for `to`: a ship at a berth pulls out first (see _pull_out()); one
 ## at the anchorage sets off straight away.
 func _depart(ship: Ship, to: String) -> void:
+	var t_x := Time.get_ticks_usec()
+	_depart_timed(ship, to)
+	MapView._prof("sim.depart", t_x)
+
+func _depart_timed(ship: Ship, to: String) -> void:
 	if ship.berth >= 0:
 		if ship.berth_phase != Ship.BERTH_OUT:
 			_pull_out(ship, to)
@@ -3380,9 +3500,11 @@ func ship_by_id(id: int) -> Ship:
 
 ## Why a company can't be founded in this game with a name and home port, or
 ## "": every company has its own home port.
-func found_company_error(new_name: String, new_home_port: String) -> String:
+func found_company_error(new_name: String, new_home_port: String, new_color := "") -> String:
 	if new_name.strip_edges().is_empty():
 		return "Enter a company name."
+	if not new_color.is_empty() and color_taken(new_color):
+		return "Another company has that color: pick another."
 	if GameData.get_port(new_home_port).is_empty():
 		return "Pick a home port."
 	if GameData.start_info(new_home_port).is_empty():
@@ -3399,6 +3521,7 @@ func found_company_error(new_name: String, new_home_port: String) -> String:
 ## its HQ at its home port and the CEO they made (Characters.clean(): a
 ## random one if it won't do). Returns its place in companies.
 func found_company(new_name: String, new_color: String, new_home_port: String, new_ceo := {}) -> int:
+	new_color = free_color(new_color)  # (Never a color another company has.)
 	var founded := Company.new(new_name.strip_edges().left(MAX_COMPANY_NAME_LENGTH), new_color, new_home_port)
 	founded.money = int(GameData.config.get("starting_money", 10000))
 	founded.ceo = Characters.clean(new_ceo)
@@ -3412,6 +3535,24 @@ func found_company(new_name: String, new_color: String, new_home_port: String, n
 	save_game()
 	return companies.size() - 1
 
+
+## True if a company in the game (a player's or a rival's) has a color already:
+## no two companies share one, in single player or multiplayer.
+func color_taken(color_id: String, but: Company = null) -> bool:
+	for each: Company in all_companies():
+		if each != but and each.color == color_id:
+			return true
+	return false
+
+
+## The first color no company has (picker order), or the one given if free.
+func free_color(wanted := "") -> String:
+	if not wanted.is_empty() and not color_taken(wanted):
+		return wanted
+	for entry: Array in GameData.config.get("company_colors", []):
+		if not color_taken(str(entry[0])):
+			return str(entry[0])
+	return wanted
 
 ## A joined player's own map and log settings (Company.PREF_KEYS), kept in the
 ## host's save.

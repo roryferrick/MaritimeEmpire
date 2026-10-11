@@ -1,6 +1,31 @@
 {
 	"_comment": "Which way each port's docks face (tools/port_facing.gd): bearing is the compass bearing out to sea (0 north, 90 east), from the coastline round the port; quay is which side of the piers, looking out to sea, the quay, tugs and anchorage go (the side with more open water). Entries under manual win over the worked-out ones and are kept when the tool runs again.",
 	"manual": {
+		"TNG": {
+			"bearing": 30.0,
+			"quay": "left",
+			"note": "Tanger Med: moved south and east into open water, out north-east into the strait"
+		},
+		"GIB": {
+			"bearing": 225.0,
+			"quay": "left",
+			"note": "Gibraltar: in line above Tanger Med, out south-west into the strait"
+		},
+		"AQJ": {
+			"bearing": 180.0,
+			"quay": "left",
+			"note": "Eilat & Aqaba: one port at the head of the gulf, out south"
+		},
+		"KOP": {
+			"bearing": 270.0,
+			"quay": "right",
+			"note": "Koper: turned to face west about its old entrance"
+		},
+		"TEW": {
+			"bearing": 180.0,
+			"quay": "right",
+			"note": "Port Tewfik: out south down the Gulf of Suez, the entrance on the water"
+		},
 		"GIT": {
 			"bearing": 315.0,
 			"quay": "left",
@@ -908,14 +933,6 @@
 		},
 		"SOK": {
 			"bearing": 134,
-			"quay": "left"
-		},
-		"TEW": {
-			"bearing": 198,
-			"quay": "right"
-		},
-		"ETH": {
-			"bearing": 191,
 			"quay": "left"
 		},
 		"NOU": {

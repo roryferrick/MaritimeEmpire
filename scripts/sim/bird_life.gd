@@ -631,7 +631,9 @@ func _ships_now() -> Array:
 
 
 ## The birds following a ship now, by species: [{id, count}], most first.
-func following(ship: Ship) -> Array:
+## `cap`: no more than this many of a species counted (0: all); `max_states`: no
+## more than this many birds looked at closely (0: all): a bound on the cost.
+func following(ship: Ship, cap := 0, max_states := 0) -> Array:
 	if ship == null or not ensure_built():
 		return []
 	var wildlife := Wildlife.shared()
@@ -639,7 +641,9 @@ func following(ship: Ship) -> Array:
 	var cal := float(GameState.calendar_time())
 	var at := Geo.unproject(GameData.port_position(ship.docked_at) if ship.is_docked() else ship.world_position())
 	if native != null:
-		var found: Dictionary = native.following(ship.id, at, now, cal)
+		var t_n := Time.get_ticks_usec()
+		var found: Dictionary = native.following(ship.id, at, now, cal, cap, max_states)
+		MapView._prof("birds.native", t_n)
 		var listed := []
 		for id: String in found:
 			listed.append({id = id, count = found[id]})

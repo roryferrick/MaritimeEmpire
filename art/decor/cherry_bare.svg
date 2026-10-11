@@ -1,11 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<g fill="none" stroke="#5e4a3a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-<path d="M22,56 L22,42 M22,46 L12,38 M22,43 L30,33 M12,38 L8,36 M22,42 L20,30"/>
-<path d="M42,54 L42,40 M42,44 L34,36 M42,41 L52,31 M52,31 L56,30 M42,40 L44,28"/>
-<path d="M32,62 L32,50 M32,54 L25,47 M32,51 L40,45 M32,50 L31,42"/>
-</g>
-<g fill="none" stroke="#8a7866" stroke-width="1.2" stroke-linecap="round">
-<path d="M12,38 L10,33 M20,30 L17,26 M30,33 L32,28 M34,36 L31,31 M44,28 L41,24 M52,31 L54,26 M25,47 L21,45 M40,45 L44,43"/>
-</g>
+<ellipse cx="34.2" cy="34.2" rx="12.6" ry="10.8" fill="#000000" opacity="0.18"/>
+<path d="M32.0,32.0 L41.8,32.6 L49.8,33.1" fill="none" stroke="#3a3128" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L41.8,32.6 L49.8,33.1" fill="none" stroke="#6b5340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M41.8,32.6 L47.3,29.7" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M41.8,32.6 L46.9,36.2" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L37.4,39.1 L41.7,44.8" fill="none" stroke="#3a3128" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L37.4,39.1 L41.7,44.8" fill="none" stroke="#6b5340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M37.4,39.1 L42.6,41.1" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M37.4,39.1 L37.9,44.7" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L29.1,40.8 L26.8,48.1" fill="none" stroke="#3a3128" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L29.1,40.8 L26.8,48.1" fill="none" stroke="#6b5340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M29.1,40.8 L30.5,46.6" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M29.1,40.8 L24.6,44.7" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L23.7,35.7 L17.0,38.8" fill="none" stroke="#3a3128" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L23.7,35.7 L17.0,38.8" fill="none" stroke="#6b5340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M23.7,35.7 L20.5,40.5" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M23.7,35.7 L18.0,35.0" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L25.3,28.7 L19.8,25.9" fill="none" stroke="#3a3128" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L25.3,28.7 L19.8,25.9" fill="none" stroke="#6b5340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M25.3,28.7 L20.5,29.1" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M25.3,28.7 L22.7,24.6" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L30.8,23.7 L29.8,16.8" fill="none" stroke="#3a3128" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L30.8,23.7 L29.8,16.8" fill="none" stroke="#6b5340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M30.8,23.7 L27.3,19.5" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M30.8,23.7 L32.9,18.7" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L39.6,26.6 L45.8,22.2" fill="none" stroke="#3a3128" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M32.0,32.0 L39.6,26.6 L45.8,22.2" fill="none" stroke="#6b5340" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M39.6,26.6 L41.9,21.2" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M39.6,26.6 L45.5,26.2" fill="none" stroke="#6b5340" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="32.0" cy="32.0" r="2.9" fill="#6b5340" stroke="#3a3128" stroke-width="0.9"/>
 </svg>

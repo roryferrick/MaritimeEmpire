@@ -1,6 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
-<path d="M2,34 Q12,8 22,24 Q32,42 42,16 Q50,2 62,20 L62,30 Q50,14 42,30 Q32,50 22,34 Q12,20 2,44 Z" fill="#3fe08a" opacity="0.8"/>
-<path d="M4,28 Q14,12 24,22 Q34,36 44,14 Q52,6 60,16" fill="none" stroke="#b06ad6" stroke-width="2" opacity="0.8"/>
-<path d="M0,58 L10,46 L18,52 L28,42 L38,52 L48,44 L64,58 Z" fill="#e8eef6" stroke="#3a3128" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M0.0,0.0 L64.0,0.0 L64.0,64.0 L0.0,64.0 Z" fill="#101830" />
+<path d="M 0,14 Q 16,6 32,14 Q 48,22 64,14" fill="none" fill="none" stroke="#4fe0a0" stroke-width="4" opacity="0.7"/>
+<path d="M 0,23 Q 16,15 32,23 Q 48,31 64,23" fill="none" fill="none" stroke="#7ff0c0" stroke-width="4" opacity="0.7"/>
+<path d="M 0,32 Q 16,24 32,32 Q 48,40 64,32" fill="none" fill="none" stroke="#a0ffd0" stroke-width="4" opacity="0.7"/>
+<path d="M 0,41 Q 16,33 32,41 Q 48,49 64,41" fill="none" fill="none" stroke="#7fd0ff" stroke-width="4" opacity="0.7"/>
+<path d="M 0,50 Q 16,42 32,50 Q 48,58 64,50" fill="none" fill="none" stroke="#c080ff" stroke-width="4" opacity="0.7"/>
+<circle cx="58.4" cy="10.2" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="36.7" cy="51.3" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="35.4" cy="13.9" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="43.7" cy="39.2" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="40.1" cy="63.2" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="16.4" cy="50.7" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="34.1" cy="55.6" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="32.5" cy="33.9" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="20.8" cy="54.9" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="57.4" cy="12.7" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="50.5" cy="20.0" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="29.9" cy="48.4" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="19.0" cy="46.2" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="58.5" cy="1.6" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="32.7" cy="34.5" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="29.8" cy="1.4" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="8.7" cy="57.4" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="8.9" cy="53.0" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="13.3" cy="22.2" r="0.8" fill="#ffffff" opacity="0.8"/>
+<circle cx="13.5" cy="8.9" r="0.8" fill="#ffffff" opacity="0.8"/>
 </svg>

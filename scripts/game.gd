@@ -9,7 +9,7 @@ enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
-const ALERT_CHECK_SECONDS := 0.5
+const ALERT_CHECK_SECONDS := 2.0  # (A look over every ship and model: a few ms.)
 ## Ships named per reason in the Ships tab's tooltip before "and 3 more".
 const ALERT_NAMES_SHOWN := 3
 
@@ -84,7 +84,7 @@ func _ready() -> void:
 	GameState.hub_built.connect(_on_hub_built)
 	GameState.mega_upgraded.connect(_on_mega_upgraded)
 	GameState.port_band_changed.connect(_on_port_band_changed)
-	_update_alerts()
+	_alert_phase = 0  # (Worked out over the next frames: see _process().)
 	Net.left.connect(_on_left_game)
 	if not Net.host_error.is_empty():
 		_tell(Net.host_error, "Couldn't host this game")
@@ -100,15 +100,31 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	var t_x := Time.get_ticks_usec()
+	_process_timed(delta)
+	MapView._prof("proc.game", t_x)
+
+func _process_timed(delta: float) -> void:
 	_alert_clock += delta
 	if _alert_clock >= ALERT_CHECK_SECONDS:
 		_alert_clock = 0.0
-		_update_alerts()
+		_alert_phase = 0
+	if _alert_phase < 3:  # (One part a frame: each is a look over the hubs, the models or the fleet.)
+		_update_alerts(_alert_phase)
+		_alert_phase += 1
 
 
 ## Red dots on the Ships tab if any ship needs the player (the tooltip says
 ## why), and on the Shop tab if anything can be bought.
-func _update_alerts() -> void:
+var _alert_phase := 3
+func _update_alerts(phase: int) -> void:
+	var t_a := Time.get_ticks_usec()
+	if phase != 0:
+		if phase == 1:
+			_update_shop_alert()
+		else:
+			_update_ships_alert()
+		return
 	var hub_notes := PackedStringArray()
 	for hub in GameState.hubs:
 		if GameState.hub_can_upgrade(hub):
@@ -119,12 +135,20 @@ func _update_alerts() -> void:
 	_world_alert.visible = GameState.regions_available() > 0
 	%WorldButton.tooltip_text = "A new region can be unlocked: Unlock a region, on the map" if _world_alert.visible else ""
 	%HubsButton.tooltip_text = "; ".join(hub_notes)
+	MapView._prof("alerts.hubs", t_a)
+
+func _update_shop_alert() -> void:
+	var t_a := Time.get_ticks_usec()
 	var buyable := PackedStringArray()
 	for model: Dictionary in GameData.ship_models:
 		if GameState.buy_error(model.id).is_empty():
 			buyable.append(model.get("name", model.id))
 	_shop_alert.visible = not buyable.is_empty()
 	%ShopButton.tooltip_text = "You can buy: %s" % ", ".join(buyable) if not buyable.is_empty() else ""
+	MapView._prof("alerts.shop", t_a)
+
+func _update_ships_alert() -> void:
+	var t_a := Time.get_ticks_usec()
 	var reasons := {}  # reason -> names of the ships it applies to
 	for ship in GameState.fleet():
 		var reason := ship.attention_reason()
@@ -133,6 +157,7 @@ func _update_alerts() -> void:
 				reasons[reason] = PackedStringArray()
 			reasons[reason].append(ship.name)
 	_ships_alert.visible = not reasons.is_empty()
+	MapView._prof("alerts.ships", t_a)
 	var parts := PackedStringArray()
 	for reason: String in reasons:
 		var names: PackedStringArray = reasons[reason]

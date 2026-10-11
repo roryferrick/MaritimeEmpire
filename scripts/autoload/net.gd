@@ -220,6 +220,11 @@ func is_online() -> bool:
 
 
 func _process(delta: float) -> void:
+	var t_x := Time.get_ticks_usec()
+	_process_timed(delta)
+	MapView._prof("proc.net", t_x)
+
+func _process_timed(delta: float) -> void:
 	if steam != null:
 		steam.run_callbacks()
 		if _browsing:
@@ -436,7 +441,7 @@ func _choice_info() -> Dictionary:
 		var each: Company = GameState.companies[i]
 		list.append({index = i, name = each.name, color = each.color, home_port = each.home_port,
 			money = each.money, level = each.level(), taken = taken.has(i) or each.is_ai(), ai = each.ai})
-	return {companies = list, taken_ports = GameState.companies.map(func(each: Company) -> String: return each.home_port),
+	return {companies = list, taken_colors = GameState.companies.map(func(each: Company) -> String: return each.color), taken_ports = GameState.companies.map(func(each: Company) -> String: return each.home_port),
 		storms = GameState.storms, seasons = GameState.seasons, max_time_speed = GameState.max_time_speed, name = game_name}
 
 
@@ -461,7 +466,7 @@ func _choose(choice: Dictionary) -> void:
 			_choose_again.rpc_id(id, "Someone is already playing that company.", _choice_info())
 			return
 	else:
-		var error := GameState.found_company_error(str(choice.get("name", "")), str(choice.get("home_port", "")))
+		var error := GameState.found_company_error(str(choice.get("name", "")), str(choice.get("home_port", "")), str(choice.get("color", "")))
 		if not error.is_empty():
 			_choose_again.rpc_id(id, error, _choice_info())
 			return

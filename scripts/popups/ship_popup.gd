@@ -113,6 +113,9 @@ func _update_birds() -> void:
 	var following := Birds.shared().counts_text(BirdLife.shared().following(ship))
 	if not following.is_empty():
 		parts.append("Following: %s" % following)
+		var boosts := BirdBoosts.describe(GameState.bird_boosts(ship))  # What they give the ship (see BirdBoosts).
+		if not boosts.is_empty():
+			parts.append(boosts)
 	_birds_label.text = " · ".join(parts)
 	_set_shown(_birds_label, not parts.is_empty() and not %SkillsButton.button_pressed and not _crew_button.button_pressed)
 

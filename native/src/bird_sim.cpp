@@ -996,9 +996,13 @@ Dictionary BirdSim::doing_counts(int colony, double now, double cal) {
 	return out;
 }
 
-Dictionary BirdSim::following(int64_t ship, Vector2 at, double now, double cal) {
+// `cap`: no more than this many of a species are counted (0: all); `max_states`:
+// no more than this many birds' states are worked out (0: all), a bound on
+// the cost (a big colony that all planned to follow one ship).
+Dictionary BirdSim::following(int64_t ship, Vector2 at, double now, double cal, int64_t cap, int64_t max_states) {
 	Dictionary out;
 	V2 here = v2(at);
+	int64_t states = 0;
 	for (size_t ci = 0; ci < _colonies.size(); ci++) {
 		const Colony &c = _colonies[ci];
 		double reach = c.cls == SEABIRDS ? c.range_km + SEABIRD_ROAM_KM + SEABIRD_FOLLOW_KM : GULL_FOLLOW_KM * 2.0;
@@ -1008,14 +1012,27 @@ Dictionary BirdSim::following(int64_t ship, Vector2 at, double now, double cal) 
 		if (_distance_km(c.spot, here) > reach && _distance_km(c.away_spot, here) > reach) {
 			continue;
 		}
+		String species_id = _species[c.species].id;
+		if (cap > 0 && (int)out.get(species_id, 0) >= cap) {
+			continue;
+		}
 		for (int i = 0; i < c.count; i++) {
 			int b = c.first_bird + i;
+			// (Its plan first: a cheap check, where working out its state isn't,
+			// and a colony has many birds, few of them after this ship.)
+			if (_plans[b].ship != ship) {
+				continue;
+			}
+			if (max_states > 0 && states >= max_states) {
+				return out;
+			}
+			states++;
 			if (state(b, now, cal).mode != M_FOLLOW) {
 				continue;
 			}
-			if (_plans[b].ship == ship) {
-				String id = _species[c.species].id;
-				out[id] = (int)out.get(id, 0) + 1;
+			out[species_id] = (int)out.get(species_id, 0) + 1;
+			if (cap > 0 && (int)out.get(species_id, 0) >= cap) {
+				break;
 			}
 		}
 	}
@@ -1448,7 +1465,7 @@ void BirdSim::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("birds_of", "colony"), &BirdSim::birds_of);
 	ClassDB::bind_method(D_METHOD("bird_state", "index", "now", "cal"), &BirdSim::bird_state);
 	ClassDB::bind_method(D_METHOD("doing_counts", "colony", "now", "cal"), &BirdSim::doing_counts);
-	ClassDB::bind_method(D_METHOD("following", "ship", "at", "now", "cal"), &BirdSim::following);
+	ClassDB::bind_method(D_METHOD("following", "ship", "at", "now", "cal", "cap", "max_states"), &BirdSim::following, DEFVAL(0), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("where_changes"), &BirdSim::where_changes);
 	ClassDB::bind_method(D_METHOD("forget_spots"), &BirdSim::forget_spots);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "still", "params"), &BirdSim::draw);

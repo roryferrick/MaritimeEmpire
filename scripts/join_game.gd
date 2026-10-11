@@ -33,6 +33,8 @@ var _password_edit := LineEdit.new()
 var _asking := {}
 ## Picking a company (see _show_choice()).
 var _color := "red"
+## The colors the game's companies have (from the host): greyed out in the picker.
+var _taken_colors: Array[String] = []
 ## The home port picked on the globe, its name and what kind of start it is.
 var _home_port := ""
 var _port_name := Label.new()
@@ -244,6 +246,12 @@ func _show_choice(info: Dictionary) -> void:
 	_page.add_child(_dim("%s · %s · game speed set by the host" % [
 		Weather.LEVEL_NAMES.get(info.get("storms", "none"), "No storms"),
 		"Seasonal closures" if info.get("seasons", false) else "No seasonal closures"]))
+	_taken_colors.assign(info.get("taken_colors", []))
+	if _taken_colors.has(_color):  # (The first free color, if the usual one is some company's.)
+		for entry: Array in GameData.config.get("company_colors", []):
+			if not _taken_colors.has(str(entry[0])):
+				_color = str(entry[0])
+				break
 	var free: Array = info.get("companies", []).filter(func(entry: Dictionary) -> bool: return not entry.taken)
 	if not free.is_empty():
 		_page.add_child(_dim("Play one of this game's companies:"))
@@ -340,6 +348,9 @@ func _swatches() -> HFlowContainer:
 			style.border_color = Color(0.1, 0.12, 0.15) if color.get_luminance() > 0.8 else Color.WHITE
 			swatch.add_theme_stylebox_override(style_name, style)
 		swatch.button_pressed = entry[0] == _color
+		if _taken_colors.has(str(entry[0])):
+			swatch.disabled = true
+			swatch.tooltip_text = "%s (another company's)" % entry[1]
 		swatch.pressed.connect(func() -> void: _color = entry[0])
 		row.add_child(swatch)
 	return row

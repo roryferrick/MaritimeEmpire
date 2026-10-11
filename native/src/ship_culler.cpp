@@ -2,10 +2,15 @@
 // See ship_culler.h. The rules are MapView._draw_ships()' and its loops'.
 #include "ship_culler.h"
 
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/packed_color_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
+#include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/rect2.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -84,6 +89,31 @@ ShipCuller::Lane &ShipCuller::_lane(const String &from, const String &to) {
 	return lane;
 }
 
+Vector3 ShipCuller::_between(const Vector3 &a, const Vector3 &b, double t) {
+	double lon_a = std::atan2((double)a.y, (double)a.x);
+	double lon_b = std::atan2((double)b.y, (double)b.x);
+	double d = lon_b - lon_a;
+	if (d > PI_D) {
+		d -= 2.0 * PI_D;
+	} else if (d < -PI_D) {
+		d += 2.0 * PI_D;
+	}
+	double lon = lon_a + d * t;
+	double m = std::atanh(std::clamp((double)a.z, -0.9999, 0.9999)) * (1.0 - t) + std::atanh(std::clamp((double)b.z, -0.9999, 0.9999)) * t;
+	double c = 1.0 / std::cosh(m);
+	return Vector3((real_t)(c * std::cos(lon)), (real_t)(c * std::sin(lon)), (real_t)std::tanh(m));
+}
+
+Vector3 ShipCuller::_at_mile(const Lane &lane, double mile) {
+	double length = lane.miles.back();
+	mile = std::clamp(mile, 0.0, length);
+	int64_t i = std::lower_bound(lane.miles.begin(), lane.miles.end(), mile) - lane.miles.begin();
+	i = std::clamp(i, (int64_t)1, (int64_t)lane.miles.size() - 1);
+	double span = lane.miles[i] - lane.miles[i - 1];
+	double t = span > 0.0 ? (mile - lane.miles[i - 1]) / span : 1.0;
+	return _between(lane.units[i - 1], lane.units[i], t);
+}
+
 // Whether a ship `mile` along a lane could be in view (MapView._on_lane_in_view()):
 // its chunk of lane near enough; and (`plain`: a cargo ship plainly on its
 // lane, well away from either port) its own point within _tight_angle.
@@ -136,11 +166,16 @@ bool ShipCuller::_lane_in_view(const String &from, const String &to, double mile
 // its lane, by its own point that far from either port, where nothing moves
 // it off its lane; nearer, by the lens between its point and the port, and
 // end_slack_angle more), docks_shown (bool), mine (the player's company), port_shown (a
-// callable: port id -> whether ships in port there show). Gives {draw: the
-// places in `order` of the ships to draw, plain: a byte for each, 1 for a
-// cargo ship plainly on its lane (its stretch of lane in view, nothing more
-// to check), carried: those riding on a recovery boat, markers: those that
-// may want a marker, tugs: those with a ship on their line}.
+// callable: port id -> whether ships in port there show); and for the dots
+// (see the top; left out when dots is false): dots_canvas (the RID to draw
+// on), right, up, radius, middle, screen (Rect2), scale (px a dock unit),
+// dot_px (a ship shorter than this on screen is a dot), lengths (each ship's
+// length in dock units, by its place in `order`) and colors (its dot's).
+// Gives {draw: the places in `order` of the ships to draw, plain: a byte for
+// each, 1 for a cargo ship plainly on its lane (its stretch of lane in view,
+// nothing more to check), carried: those riding on a recovery boat, markers:
+// those that may want a marker, tugs: those with a ship on their line, dots:
+// how many ships were drawn as dots}.
 Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 	const Names &n = names();
 	if (_forget) {
@@ -156,6 +191,24 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 	bool docks_shown = params.get("docks_shown", true);
 	Object *mine = params.get("mine", Variant());
 	Callable port_shown = params.get("port_shown", Callable());
+	bool dots = params.get("dots", false);
+	RID dots_canvas = params.get("dots_canvas", RID());
+	Vector3 right = params.get("right", Vector3());
+	Vector3 up = params.get("up", Vector3());
+	double radius = params.get("radius", 1.0);
+	Vector2 middle = params.get("middle", Vector2());
+	Rect2 screen = params.get("screen", Rect2());
+	double scale = params.get("scale", 1.0);
+	double dot_px = params.get("dot_px", 0.0);
+	PackedFloat32Array lengths = params.get("lengths", PackedFloat32Array());
+	PackedColorArray colors = params.get("colors", PackedColorArray());
+	if (!dots_canvas.is_valid() || lengths.size() < order.size() || colors.size() < order.size()) {
+		dots = false;
+	}
+	PackedVector2Array dot_points;
+	PackedColorArray dot_colors;
+	PackedInt32Array dot_indices;
+	int64_t dotted = 0;
 	HashMap<String, bool> shown;
 	PackedInt32Array draw, carried, markers, tugs;
 	PackedByteArray plain;
@@ -188,15 +241,18 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 		bool idle_service = !docked && !is_carried && kind != _kind_cargo && rescuer == nullptr && !held && String(ship->get(n.job_phase)).is_empty() && ship->get(n.rescuing).get_type() == Variant::NIL && String(ship->get(n.ice_phase)).is_empty();
 		bool in_view = true;
 		bool lane_looked = docked || held;
+		String from, to;
+		double mile = 0.0;
 		auto look_at_lane = [&]() {
 			if (lane_looked) {
 				return;
 			}
 			lane_looked = true;
-			String from = ship->get(n.from_port);
-			String to = ship->get(n.to_port);
+			from = ship->get(n.from_port);
+			to = ship->get(n.to_port);
 			if (!from.is_empty() && !to.is_empty()) {
-				in_view = _lane_in_view(from, to, ship->get(n.traveled_nm), plain_sailing);
+				mile = ship->get(n.traveled_nm);
+				in_view = _lane_in_view(from, to, mile, plain_sailing);
 			}
 		};
 		if (plain_sailing || idle_service) {
@@ -217,6 +273,32 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 				}
 			}
 		} else if ((!plain_sailing && !idle_service) || in_view) {
+			// A cargo ship plainly on its lane, too small to make out: a dot
+			// where it is (MapView._draw_tiny_ship()), drawn here.
+			if (dots && plain_sailing && !from.is_empty() && !to.is_empty() && (double)lengths[i] * scale < dot_px) {
+				Lane &lane = _lane(from, to);
+				if (lane.valid) {
+					Vector3 p = _at_mile(lane, mile);
+					if (p.dot(_toward) >= 0.0f) {
+						Vector2 at = middle + Vector2(p.dot(right), -p.dot(up)) * (real_t)radius;
+						if (screen.has_point(at)) {
+							int32_t base = (int32_t)dot_points.size();
+							dot_points.push_back(at + Vector2(-1.0f, -1.0f));
+							dot_points.push_back(at + Vector2(1.0f, -1.0f));
+							dot_points.push_back(at + Vector2(1.0f, 1.0f));
+							dot_points.push_back(at + Vector2(-1.0f, 1.0f));
+							for (int k = 0; k < 4; k++) {
+								dot_colors.push_back(colors[i]);
+							}
+							for (int32_t k : { 0, 1, 2, 0, 2, 3 }) {
+								dot_indices.push_back(base + k);
+							}
+						}
+					}
+					dotted++;
+					continue; // (Not the map's to draw, on screen or not.)
+				}
+			}
 			draw.push_back((int32_t)i);
 			plain.push_back(plain_sailing ? 1 : 0);
 		}
@@ -234,12 +316,16 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 			}
 		}
 	}
+	if (!dot_indices.is_empty()) {
+		RenderingServer::get_singleton()->canvas_item_add_triangle_array(dots_canvas, dot_indices, dot_points, dot_colors);
+	}
 	Dictionary out;
 	out["draw"] = draw;
 	out["plain"] = plain;
 	out["carried"] = carried;
 	out["markers"] = markers;
 	out["tugs"] = tugs;
+	out["dots"] = dotted;
 	return out;
 }
 
