@@ -29,6 +29,8 @@ const MEGA_FONT_SIZE := 13
 const MEGA_COLOR := Color(1.0, 0.82, 0.3)
 ## "Upgrade all": its width, and the extra gap before it (on top of the header's own).
 const UPGRADE_ALL_WIDTH := 250.0
+## The header's buttons' text size.
+const HEADER_FONT_SIZE := 15
 const UPGRADE_ALL_GAP := 16.0
 const SORT_NAMES := {Sort.EARNINGS: "Earnings", Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit (all time)"}
 ## Sorted by earnings, the tiles re-sort this often (s) while the tab is open,
@@ -81,6 +83,8 @@ func _ready() -> void:
 			_needs_rebuild = true)
 	_upgrade_all.pressed.connect(GameState.upgrade_all)
 	_upgrade_all.custom_minimum_size.x = UPGRADE_ALL_WIDTH
+	for control: Control in [%SortOption, %FilterOption, _upgrade_all]:
+		control.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)  # (Cinzel runs wide: a size down to fit the row.)
 	_upgrade_all.clip_text = true  # So it never widens the header past the screen.
 	var gap := Control.new()  # Extra room between the Show filter and Upgrade all.
 	gap.custom_minimum_size.x = UPGRADE_ALL_GAP
@@ -91,6 +95,7 @@ func _ready() -> void:
 	%Header.move_child(_upgrade_all, %CountLabel.get_index())
 	var uniforms := Button.new()  # What the crews wear (UniformsPage).
 	uniforms.text = "Uniforms"
+	uniforms.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)
 	uniforms.tooltip_text = "What your captains and crews wear on deck, ship by ship type."
 	uniforms.pressed.connect(func() -> void: get_tree().root.add_child(UniformsPage.new()))
 	%Header.add_child(uniforms)

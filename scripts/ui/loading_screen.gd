@@ -155,7 +155,7 @@ func _draw_page() -> void:
 		_page.draw_line(at, at + Vector2(float(wave.length), 0.0), Color(WAKE, float(wave.alpha)), 2.0, true)
 	for ship: Dictionary in _ships:
 		_draw_ship(ship)
-	var font := _page.get_theme_default_font()
+	var font := _page.get_theme_font(&"font", &"HeaderLabel")  # (The headings' font: Cinzel.)
 	_page.draw_string(font, Vector2(0.0, size.y * 0.16), "Maritime Empire", HORIZONTAL_ALIGNMENT_CENTER, size.x, TITLE_SIZE, Color(1.0, 1.0, 1.0, 0.92))
 	var dots := ".".repeat(1 + int(fmod(_elapsed * 2.0, 3.0)))
 	_page.draw_string(font, Vector2(0.0, size.y * 0.9), "Loading" + dots, HORIZONTAL_ALIGNMENT_CENTER, size.x, NOTE_SIZE, Color(1.0, 1.0, 1.0, 0.7))

@@ -14,6 +14,14 @@ var _players := Label.new()
 
 
 func _ready() -> void:
+	# The company's name, the clock, the level and the money in the headings' font (Cinzel: see ui/theme.tres), a size up for its small capitals.
+	var heading_font := get_theme_font(&"font", &"HeaderLabel")
+	%CompanyLabel.add_theme_font_override(&"font", heading_font)
+	%CompanyLabel.add_theme_font_size_override(&"font_size", 17)
+	%DateLabel.add_theme_font_override(&"font", heading_font)
+	%DateLabel.add_theme_font_size_override(&"font_size", 14)
+	for label: Label in [%LevelLabel, %MoneyLabel]:  # (The level and the money too.)
+		label.add_theme_font_override(&"font", heading_font)
 	%CompanyLabel.text = GameState.company_name
 	GameState.apply_company_text_color(%CompanyLabel)
 	GameState.money_changed.connect(_on_money_changed)

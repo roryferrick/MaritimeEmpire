@@ -57,6 +57,7 @@ func _ready() -> void:
 	var group := ButtonGroup.new()
 	for screen: Screen in _nav_buttons:
 		var button: Button = _nav_buttons[screen]
+		button.theme_type_variation = &"PageButton"  # (In the headings' font: see ui/theme.tres.)
 		button.toggle_mode = true
 		button.button_group = group
 		button.pressed.connect(show_screen.bind(screen))

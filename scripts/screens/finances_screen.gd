@@ -13,6 +13,9 @@ const REFRESH_SECONDS := 1.0
 ## Text size for the totals, canal and ship tables (smaller than the theme's, so
 ## the eight-column ship table fits beside the activity log).
 const TABLE_FONT_SIZE := 14
+## The ship table's name and model columns (px; longer names are cut short with "...").
+const NAME_WIDTH := 130.0
+const MODEL_WIDTH := 110.0
 ## Space between the cards side by side (the same as between the rows of cards).
 const CARD_GAP := 12
 ## Table columns: [title, sort key]. Money columns sort biggest first.
@@ -196,6 +199,7 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 		var header := Button.new()
 		header.flat = true
 		header.add_theme_font_size_override(&"font_size", TABLE_FONT_SIZE)
+		header.add_theme_font_override(&"font", get_theme_default_font())  # (In the text's font, like the table: Cinzel would widen its columns.)
 		header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		header.text = column[0]
 		if column[1] == _sort_key:
@@ -240,8 +244,8 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 func _add_row(row: Dictionary, title_color := Color.TRANSPARENT) -> Array[Label]:
 	var is_total := title_color.a > 0.0
 	var cells: Array[Label] = []
-	cells.append(_add_label(%ShipTable, row.name))
-	cells.append(_add_label(%ShipTable, row.model, &"DimLabel"))
+	cells.append(_fit(_add_label(%ShipTable, row.name), NAME_WIDTH))
+	cells.append(_fit(_add_label(%ShipTable, row.model, &"DimLabel"), MODEL_WIDTH))
 	cells.append(_add_money(roundi(row.income)))
 	for key: String in ["cargo", "fuel", "repair", "tolls", "wages"]:
 		cells.append(_add_money(-roundi(row[key])))
@@ -305,6 +309,17 @@ func _sort_by(key: String) -> void:
 		_sort_key = key
 		_sort_descending = key not in ["name", "model"]
 	_refresh()
+
+
+## A name cell kept to a width so the table fits the screen: a longer name ends
+## in "..." (whole in its tooltip).
+func _fit(label: Label, width: float) -> Label:
+	label.custom_minimum_size.x = width
+	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	if label.tooltip_text.is_empty():
+		label.tooltip_text = label.text
+	return label
 
 
 func _add_label(parent: Node, text: String, variation := &"") -> Label:

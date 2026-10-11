@@ -3177,12 +3177,16 @@ func _shift_labels() -> void:
 		var rect: Rect2 = box[1]
 		box[1] = Rect2(port_screen_position(box[0]) + (box[3] as Vector2), rect.size)
 
+## The font ports are named in on the map: the headings' (Cinzel, see ui/theme.tres).
+func _port_font() -> Font:
+	return get_theme_font(&"font", &"HeaderLabel")
+
 ## Every name the map can label (the ports', the countries', the features')
 ## into the atlas, once: rendered at the first frame (see LabelAtlas.render()).
 func _preload_label_atlas() -> void:
 	var font := get_theme_default_font()
 	for port: Dictionary in GameData.ports:
-		_label_atlas.add(font, PORT_FONT_SIZE, 0, GameData.port_name(port.id))
+		_label_atlas.add(_port_font(), PORT_FONT_SIZE, 0, GameData.port_name(port.id))
 	var data := GameData.world_map
 	for text: String in data.label_names:
 		_label_atlas.add(font, COUNTRY_FONT_SIZE, 0, text)
@@ -3231,14 +3235,15 @@ func _draw_label_layer() -> void:
 	var shadow := _color(&"label_shadow")
 	var label_color := _color(&"label")
 	var dimmed := _color(&"port_dimmed")
+	var port_font := _port_font()
 	for label: Array in _port_labels:
 		var rect: Rect2 = label[1]
 		if not bounds.intersects(rect):
 			continue
 		var text: String = GameData.port_name(label[0])
 		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
-		if _label_quad(font, PORT_FONT_SIZE, 0, text, rect.position + Vector2(1, 1), shadow, pixels):
-			_label_quad(font, PORT_FONT_SIZE, 0, text, rect.position, color, pixels)
+		if _label_quad(port_font, PORT_FONT_SIZE, 0, text, rect.position + Vector2(1, 1), shadow, pixels):
+			_label_quad(port_font, PORT_FONT_SIZE, 0, text, rect.position, color, pixels)
 	_label_batch.flush(_label_layer, _label_atlas.get_texture())
 	_prof("labels.layer", t_l)
 
@@ -5716,10 +5721,10 @@ func _place_port_labels(placed: Array[Rect2], labels := []) -> Array:
 	return labels
 
 ## Where a port's name goes: centered under its dot.
-func _port_label_rect(font: Font, port: Dictionary) -> Rect2:
+func _port_label_rect(_font: Font, port: Dictionary) -> Rect2:
 	var text_size: Vector2 = _port_text_sizes.get(port.id, Vector2.INF)  # (Kept by port: measured, or even looked up by text, costs.)
 	if text_size == Vector2.INF:
-		text_size = _label_size(font, port.name, PORT_FONT_SIZE)
+		text_size = _label_size(_port_font(), port.name, PORT_FONT_SIZE)
 		_port_text_sizes[port.id] = text_size
 	return Rect2(port_screen_position(port.id) + Vector2(-text_size.x / 2.0, _port_radius(port.id) + 2.0), text_size)
 
@@ -6150,12 +6155,13 @@ func _draw_ports(labels: Array) -> void:
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
 		var text: String = GameData.port_name(label[0])
-		if not bounds.intersects(rect) or _label_in_atlas(font, PORT_FONT_SIZE, text):
+		var port_font := _port_font()
+		if not bounds.intersects(rect) or _label_in_atlas(port_font, PORT_FONT_SIZE, text):
 			continue  # (Off screen since it was placed, or drawn from the atlas: see _draw_label_layer().)
-		var baseline := rect.position + Vector2(0, font.get_ascent(PORT_FONT_SIZE))
+		var baseline := rect.position + Vector2(0, port_font.get_ascent(PORT_FONT_SIZE))
 		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
-		_canvas.draw_string(font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
-		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
+		_canvas.draw_string(port_font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
+		_canvas.draw_string(port_font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
 
 ## Works out every port's look for the native dots (PortPainter) again when
 ## anything that sets it has changed: a port picked, dimmed or shining, the regions open, the
@@ -6914,7 +6920,9 @@ func _fishing_pose_now(ship: Ship) -> Array:
 
 ## A ground's spot for a slot (projected): round its middle, FISH_SPOT_SHARE
 ## of its radius out (each slot its own way round), pulled in till it and its
-## loop are on the water.
+## loop are on the water and clear of every marina (with its lines out, a
+## boat never works inside a harbour); further out if it must.
+const FISH_MARINA_CLEAR_NM := 2.0
 func _fish_spot(ground: String, slot: int) -> Vector2:
 	var key := [ground, slot]
 	if _fish_spots.has(key):
@@ -6926,8 +6934,10 @@ func _fish_spot(ground: String, slot: int) -> Vector2:
 	var spot := middle
 	for turn in 8:  # (Its own way round first, then the ways either side of it.)
 		var angle := first + float(slot) * TAU / GameState.GROUND_BOATS + float((turn + 1) / 2) * (0.3 if turn % 2 == 1 else -0.3)
-		for share: float in [1.0, 0.75, 0.5, 0.3]:
+		for share: float in [1.0, 0.75, 0.5, 0.3, 0.15, 1.5, 2.0]:
 			var at := middle + Vector2.from_angle(angle) * radius * share * units
+			if not _clear_of_marinas(at, (FISH_LOOP_NM + FISH_MARINA_CLEAR_NM) * units):
+				continue
 			var wet := true
 			for k in 5:
 				var check := at if k == 4 else at + Vector2.from_angle(k * PI / 2.0) * (FISH_LOOP_NM + 0.3) * units
@@ -6941,6 +6951,19 @@ func _fish_spot(ground: String, slot: int) -> Vector2:
 			break
 	_fish_spots[key] = spot
 	return spot
+
+## True if a point (projected) is further than `margin` (projected units)
+## outside every marina near it (its jetty's radius round its port: dock units,
+## 1/SHIP_WORLD_ZOOM of a projected degree each).
+func _clear_of_marinas(at: Vector2, margin: float) -> bool:
+	for port: Dictionary in GameData.ports:
+		var spot := GameData.port_position(port.id)
+		if absf(spot.y - at.y) > 3.0 or absf(fposmod(spot.x - at.x + 180.0, 360.0) - 180.0) > 3.0:
+			continue
+		var reach := float(_port_layout(port.id).radius) / SHIP_WORLD_ZOOM + margin
+		if spot.distance_to(at) < reach:
+			return false
+	return true
 
 ## Projected map units in a nautical mile there (Web Mercator degrees: 1/60 of
 ## a degree, stretched by the latitude).

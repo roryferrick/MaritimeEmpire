@@ -109,7 +109,7 @@ static func notices() -> String:
 	return "\n\n".join(out)
 
 
-## The bundled fonts (fonts/, see UiLook), each with its licence in full
+## The bundled fonts (fonts/: the look in ui/theme.tres), each with its licence in full
 ## (SIL Open Font License 1.1).
 static func _font_notices() -> String:
 	var out := PackedStringArray()

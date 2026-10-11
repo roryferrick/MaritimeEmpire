@@ -65,7 +65,7 @@ text = "Click a column to sort. Recovery boats pay their own fuel and repairs."
 [node name="ShipTable" type="GridContainer" parent="Scroll/Margin/Content/ShipsCard/ShipsBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/h_separation = 14
+theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 3
 columns = 10
 
