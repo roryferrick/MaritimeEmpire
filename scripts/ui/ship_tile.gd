@@ -49,7 +49,7 @@ func _init(for_ship: Ship) -> void:
 	_dot.draw.connect(_draw_dot)
 	row.add_child(_dot)
 
-	var face := Portrait.new(ship.captain(), true)
+	var face := Portrait.new(CrewLooks.dressed(ship.captain(), ship), true)
 	face.custom_minimum_size = Vector2.ONE * CAPTAIN_SIZE
 	face.size_flags_vertical = SIZE_SHRINK_CENTER
 	face.mouse_filter = MOUSE_FILTER_IGNORE

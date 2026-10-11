@@ -52,9 +52,11 @@ func _process(_delta: float) -> void:
 
 func _draw() -> void:
 	var cargo_text: String = GameData.commodity(ship.cargo_id).get("name", "Loaded") if not ship.cargo_id.is_empty() else "Empty"
+	if ship.is_fishing():  # Its catch: "12 / 30 crates".
+		cargo_text = "%s / %s crates" % [Fmt.thousands(floori(ship.catch)), Fmt.thousands(ship.capacity())] if ship.catch > 0.0 else "Empty"
 	if ship.is_docking():
 		cargo_text = "Unloading" if ship.dock_time < ship.dock_seconds() / 2.0 else "Loading"
-	var load_bar := ["Cargo", ship.cargo_level(), &"cargo", cargo_text]
+	var load_bar := ["Catch" if ship.is_fishing() else "Cargo", ship.cargo_level(), &"cargo", cargo_text]
 	if ship.is_recovery() or ship.is_tug():  # A recovery boat's or tug's load is the ship it's carrying or towing.
 		var carrying := ship.is_carrying() or (ship.is_tug() and ship.job_phase == Ship.JOB_TOW)
 		load_bar = ["Tow", 1.0 if carrying else 0.0, &"cargo", ship.rescuing.name if carrying else "Empty"]

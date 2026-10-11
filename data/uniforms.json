@@ -1,0 +1,33 @@
+{
+	"_comment": "What the people on deck wear (scripts/sim/crew_looks.gd, drawn by scripts/ui/deck_crew.gd): seen from above, a hat (Characters headwear, by name: 'None' shows the hair), shoulders in the shirt's colour and, walking, legs in the trousers'. Each ship line (a model's category) has its captain's (and mates') and its crew's outfit by default here; a company can change any of them (Company.uniforms, on the Uniforms page). Shirts and trousers are named colours from these lists. Dock workers belong to the port, not the company: hard hats and hi-vis, as dock below.",
+	"shirts": [
+		["White", "#f2f2ee"], ["Navy", "#1f2b4d"], ["Royal blue", "#2f5fb0"], ["Sky blue", "#7ab4e0"], ["Red", "#c8343a"], ["Brick", "#9a4632"],
+		["Hi-vis orange", "#ff7a1a"], ["Hi-vis yellow", "#d8f02a"], ["Oilskin orange", "#ee6a1e"], ["Oilskin yellow", "#f2c230"], ["Forest green", "#2f6a3e"],
+		["Olive", "#6a6e3a"], ["Khaki", "#c2ad7c"], ["Grey", "#8a8f96"], ["Charcoal", "#3c4046"], ["Black", "#1c1c1e"], ["Pink", "#e88aa8"], ["Purple", "#6a4a9a"]
+	],
+	"trousers": [
+		["Navy", "#1f2b4d"], ["Black", "#1c1c1e"], ["Charcoal", "#3c4046"], ["Grey", "#7a7f86"], ["Khaki", "#b8a272"], ["Denim", "#3e5f8a"],
+		["White", "#ecebe6"], ["Oilskin orange", "#e2601a"], ["Oilskin yellow", "#e8b828"], ["Olive", "#5a5e32"], ["Brown", "#5e4430"], ["Red", "#a82a30"], ["Royal blue", "#2a5098"]
+	],
+	"lines": [
+		{"id": "container", "title": "Container ships", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Navy"}},
+		{"id": "ore", "title": "Ore carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Brick", "trousers": "Brick"}},
+		{"id": "grain", "title": "Grain carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Black"}, "crew": {"hat": "Watch cap", "shirt": "Royal blue", "trousers": "Royal blue"}},
+		{"id": "livestock", "title": "Livestock carriers", "captain": {"hat": "Captain's cap", "shirt": "Khaki", "trousers": "Brown"}, "crew": {"hat": "Cowboy hat", "shirt": "Brick", "trousers": "Denim"}},
+		{"id": "tanker", "title": "Tankers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Red", "trousers": "Red"}},
+		{"id": "vehicles", "title": "Car carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Black"}, "crew": {"hat": "Baseball cap", "shirt": "Hi-vis yellow", "trousers": "Charcoal"}},
+		{"id": "seafood", "title": "Reefers", "captain": {"hat": "Captain's cap", "shirt": "Navy", "trousers": "Navy"}, "crew": {"hat": "Watch cap", "shirt": "Navy", "trousers": "Black"}},
+		{"id": "fishing", "title": "Fishing boats", "captain": {"hat": "Baseball cap", "shirt": "White", "trousers": "Khaki"}, "crew": {"hat": "Bucket hat", "shirt": "Sky blue", "trousers": "Khaki"}},
+		{"id": "crabbing", "title": "Crabbers", "captain": {"hat": "Baseball cap", "shirt": "Charcoal", "trousers": "Denim"}, "crew": {"hat": "Watch cap", "shirt": "Oilskin orange", "trousers": "Oilskin orange"}},
+		{"id": "tug", "title": "Tugs", "captain": {"hat": "Fisherman's cap", "shirt": "Navy", "trousers": "Khaki"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Navy"}},
+		{"id": "recovery", "title": "Recovery boats", "captain": {"hat": "Fisherman's cap", "shirt": "Navy", "trousers": "Charcoal"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Charcoal"}},
+		{"id": "icebreaker", "title": "Icebreakers", "captain": {"hat": "Captain's cap", "shirt": "Navy", "trousers": "Navy"}, "crew": {"hat": "Pompom beanie", "shirt": "Red", "trousers": "Black"}}
+	],
+	"dock": [
+		{"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Navy"},
+		{"hat": "Hard hat", "shirt": "Hi-vis yellow", "trousers": "Charcoal"},
+		{"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Denim"}
+	],
+	"_crew_comment": "How many are out on deck (see DeckCrew): big crews keep three 8-hour watches (on_deck_share of the crew out at once, changing at 00:00, 08:00 and 16:00 ship's time, with handover_s of real seconds of both watches about), crews of small_crew or fewer work small_day_hours a day and sleep in turns, at least one always up. size: a person's shoulders across, in ship units (map_size x SHIP_SIZE), drawn from min_px wide on screen; walk_speed in ship units a real second.",
+	"crew": {"on_deck_share": 0.333, "handover_s": 25.0, "small_crew": 8, "small_day_hours": 14, "size": 0.14, "min_px": 3.0, "walk_speed": 0.06, "max_on_deck": 60}
+}

@@ -43,7 +43,7 @@ const GAINS := {gull = -6.0, tern = -8.0, pelican = -4.0, cormorant = -8.0, shea
 	bison = -4.0, brown_bear = -4.0, elephant = -2.0, giraffe = -2.0, lemur = -6.0, lion = -2.0, orangutan = -6.0, tiger = -10.0,
 	ship_horn = -8.0, ship_horn2 = -14.0, foghorn = -10.0}
 ## A bird's kind (Birds species "kind") to its call; gulls have no kind (their class is "gulls").
-const BIRD_CALLS := {"Tern": "tern", "Pelican": "pelican", "Cormorant": "cormorant", "Shearwater": "shearwater", "Eider": "eider",
+const BIRD_CALLS := {"Tern": "tern", "Pelican": "pelican", "Cormorant": "birds/great_cormorant", "Shearwater": "shearwater", "Eider": "eider",
 	"Scoter": "scoter", "Heron": "heron", "Egret": "egret", "Bittern": "bittern", "Crane": "crane", "Night heron": "night_heron",
 	"Eagle": "eagle", "Hawk": "hawk", "Falcon": "falcon", "Osprey": "osprey", "Condor": "condor"}
 ## Gains (dB) for a species' own recording, where it needs one (the grey heron's is loud).
@@ -287,6 +287,8 @@ func _pick_call() -> String:
 				var key := "birds/" + species
 				if _stream_path(key).is_empty():  # No recording of the species itself: its kind's.
 					key = "gull" if cls == "gulls" else str(BIRD_CALLS.get(str(birds.species(species).get("kind", "")), ""))
+				if randf() < 0.5 and not _stream_path(key + "_2").is_empty():  # (A second take of it, some of the time.)
+					key += "_2"
 				if not key.is_empty() and not _stream_path(key).is_empty():
 					picks.append([key, sqrt(float(entry.count)) * float(CALL_WEIGHTS.get(species, 1.0)), int(entry.colony)])
 	var sea := SeaLife.shared()

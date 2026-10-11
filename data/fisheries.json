@@ -1,0 +1,5549 @@
+{
+	"_comment": "Fishing and crabbing (Fisheries, scripts/sim/fisheries.gd). families: the seafood commodities (data/markets.json lists them too, with their prices), base $ a ton landed. species: what's caught, each in a family, by a gear (troll: lines trolled behind small boats; net: gillnets and purse seines; trawl: big dragged nets; trap: crab pots), its price a ton the family's times grade; a trophy is one giant fish that fills a small trolling boat's hold on its own. grounds: where each species is caught and in which months (1-12), how thick the catch is there (density), how much the ground holds (stock_t: fishing draws it down, it regrows over a year), its depth (inshore grounds take every boat; offshore ones the tier 2 and 3 boats; deep ones only the tier 3), and the months its seas are rough (crabbing and fishing there wears boats harder: the Bering Sea in winter).",
+	"families": [
+		{
+			"id": "king_crab",
+			"name": "King crab",
+			"kind": "crab",
+			"base": 160000,
+			"color": "#c8462e"
+		},
+		{
+			"id": "snow_crab",
+			"name": "Snow & tanner crab",
+			"kind": "crab",
+			"base": 90000,
+			"color": "#e07a4a"
+		},
+		{
+			"id": "dungeness_crab",
+			"name": "Dungeness crab",
+			"kind": "crab",
+			"base": 85000,
+			"color": "#b8643c"
+		},
+		{
+			"id": "blue_crab",
+			"name": "Blue crab",
+			"kind": "crab",
+			"base": 60000,
+			"color": "#4f7fb0"
+		},
+		{
+			"id": "stone_crab",
+			"name": "Stone crab",
+			"kind": "crab",
+			"base": 140000,
+			"color": "#9a5a3a"
+		},
+		{
+			"id": "rock_crab",
+			"name": "Rock & brown crab",
+			"kind": "crab",
+			"base": 42000,
+			"color": "#a0603c"
+		},
+		{
+			"id": "swimming_crab",
+			"name": "Swimming & mud crab",
+			"kind": "crab",
+			"base": 70000,
+			"color": "#6a8a6a"
+		},
+		{
+			"id": "deepwater_crab",
+			"name": "Deepwater crab",
+			"kind": "crab",
+			"base": 75000,
+			"color": "#d04a3a"
+		},
+		{
+			"id": "tuna",
+			"name": "Tuna",
+			"kind": "fish",
+			"base": 60000,
+			"color": "#3e5a8a"
+		},
+		{
+			"id": "billfish",
+			"name": "Billfish",
+			"kind": "fish",
+			"base": 50000,
+			"color": "#2e4a7a"
+		},
+		{
+			"id": "salmon",
+			"name": "Salmon",
+			"kind": "fish",
+			"base": 45000,
+			"color": "#e08a7a"
+		},
+		{
+			"id": "whitefish",
+			"name": "Cod & whitefish",
+			"kind": "fish",
+			"base": 30000,
+			"color": "#d8d4c4"
+		},
+		{
+			"id": "flatfish",
+			"name": "Flatfish",
+			"kind": "fish",
+			"base": 40000,
+			"color": "#b8a888"
+		},
+		{
+			"id": "small_pelagic",
+			"name": "Herring, sardine & anchovy",
+			"kind": "fish",
+			"base": 12000,
+			"color": "#9ab0c4"
+		},
+		{
+			"id": "mackerel",
+			"name": "Mackerel",
+			"kind": "fish",
+			"base": 22000,
+			"color": "#5a8a9a"
+		},
+		{
+			"id": "game_fish",
+			"name": "Snapper, mahi & reef fish",
+			"kind": "fish",
+			"base": 40000,
+			"color": "#e0b040"
+		}
+	],
+	"species": {
+		"red_king_crab": {
+			"name": "Red king crab",
+			"latin": "Paralithodes camtschaticus",
+			"family": "king_crab",
+			"gear": "trap",
+			"grade": 1.2,
+			"trophy": false,
+			"fact": "The biggest catch of the Bering Sea's crab fleet: a leg span up to 1.8 m, fished in Bristol Bay each October in the worst seas in the world."
+		},
+		"blue_king_crab": {
+			"name": "Blue king crab",
+			"latin": "Paralithodes platypus",
+			"family": "king_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "Brown with blue highlights, it lives round the Pribilofs and St. Matthew Island and turns red when cooked."
+		},
+		"golden_king_crab": {
+			"name": "Golden king crab",
+			"latin": "Lithodes aequispinus",
+			"family": "king_crab",
+			"gear": "trap",
+			"grade": 0.9,
+			"trophy": false,
+			"fact": "The deepest of the king crabs, caught year round off the Aleutians in pots set 300 to 1,000 m down."
+		},
+		"southern_king_crab": {
+			"name": "Southern king crab (centolla)",
+			"latin": "Lithodes santolla",
+			"family": "king_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "Centolla: Patagonia's king crab, fished from Punta Arenas and Ushuaia in the Strait of Magellan and the Beagle Channel."
+		},
+		"snow_crab": {
+			"name": "Snow crab (opilio)",
+			"latin": "Chionoecetes opilio",
+			"family": "snow_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "Opilio: long thin legs, sweet meat; fished in winter on the Bering Sea ice edge and each spring in the Gulf of St. Lawrence."
+		},
+		"tanner_crab": {
+			"name": "Tanner crab (bairdi)",
+			"latin": "Chionoecetes bairdi",
+			"family": "snow_crab",
+			"gear": "trap",
+			"grade": 1.2,
+			"trophy": false,
+			"fact": "Bairdi, the bigger Tanner crab of the Bering Sea and the Gulf of Alaska."
+		},
+		"red_snow_crab": {
+			"name": "Red snow crab (beni-zuwai)",
+			"latin": "Chionoecetes japonicus",
+			"family": "snow_crab",
+			"gear": "trap",
+			"grade": 0.8,
+			"trophy": false,
+			"fact": "Beni-zuwai: a deep red snow crab from the Sea of Japan, caught in pots set 500 to 2,500 m down."
+		},
+		"hair_crab": {
+			"name": "Horsehair crab (kegani)",
+			"latin": "Erimacrus isenbeckii",
+			"family": "snow_crab",
+			"gear": "trap",
+			"grade": 1.3,
+			"trophy": false,
+			"fact": "Kegani, the horsehair crab: covered in short bristles, the prized winter crab of Hokkaido."
+		},
+		"dungeness_crab": {
+			"name": "Dungeness crab",
+			"latin": "Metacarcinus magister",
+			"family": "dungeness_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "The Pacific coast's crab, from Alaska to California: only males over 16 cm may be kept, and the season opens in December."
+		},
+		"blue_crab": {
+			"name": "Atlantic blue crab",
+			"latin": "Callinectes sapidus",
+			"family": "blue_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "Callinectes sapidus, 'beautiful swimmer': Chesapeake Bay's and Louisiana's crab, eaten as soft-shells when it moults."
+		},
+		"stone_crab": {
+			"name": "Florida stone crab",
+			"latin": "Menippe mercenaria",
+			"family": "stone_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "Only a claw is taken and the crab put back to grow another: Florida's stone crab season runs from October to May."
+		},
+		"brown_crab": {
+			"name": "Brown crab (edible crab)",
+			"latin": "Cancer pagurus",
+			"family": "rock_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "The edible crab of Britain, Ireland and Norway: a pie-crust edge to its shell and black-tipped claws."
+		},
+		"jonah_crab": {
+			"name": "Jonah crab",
+			"latin": "Cancer borealis",
+			"family": "rock_crab",
+			"gear": "trap",
+			"grade": 0.85,
+			"trophy": false,
+			"fact": "Once a by-catch of New England's lobster pots, now a fishery of its own."
+		},
+		"atlantic_rock_crab": {
+			"name": "Atlantic rock crab",
+			"latin": "Cancer irroratus",
+			"family": "rock_crab",
+			"gear": "trap",
+			"grade": 0.7,
+			"trophy": false,
+			"fact": "A small Cancer crab of Atlantic Canada and New England, freckled purple."
+		},
+		"pacific_rock_crab": {
+			"name": "Pacific rock crab",
+			"latin": "Cancer productus",
+			"family": "rock_crab",
+			"gear": "trap",
+			"grade": 0.8,
+			"trophy": false,
+			"fact": "The red rock crab of the Pacific coast, with heavy black-tipped claws."
+		},
+		"spider_crab": {
+			"name": "European spider crab",
+			"latin": "Maja brachydactyla",
+			"family": "rock_crab",
+			"gear": "trap",
+			"grade": 1.2,
+			"trophy": false,
+			"fact": "Centolla in Spain, araignée in France: a spiny spider crab whose spring migration fills the Breton and Galician pots."
+		},
+		"velvet_crab": {
+			"name": "Velvet swimming crab",
+			"latin": "Necora puber",
+			"family": "rock_crab",
+			"gear": "trap",
+			"grade": 1.1,
+			"trophy": false,
+			"fact": "A fierce little swimming crab with red eyes and a velvety blue-black shell, shipped live from Scotland to Spain."
+		},
+		"spanner_crab": {
+			"name": "Spanner crab",
+			"latin": "Ranina ranina",
+			"family": "rock_crab",
+			"gear": "trap",
+			"grade": 0.9,
+			"trophy": false,
+			"fact": "Shaped like a spanner: it buries itself in the sand off Queensland and is caught on flat dillies, not pots."
+		},
+		"gazami_crab": {
+			"name": "Gazami crab",
+			"latin": "Portunus trituberculatus",
+			"family": "swimming_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "The Japanese blue crab, the world's biggest crab catch by weight: over 300,000 tonnes a year from the Yellow and East China Seas."
+		},
+		"blue_swimmer_crab": {
+			"name": "Blue swimmer crab",
+			"latin": "Portunus armatus",
+			"family": "swimming_crab",
+			"gear": "trap",
+			"grade": 1.0,
+			"trophy": false,
+			"fact": "The flower crab of Southeast Asia and Australia, picked by hand in Thai and Filipino villages."
+		},
+		"mud_crab": {
+			"name": "Mud crab",
+			"latin": "Scylla serrata",
+			"family": "swimming_crab",
+			"gear": "trap",
+			"grade": 1.4,
+			"trophy": false,
+			"fact": "The mangrove crab of the Indo-Pacific, with claws that can crush a finger: caught in the Sundarbans, Queensland and East Africa."
+		},
+		"red_crab": {
+			"name": "Deep-sea red crab",
+			"latin": "Chaceon quinquedens",
+			"family": "deepwater_crab",
+			"gear": "trap",
+			"grade": 0.8,
+			"trophy": false,
+			"fact": "A deep-sea crab of the New England slope, caught in pots 600 m down along the canyons."
+		},
+		"golden_crab": {
+			"name": "Golden deep-sea crab",
+			"latin": "Chaceon fenneri",
+			"family": "deepwater_crab",
+			"gear": "trap",
+			"grade": 1.1,
+			"trophy": false,
+			"fact": "A deep-water crab of the slope off Florida and the Carolinas, caught 300 to 700 m down."
+		},
+		"giant_crab": {
+			"name": "Tasmanian giant crab",
+			"latin": "Pseudocarcinus gigas",
+			"family": "deepwater_crab",
+			"gear": "trap",
+			"grade": 1.6,
+			"trophy": false,
+			"fact": "One of the heaviest crabs in the world, up to 13 kg: caught in deep pots on the edge of Bass Strait."
+		},
+		"bluefin_tuna": {
+			"name": "Bluefin tuna",
+			"latin": "Thunnus thynnus",
+			"family": "tuna",
+			"gear": "troll",
+			"grade": 3.0,
+			"trophy": true
+		},
+		"yellowfin_tuna": {
+			"name": "Yellowfin tuna",
+			"latin": "Thunnus albacares",
+			"family": "tuna",
+			"gear": "troll",
+			"grade": 1.2,
+			"trophy": false
+		},
+		"albacore": {
+			"name": "Albacore",
+			"latin": "Thunnus alalunga",
+			"family": "tuna",
+			"gear": "troll",
+			"grade": 0.9,
+			"trophy": false
+		},
+		"skipjack": {
+			"name": "Skipjack tuna",
+			"latin": "Katsuwonus pelamis",
+			"family": "tuna",
+			"gear": "net",
+			"grade": 0.6,
+			"trophy": false
+		},
+		"blue_marlin": {
+			"name": "Blue marlin",
+			"latin": "Makaira nigricans",
+			"family": "billfish",
+			"gear": "troll",
+			"grade": 1.6,
+			"trophy": true
+		},
+		"black_marlin": {
+			"name": "Black marlin",
+			"latin": "Istiompax indica",
+			"family": "billfish",
+			"gear": "troll",
+			"grade": 1.6,
+			"trophy": true
+		},
+		"striped_marlin": {
+			"name": "Striped marlin",
+			"latin": "Kajikia audax",
+			"family": "billfish",
+			"gear": "troll",
+			"grade": 1.2,
+			"trophy": true
+		},
+		"sailfish": {
+			"name": "Sailfish",
+			"latin": "Istiophorus platypterus",
+			"family": "billfish",
+			"gear": "troll",
+			"grade": 0.9,
+			"trophy": true
+		},
+		"swordfish": {
+			"name": "Swordfish",
+			"latin": "Xiphias gladius",
+			"family": "billfish",
+			"gear": "troll",
+			"grade": 1.5,
+			"trophy": true
+		},
+		"chinook_salmon": {
+			"name": "Chinook (king) salmon",
+			"latin": "Oncorhynchus tshawytscha",
+			"family": "salmon",
+			"gear": "troll",
+			"grade": 1.6,
+			"trophy": false
+		},
+		"sockeye_salmon": {
+			"name": "Sockeye salmon",
+			"latin": "Oncorhynchus nerka",
+			"family": "salmon",
+			"gear": "net",
+			"grade": 1.3,
+			"trophy": false
+		},
+		"coho_salmon": {
+			"name": "Coho salmon",
+			"latin": "Oncorhynchus kisutch",
+			"family": "salmon",
+			"gear": "troll",
+			"grade": 1.1,
+			"trophy": false
+		},
+		"pink_salmon": {
+			"name": "Pink salmon",
+			"latin": "Oncorhynchus gorbuscha",
+			"family": "salmon",
+			"gear": "net",
+			"grade": 0.6,
+			"trophy": false
+		},
+		"chum_salmon": {
+			"name": "Chum salmon",
+			"latin": "Oncorhynchus keta",
+			"family": "salmon",
+			"gear": "net",
+			"grade": 0.7,
+			"trophy": false
+		},
+		"atlantic_salmon": {
+			"name": "Atlantic salmon",
+			"latin": "Salmo salar",
+			"family": "salmon",
+			"gear": "net",
+			"grade": 1.2,
+			"trophy": false
+		},
+		"atlantic_cod": {
+			"name": "Atlantic cod",
+			"latin": "Gadus morhua",
+			"family": "whitefish",
+			"gear": "trawl",
+			"grade": 1.2,
+			"trophy": false
+		},
+		"halibut": {
+			"name": "Halibut",
+			"latin": "Hippoglossus",
+			"family": "flatfish",
+			"gear": "troll",
+			"grade": 1.8,
+			"trophy": true
+		},
+		"mahi_mahi": {
+			"name": "Mahi-mahi",
+			"latin": "Coryphaena hippurus",
+			"family": "game_fish",
+			"gear": "troll",
+			"grade": 1.3,
+			"trophy": false
+		},
+		"wahoo": {
+			"name": "Wahoo",
+			"latin": "Acanthocybium solandri",
+			"family": "game_fish",
+			"gear": "troll",
+			"grade": 1.3,
+			"trophy": false
+		},
+		"yellowtail": {
+			"name": "Yellowtail",
+			"latin": "Seriola",
+			"family": "game_fish",
+			"gear": "troll",
+			"grade": 1.4,
+			"trophy": false
+		},
+		"giant_trevally": {
+			"name": "Giant trevally",
+			"latin": "Caranx ignobilis",
+			"family": "game_fish",
+			"gear": "troll",
+			"grade": 1.0,
+			"trophy": false
+		},
+		"barracuda": {
+			"name": "Barracuda",
+			"latin": "Sphyraena barracuda",
+			"family": "game_fish",
+			"gear": "troll",
+			"grade": 0.8,
+			"trophy": false
+		},
+		"striped_bass": {
+			"name": "Striped bass",
+			"latin": "Morone saxatilis",
+			"family": "game_fish",
+			"gear": "troll",
+			"grade": 1.4,
+			"trophy": false
+		},
+		"king_mackerel": {
+			"name": "King mackerel",
+			"latin": "Scomberomorus cavalla",
+			"family": "mackerel",
+			"gear": "troll",
+			"grade": 1.5,
+			"trophy": false
+		},
+		"atlantic_herring": {
+			"name": "Atlantic herring",
+			"latin": "Clupea harengus",
+			"family": "small_pelagic",
+			"gear": "net",
+			"grade": 1.0,
+			"trophy": false
+		},
+		"sardine": {
+			"name": "Sardine (pilchard)",
+			"latin": "Sardina pilchardus",
+			"family": "small_pelagic",
+			"gear": "net",
+			"grade": 1.0,
+			"trophy": false
+		},
+		"anchovy": {
+			"name": "European anchovy",
+			"latin": "Engraulis encrasicolus",
+			"family": "small_pelagic",
+			"gear": "net",
+			"grade": 0.9,
+			"trophy": false
+		},
+		"anchoveta": {
+			"name": "Peruvian anchoveta",
+			"latin": "Engraulis ringens",
+			"family": "small_pelagic",
+			"gear": "trawl",
+			"grade": 0.6,
+			"trophy": false
+		},
+		"capelin": {
+			"name": "Capelin",
+			"latin": "Mallotus villosus",
+			"family": "small_pelagic",
+			"gear": "trawl",
+			"grade": 0.8,
+			"trophy": false
+		},
+		"menhaden": {
+			"name": "Atlantic menhaden",
+			"latin": "Brevoortia tyrannus",
+			"family": "small_pelagic",
+			"gear": "net",
+			"grade": 0.5,
+			"trophy": false
+		},
+		"sprat": {
+			"name": "European sprat",
+			"latin": "Sprattus sprattus",
+			"family": "small_pelagic",
+			"gear": "trawl",
+			"grade": 0.7,
+			"trophy": false
+		},
+		"pacific_saury": {
+			"name": "Pacific saury",
+			"latin": "Cololabis saira",
+			"family": "small_pelagic",
+			"gear": "net",
+			"grade": 1.1,
+			"trophy": false
+		},
+		"atlantic_mackerel": {
+			"name": "Atlantic mackerel",
+			"latin": "Scomber scombrus",
+			"family": "mackerel",
+			"gear": "net",
+			"grade": 1.0,
+			"trophy": false
+		},
+		"jack_mackerel": {
+			"name": "Jack mackerel",
+			"latin": "Trachurus murphyi",
+			"family": "mackerel",
+			"gear": "trawl",
+			"grade": 0.8,
+			"trophy": false
+		},
+		"alaska_pollock": {
+			"name": "Alaska pollock",
+			"latin": "Gadus chalcogrammus",
+			"family": "whitefish",
+			"gear": "trawl",
+			"grade": 0.6,
+			"trophy": false
+		},
+		"haddock": {
+			"name": "Haddock",
+			"latin": "Melanogrammus aeglefinus",
+			"family": "whitefish",
+			"gear": "trawl",
+			"grade": 1.0,
+			"trophy": false
+		},
+		"hake": {
+			"name": "Hake",
+			"latin": "Merluccius",
+			"family": "whitefish",
+			"gear": "trawl",
+			"grade": 0.7,
+			"trophy": false
+		}
+	},
+	"grounds": [
+		{
+			"id": "bristol_bay",
+			"name": "Bristol Bay",
+			"lon": -162.5,
+			"lat": 57.3,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 9000,
+			"species": {
+				"red_king_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1
+					],
+					"density": 1.2
+				},
+				"sockeye_salmon": {
+					"months": [
+						6,
+						7
+					],
+					"density": 2.0
+				},
+				"chum_salmon": {
+					"months": [
+						6,
+						7,
+						8
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "pribilof_islands",
+			"name": "the Pribilof Islands",
+			"lon": -169.8,
+			"lat": 56.8,
+			"radius_nm": 60,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 6000,
+			"species": {
+				"blue_king_crab": {
+					"months": [
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"red_king_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1
+					],
+					"density": 0.7
+				},
+				"snow_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "st_matthew",
+			"name": "St. Matthew Island",
+			"lon": -172.5,
+			"lat": 60.4,
+			"radius_nm": 60,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 5000,
+			"species": {
+				"blue_king_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1
+					],
+					"density": 1.1
+				},
+				"snow_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.1
+				}
+			}
+		},
+		{
+			"id": "bering_shelf",
+			"name": "the Bering Sea shelf",
+			"lon": -170.5,
+			"lat": 58.6,
+			"radius_nm": 90,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 20000,
+			"species": {
+				"snow_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.4
+				},
+				"tanner_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.0
+				},
+				"alaska_pollock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.6
+				},
+				"halibut": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "aleutian_islands",
+			"name": "the Aleutian Islands",
+			"lon": -176.0,
+			"lat": 52.0,
+			"radius_nm": 80,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 8000,
+			"species": {
+				"golden_king_crab": {
+					"months": [
+						8,
+						9,
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.1
+				},
+				"alaska_pollock": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.0
+				},
+				"halibut": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.7
+				}
+			}
+		},
+		{
+			"id": "unalaska_bight",
+			"name": "the waters off Unalaska",
+			"lon": -166.0,
+			"lat": 54.2,
+			"radius_nm": 40,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 4000,
+			"species": {
+				"tanner_crab": {
+					"months": [
+						1,
+						2,
+						3
+					],
+					"density": 0.8
+				},
+				"halibut": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.9
+				},
+				"alaska_pollock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "kodiak",
+			"name": "the waters off Kodiak",
+			"lon": -152.3,
+			"lat": 57.4,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 7000,
+			"species": {
+				"tanner_crab": {
+					"months": [
+						1,
+						2,
+						3
+					],
+					"density": 1.0
+				},
+				"dungeness_crab": {
+					"months": [
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 0.8
+				},
+				"halibut": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				},
+				"pink_salmon": {
+					"months": [
+						7,
+						8
+					],
+					"density": 1.6
+				}
+			}
+		},
+		{
+			"id": "cook_inlet",
+			"name": "Cook Inlet",
+			"lon": -151.8,
+			"lat": 60.2,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 3000,
+			"species": {
+				"sockeye_salmon": {
+					"months": [
+						6,
+						7,
+						8
+					],
+					"density": 1.4
+				},
+				"halibut": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 1.0
+				},
+				"chinook_salmon": {
+					"months": [
+						5,
+						6,
+						7
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "southeast_alaska",
+			"name": "Southeast Alaska",
+			"lon": -135.0,
+			"lat": 57.3,
+			"radius_nm": 50,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 5000,
+			"species": {
+				"dungeness_crab": {
+					"months": [
+						6,
+						7,
+						8,
+						10,
+						11
+					],
+					"density": 1.0
+				},
+				"golden_king_crab": {
+					"months": [
+						2,
+						3
+					],
+					"density": 0.6
+				},
+				"pink_salmon": {
+					"months": [
+						7,
+						8,
+						9
+					],
+					"density": 1.5
+				},
+				"chinook_salmon": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 1.0
+				},
+				"coho_salmon": {
+					"months": [
+						7,
+						8,
+						9
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "hecate_strait",
+			"name": "Hecate Strait",
+			"lon": -130.8,
+			"lat": 53.3,
+			"radius_nm": 50,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"dungeness_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"halibut": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.8
+				},
+				"chum_salmon": {
+					"months": [
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "washington_coast",
+			"name": "the Washington coast",
+			"lon": -124.4,
+			"lat": 46.9,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"dungeness_crab": {
+					"months": [
+						12,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 1.2
+				},
+				"albacore": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.8
+				},
+				"chinook_salmon": {
+					"months": [
+						7,
+						8,
+						9
+					],
+					"density": 1.0
+				},
+				"coho_salmon": {
+					"months": [
+						8,
+						9,
+						10
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "oregon_coast",
+			"name": "the Oregon coast",
+			"lon": -124.3,
+			"lat": 44.5,
+			"radius_nm": 45,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 5000,
+			"species": {
+				"dungeness_crab": {
+					"months": [
+						12,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 1.4
+				},
+				"albacore": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "northern_california",
+			"name": "the North Coast of California",
+			"lon": -124.0,
+			"lat": 40.5,
+			"radius_nm": 45,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"dungeness_crab": {
+					"months": [
+						12,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7
+					],
+					"density": 1.2
+				},
+				"pacific_rock_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "gulf_of_farallones",
+			"name": "the Gulf of the Farallones",
+			"lon": -122.9,
+			"lat": 37.7,
+			"radius_nm": 30,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"dungeness_crab": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.0
+				},
+				"pacific_rock_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"chinook_salmon": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.8
+				},
+				"striped_bass": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.5
+				}
+			}
+		},
+		{
+			"id": "chesapeake_bay",
+			"name": "Chesapeake Bay",
+			"lon": -76.1,
+			"lat": 37.6,
+			"radius_nm": 35,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"blue_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"striped_bass": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"menhaden": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "pamlico_sound",
+			"name": "Pamlico Sound",
+			"lon": -75.9,
+			"lat": 35.3,
+			"radius_nm": 30,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"blue_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				},
+				"menhaden": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "mississippi_delta",
+			"name": "the Mississippi delta",
+			"lon": -89.8,
+			"lat": 29.0,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 8000,
+			"species": {
+				"blue_crab": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.4
+				},
+				"menhaden": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 2.0
+				},
+				"king_mackerel": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "ten_thousand_islands",
+			"name": "the Ten Thousand Islands",
+			"lon": -81.8,
+			"lat": 25.6,
+			"radius_nm": 30,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 2500,
+			"species": {
+				"stone_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.4
+				},
+				"blue_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				},
+				"barracuda": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.5
+				}
+			}
+		},
+		{
+			"id": "florida_keys",
+			"name": "the Florida Keys",
+			"lon": -81.0,
+			"lat": 24.6,
+			"radius_nm": 35,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"stone_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				},
+				"sailfish": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 0.8
+				},
+				"mahi_mahi": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 1.0
+				},
+				"king_mackerel": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 0.8
+				},
+				"barracuda": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "southeast_slope",
+			"name": "the Southeast US continental slope",
+			"lon": -79.6,
+			"lat": 29.8,
+			"radius_nm": 40,
+			"depth": "deep",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"golden_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"swordfish": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "new_england_canyons",
+			"name": "the New England canyons",
+			"lon": -70.2,
+			"lat": 39.9,
+			"radius_nm": 40,
+			"depth": "deep",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"red_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"swordfish": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.7
+				},
+				"yellowfin_tuna": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.7
+				}
+			}
+		},
+		{
+			"id": "gulf_of_maine",
+			"name": "the Gulf of Maine",
+			"lon": -68.8,
+			"lat": 43.3,
+			"radius_nm": 55,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 9000,
+			"species": {
+				"jonah_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"atlantic_rock_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.8
+				},
+				"atlantic_herring": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.4
+				},
+				"bluefin_tuna": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.6
+				},
+				"atlantic_cod": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "georges_bank",
+			"name": "Georges Bank",
+			"lon": -67.6,
+			"lat": 41.4,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 15000,
+			"species": {
+				"atlantic_cod": {
+					"months": [
+						9,
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				},
+				"haddock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"atlantic_herring": {
+					"months": [
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.4
+				},
+				"atlantic_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.2
+				},
+				"jonah_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "cape_cod_bay",
+			"name": "Cape Cod Bay",
+			"lon": -70.3,
+			"lat": 41.9,
+			"radius_nm": 25,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 2500,
+			"species": {
+				"bluefin_tuna": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.7
+				},
+				"striped_bass": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.2
+				},
+				"atlantic_rock_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "gulf_of_st_lawrence",
+			"name": "the Gulf of St. Lawrence",
+			"lon": -62.5,
+			"lat": 47.6,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 12000,
+			"species": {
+				"snow_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7
+					],
+					"density": 1.6
+				},
+				"atlantic_rock_crab": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.8
+				},
+				"atlantic_mackerel": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"atlantic_herring": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "grand_banks",
+			"name": "the Grand Banks",
+			"lon": -51.5,
+			"lat": 46.3,
+			"radius_nm": 90,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3,
+				4
+			],
+			"stock_t": 25000,
+			"species": {
+				"snow_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 1.4
+				},
+				"atlantic_cod": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.8
+				},
+				"capelin": {
+					"months": [
+						6,
+						7
+					],
+					"density": 2.0
+				},
+				"halibut": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.5
+				}
+			}
+		},
+		{
+			"id": "scotian_shelf",
+			"name": "the Scotian Shelf",
+			"lon": -62.0,
+			"lat": 43.8,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 8000,
+			"species": {
+				"snow_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 1.0
+				},
+				"haddock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"swordfish": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.5
+				}
+			}
+		},
+		{
+			"id": "labrador_shelf",
+			"name": "the Labrador Shelf",
+			"lon": -57.5,
+			"lat": 55.5,
+			"radius_nm": 70,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3,
+				4,
+				5
+			],
+			"stock_t": 8000,
+			"species": {
+				"snow_crab": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 1.0
+				},
+				"atlantic_cod": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.7
+				},
+				"capelin": {
+					"months": [
+						6,
+						7
+					],
+					"density": 1.4
+				}
+			}
+		},
+		{
+			"id": "west_greenland",
+			"name": "West Greenland",
+			"lon": -55.0,
+			"lat": 66.6,
+			"radius_nm": 70,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3,
+				4,
+				5
+			],
+			"stock_t": 8000,
+			"species": {
+				"snow_crab": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.9
+				},
+				"halibut": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.4
+				},
+				"atlantic_cod": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.7
+				}
+			}
+		},
+		{
+			"id": "barents_sea",
+			"name": "the Barents Sea",
+			"lon": 35.0,
+			"lat": 71.0,
+			"radius_nm": 120,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 30000,
+			"species": {
+				"red_king_crab": {
+					"months": [
+						9,
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.2
+				},
+				"snow_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.0
+				},
+				"atlantic_cod": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"haddock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"capelin": {
+					"months": [
+						1,
+						2,
+						3
+					],
+					"density": 2.0
+				}
+			}
+		},
+		{
+			"id": "lofoten",
+			"name": "the Lofoten Islands",
+			"lon": 14.0,
+			"lat": 68.3,
+			"radius_nm": 40,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 10000,
+			"species": {
+				"atlantic_cod": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 2.2
+				},
+				"haddock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "norwegian_coast",
+			"name": "the Norwegian coast",
+			"lon": 7.5,
+			"lat": 63.2,
+			"radius_nm": 45,
+			"depth": "inshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 6000,
+			"species": {
+				"brown_crab": {
+					"months": [
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				},
+				"atlantic_herring": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.4
+				},
+				"atlantic_mackerel": {
+					"months": [
+						8,
+						9,
+						10
+					],
+					"density": 1.2
+				},
+				"atlantic_salmon": {
+					"months": [
+						6,
+						7,
+						8
+					],
+					"density": 0.4
+				}
+			}
+		},
+		{
+			"id": "norwegian_sea",
+			"name": "the Norwegian Sea",
+			"lon": 3.5,
+			"lat": 66.0,
+			"radius_nm": 100,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 30000,
+			"species": {
+				"atlantic_herring": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 2.0
+				},
+				"atlantic_mackerel": {
+					"months": [
+						8,
+						9,
+						10
+					],
+					"density": 2.0
+				}
+			}
+		},
+		{
+			"id": "north_sea",
+			"name": "the North Sea",
+			"lon": 3.0,
+			"lat": 56.3,
+			"radius_nm": 90,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 25000,
+			"species": {
+				"atlantic_herring": {
+					"months": [
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 1.6
+				},
+				"atlantic_mackerel": {
+					"months": [
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				},
+				"atlantic_cod": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.7
+				},
+				"haddock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"sprat": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.4
+				}
+			}
+		},
+		{
+			"id": "yorkshire_coast",
+			"name": "the Yorkshire coast",
+			"lon": -0.4,
+			"lat": 54.5,
+			"radius_nm": 25,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 2500,
+			"species": {
+				"brown_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.4
+				},
+				"velvet_crab": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "hebrides",
+			"name": "the Hebrides",
+			"lon": -7.0,
+			"lat": 57.4,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2
+			],
+			"stock_t": 4000,
+			"species": {
+				"brown_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				},
+				"velvet_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				},
+				"atlantic_mackerel": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "faroe_bank",
+			"name": "the Faroe Islands",
+			"lon": -6.8,
+			"lat": 61.6,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 8000,
+			"species": {
+				"haddock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"atlantic_cod": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"atlantic_mackerel": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.4
+				}
+			}
+		},
+		{
+			"id": "iceland_shelf",
+			"name": "the Icelandic shelf",
+			"lon": -23.0,
+			"lat": 64.2,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 15000,
+			"species": {
+				"atlantic_cod": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"haddock": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"capelin": {
+					"months": [
+						1,
+						2,
+						3
+					],
+					"density": 2.0
+				}
+			}
+		},
+		{
+			"id": "celtic_sea",
+			"name": "the Celtic Sea",
+			"lon": -6.8,
+			"lat": 50.8,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2
+			],
+			"stock_t": 8000,
+			"species": {
+				"atlantic_mackerel": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.4
+				},
+				"atlantic_herring": {
+					"months": [
+						11,
+						12,
+						1,
+						2
+					],
+					"density": 1.0
+				},
+				"hake": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"brown_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "english_channel",
+			"name": "the western Channel",
+			"lon": -3.5,
+			"lat": 49.1,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 5000,
+			"species": {
+				"spider_crab": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7
+					],
+					"density": 1.2
+				},
+				"brown_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.0
+				},
+				"atlantic_mackerel": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "bay_of_biscay",
+			"name": "the Bay of Biscay",
+			"lon": -3.5,
+			"lat": 45.2,
+			"radius_nm": 80,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2
+			],
+			"stock_t": 10000,
+			"species": {
+				"albacore": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.2
+				},
+				"hake": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"sardine": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.4
+				},
+				"anchovy": {
+					"months": [
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.4
+				}
+			}
+		},
+		{
+			"id": "galicia",
+			"name": "the Galician rias",
+			"lon": -9.2,
+			"lat": 42.9,
+			"radius_nm": 35,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 5000,
+			"species": {
+				"spider_crab": {
+					"months": [
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.2
+				},
+				"velvet_crab": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.0
+				},
+				"sardine": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "portuguese_coast",
+			"name": "the Portuguese coast",
+			"lon": -9.5,
+			"lat": 39.8,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"sardine": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.6
+				},
+				"atlantic_mackerel": {
+					"months": [
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "baltic",
+			"name": "the southern Baltic",
+			"lon": 18.0,
+			"lat": 55.6,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2
+			],
+			"stock_t": 10000,
+			"species": {
+				"sprat": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 2.0
+				},
+				"atlantic_herring": {
+					"months": [
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.4
+				},
+				"atlantic_cod": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.5
+				}
+			}
+		},
+		{
+			"id": "strait_of_sicily",
+			"name": "the Strait of Sicily",
+			"lon": 12.8,
+			"lat": 36.6,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"bluefin_tuna": {
+					"months": [
+						5,
+						6,
+						7
+					],
+					"density": 0.8
+				},
+				"swordfish": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.8
+				},
+				"sardine": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"anchovy": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "balearic_sea",
+			"name": "the Balearic Sea",
+			"lon": 2.5,
+			"lat": 39.8,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"bluefin_tuna": {
+					"months": [
+						5,
+						6,
+						7
+					],
+					"density": 0.7
+				},
+				"mahi_mahi": {
+					"months": [
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.0
+				},
+				"swordfish": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "canary_current",
+			"name": "the Canary Islands",
+			"lon": -14.8,
+			"lat": 28.4,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 8000,
+			"species": {
+				"skipjack": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"atlantic_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "mauritanian_shelf",
+			"name": "the Mauritanian shelf",
+			"lon": -17.0,
+			"lat": 19.5,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 15000,
+			"species": {
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 2.0
+				},
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "senegal_coast",
+			"name": "the Senegalese coast",
+			"lon": -17.6,
+			"lat": 14.4,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"yellowfin_tuna": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.8
+				},
+				"sailfish": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "gulf_of_guinea",
+			"name": "the Gulf of Guinea",
+			"lon": 0.5,
+			"lat": 4.5,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 10000,
+			"species": {
+				"skipjack": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"sardine": {
+					"months": [
+						7,
+						8,
+						9
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "benguela",
+			"name": "the Benguela coast",
+			"lon": 13.3,
+			"lat": -22.5,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 15000,
+			"species": {
+				"hake": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				}
+			}
+		},
+		{
+			"id": "agulhas_bank",
+			"name": "the Agulhas Bank",
+			"lon": 21.0,
+			"lat": -35.2,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				6,
+				7,
+				8
+			],
+			"stock_t": 10000,
+			"species": {
+				"hake": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"sardine": {
+					"months": [
+						5,
+						6,
+						7
+					],
+					"density": 1.6
+				},
+				"yellowtail": {
+					"months": [
+						6,
+						7,
+						8
+					],
+					"density": 0.8
+				},
+				"yellowfin_tuna": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "zanzibar_channel",
+			"name": "the Zanzibar Channel",
+			"lon": 39.4,
+			"lat": -6.3,
+			"radius_nm": 30,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"mud_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"giant_trevally": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				},
+				"sailfish": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "mozambique_channel",
+			"name": "the Mozambique Channel",
+			"lon": 35.5,
+			"lat": -24.5,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"sailfish": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.7
+				},
+				"black_marlin": {
+					"months": [
+						10,
+						11,
+						12,
+						1
+					],
+					"density": 0.5
+				},
+				"king_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"mud_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "oman_coast",
+			"name": "the Omani coast",
+			"lon": 54.6,
+			"lat": 16.4,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"yellowfin_tuna": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				},
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"king_mackerel": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "gulf_of_mannar",
+			"name": "the Gulf of Mannar and Palk Bay",
+			"lon": 79.5,
+			"lat": 9.0,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"blue_swimmer_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"mud_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "sri_lanka_waters",
+			"name": "the waters off Sri Lanka",
+			"lon": 81.0,
+			"lat": 6.0,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"skipjack": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"swordfish": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.6
+				},
+				"sailfish": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 0.7
+				}
+			}
+		},
+		{
+			"id": "sundarbans",
+			"name": "the Sundarbans",
+			"lon": 89.3,
+			"lat": 21.6,
+			"radius_nm": 30,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"mud_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				}
+			}
+		},
+		{
+			"id": "andaman_sea",
+			"name": "the Andaman Sea",
+			"lon": 97.0,
+			"lat": 14.0,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"anchovy": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"mud_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				},
+				"yellowfin_tuna": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "leeuwin_coast",
+			"name": "the Leeuwin coast",
+			"lon": 114.8,
+			"lat": -31.8,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"blue_swimmer_crab": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.0
+				},
+				"yellowtail": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"sardine": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "gulf_of_thailand",
+			"name": "the Gulf of Thailand",
+			"lon": 100.8,
+			"lat": 11.8,
+			"radius_nm": 60,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 10000,
+			"species": {
+				"blue_swimmer_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"mud_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"anchovy": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "visayan_sea",
+			"name": "the Visayan Sea",
+			"lon": 123.6,
+			"lat": 11.3,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"blue_swimmer_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"mud_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"sardine": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "celebes_sea",
+			"name": "the Celebes Sea",
+			"lon": 124.8,
+			"lat": 5.6,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 10000,
+			"species": {
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"skipjack": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"blue_marlin": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.4
+				}
+			}
+		},
+		{
+			"id": "java_sea",
+			"name": "the Java Sea",
+			"lon": 111.0,
+			"lat": -5.6,
+			"radius_nm": 70,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 10000,
+			"species": {
+				"blue_swimmer_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "banda_sea",
+			"name": "the Banda Sea",
+			"lon": 125.5,
+			"lat": -6.0,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 8000,
+			"species": {
+				"skipjack": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.6
+				},
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "arafura_sea",
+			"name": "the Arafura Sea",
+			"lon": 133.0,
+			"lat": -10.0,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"mud_crab": {
+					"months": [
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.0
+				},
+				"giant_trevally": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "moreton_bay",
+			"name": "Moreton Bay",
+			"lon": 153.4,
+			"lat": -27.2,
+			"radius_nm": 30,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"mud_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.2
+				},
+				"blue_swimmer_crab": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.0
+				},
+				"spanner_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "coral_sea",
+			"name": "the Coral Sea",
+			"lon": 154.0,
+			"lat": -24.0,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"black_marlin": {
+					"months": [
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.7
+				},
+				"mahi_mahi": {
+					"months": [
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.0
+				},
+				"yellowfin_tuna": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "bass_strait",
+			"name": "Bass Strait",
+			"lon": 145.5,
+			"lat": -39.8,
+			"radius_nm": 50,
+			"depth": "deep",
+			"rough_months": [
+				5,
+				6,
+				7,
+				8,
+				9
+			],
+			"stock_t": 3000,
+			"species": {
+				"giant_crab": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 0.8
+				},
+				"bluefin_tuna": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7
+					],
+					"density": 0.5
+				},
+				"yellowtail": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "hauraki_gulf",
+			"name": "the Hauraki Gulf",
+			"lon": 175.2,
+			"lat": -36.4,
+			"radius_nm": 35,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"yellowtail": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"striped_marlin": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.6
+				},
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "yellow_sea",
+			"name": "the Yellow Sea",
+			"lon": 123.2,
+			"lat": 36.2,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2
+			],
+			"stock_t": 15000,
+			"species": {
+				"gazami_crab": {
+					"months": [
+						4,
+						5,
+						6,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"anchovy": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.4
+				}
+			}
+		},
+		{
+			"id": "east_china_sea",
+			"name": "the East China Sea",
+			"lon": 124.8,
+			"lat": 30.0,
+			"radius_nm": 80,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 20000,
+			"species": {
+				"gazami_crab": {
+					"months": [
+						9,
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.0
+				},
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "taiwan_strait",
+			"name": "the Taiwan Strait",
+			"lon": 119.6,
+			"lat": 24.2,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 8000,
+			"species": {
+				"gazami_crab": {
+					"months": [
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"mahi_mahi": {
+					"months": [
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.0
+				},
+				"anchovy": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "sea_of_japan",
+			"name": "the Sea of Japan",
+			"lon": 134.5,
+			"lat": 37.5,
+			"radius_nm": 80,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 10000,
+			"species": {
+				"red_snow_crab": {
+					"months": [
+						9,
+						10,
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.2
+				},
+				"snow_crab": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.0
+				},
+				"sardine": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "kuroshio",
+			"name": "the Kuroshio off Honshu",
+			"lon": 141.5,
+			"lat": 34.6,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 12000,
+			"species": {
+				"skipjack": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7
+					],
+					"density": 1.4
+				},
+				"bluefin_tuna": {
+					"months": [
+						6,
+						7,
+						8
+					],
+					"density": 0.6
+				},
+				"pacific_saury": {
+					"months": [
+						9,
+						10,
+						11
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "east_hokkaido",
+			"name": "the waters off eastern Hokkaido",
+			"lon": 145.8,
+			"lat": 42.7,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3
+			],
+			"stock_t": 12000,
+			"species": {
+				"pacific_saury": {
+					"months": [
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.8
+				},
+				"hair_crab": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 1.0
+				},
+				"alaska_pollock": {
+					"months": [
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "sea_of_okhotsk",
+			"name": "the Sea of Okhotsk",
+			"lon": 152.0,
+			"lat": 55.5,
+			"radius_nm": 120,
+			"depth": "deep",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3,
+				4
+			],
+			"stock_t": 30000,
+			"species": {
+				"red_king_crab": {
+					"months": [
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"blue_king_crab": {
+					"months": [
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				},
+				"alaska_pollock": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 2.0
+				}
+			}
+		},
+		{
+			"id": "kamchatka_shelf",
+			"name": "the East Kamchatka shelf",
+			"lon": 160.0,
+			"lat": 52.5,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [
+				11,
+				12,
+				1,
+				2,
+				3,
+				4
+			],
+			"stock_t": 15000,
+			"species": {
+				"red_king_crab": {
+					"months": [
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"sockeye_salmon": {
+					"months": [
+						6,
+						7,
+						8
+					],
+					"density": 1.6
+				},
+				"pink_salmon": {
+					"months": [
+						7,
+						8
+					],
+					"density": 2.0
+				}
+			}
+		},
+		{
+			"id": "samoa_waters",
+			"name": "the waters off Samoa",
+			"lon": -171.0,
+			"lat": -14.6,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 6000,
+			"species": {
+				"skipjack": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.4
+				},
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"albacore": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"wahoo": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "fiji_waters",
+			"name": "the waters off Fiji",
+			"lon": 178.8,
+			"lat": -18.6,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 5000,
+			"species": {
+				"albacore": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.2
+				},
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"mahi_mahi": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "kona_coast",
+			"name": "the Kona coast",
+			"lon": -156.2,
+			"lat": 19.6,
+			"radius_nm": 30,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"blue_marlin": {
+					"months": [
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.9
+				},
+				"yellowfin_tuna": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"mahi_mahi": {
+					"months": [
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				},
+				"wahoo": {
+					"months": [
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "southern_california_bight",
+			"name": "the Southern California Bight",
+			"lon": -119.0,
+			"lat": 33.3,
+			"radius_nm": 50,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 8000,
+			"species": {
+				"albacore": {
+					"months": [
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 0.8
+				},
+				"yellowtail": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"swordfish": {
+					"months": [
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.5
+				},
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "monterey_bay",
+			"name": "Monterey Bay",
+			"lon": -122.1,
+			"lat": 36.8,
+			"radius_nm": 25,
+			"depth": "inshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"anchovy": {
+					"months": [
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.6
+				},
+				"sardine": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"chinook_salmon": {
+					"months": [
+						5,
+						6,
+						7,
+						8
+					],
+					"density": 0.6
+				},
+				"pacific_rock_crab": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "cabo_san_lucas",
+			"name": "the waters off Cabo San Lucas",
+			"lon": -110.0,
+			"lat": 22.6,
+			"radius_nm": 40,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"striped_marlin": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.0
+				},
+				"blue_marlin": {
+					"months": [
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.7
+				},
+				"mahi_mahi": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				},
+				"wahoo": {
+					"months": [
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"yellowfin_tuna": {
+					"months": [
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "galapagos",
+			"name": "the Galapagos",
+			"lon": -90.8,
+			"lat": -0.5,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"wahoo": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"striped_marlin": {
+					"months": [
+						12,
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 0.5
+				}
+			}
+		},
+		{
+			"id": "humboldt_current",
+			"name": "the Humboldt Current off Peru",
+			"lon": -78.2,
+			"lat": -11.2,
+			"radius_nm": 90,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 40000,
+			"species": {
+				"anchoveta": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						11,
+						12,
+						1
+					],
+					"density": 2.4
+				},
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.0
+				},
+				"skipjack": {
+					"months": [
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "chilean_coast",
+			"name": "the central Chilean coast",
+			"lon": -72.5,
+			"lat": -35.0,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [
+				5,
+				6,
+				7,
+				8
+			],
+			"stock_t": 15000,
+			"species": {
+				"jack_mackerel": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.6
+				},
+				"anchoveta": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "magellan_strait",
+			"name": "the Strait of Magellan",
+			"lon": -71.5,
+			"lat": -53.6,
+			"radius_nm": 40,
+			"depth": "inshore",
+			"rough_months": [
+				5,
+				6,
+				7,
+				8
+			],
+			"stock_t": 2500,
+			"species": {
+				"southern_king_crab": {
+					"months": [
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "patagonian_shelf",
+			"name": "the Patagonian shelf",
+			"lon": -61.5,
+			"lat": -45.5,
+			"radius_nm": 90,
+			"depth": "offshore",
+			"rough_months": [
+				5,
+				6,
+				7,
+				8
+			],
+			"stock_t": 20000,
+			"species": {
+				"hake": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.8
+				},
+				"southern_king_crab": {
+					"months": [
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 0.4
+				},
+				"anchovy": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2
+					],
+					"density": 1.0
+				}
+			}
+		},
+		{
+			"id": "gulf_of_mexico_reefs",
+			"name": "the northern Gulf of Mexico",
+			"lon": -88.5,
+			"lat": 28.3,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 8000,
+			"species": {
+				"yellowfin_tuna": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 0.8
+				},
+				"king_mackerel": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.0
+				},
+				"mahi_mahi": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "outer_banks",
+			"name": "the Outer Banks",
+			"lon": -75.0,
+			"lat": 35.2,
+			"radius_nm": 40,
+			"depth": "offshore",
+			"rough_months": [
+				12,
+				1,
+				2
+			],
+			"stock_t": 5000,
+			"species": {
+				"bluefin_tuna": {
+					"months": [
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 0.6
+				},
+				"yellowfin_tuna": {
+					"months": [
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					],
+					"density": 1.0
+				},
+				"mahi_mahi": {
+					"months": [
+						5,
+						6,
+						7,
+						8,
+						9
+					],
+					"density": 1.2
+				},
+				"blue_marlin": {
+					"months": [
+						6,
+						7,
+						8
+					],
+					"density": 0.5
+				}
+			}
+		},
+		{
+			"id": "bahamas_banks",
+			"name": "the Bahamas",
+			"lon": -77.8,
+			"lat": 25.8,
+			"radius_nm": 40,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 4000,
+			"species": {
+				"wahoo": {
+					"months": [
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 1.0
+				},
+				"mahi_mahi": {
+					"months": [
+						3,
+						4,
+						5,
+						6
+					],
+					"density": 1.0
+				},
+				"blue_marlin": {
+					"months": [
+						5,
+						6,
+						7
+					],
+					"density": 0.6
+				}
+			}
+		},
+		{
+			"id": "windward_passage",
+			"name": "the Windward Passage",
+			"lon": -73.8,
+			"lat": 19.6,
+			"radius_nm": 40,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 3000,
+			"species": {
+				"mahi_mahi": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					"density": 1.0
+				},
+				"wahoo": {
+					"months": [
+						10,
+						11,
+						12,
+						1,
+						2,
+						3
+					],
+					"density": 0.8
+				}
+			}
+		},
+		{
+			"id": "brazil_south",
+			"name": "the southern Brazilian shelf",
+			"lon": -47.5,
+			"lat": -26.0,
+			"radius_nm": 70,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 10000,
+			"species": {
+				"sardine": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10
+					],
+					"density": 1.4
+				},
+				"skipjack": {
+					"months": [
+						12,
+						1,
+						2,
+						3,
+						4
+					],
+					"density": 1.2
+				}
+			}
+		},
+		{
+			"id": "rio_de_la_plata",
+			"name": "the Rio de la Plata",
+			"lon": -55.5,
+			"lat": -36.0,
+			"radius_nm": 60,
+			"depth": "offshore",
+			"rough_months": [],
+			"stock_t": 10000,
+			"species": {
+				"hake": {
+					"months": [
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"density": 1.2
+				},
+				"anchovy": {
+					"months": [
+						10,
+						11,
+						12,
+						1
+					],
+					"density": 1.4
+				}
+			}
+		}
+	]
+}

@@ -26,6 +26,7 @@ const STAR_UNITS := {
 	"ton": [50000, 10000000, 100000000],
 	"head": [5000, 1000000, 10000000],
 	"vehicle": [2000, 250000, 5000000],
+	"crate": [1000, 100000, 2000000],
 }
 const FLEET_STARS := [10, 50, 200]
 const LEVEL_STARS := [10, 30, 60]
@@ -36,7 +37,7 @@ const ANIMAL_STARS := [1.0 / 3.0, 2.0 / 3.0, 1.0]
 ## Wonders of the world seen for each star: 10, 25 and all of them (0: all).
 const WONDER_STARS := [10, 25, 0]
 ## The ship lines owning one of each counts for the Full house badge.
-const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "tanker", "vehicles"]
+const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "tanker", "vehicles", "seafood"]
 ## Badges: [id, name, what it takes].
 const BADGES := [
 	["first_delivery", "Maiden voyage", "Deliver a cargo"],

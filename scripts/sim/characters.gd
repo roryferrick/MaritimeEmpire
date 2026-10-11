@@ -44,7 +44,8 @@ const PARTS := [
 	["bottoms", "Bottoms", ["Navy trousers", "Sailor bell-bottoms", "Oilskin trousers", "Deck shorts", "Wetsuit legs", "Jeans", "Khakis", "Black trousers", "Cargo trousers", "Red skirt", "Navy skirt", "Denim shorts"]],
 	["shoes", "Shoes", ["Deck shoes", "Sea boots", "Yellow wellies", "Barefoot", "Black boots", "Brown boots", "White trainers", "Dress shoes", "Sandals", "Red trainers"]],
 	["eyewear", "Glasses", ["None", "Round", "Square", "Sunglasses", "Aviators", "Monocle", "Half-rims", "Cat-eye", "Goggles", "Eye patch"]],
-	["headwear", "Hat", ["None", "Captain's cap", "Sailor cap", "Sou'wester", "Tricorne", "Bandana", "Watch cap", "Straw hat", "Bucket hat", "Baseball cap", "Top hat", "Hard hat", "Cowboy hat"]],
+	["headwear", "Hat", ["None", "Captain's cap", "Sailor cap", "Sou'wester", "Tricorne", "Bandana", "Watch cap", "Straw hat", "Bucket hat", "Baseball cap", "Top hat", "Hard hat", "Cowboy hat",
+		"Fisherman's cap", "Flat cap", "Beret", "Bicorne", "Pompom beanie", "Fedora", "Pith helmet", "Conical hat"]],
 ]
 ## The sliders of a look (0 to 100, 50 the middle): [key, title, low word, high word].
 const SLIDERS := [

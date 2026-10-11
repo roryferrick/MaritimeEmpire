@@ -63,6 +63,8 @@ func _ready() -> void:
 	%RouteScreen.finished.connect(_close_route_screen)
 	GameState.cargo_sold.connect(_on_cargo_sold)
 	GameState.cargo_loaded.connect(_on_cargo_loaded)
+	GameState.catch_landed.connect(_on_catch_landed)
+	GameState.trophy_caught.connect(_on_trophy_caught)
 	GameState.canal_entered.connect(_on_canal_entered)
 	GameState.ship_held.connect(_on_ship_held)
 	GameState.ship_broke_down.connect(_on_ship_broke_down)
@@ -236,6 +238,25 @@ func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity
 		GameData.port_name(port_id), "+" if profit >= 0 else "", Fmt.money(profit), Fmt.money(cost), Fmt.money(sale),
 		", tolls %s" % Fmt.money(tolls) if tolls > 0 else "", ", port fee %s" % Fmt.money(fee) if fee > 0 else ""]
 	ActivityLog.add(text, ActivityLog.Kind.INFO if profit >= 0 else ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
+
+
+## "Pot Luck landed 6,000 crates of red king crab at Dutch Harbor: $28,800,000"
+## (or "... put ... in the cold store at ...", for the company's carriers).
+func _on_catch_landed(ship: Ship, port_id: String, species: String, crates: int, value: int, stored: bool) -> void:
+	if not GameState.is_mine(ship) or GameState.muted_models.has(ship.model_id):
+		return
+	var what := Fisheries.shared().species_name(species).to_lower()
+	var text := "%s %s %s crates of %s %s %s: %s" % [ship.name, "put" if stored else "landed", Fmt.thousands(crates), what,
+		"in the cold store at" if stored else "at", GameData.port_name(port_id), Fmt.money(value)]
+	ActivityLog.add(text, ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
+
+
+## "Reel Deal hooked a giant bluefin tuna: its hold's full, heading home".
+func _on_trophy_caught(ship: Ship, species: String) -> void:
+	if not GameState.is_mine(ship):
+		return
+	ActivityLog.add("%s hooked a giant %s: its hold's full, heading home" % [ship.name, Fisheries.shared().species_name(species).to_lower()],
+		ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
 
 
 ## "Sea Otter loaded 10 containers of Toys for Rotterdam ($1,200)".

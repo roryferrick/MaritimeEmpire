@@ -88,14 +88,14 @@ func _ready() -> void:
 ## A ship of a random model with art, coming on from off a random side, headed
 ## across to the far side (a little off straight), at its own speed.
 func _spawn(size: Vector2) -> Dictionary:
-	var models: Array = GameData.ship_models.filter(func(m: Dictionary) -> bool: return not _ship_art(str(m.get("category", ""))).is_empty())
+	var models: Array = GameData.ship_models.filter(func(m: Dictionary) -> bool: return not _ship_art(str(m.get("art", m.get("category", "")))).is_empty())
 	var longest := 1.0
 	for m: Dictionary in models:
 		longest = maxf(longest, float((m.get("map_size", [14, 6]) as Array)[0]))
 	var model: Dictionary = models[_rng.randi() % models.size()] if not models.is_empty() else {}
 	var dims: Array = model.get("map_size", [14, 6])
 	var length := lerpf(SHORTEST_PX, LONGEST_PX, float(dims[0]) / longest)
-	var art := _ship_art(str(model.get("category", "")))
+	var art := _ship_art(str(model.get("art", model.get("category", ""))))
 	var hull: Texture2D = art.get("hull")
 	var width := length * (float(hull.get_height()) / float(hull.get_width()) if hull != null else 52.0 / 180.0)
 	var side := _rng.randi() % 4  # 0 from the left, 1 the right, 2 the top, 3 the bottom.

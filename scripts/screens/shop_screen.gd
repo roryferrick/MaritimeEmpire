@@ -17,9 +17,9 @@ extends Control
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs (two per route port)", "tug"],
-	["Icebreakers (for seasonal ice)", "icebreaker"]]
+	["Icebreakers (for seasonal ice)", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"]]
 ## The sections side by side on each row (by category).
-const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery"], ["icebreaker", "tug"]]
+const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery"], ["icebreaker", "tug"], ["fishing", "crabbing"], ["seafood"]]
 ## Cards a section shows across, fewer if they don't fit. Six fit across a row
 ## beside the open activity log at the default window size: cards are
 ## CARD_WIDTH wide (plus padding), and long ship names and Buy button texts wrap.
@@ -251,6 +251,13 @@ func _make_card(model: Dictionary) -> Control:
 		rows[1] = ["Carries", GameData.carries_text(model)]
 		rows[2] = ["Job", "Recovers lost ships"]
 		rows.remove_at(3)
+	elif str(model.get("category", "")) == "seafood":
+		rows[2] = ["Carries", "All %d kinds of seafood, crab and fish, in crates; your boats' catch from the cold stores" % (model.get("cargo", []) as Array).size()]
+	elif model.has("fishing"):
+		var gear: Dictionary = model.fishing
+		rows[1] = ["Hold", "%s crates" % Fmt.thousands(int(model.get("capacity", 0)))]
+		rows[2] = ["Gear", "%s · %d crew · %s" % [Fisheries.gear_text(gear), int(gear.get("crew", 0)), Fisheries.trip_text(gear)]]
+		rows.insert(3, ["Works", " and ".join((gear.get("depth", []) as Array).map(func(depth: String) -> String: return {inshore = "inshore", offshore = "offshore", deep = "deep-water"}.get(depth, depth))) + " grounds, from any port"])
 	elif model.get("tug", false):
 		rows[1] = ["Job", "Pushes or drags your lost ships back into port"]
 		rows[2] = ["Reach", "%d nm out from its port; two together tow twice as fast" % int(model.get("reach_nm", 0))]

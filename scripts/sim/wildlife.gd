@@ -158,12 +158,14 @@ func _build_land() -> void:
 		for g in int(info.get("groups", 3)) * LAND_GROUPS:
 			var key := "%s/%d/%d" % [species, i, g]
 			var home := base
-			# The first group at the spot itself; the rest round it, on land.
-			for attempt in 12:
+			# The first group at the spot itself; the rest round it, on land with
+			# all the range they roam on land too (so none wanders into the sea).
+			var reach := float(info.get("roam_km", 30.0)) + float(info.get("km", 6.0)) * 3.0
+			for attempt in 24:
 				if g == 0:
 					break
 				var spot := _offset(base, _disc([key, "home", attempt]) * float(info.get("spread_km", 300.0)))
-				if MapView._on_land(spot):
+				if _range_on_land(spot, reach):
 					home = spot
 					break
 			var away := home
@@ -581,6 +583,17 @@ func young_now(colony: Dictionary, cal: float) -> String:
 ## A spot `km` (Vector2 km east and north) from a (lon, lat).
 static func _offset(spot: Vector2, km: Vector2) -> Vector2:
 	return spot + Vector2(km.x / (KM_PER_DEGREE * maxf(cos(deg_to_rad(spot.y)), 0.1)), km.y / KM_PER_DEGREE)
+
+
+## True if a spot and the ring round it `km` out (and halfway) are all on land.
+static func _range_on_land(spot: Vector2, km: float) -> bool:
+	if not MapView._on_land(spot):
+		return false
+	for k in 12:
+		var way := Vector2.from_angle(TAU * k / 12.0)
+		if not MapView._on_land(_offset(spot, way * km)) or not MapView._on_land(_offset(spot, way * km * 0.5)):
+			return false
+	return true
 
 
 ## A steady point in the unit disc for the parts given.

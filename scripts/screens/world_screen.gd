@@ -14,7 +14,7 @@ const FIELD_GUIDE_BUTTON := 44.0
 const LINE_MIN_LUMINANCE := 0.5
 ## The price picker's ship lines: [name, ship_models.json category].
 const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"]]
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Seafood carriers", "seafood"]]
 
 @onready var _map: MapView = $MapView
 var _price_button := Button.new()

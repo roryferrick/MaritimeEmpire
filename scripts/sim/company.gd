@@ -42,6 +42,9 @@ var bank_reserve := 0
 var loan := 0
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
+## What its people wear, line by line, where it's changed the defaults
+## (CrewLooks: {line: {role: {part: name}}}, set on the Uniforms page).
+var uniforms := {}
 ## The HQ (at the home port, first) and the hubs placed since.
 var hubs: Array[Hub] = []
 ## The market regions unlocked (ids from markets.json regions): the home
@@ -51,6 +54,10 @@ var hubs: Array[Hub] = []
 var regions: Array[String] = []
 ## All-time totals for each of GameState.MONEY_KINDS.
 var totals := {}
+## The catch its fishing and crabbing boats left in the cold store at each
+## port for its seafood carriers to take (see GameState._land_catch()):
+## port id -> {family: crates}.
+var cold_stores := {}
 ## Per canal id: {crossings, tolls, xp (the extra company XP its bonus gave)}.
 var canal_stats := {}
 ## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
@@ -131,9 +138,11 @@ func to_dict() -> Dictionary:
 		"bank_reserve": bank_reserve,
 		"loan": loan,
 		"ceo": ceo,
+		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
 		"regions": regions,
 		"totals": totals,
+		"cold_stores": cold_stores,
 		"canal_stats": canal_stats,
 		"finance_window": finance_window,
 		"tutorials": tutorials,
@@ -164,6 +173,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.bank_reserve = int(data.get("bank_reserve", 0))
 	company.loan = int(data.get("loan", 0))
 	company.ceo = data.get("ceo", {})
+	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.
 		company.ceo = Company.random_ceo(absi(company.name.hash()))
 	company.regions.assign(data.get("regions", []))
@@ -172,6 +182,7 @@ static func from_dict(data: Dictionary) -> Company:
 	if company.hubs.is_empty():  # Saves from before hubs: the HQ at the home port.
 		company.hubs.append(Hub.new(company.home_port, true))
 	company.totals = data.get("totals", {})
+	company.cold_stores = data.get("cold_stores", {})
 	company.canal_stats = data.get("canal_stats", {})
 	company.finance_window = data.get("finance_window", [])
 	company.tutorials = bool(data.get("tutorials", false))

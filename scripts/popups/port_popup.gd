@@ -81,6 +81,17 @@ func _build_size() -> void:
 	_birds_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_birds_label.add_theme_color_override(&"font_color", BIRDS_COLOR)
 	%SizeBox.add_child(_birds_label)
+	# What the company's boats have left in the cold store here, for its seafood carriers.
+	var store: Dictionary = GameState.company.cold_stores.get(port_id, {})
+	if not store.is_empty():
+		var cold := Label.new()
+		cold.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		cold.add_theme_color_override(&"font_color", Color(0.62, 0.82, 0.95))
+		var parts := PackedStringArray()
+		for family: String in store:
+			parts.append("%s crates of %s" % [Fmt.thousands(floori(float(store[family]))), str(GameData.commodity(family).get("name", family)).to_lower()])
+		cold.text = "Your cold store: %s, for your seafood carriers" % ", ".join(parts)
+		%SizeBox.add_child(cold)
 	_update_birds()
 	_update_size()
 

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<rect x="3" y="4" width="34" height="26" fill="#2e4a54" stroke="#2b2b2b" stroke-width="1.1"/>
+<path d="M3,9.2 L37,9.2" stroke="#00000033" stroke-width="0.8"/><path d="M3,14.4 L37,14.4" stroke="#00000033" stroke-width="0.8"/><path d="M3,19.6 L37,19.6" stroke="#00000033" stroke-width="0.8"/><path d="M3,24.8 L37,24.8" stroke="#00000033" stroke-width="0.8"/><rect x="3" y="4" width="34" height="4" fill="#5a8a9a"/>
+<rect x="40" y="4" width="21" height="26" fill="#eef3f6" stroke="#2b2b2b" stroke-width="1.1"/>
+<path d="M40,11 L61,11 M40,18 L61,18 M40,25 L61,25" stroke="#7aa6c8" stroke-width="1.2"/>
+<circle cx="50.5" cy="7.5" r="1.6" fill="#7aa6c8"/>
+<rect x="3" y="33" width="58" height="28" fill="#c9c4b6" stroke="#2b2b2b" stroke-width="0.8"/>
+<path d="M11.0,44.0 L7.6,40.9 L7.6,47.1 Z" fill="#3a6a7a" stroke="#2b2b2b" stroke-width="0.5"/><ellipse cx="20.0" cy="44.0" rx="10.0" ry="3.4" fill="#3a6a7a" stroke="#2b2b2b" stroke-width="0.6"/><ellipse cx="20.6" cy="45.2" rx="8.0" ry="1.4" fill="#e8eef0" opacity="0.8"/><path d="M13.0,43.3 Q20.0,42.3 27.0,43.3" stroke="#1a3a4a" stroke-width="1.0" fill="none"/><circle cx="27.2" cy="43.3" r="0.8" fill="#111"/>
+<path d="M11.0,54.0 L7.6,50.9 L7.6,57.1 Z" fill="#3a6a7a" stroke="#2b2b2b" stroke-width="0.5"/><ellipse cx="20.0" cy="54.0" rx="10.0" ry="3.4" fill="#3a6a7a" stroke="#2b2b2b" stroke-width="0.6"/><ellipse cx="20.6" cy="55.2" rx="8.0" ry="1.4" fill="#e8eef0" opacity="0.8"/><path d="M13.0,53.3 Q20.0,52.3 27.0,53.3" stroke="#1a3a4a" stroke-width="1.0" fill="none"/><circle cx="27.2" cy="53.3" r="0.8" fill="#111"/>
+<rect x="42.0" y="38.0" width="18.0" height="18.0" rx="2" fill="#3f6e48" opacity="0.85"/><path d="M45.6,38.0 L45.6,56.0 M42.0,41.6 L60.0,41.6" stroke="#1e3a24" stroke-width="0.4"/><path d="M49.2,38.0 L49.2,56.0 M42.0,45.2 L60.0,45.2" stroke="#1e3a24" stroke-width="0.4"/><path d="M52.8,38.0 L52.8,56.0 M42.0,48.8 L60.0,48.8" stroke="#1e3a24" stroke-width="0.4"/><path d="M56.4,38.0 L56.4,56.0 M42.0,52.4 L60.0,52.4" stroke="#1e3a24" stroke-width="0.4"/>
+</svg>

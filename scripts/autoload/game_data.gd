@@ -57,7 +57,17 @@ var _lane_index: Dictionary = {}
 var _lane_cache: Dictionary = {}  # "FROM-TO" -> SeaLane, built on first use
 var _crossing_cache: Dictionary = {}  # "FROM-TO" -> canal_crossings()
 var _chambers_cache: Dictionary = {}  # "FROM-TO" -> lane_chambers()
-var _zones_cache: Dictionary = {}  # "FROM-TO" -> lane_zones()
+var _zones_cache: Dictionary = {}  # "FROM-TO#way@month" -> lane_zones()
+## The currents' second ways round (SeaLaneData variant_*: one way, riding a
+## current, in the months it's quicker): "FROM>TO" -> its index there.
+var _variant_index: Dictionary = {}
+## The month the routes and currents go by (0-11; 12, Currents.MEAN, the
+## year's average until GameState sets it: see set_month()), and each one-way
+## leg's way this month (see way_now()).
+var month := Currents.MEAN
+var _ways_now: Dictionary = {}
+## How strongly the currents push ships (game_config currents), read once.
+var _current_settings: Dictionary = {}
 ## Lanes, their zones and canal crossings worked out natively (LaneMath: the
 ## same numbers, to the last bit) when the native library's there.
 var native_lanes := ClassDB.class_exists(&"LaneMath")
@@ -157,7 +167,46 @@ func _ready() -> void:
 
 
 func get_port(id: String) -> Dictionary:
-	return _ports_by_id.get(id, {})
+	var port: Dictionary = _ports_by_id.get(id, {})
+	if port.is_empty() and id.begins_with("@"):
+		return _ground_port(id)
+	return port
+
+
+## A fishing ground's end of its lanes ("@bristol_bay": see Fisheries) as a
+## port-like place: {id, name, lon, lat, ground}, made once.
+func _ground_port(id: String) -> Dictionary:
+	if not _ground_ports.has(id):
+		var ground: Dictionary = Fisheries.shared().grounds.get(id.substr(1), {})
+		var place := {}
+		if not ground.is_empty():
+			var title := str(ground.name).trim_prefix("the ")
+			place = {id = id, name = title.left(1).to_upper() + title.substr(1), lon = ground.lon, lat = ground.lat, ground = ground.id}
+			# Where its lanes end (its middle, on the water).
+			var ports: Array = ground.get("ports", [])
+			if not ports.is_empty():
+				var sea_lane := lane(str(ports[0]), id, -1)
+				if sea_lane != null and not sea_lane.points.is_empty():
+					var end := Geo.unproject(sea_lane.points[sea_lane.points.size() - 1])
+					place.lon = wrapf(end.x, -180.0, 180.0)
+					place.lat = end.y
+			_port_positions[id] = Geo.project(Vector2(place.lon, place.lat))
+		_ground_ports[id] = place
+	return _ground_ports[id]
+var _ground_ports := {}
+
+
+## The fishing grounds' lanes (see Fisheries): "@ground" -> the ports they run from.
+func fishing_lanes() -> Dictionary:
+	var out := {}
+	for key: String in _lane_data.keys:
+		if not key.contains("@"):
+			continue
+		var ids := key.split("-")
+		var port := ids[0] if not ids[0].begins_with("@") else ids[1]
+		var end := ids[1] if ids[1].begins_with("@") else ids[0]
+		out.get_or_add(end, []).append(port)
+	return out
 
 
 func port_name(id: String) -> String:
@@ -199,11 +248,17 @@ func category_color(category: String, min_luminance := 0.5) -> Color:
 
 ## Port position in projected map coordinates.
 func port_position(id: String) -> Vector2:
+	if not _port_positions.has(id) and id.begins_with("@"):
+		_ground_port(id)
 	return _port_positions.get(id, Vector2.ZERO)
 
 
 ## The sea lane from one port to another, or null if there isn't one.
-func lane(from_port: String, to_port: String) -> SeaLane:
+func lane(from_port: String, to_port: String, way := -2) -> SeaLane:
+	if way == -2:
+		way = way_now(from_port, to_port)
+	if way >= 0:
+		return _variant_lane(way)
 	var key := "%s-%s" % [from_port, to_port]
 	if _lane_cache.has(key):
 		return _lane_cache[key]
@@ -237,8 +292,81 @@ func lane(from_port: String, to_port: String) -> SeaLane:
 	return sea_lane
 
 
-## Sailing distance in nautical miles; INF if there's no sea route.
-func distance_nm(from_port: String, to_port: String) -> float:
+## A second way round as a lane (see _variant_index), made once.
+func _variant_lane(way: int) -> SeaLane:
+	var key := "#%d" % way
+	if _lane_cache.has(key):
+		return _lane_cache[key]
+	var sea_lane := SeaLane.new()
+	var made: Array = LaneMath.lane_points(_lane_data.variant_points.slice(_lane_data.variant_starts[way], _lane_data.variant_starts[way + 1])) if native_lanes else []
+	if not made.is_empty():
+		sea_lane.points = made[0]
+		sea_lane.miles = made[1]
+	else:
+		var previous := Vector2.ZERO
+		var miles := 0.0
+		for i in range(_lane_data.variant_starts[way], _lane_data.variant_starts[way + 1]):
+			var lon_lat := _lane_data.variant_points[i]
+			if not sea_lane.points.is_empty():
+				miles += Geo.distance_nm(previous, lon_lat)
+			sea_lane.points.append(Geo.project(lon_lat))
+			sea_lane.miles.append(miles)
+			previous = lon_lat
+	_lane_cache[key] = sea_lane
+	return sea_lane
+
+
+## Which way a ship setting off from one port to another this month sails:
+## the second way round on a current (its index) if there's one quicker this
+## month, else -1 (the lane).
+func way_now(from_port: String, to_port: String) -> int:
+	if _variant_index.is_empty():
+		return -1
+	var key := "%s>%s" % [from_port, to_port]
+	if _ways_now.has(key):
+		return _ways_now[key]
+	var way := -1
+	var index: int = _variant_index.get(key, -1)
+	if index >= 0 and _lane_data.variant_months[index] & (1 << month):
+		way = index
+	_ways_now[key] = way
+	return way
+
+
+## The second way round on a current for a one-way leg (its index), whatever
+## the month, or -1 if it has none.
+func variant_of(from_port: String, to_port: String) -> int:
+	return _variant_index.get("%s>%s" % [from_port, to_port], -1)
+
+
+## Sets the month the routes and currents go by (GameState, as the calendar
+## turns): this month's ways and the zones are worked out afresh.
+func set_month(new_month: int) -> void:
+	if new_month == month:
+		return
+	month = new_month
+	_ways_now.clear()
+	_zones_cache.clear()
+
+
+## The current at a way's name (a chain like "gulf_stream+north_atlantic": its
+## first), for saying which current a ship rides.
+func way_current(way: int) -> String:
+	if way < 0 or way >= _lane_data.variant_currents.size():
+		return ""
+	var id := _lane_data.variant_currents[way].get_slice("+", 0)
+	for item: Dictionary in Currents.shared().list:
+		if item.id == id:
+			return str(item.name)
+	return ""
+
+
+## Sailing distance in nautical miles; INF if there's no sea route. A way as for lane().
+func distance_nm(from_port: String, to_port: String, way := -2) -> float:
+	if way == -2:
+		way = way_now(from_port, to_port)
+	if way >= 0:
+		return _lane_data.variant_distances[way]
 	var index: int = _lane_index.get("%s-%s" % [from_port, to_port], _NO_LANE)
 	if index == _NO_LANE:
 		return INF
@@ -460,14 +588,54 @@ func convoy_wait_seconds(from_port: String, to_port: String) -> float:
 ## How a lane slows ships (convoy canals: speed_factor) and wears them (rough
 ## seas past rough_seas.lat: wear_factor), as pieces from its start:
 ## [[end mile, speed factor, wear factor], ...] covering the whole lane.
-func lane_zones(from_port: String, to_port: String) -> Array:
-	var key := "%s-%s" % [from_port, to_port]
+func lane_zones(from_port: String, to_port: String, way := -2, in_month := -1) -> Array:
+	if way == -2:
+		way = way_now(from_port, to_port)
+	if in_month < 0:
+		in_month = month
+	var key := "%s-%s#%d@%d" % [from_port, to_port, way, in_month]
 	if _zones_cache.has(key):
 		return _zones_cache[key]
-	var sea_lane := lane(from_port, to_port)
+	var zones := _lane_zones_plain(from_port, to_port, way)
+	if not zones.is_empty():
+		zones = _with_currents(zones, lane(from_port, to_port, way), in_month)
+	_zones_cache[key] = zones
+	return zones
+
+
+## A lane's zones with the currents (Currents.lane_factors()) laid over:
+## each zone split where the currents' push changes, its speed times theirs.
+func _with_currents(zones: Array, sea_lane: SeaLane, in_month: int) -> Array:
+	if _current_settings.is_empty():
+		_current_settings = config.get("currents", {ref_speed_kn = 15.0, limit = 0.35})
+	var currents := Currents.lane_factors_of(sea_lane.points, sea_lane.miles, in_month, float(_current_settings.ref_speed_kn), float(_current_settings.limit))
+	if currents.is_empty():
+		return zones
+	var out := []
+	var i := 0
+	var j := 0
+	var at := 0.0
+	while i < zones.size() and j < currents.size():
+		var end := minf(float(zones[i][0]), float(currents[j][0]))
+		if end > at + 0.0001:
+			out.append([end, float(zones[i][1]) * float(currents[j][1]), zones[i][2]])
+			at = end
+		if float(zones[i][0]) <= end + 0.0001:
+			i += 1
+		if float(currents[j][0]) <= end + 0.0001:
+			j += 1
+	while i < zones.size():
+		if float(zones[i][0]) > at + 0.0001:
+			out.append(zones[i])
+		i += 1
+	return out
+
+
+## A lane's zones from its canals and rough seas only (see lane_zones()).
+func _lane_zones_plain(from_port: String, to_port: String, way: int) -> Array:
+	var sea_lane := lane(from_port, to_port, way)
 	var zones := []
 	if sea_lane == null:
-		_zones_cache[key] = zones
 		return zones
 	var rough: Dictionary = config.get("rough_seas", {})
 	var rough_lat := float(rough.get("lat", -90.0))
@@ -478,9 +646,7 @@ func lane_zones(from_port: String, to_port: String) -> Array:
 		if factor != 1.0:
 			slow.append([crossing.start_nm, crossing.end_nm, factor])
 	if native_lanes:
-		zones = LaneMath.zones(sea_lane.points, sea_lane.miles, slow, rough_lat, rough_wear)
-		_zones_cache[key] = zones
-		return zones
+		return LaneMath.zones(sea_lane.points, sea_lane.miles, slow, rough_lat, rough_wear)
 	var breaks := PackedFloat64Array([sea_lane.length()])
 	for i in range(1, sea_lane.points.size()):
 		var a := Geo.unproject(sea_lane.points[i - 1]).y < rough_lat
@@ -503,7 +669,6 @@ func lane_zones(from_port: String, to_port: String) -> Array:
 		var wear := rough_wear if Geo.unproject(sea_lane.sample(middle)[0]).y < rough_lat else 1.0
 		zones.append([mile, speed, wear])
 		previous = mile
-	_zones_cache[key] = zones
 	return zones
 
 
@@ -710,6 +875,8 @@ func _load_lanes() -> void:
 		var ids := _lane_data.keys[i].split("-")
 		_lane_index["%s-%s" % [ids[0], ids[1]]] = i
 		_lane_index["%s-%s" % [ids[1], ids[0]]] = -i - 1
+	for i in _lane_data.variant_keys.size():
+		_variant_index[_lane_data.variant_keys[i]] = i
 
 
 ## The ocean trenches' labels (data/trenches.json) added to the map's feature

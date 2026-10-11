@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="63" viewBox="0 0 180 63">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M11.6,4.0 L133.2,4.0 Q170.0,5.0 177,31.5 Q170.0,58.0 133.2,59.0 L11.6,59.0 Q4,59.0 4,51.4 L4,11.6 Q4,4.0 11.6,4.0 Z" fill="none" stroke="#3c3c3c" stroke-width="7"/>
+<path d="M11.6,4.0 L133.2,4.0 Q170.0,5.0 177,31.5 Q170.0,58.0 133.2,59.0 L11.6,59.0 Q4,59.0 4,51.4 L4,11.6 Q4,4.0 11.6,4.0 Z" fill="none" stroke="#a7adb4" stroke-width="2" opacity="0.9"/>
+<rect x="8.0" y="10.0" width="34.0" height="43.0" rx="4.0" fill="#f1efe8" stroke="#1a1a1a" stroke-width="1.2" />
+<rect x="10.0" y="14.0" width="6.0" height="35.0" rx="1.0" fill="#2f4a63" stroke="none" stroke-width="0.0" />
+<rect x="30.0" y="26.0" width="9.0" height="11.0" rx="2.0" fill="#1f4a8a" stroke="#1a1a1a" stroke-width="1.2" />
+<rect x="30.0" y="26.0" width="9.0" height="3.0" rx="1.0" fill="#1a1a1a" stroke="none" stroke-width="0.0" />
+<rect x="48.0" y="13.0" width="24.0" height="37.0" rx="2.0" fill="#e6eef5" stroke="#4a6a8a" stroke-width="1.2" />
+<path d="M50.0,31.5 L70.0,31.5" stroke="#9fb6cc" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="75.0" cy="31.5" r="3.2" fill="#e0b030" stroke="#1a1a1a" stroke-width="0.8"/>
+<path d="M75.0,31.5 L62.0,18.0" stroke="#e0b030" stroke-width="1.6" stroke-linecap="round" fill="none" />
+<rect x="78.0" y="13.0" width="24.0" height="37.0" rx="2.0" fill="#e6eef5" stroke="#4a6a8a" stroke-width="1.2" />
+<path d="M80.0,31.5 L100.0,31.5" stroke="#9fb6cc" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="105.0" cy="31.5" r="3.2" fill="#e0b030" stroke="#1a1a1a" stroke-width="0.8"/>
+<path d="M105.0,31.5 L92.0,18.0" stroke="#e0b030" stroke-width="1.6" stroke-linecap="round" fill="none" />
+<rect x="108.0" y="13.0" width="24.0" height="37.0" rx="2.0" fill="#e6eef5" stroke="#4a6a8a" stroke-width="1.2" />
+<path d="M110.0,31.5 L130.0,31.5" stroke="#9fb6cc" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="135.0" cy="31.5" r="3.2" fill="#e0b030" stroke="#1a1a1a" stroke-width="0.8"/>
+<path d="M135.0,31.5 L122.0,18.0" stroke="#e0b030" stroke-width="1.6" stroke-linecap="round" fill="none" />
+<rect x="138.0" y="13.0" width="24.0" height="37.0" rx="2.0" fill="#e6eef5" stroke="#4a6a8a" stroke-width="1.2" />
+<path d="M140.0,31.5 L160.0,31.5" stroke="#9fb6cc" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M167.0,31.5 L176.0,31.5" stroke="#c9ced3" stroke-width="1.0" stroke-linecap="round" fill="none" />
+</svg>

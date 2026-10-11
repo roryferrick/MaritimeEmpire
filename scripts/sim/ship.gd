@@ -59,6 +59,10 @@ const KIND_CARGO := 0
 const KIND_RECOVERY := 1
 const KIND_ICEBREAKER := 2
 const KIND_TUG := 3
+const KIND_FISHING := 4
+## A fishing or crabbing trip (see GameState._advance_fishing()): it's on a
+## job the whole time it's away, out to its ground, working it and home.
+const JOB_FISH := "fish"
 
 ## Canal states (canal_state; see CanalTraffic): heading into a lock chamber
 ## it has reserved, waiting in line for one, waiting for toll money, at anchor
@@ -212,6 +216,13 @@ var _leg_has_canal := false
 ## heading]) with the mile it was taken at: the map asks for both every frame,
 ## so they're kept until the ship moves (see lane_sample()).
 var _leg_lane: GameData.SeaLane = null
+## The way it sails its leg, chosen as it sets off (GameData.way_now()) and
+## kept to the end of the leg whatever the month does: leg_key ("FROM>TO")
+## the leg it was chosen for, leg_current true if it rides the current's
+## second way round, leg_month the month the currents push it by.
+var leg_key := ""
+var leg_current := false
+var leg_month := Currents.MEAN
 ## Whole legs' seconds from full maintenance, for every ship (see
 ## leg_seconds()): [from, to, miles, top speed, wear a second] -> seconds.
 static var _whole_legs := {}
@@ -219,6 +230,7 @@ static var _whole_legs := {}
 var _zones_from := ""
 var _zones_to := ""
 var _zones_speed := -1.0
+var _zones_month := -1
 var _zones_asked: Array = []
 var _here_cache: Array = []
 var _here_mile := -1.0
@@ -286,6 +298,25 @@ var assist_s := -1.0
 ## Recovery boat only: the ship it's carrying faces the other way from it (it
 ## met the ship head on); set as it lines up.
 var carry_reversed := false
+## Fishing boat only: what it goes after (fish_target a species, fish_area
+## the ground; both "" for the best this season, worked out each trip:
+## Fisheries.options()); what it does with its catch landed (fish_landing:
+## "auto" stores it for the company's seafood carriers where one calls at its
+## base, else sells it; "sell"; "store"); its trip (fish_phase "out", "work"
+## or "home"; the ground and species it's working; its catch in crates and
+## their worth a crate's grade; the play seconds it's worked; why it's in
+## port, if it can't go).
+var fish_target := ""
+var fish_area := ""
+var fish_landing := "auto"
+var fish_phase := ""
+var fish_ground := ""
+var fish_species := ""
+var catch := 0.0
+var catch_grade := 1.0
+var work_s := 0.0
+var work_limit_s := 0.0
+var fish_wait := ""
 ## Icebreaker only: the ice area (game_config icebreaking) it's stationed at,
 ## or ""; base_port is then the port there it waits at.
 var station := ""
@@ -336,8 +367,20 @@ func is_tug() -> bool:
 	return _kind() == KIND_TUG
 
 
-## A service ship (a recovery boat, an icebreaker or a tug): no route or
-## cargo, pays its own fuel and repairs, and is never lost at sea.
+## A fishing or crabbing boat: based at a port, it sails out to a fishing
+## ground, works it and brings its catch home (see GameState._advance_fishing()).
+func is_fishing() -> bool:
+	return _kind() == KIND_FISHING
+
+
+## Fishing boat only: "crabbing" or "fishing", by its gear.
+func fishing_line() -> String:
+	return "crabbing" if str(model().get("category", "")) == "crabbing" else "fishing"
+
+
+## A service ship (a recovery boat, an icebreaker, a tug or a fishing boat):
+## no route; pays its own fuel and repairs, and (but for a fishing boat) is
+## never lost at sea.
 func is_service() -> bool:
 	return _kind() != KIND_CARGO
 
@@ -353,6 +396,8 @@ func _kind() -> int:
 			_kind_cache = KIND_ICEBREAKER
 		elif data.get("tug", false):
 			_kind_cache = KIND_TUG
+		elif data.has("fishing"):
+			_kind_cache = KIND_FISHING
 		else:
 			_kind_cache = KIND_CARGO
 	return _kind_cache
@@ -571,7 +616,7 @@ func leg_seconds(from: String, to: String, start_mile: float, end_mile: float, s
 	if whole:
 		if _stats_dirty:
 			_refresh_stats()
-		key = [from, to, end_mile, _top_speed, _wear_per_s]
+		key = [from, to, end_mile, _top_speed, _wear_per_s, GameData.month, GameData.way_now(from, to)]
 		if _whole_legs.has(key):
 			return _whole_legs[key]
 	var seconds := _leg_seconds(from, to, start_mile, end_mile, start_maintenance)
@@ -766,6 +811,8 @@ func attention_reason() -> String:
 
 ## Green on the status dot.
 func is_active() -> bool:
+	if is_fishing():  # Out on a trip, or in port with nothing keeping it there.
+		return not is_docked() or (fish_wait.is_empty() and not paused) if not is_lost() else false
 	if is_icebreaker():
 		return not ice_phase.is_empty() or not is_docked()
 	if is_recovery() or is_tug():
@@ -781,6 +828,8 @@ func fuel_level() -> float:
 ## How full the hold is (0..1): the cargo aboard, emptying over the first half
 ## of a stop as it's unloaded and filling over the second half with what it loaded.
 func cargo_level() -> float:
+	if is_fishing():
+		return clampf(catch / capacity(), 0.0, 1.0) if capacity() > 0 else 0.0
 	var full := clampf(float(cargo_qty) / capacity(), 0.0, 1.0) if capacity() > 0 else 0.0
 	if not is_docking() or dock_seconds() <= 0.0:
 		return full
@@ -821,11 +870,23 @@ func _update_leg() -> void:
 		return
 	_leg_from = from_port
 	_leg_to = to_port
-	_leg_length = GameData.distance_nm(from_port, to_port)
-	_leg_zones = _with_harbor_speed(GameData.lane_zones(from_port, to_port), _leg_length)
+	var key := "%s>%s" % [from_port, to_port]
+	if key != leg_key:  # A new leg: this month's way (see leg_key).
+		leg_key = key
+		leg_current = GameData.way_now(from_port, to_port) >= 0 and not is_on_job()  # (A job's segments are miles along the lane itself.)
+		leg_month = GameData.month
+	var way := GameData.variant_of(from_port, to_port) if leg_current else -1
+	_leg_length = GameData.distance_nm(from_port, to_port, way)
+	_leg_zones = _with_harbor_speed(GameData.lane_zones(from_port, to_port, way, leg_month), _leg_length)
 	_leg_has_canal = not GameData.canal_crossings(from_port, to_port).is_empty()
-	_leg_lane = GameData.lane(from_port, to_port)
+	_leg_lane = GameData.lane(from_port, to_port, way)
 	_here_cache = []
+
+
+## The lane it sails its leg along (the way it chose as it set off: see leg_key).
+func leg_lane() -> GameData.SeaLane:
+	_update_leg()
+	return _leg_lane
 
 
 ## The current lane's sample() where the ship is ([position, heading]), or []
@@ -852,10 +913,11 @@ func leg_zones(from: String, to: String) -> Array:
 	# (Kept for the last leg asked about, at this top speed: a ship waiting in
 	# port asks about its next leg every step.)
 	var speed := top_speed()
-	if from != _zones_from or to != _zones_to or speed != _zones_speed:
+	if from != _zones_from or to != _zones_to or speed != _zones_speed or GameData.month != _zones_month:
 		_zones_from = from
 		_zones_to = to
 		_zones_speed = speed
+		_zones_month = GameData.month
 		_zones_asked = _with_harbor_speed(GameData.lane_zones(from, to), GameData.distance_nm(from, to))
 	return _zones_asked
 
@@ -962,6 +1024,10 @@ func status_text() -> String:
 	if is_tug():
 		var job := _tug_status_text()
 		return job if canal.is_empty() else "%s — %s" % [job, canal]
+	if is_fishing() and not is_lost():
+		var trip := _fishing_status_text()
+		if not trip.is_empty():
+			return trip if canal.is_empty() else "%s — %s" % [trip, canal]
 	if is_lost():
 		if rescuer == null:
 			if auto_recover:
@@ -1173,6 +1239,28 @@ func tug_crew_text() -> String:
 	return " and ".join(names) if not names.is_empty() else name
 
 
+## "Heading out to Bristol Bay for red king crab", "Crabbing for red king
+## crab in Bristol Bay — 3,200 / 6,000 crates", "Heading home to Dutch
+## Harbor with 6,000 crates of red king crab", "At Dutch Harbor: no red king
+## crab in season till October"; "" when it's just in port.
+func _fishing_status_text() -> String:
+	var what := Fisheries.shared().species_name(fish_species).to_lower()
+	var where := GameData.port_name(Fisheries.end_of(fish_ground))
+	match fish_phase:
+		"out":
+			return "Heading out to %s for %s" % [where, what]
+		"work":
+			var doing := "Crabbing" if fishing_line() == "crabbing" else ("Trolling" if (model().get("fishing", {}).get("gear", []) as Array) == ["troll"] else "Fishing")
+			return "%s for %s at %s — %s / %s crates" % [doing, what, where, Fmt.thousands(floori(catch)), Fmt.thousands(capacity())]
+		"home":
+			if catch <= 0.0:
+				return "Heading home to %s" % GameData.port_name(base_port)
+			return "Heading home to %s with %s crates of %s" % [GameData.port_name(base_port), Fmt.thousands(floori(catch)), what]
+	if is_docked() and not fish_wait.is_empty() and not is_docking():
+		return "At %s: %s" % [GameData.port_name(docked_at), fish_wait]
+	return ""
+
+
 ## "Leading 3 ships to Vanino", "Standing by at Helsinki for the Gulf of
 ## Finland", "Not stationed (only needed in seasonal ice)".
 func _icebreaker_status_text() -> String:
@@ -1199,6 +1287,9 @@ func _icebreaker_status_text() -> String:
 		if GameState.icebreaking.in_season(GameState.icebreaking.area(station)):
 			return "Standing by at %s for the %s ice" % [port, area_name]
 		return "Standing by at %s (the %s isn't frozen now)" % [port, area_name]
+	var riding := GameData.way_current(GameData.variant_of(from_port, to_port)) if leg_current else ""
+	if not riding.is_empty():  # (On the second way round, riding a current: see leg_key.)
+		return "Sailing to %s on the %s — %d%%" % [GameData.port_name(to_port), riding, int(leg_progress() * 100.0)]
 	return "Sailing to %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
 
 
@@ -1221,6 +1312,20 @@ func to_dict() -> Dictionary:
 		"docked_at": docked_at,
 		"from_port": from_port,
 		"to_port": to_port,
+		"fish_target": fish_target,
+		"fish_area": fish_area,
+		"fish_landing": fish_landing,
+		"fish_phase": fish_phase,
+		"fish_ground": fish_ground,
+		"fish_species": fish_species,
+		"catch": catch,
+		"catch_grade": catch_grade,
+		"work_s": work_s,
+		"work_limit_s": work_limit_s,
+		"fish_wait": fish_wait,
+		"leg_key": leg_key,
+		"leg_current": leg_current,
+		"leg_month": leg_month,
 		"traveled_nm": traveled_nm,
 		"fuel": fuel,
 		"maintenance": maintenance,
@@ -1296,6 +1401,20 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.paused = bool(data.get("paused", false))
 	ship.from_port = data.get("from_port", "")
 	ship.to_port = data.get("to_port", "")
+	ship.fish_target = str(data.get("fish_target", ""))
+	ship.fish_area = str(data.get("fish_area", ""))
+	ship.fish_landing = str(data.get("fish_landing", "auto"))
+	ship.fish_phase = str(data.get("fish_phase", ""))
+	ship.fish_ground = str(data.get("fish_ground", ""))
+	ship.fish_species = str(data.get("fish_species", ""))
+	ship.catch = float(data.get("catch", 0.0))
+	ship.catch_grade = float(data.get("catch_grade", 1.0))
+	ship.work_s = float(data.get("work_s", 0.0))
+	ship.work_limit_s = float(data.get("work_limit_s", 0.0))
+	ship.fish_wait = str(data.get("fish_wait", ""))
+	ship.leg_key = str(data.get("leg_key", ""))
+	ship.leg_current = bool(data.get("leg_current", false))
+	ship.leg_month = int(data.get("leg_month", Currents.MEAN))
 	ship.traveled_nm = float(data.get("traveled_nm", 0.0))
 	ship.fuel = float(data.get("fuel", ship.fuel_tank()))
 	ship.maintenance = float(data.get("maintenance", 1.0))
@@ -1403,6 +1522,9 @@ func apply_update(data: Dictionary) -> void:
 					invalidate_stats()
 			"route", "pending_route", "canals_entered", "delivery_canals":
 				(get(key) as Array).assign(value)
+			"leg_key", "leg_current", "leg_month":
+				set(key, value)
+				_leg_from = "?"  # (The host's way for its leg: worked out again.)
 			_:
 				set(key, value)
 

@@ -901,7 +901,7 @@ func _forget_fleet(rival: Company) -> void:
 
 
 static func _is_service_model(model: Dictionary) -> bool:
-	return model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty()
+	return model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty() or model.has("fishing")
 
 
 ## The cheapest ship model passing a test, or "".

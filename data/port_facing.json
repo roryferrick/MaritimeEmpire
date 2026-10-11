@@ -140,6 +140,61 @@
 			"bearing": 243.0,
 			"quay": "right",
 			"note": "Buffalo: out over the lake (the coastline's guess was 180 degrees off)"
+		},
+		"MGL": {
+			"bearing": 180.0,
+			"quay": "right",
+			"note": "Mongla: moved down the Pasur to the Sundarbans shore, out south into the bay"
+		},
+		"CCU": {
+			"bearing": 180.0,
+			"quay": "left",
+			"note": "Kolkata (Haldia): moved down to the wide Hooghly mouth, out south so its ways in keep to the water"
+		},
+		"MUN": {
+			"bearing": 248.0,
+			"quay": "right",
+			"note": "Mundra: mirrored about its middle, out west by south-west into the Gulf of Kutch"
+		},
+		"RGN": {
+			"bearing": 180.0,
+			"quay": "left",
+			"note": "Yangon (Thilawa): moved down to the Gulf of Martaban shore, out south"
+		},
+		"KOS": {
+			"bearing": 225.0,
+			"quay": "right",
+			"note": "Sihanoukville: out south-west"
+		},
+		"BWN": {
+			"bearing": 0.0,
+			"quay": "right",
+			"note": "Muara: out north"
+		},
+		"CAN": {
+			"bearing": 157.5,
+			"quay": "left",
+			"note": "Guangzhou: the west step of the Pearl River podium (Hong Kong in the middle, furthest out), out south by south-east"
+		},
+		"HKG": {
+			"bearing": 157.5,
+			"quay": "right",
+			"note": "Hong Kong: the middle of the Pearl River podium, furthest out, out south by south-east"
+		},
+		"SZX": {
+			"bearing": 157.5,
+			"quay": "right",
+			"note": "Shenzhen: the east step of the Pearl River podium, out south by south-east"
+		},
+		"MNL": {
+			"bearing": 239.0,
+			"quay": "right",
+			"note": "Manila: out at the mouth of Manila Bay (past Corregidor)"
+		},
+		"OAK": {
+			"bearing": 345.0,
+			"quay": "right",
+			"note": "Oakland: moved down into the bay clear of the Golden Gate Bridge (the bay as drawn is too small for it facing west), out north-north-west up the bay"
 		}
 	},
 	"facing": {

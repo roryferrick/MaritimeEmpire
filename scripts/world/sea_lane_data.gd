@@ -15,3 +15,15 @@ extends Resource
 @export var points := PackedVector2Array()
 ## Lane lengths in nautical miles.
 @export var distances := PackedFloat32Array()
+
+## Second ways round (tools/build_map_data.gd --currents-only): one way only,
+## "FROM>TO", each riding a current (variant_currents: its id) and taken in
+## the months set in variant_months (bit m for month m, 0-11; bit 12 for the
+## year's average), when it's quicker than the lane. Points and distances as
+## the lanes', running from FROM (at its real longitude) to TO.
+@export var variant_keys := PackedStringArray()
+@export var variant_months := PackedInt32Array()
+@export var variant_currents := PackedStringArray()
+@export var variant_starts := PackedInt32Array()
+@export var variant_points := PackedVector2Array()
+@export var variant_distances := PackedFloat32Array()

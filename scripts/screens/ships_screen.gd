@@ -8,7 +8,7 @@ extends Control
 ## don't jump around; the filter follows each ship's status as it changes.
 
 enum Sort { EARNINGS, NAME, STATUS, PROFIT }
-enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY }
+enum Filter { ALL, ATTENTION, ACTIVE, STOPPED, LOST, RECOVERY, FISHING }
 
 const COLUMNS := 8
 ## Fewer columns rather than tiles narrower than this (px).
@@ -37,7 +37,7 @@ const EARNINGS_RESORT_S := 30.0
 const FILTER_NAMES := {
 	Filter.ALL: "All ships", Filter.ATTENTION: "Needs attention",
 	Filter.ACTIVE: "Running (green)", Filter.STOPPED: "Stopped (red)",
-	Filter.LOST: "Lost at sea", Filter.RECOVERY: "Recovery boats and tugs",
+	Filter.LOST: "Lost at sea", Filter.RECOVERY: "Recovery boats and tugs", Filter.FISHING: "Fishing and crabbing boats",
 }
 
 ## Model id -> [group box, tile grid].
@@ -89,6 +89,12 @@ func _ready() -> void:
 	%Header.add_child(_upgrade_all)
 	_upgrade_all.add_child(_upgrade_all_alert)
 	%Header.move_child(_upgrade_all, %CountLabel.get_index())
+	var uniforms := Button.new()  # What the crews wear (UniformsPage).
+	uniforms.text = "Uniforms"
+	uniforms.tooltip_text = "What your captains and crews wear on deck, ship by ship type."
+	uniforms.pressed.connect(func() -> void: get_tree().root.add_child(UniformsPage.new()))
+	%Header.add_child(uniforms)
+	%Header.move_child(uniforms, %CountLabel.get_index())
 	$Scroll.resized.connect(_size_tiles)
 	_rebuild()
 
@@ -353,6 +359,8 @@ static func _matches(ship: Ship, filter: int) -> bool:
 			return ship.is_lost()
 		Filter.RECOVERY:
 			return ship.is_recovery() or ship.is_tug()
+		Filter.FISHING:
+			return ship.is_fishing()
 	return true
 
 

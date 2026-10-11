@@ -1013,3 +1013,43 @@ func _draw_headwear(hair: Color) -> void:
 			_shape(_p([h.x - half + 5.0, brim_y + 1.0, h.x - half + 6.0, top - 10.0, h.x - 5.0, top - 12.0, h.x, top - 9.0, h.x + 5.0, top - 12.0, h.x + half - 6.0, top - 10.0, h.x + half - 5.0, brim_y + 1.0]), Color("#8a5a30"))
 			_shape(_p([h.x - half - 14.0, brim_y - 2.0, h.x - half - 2.0, brim_y + 2.0, h.x, brim_y + 3.0, h.x + half + 2.0, brim_y + 2.0, h.x + half + 14.0, brim_y - 2.0, h.x + half + 10.0, brim_y + 5.0, h.x + 10.0, brim_y + 8.0, h.x - 10.0, brim_y + 8.0, h.x - half - 10.0, brim_y + 5.0]), Color("#7a4e28"))
 			_line(_p([h.x - half + 5.5, brim_y - 2.0, h.x + half - 5.5, brim_y - 2.0]), Color("#3a2414"), 2.4)
+		13:  # Fisherman's cap: a navy Greek cap, a black visor and a braided cord.
+			_shape(_p([h.x - half, brim_y + 2.0, h.x - half - 1.0, brim_y - 9.0, h.x - 6.0, top - 4.0, h.x + 8.0, top - 4.0, h.x + half + 2.0, brim_y - 9.0, h.x + half, brim_y + 2.0]), NAVY)
+			_shape(_p([h.x - half + 1.0, brim_y + 1.0, h.x + half - 1.0, brim_y + 1.0, h.x + 12.0, brim_y + 7.0, h.x - 12.0, brim_y + 7.0]), Color("#151515"))
+			_line(_p([h.x - half + 2.0, brim_y - 1.0, h.x + half - 2.0, brim_y - 1.0]), Color("#151515"), 2.2)
+			_line(_p([h.x - half + 3.0, brim_y + 1.5, h.x + half - 3.0, brim_y + 1.5]), GOLD, 0.9)
+		14:  # Flat cap: grey tweed, its peak snug over the brow.
+			_shape(_p([h.x - half, brim_y + 2.0, h.x - half + 2.0, top - 1.0, h.x + 4.0, top - 3.0, h.x + half + 3.0, brim_y - 6.0, h.x + half + 1.0, brim_y + 2.0]), Color("#6f6a62"))
+			_shape(_p([h.x - half + 2.0, brim_y + 1.0, h.x + half + 1.0, brim_y + 1.0, h.x + half + 3.0, brim_y + 5.0, h.x - half + 4.0, brim_y + 5.0]), Color("#5c574f"))
+			for k in 4:
+				_line(_p([h.x - 12.0 + k * 7.0, top + 2.0, h.x - 10.0 + k * 7.0, brim_y - 2.0]), Color("#857f75"), 0.8)
+		15:  # Beret: navy, slouched to one side, a little stalk on top.
+			_shape(_ellipse_points(h + Vector2(4.0, brim_y - h.y - 4.0), Vector2(half + 3.0, 9.0), 0.0, TAU, 20), Color("#24305a"))
+			_shape(_p([h.x - half + 2.0, brim_y - 1.0, h.x + half - 2.0, brim_y - 1.0, h.x + half - 3.0, brim_y + 3.0, h.x - half + 3.0, brim_y + 3.0]), Color("#1a2448"))
+			_line(_p([h.x + 4.0, brim_y - 13.0, h.x + 5.0, brim_y - 17.0]), Color("#1a2448"), 1.8)
+		16:  # Bicorne: an admiral's black hat worn athwart, gold-edged, a cockade.
+			_shape(_p([h.x - half - 12.0, brim_y + 1.0, h.x - 10.0, top - 14.0, h.x + 10.0, top - 14.0, h.x + half + 12.0, brim_y + 1.0, h.x, brim_y + 4.0]), Color("#1c1a1e"))
+			_line(_p([h.x - half - 12.0, brim_y + 1.0, h.x - 10.0, top - 14.0, h.x + 10.0, top - 14.0, h.x + half + 12.0, brim_y + 1.0]), GOLD, 1.4)
+			_ellipse(Vector2(h.x, top - 4.0), Vector2(4.0, 4.0), Color("#c8343a"))
+			_dot(Vector2(h.x, top - 4.0), 1.6, WHITE)
+		17:  # Pompom beanie: red knit, a white turn-up and a big white pompom.
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 4.0), Vector2(half, 16.0), PI, TAU, 16), Color("#c8343a"))
+			_shape(_p([h.x - half, brim_y - 1.0, h.x + half, brim_y - 1.0, h.x + half, brim_y + 6.0, h.x - half, brim_y + 6.0]), Color("#f0ece4"))
+			_ellipse(Vector2(h.x, top - 12.0), Vector2(6.0, 6.0), Color("#f4f2ee"))
+			for x in range(-12, 13, 6):
+				_line(_p([h.x + x, brim_y - 4.0, h.x + x * 0.6, top - 4.0]), Color("#a82a30"), 0.8)
+		18:  # Fedora: brown felt, a pinched crown and a black band.
+			_shape(_p([h.x - half + 5.0, brim_y + 1.0, h.x - half + 6.0, top - 8.0, h.x - 4.0, top - 12.0, h.x, top - 9.0, h.x + 4.0, top - 12.0, h.x + half - 6.0, top - 8.0, h.x + half - 5.0, brim_y + 1.0]), Color("#6a4e36"))
+			_shape(_p([h.x - half - 8.0, brim_y + 1.0, h.x + half + 8.0, brim_y + 1.0, h.x + half + 6.0, brim_y + 5.0, h.x - half - 6.0, brim_y + 5.0]), Color("#5a4230"))
+			_line(_p([h.x - half + 5.5, brim_y - 2.0, h.x + half - 5.5, brim_y - 2.0]), Color("#1a1412"), 2.6)
+		19:  # Pith helmet: a white dome with a sloping brim and a band.
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 2.0), Vector2(half - 1.0, 19.0), PI, TAU, 18), Color("#efe9d8"))
+			_shape(_p([h.x - half - 6.0, brim_y + 4.0, h.x + half + 6.0, brim_y + 4.0, h.x + half + 2.0, brim_y - 1.0, h.x - half - 2.0, brim_y - 1.0]), Color("#e2dcc8"))
+			_line(_p([h.x - half + 1.0, brim_y - 3.0, h.x + half - 1.0, brim_y - 3.0]), Color("#b8a882"), 2.0)
+			_dot(Vector2(h.x, top - 15.0), 1.8, Color("#c8b88a"))
+		20:  # Conical hat: woven straw, a wide cone with a chin cord.
+			_shape(_p([h.x - half - 16.0, brim_y + 3.0, h.x, top - 18.0, h.x + half + 16.0, brim_y + 3.0, h.x, brim_y + 6.0]), Color("#dcc387"))
+			for k in range(1, 4):
+				var f := k / 4.0
+				_line(_p([lerpf(h.x, h.x - half - 16.0, f), lerpf(top - 18.0, brim_y + 3.0, f), lerpf(h.x, h.x + half + 16.0, f), lerpf(top - 18.0, brim_y + 3.0, f)]), Color("#b89c5e"), 0.8)
+			_line(_p([h.x - half + 2.0, brim_y + 5.0, h.x - 6.0, h.y + 20.0, h.x + 6.0, h.y + 20.0, h.x + half - 2.0, brim_y + 5.0]), Color("#8a6a3a"), 0.7)

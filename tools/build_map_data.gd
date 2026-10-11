@@ -13,6 +13,9 @@ extends SceneTree
 ##   Godot --headless --path . -s tools/build_map_data.gd
 ## "-- --channels-only" lays every port's approach channels into the existing
 ## lanes again (see _lay_channels(); a lanes run doesn't: run it after one).
+## "-- --currents-only" plans the lanes' second ways round on the currents
+## (see _plan_current_ways(); after a lanes or channels run, which drop them).
+## "-- --fishing-only" routes the fishing grounds' lanes (see _plan_fishing_lanes(); last of all).
 ## "-- --biomes-only" redraws just the biome patches into the existing
 ## data/world_map.res (after changing BIOME_SIMPLIFY, say), in about a minute.
 ## "-- --decor-only" rebuilds just the land drawings (and their clearance) in
@@ -325,6 +328,14 @@ func _init() -> void:
 		_canals.append({path = path, divide = _to_points(canal.divide), bounds = bounds.grow(0.01)})
 	if "--canals-only" in args:
 		_resplice_lanes()
+		quit()
+		return
+	if "--fishing-only" in args:
+		_plan_fishing_lanes()
+		quit()
+		return
+	if "--currents-only" in args:
+		_plan_current_ways()
 		quit()
 		return
 	if "--channels-only" in args:
@@ -1847,23 +1858,7 @@ func _build_lanes() -> void:
 	# _build_coarse_graph()), then fitted to the fine grid; the fine grid is
 	# only searched for short hops the coarse route can't see across.
 	var coarse := _build_coarse_graph()
-	var astar := AStarGrid2D.new()
-	astar.region = Rect2i(0, 0, _cols, _rows)
-	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
-	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
-	astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
-	astar.jumping_enabled = true
-	astar.update()
-	for row in _rows:
-		var col := 0
-		while col < _cols:
-			if not _land[row * _cols + col]:
-				col += 1
-				continue
-			var run_start := col
-			while col < _cols and _land[row * _cols + col]:
-				col += 1
-			astar.fill_solid_region(Rect2i(run_start, row, col - run_start, 1))
+	var astar := _fine_astar()
 	print("Pathfinding grid ready")
 
 	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
@@ -1968,6 +1963,29 @@ func _build_lanes() -> void:
 	assert(err == OK, "Couldn't save %s" % LANES_OUT)
 	print("Lanes: %d, %d points" % [data.keys.size(), data.points.size()])
 	_print_stats(data)
+
+
+## The fine pathfinder over the grid (land solid), for short hops the coarse
+## graph can't see across (see _route()).
+func _fine_astar() -> AStarGrid2D:
+	var astar := AStarGrid2D.new()
+	astar.region = Rect2i(0, 0, _cols, _rows)
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	astar.jumping_enabled = true
+	astar.update()
+	for row in _rows:
+		var col := 0
+		while col < _cols:
+			if not _land[row * _cols + col]:
+				col += 1
+				continue
+			var run_start := col
+			while col < _cols and _land[row * _cols + col]:
+				col += 1
+			astar.fill_solid_region(Rect2i(run_start, row, col - run_start, 1))
+	return astar
 
 
 ## True if either port of a [port, port] pair is in the Arctic (ports.json
@@ -2966,3 +2984,596 @@ static func _biome_simplify() -> float:
 		if arg.begins_with("--biome-simplify="):
 			return float(arg.get_slice("=", 1))
 	return BIOME_SIMPLIFY
+
+
+
+# --- Currents' second ways round ------------------------------------------
+
+## The currents' rides (see _plan_current_ways()): each current, with the
+## ones it flows on into (one's end within CHAIN_NM of the next's start), cut
+## into stretches RIDE_STEP_NM long.
+const RIDE_STEP_NM := 25.0
+const CHAIN_NM := 400.0
+## Lanes are looked at in stretches at most this long (nm), and a ride
+## counts as alongside a lane where it's within RIDE_REACH_NM of it (looked
+## up on a grid of RIDE_CELL_DEG cells: per cell, each ride's nearest point).
+const LANE_STEP_NM := 50.0
+const RIDE_REACH_NM := 360.0
+const RIDE_CELL_DEG := 1.0
+## "--why" with --currents-only: each candidate and why it was or wasn't kept.
+var _why_currents := false
+## Per RIDE_CELL_DEG cell (see _ride_cells()): [[ride, point, nm], ...].
+var _ride_near := {}
+
+
+## Plans each lane's second ways round on the currents (game_config
+## currents; "-- --currents-only", into the existing lanes). Where a current
+## runs alongside a lane (within RIDE_REACH_NM, its points going the same way
+## along it for at least ride_min_nm), a ship could leave the lane, ride the
+## current and rejoin the lane further on: that way round is planned for each
+## direction, at least cut_nm from either port (beyond the approach channels),
+## and kept for a direction if it saves at least min_gain of the lane's time
+## in some months, at most max_detour times as long as the stretch it leaves
+## out. The months it's quicker in are kept with it, so ships take it then
+## (GameData.lane()); a current that turns with the monsoon gives one way its
+## summer route and the other its winter one. Lanes to or from the Arctic are
+## left as they are. "--pairs A-B,C-D" plans just those lanes (dropping the
+## rest's second ways); "--why" says what it found.
+func _plan_current_ways() -> void:
+	var started := Time.get_ticks_msec()
+	var land_rings := _read_land_rings()
+	_build_grid(land_rings)
+	land_rings.clear()
+	var coarse := _build_coarse_graph()
+	var astar := _fine_astar()
+	_set_arctic_blocked(coarse, astar, true)
+	var settings: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/game_config.json")).currents
+	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
+	var arctic := {}
+	for port: Dictionary in ports:
+		if bool(port.get("arctic", false)):
+			arctic[port.id] = true
+	var currents := Currents.shared()
+	var rides := []
+	for chain: Dictionary in _current_chains(currents):
+		rides.append(_ride(currents, chain, float(settings.ref_speed_kn), float(settings.limit)))
+	_ride_cells(rides)
+	print("Rides: %d, near %d cells" % [rides.size(), _ride_near.size()])
+	var data: SeaLaneData = load(LANES_OUT)
+	data.variant_keys = PackedStringArray()
+	data.variant_months = PackedInt32Array()
+	data.variant_currents = PackedStringArray()
+	data.variant_starts = PackedInt32Array()
+	data.variant_points = PackedVector2Array()
+	data.variant_distances = PackedFloat32Array()
+	var args := OS.get_cmdline_user_args()
+	_why_currents = "--why" in args
+	var only := {}
+	if "--pairs" in args:
+		for pair: String in args[args.find("--pairs") + 1].split(","):
+			only[pair] = true
+	var tried := 0
+	var by_current := {}
+	var by_month := PackedInt32Array()
+	by_month.resize(13)
+	for i in data.keys.size():
+		if data.keys[i].contains("@"):
+			continue  # (A fishing ground's lane: see _plan_fishing_lanes().)
+		var ids := data.keys[i].split("-")
+		if arctic.has(ids[0]) or arctic.has(ids[1]):
+			continue
+		if not only.is_empty() and not only.has(data.keys[i]):
+			continue
+		if data.distances[i] < float(settings.cut_nm) * 2.0 + float(settings.ride_min_nm):
+			continue
+		var points := data.points.slice(data.starts[i], data.starts[i + 1])
+		if _through_canal(points):
+			continue  # (Lanes through a canal keep their one way: their canal crossings stay as they are.)
+		if _why_currents:
+			print("  %s" % data.keys[i])
+		var found := _current_ways(points, rides, currents, settings, coarse, astar)
+		for direction in 2:
+			var way: Dictionary = found[direction]
+			tried += int(way.get("tried", 0))
+			if not way.has("points"):
+				continue
+			data.variant_keys.append("%s>%s" % [ids[direction], ids[1 - direction]])
+			data.variant_months.append(way.months)
+			data.variant_currents.append(way.current)
+			data.variant_starts.append(data.variant_points.size())
+			for p: Vector2 in way.points:
+				data.variant_points.append(Vector2(snappedf(p.x, 0.0001), snappedf(p.y, 0.0001)))
+			data.variant_distances.append(_length_nm(way.points))
+			by_current[way.current] = int(by_current.get(way.current, 0)) + 1
+			for m in 13:
+				if int(way.months) & (1 << m):
+					by_month[m] += 1
+		if i % 2000 == 0:
+			print("  %d / %d lanes, %d second ways (%.0f s)" % [i, data.keys.size(), data.variant_keys.size(), (Time.get_ticks_msec() - started) / 1000.0])
+	data.variant_starts.append(data.variant_points.size())
+	var err := ResourceSaver.save(data, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % LANES_OUT)
+	var seasonal := 0
+	for months: int in data.variant_months:
+		if months & 0xfff != 0xfff:
+			seasonal += 1
+	print("Second ways: %d (%d routed), %d seasonal, the rest quicker all year" % [data.variant_keys.size(), tried, seasonal])
+	print("  by month (Jan..Dec, average): %s" % [by_month])
+	print("  by current: %s" % [by_current])
+	print("Done in %.1f min" % ((Time.get_ticks_msec() - started) / 60000.0))
+
+
+## Every current with the ones it flows on into (see CHAIN_NM), as
+## {id ("gulf_stream+north_atlantic"), flow}.
+func _current_chains(currents: Currents) -> Array:
+	var chains := []
+	for first in currents.list.size():
+		var order := [first]
+		var flow: PackedVector2Array = (currents.list[first].flow as PackedVector2Array).duplicate()
+		while order.size() < 5:
+			var end := flow[flow.size() - 1]
+			var next := -1
+			var next_shift := 0.0
+			for j in currents.list.size():
+				if order.has(j):
+					continue
+				var start: Vector2 = currents.list[j].flow[0]
+				var shift := roundf((end.x - start.x) / 360.0) * 360.0
+				if Geo.distance_nm(end, start + Vector2(shift, 0.0)) < CHAIN_NM:
+					next = j
+					next_shift = shift
+					break
+			if next < 0:
+				break
+			order.append(next)
+			var more: PackedVector2Array = currents.list[next].flow
+			for k in more.size():
+				var p := more[k] + Vector2(next_shift, 0.0)
+				if k > 0 or p.distance_to(end) > 0.01:
+					flow.append(p)
+		var ids := PackedStringArray()
+		for index: int in order:
+			ids.append(currents.list[index].id)
+		chains.append({id = "+".join(ids), flow = flow})
+	return chains
+
+
+## A current's ride: {id, points, miles, hours (per month, 0-11 then the
+## year's average: the hours to each point at the reference speed with the
+## current)}.
+func _ride(currents: Currents, item: Dictionary, ref_speed: float, limit: float) -> Dictionary:
+	var flow: PackedVector2Array = item.flow
+	var points := PackedVector2Array([flow[0]])
+	for k in range(1, flow.size()):
+		var steps := maxi(ceili(Geo.distance_nm(flow[k - 1], flow[k]) / RIDE_STEP_NM), 1)
+		for s in range(1, steps + 1):
+			points.append(flow[k - 1].lerp(flow[k], float(s) / steps))
+	var miles := PackedFloat64Array([0.0])
+	for k in range(1, points.size()):
+		miles.append(miles[k - 1] + Geo.distance_nm(points[k - 1], points[k]))
+	var hours := []
+	for m in 13:
+		var each := PackedFloat64Array([0.0])
+		for k in range(1, points.size()):
+			var a := points[k - 1]
+			var b := points[k]
+			var way := Vector2((b.x - a.x) * cos(deg_to_rad((a.y + b.y) / 2.0)), b.y - a.y).normalized()
+			var push := currents.velocity(a.lerp(b, 0.5), m).dot(way)
+			var factor := clampf((ref_speed + push) / ref_speed, 1.0 - limit, 1.0 + limit)
+			each.append(each[k - 1] + (miles[k] - miles[k - 1]) / (ref_speed * factor))
+		hours.append(each)
+	return {id = item.id, points = points, miles = miles, hours = hours}
+
+
+## Fills _ride_near: per RIDE_CELL_DEG cell within RIDE_REACH_NM of a ride,
+## that ride's nearest point and how far it is from the cell's middle.
+func _ride_cells(rides: Array) -> void:
+	_ride_near.clear()
+	var best := {}  # Vector3i(x, y, ride) -> [point, nm]
+	var reach_deg := RIDE_REACH_NM / 60.0
+	for r in rides.size():
+		var points: PackedVector2Array = rides[r].points
+		for k in points.size():
+			var p := points[k]
+			var wide := reach_deg / maxf(cos(deg_to_rad(p.y)), 0.2)
+			for y in range(floori((p.y - reach_deg) / RIDE_CELL_DEG), floori((p.y + reach_deg) / RIDE_CELL_DEG) + 1):
+				for x in range(floori((p.x - wide) / RIDE_CELL_DEG), floori((p.x + wide) / RIDE_CELL_DEG) + 1):
+					var middle := Vector2((x + 0.5) * RIDE_CELL_DEG, (y + 0.5) * RIDE_CELL_DEG)
+					var nm := Geo.distance_nm(middle, p)
+					if nm > RIDE_REACH_NM:
+						continue
+					var key := Vector3i(posmod(x, roundi(360.0 / RIDE_CELL_DEG)), y, r)
+					if not best.has(key) or nm < best[key][1]:
+						best[key] = [k, nm]
+	for key: Vector3i in best:
+		var cell := Vector2i(key.x, key.y)
+		if not _ride_near.has(cell):
+			_ride_near[cell] = []
+		_ride_near[cell].append([key.z, best[key][0], best[key][1]])
+
+
+## A lane's points with none further apart than LANE_STEP_NM (straight in
+## the projection between them, as the map draws them).
+static func _dense_lane(lane: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array([lane[0]])
+	for k in range(1, lane.size()):
+		var steps := maxi(ceili(Geo.distance_nm(lane[k - 1], lane[k]) / LANE_STEP_NM), 1)
+		var a := Geo.project(lane[k - 1])
+		var b := Geo.project(lane[k])
+		for s in range(1, steps + 1):
+			out.append(Geo.unproject(a.lerp(b, float(s) / steps)) if s < steps else lane[k])
+	return out
+
+
+## The hours along a ride from its point `from` to `to` (either way along it)
+## at the reference speed, in a month.
+static func _ride_hours(ride: Dictionary, from: int, to: int, month: int, ref_speed: float, limit: float) -> float:
+	var hours: PackedFloat64Array = ride.hours[month]
+	if to >= from:
+		return hours[to] - hours[from]
+	# Against the way its path runs: the push the other way round.
+	var total := 0.0
+	var miles: PackedFloat64Array = ride.miles
+	for k in range(to + 1, from + 1):
+		var length := miles[k] - miles[k - 1]
+		var forward := hours[k] - hours[k - 1]
+		var factor := length / (ref_speed * forward) if forward > 0.0 else 1.0
+		total += length / (ref_speed * clampf(2.0 - factor, 1.0 - limit, 1.0 + limit))
+	return total
+
+
+## The hours a stretch of points takes at the reference speed with its
+## currents, in a month.
+static func _way_hours(currents: Currents, points: PackedVector2Array, month: int, ref_speed: float, limit: float) -> float:
+	var projected := PackedVector2Array([Geo.project(points[0])])
+	var miles := PackedFloat64Array([0.0])
+	for k in range(1, points.size()):
+		projected.append(Geo.project(points[k]))
+		miles.append(miles[k - 1] + Geo.distance_nm(points[k - 1], points[k]))
+	return currents.lane_hours(projected, miles, month, ref_speed, limit)
+
+
+## A lane's best second way round on a current each way (see
+## _plan_current_ways()): [first port to second, second to first], each
+## {points, months, current, tried} or just {tried}.
+func _current_ways(lane: PackedVector2Array, rides: Array, currents: Currents, settings: Dictionary, coarse: AStar2D, astar: AStarGrid2D) -> Array:
+	var ref_speed := float(settings.ref_speed_kn)
+	var limit := float(settings.limit)
+	var min_gain := float(settings.min_gain)
+	var detour := float(settings.max_detour)
+	var way := _dense_lane(lane)
+	var count := way.size()
+	var out := [{tried = 0}, {tried = 0}]
+	var miles := PackedFloat64Array([0.0])
+	for k in range(1, count):
+		miles.append(miles[k - 1] + Geo.distance_nm(way[k - 1], way[k]))
+	var total := miles[count - 1]
+	# Which shift of 360 puts the lane in the grid (it runs GRID_WEST to GRID_EAST).
+	var shift := INF
+	for s: float in [0.0, 360.0, -360.0]:
+		var fits := true
+		for p in way:
+			if p.x + s < GRID_WEST + 0.5 or p.x + s > GRID_EAST - 0.5:
+				fits = false
+				break
+		if fits:
+			shift = s
+			break
+	if shift == INF:
+		return out
+	# Each ride's nearest point to each of the lane's points (away from the ports), where near.
+	var cut := float(settings.cut_nm)
+	var near := {}  # ride -> [[lane point, ride point, nm], ...] in lane order
+	for i in count:
+		if miles[i] < cut or total - miles[i] < cut:
+			continue
+		var p := way[i]
+		var cell := Vector2i(posmod(floori(p.x / RIDE_CELL_DEG), roundi(360.0 / RIDE_CELL_DEG)), floori(p.y / RIDE_CELL_DEG))
+		for entry: Array in _ride_near.get(cell, []):
+			if not near.has(entry[0]):
+				near[entry[0]] = []
+			near[entry[0]].append([i, entry[1], entry[2]])
+	if near.is_empty():
+		return out
+	# The lane's hours to each point, each way, each month (see _cumulative_hours()).
+	var reversed := way.duplicate()
+	reversed.reverse()
+	var lane_cum := [[], []]
+	for m in 13:
+		lane_cum[0].append(_cumulative_hours(currents, way, m, ref_speed, limit))
+		lane_cum[1].append(_cumulative_hours(currents, reversed, m, ref_speed, limit))
+	var threshold := total / ref_speed * min_gain  # (Hours: the least saving that counts.)
+	var best_score := [0.0, 0.0]
+	for r: int in near:
+		var ride: Dictionary = rides[r]
+		var ride_miles: PackedFloat64Array = ride.miles
+		var ride_points: PackedVector2Array = ride.points
+		var run := _steady_run(near[r])
+		if run.size() < 2:
+			continue
+		var half := run.size() / 2
+		var early := _spread(run.slice(0, half + 1), 8)
+		var late := _spread(run.slice(half), 8)
+		for direction in 2:
+			# Leave the lane at one of the run's points and rejoin at a later one (going this way).
+			var leaves := early if direction == 0 else late
+			var joins := late if direction == 0 else early
+			var cum: Array = lane_cum[direction]
+			var best := {}
+			var best_gain := 0.0
+			for leave: Array in leaves:
+				var off_nm := Geo.distance_nm(way[leave[0]], _near_copy(ride_points[leave[1]], way[leave[0]]))
+				var at_leave: int = leave[0] if direction == 0 else count - 1 - leave[0]
+				for join: Array in joins:
+					var at_join: int = join[0] if direction == 0 else count - 1 - join[0]
+					if at_join <= at_leave:
+						continue
+					var ride_nm := absf(ride_miles[join[1]] - ride_miles[leave[1]])
+					if ride_nm < float(settings.ride_min_nm):
+						continue
+					var on_nm := Geo.distance_nm(_near_copy(ride_points[join[1]], way[join[0]]), way[join[0]])
+					var stretch := absf(miles[join[0]] - miles[leave[0]])
+					if off_nm + ride_nm + on_nm > stretch * detour:
+						continue
+					var gain := 0.0
+					for m in 12:
+						var part: float = cum[m][at_join] - cum[m][at_leave]
+						var mine := (off_nm + on_nm) / ref_speed + _ride_hours(ride, leave[1], join[1], m, ref_speed, limit)
+						gain += maxf(part - mine - threshold, 0.0)
+					if gain > best_gain:
+						best_gain = gain
+						best = {leave = leave, join = join, at_leave = at_leave, at_join = at_join, off = off_nm, ride = ride_nm, on = on_nm}
+			if best.is_empty():
+				continue
+			if _why_currents:
+				print("    %s %s: off %.0f, ride %.0f, on %.0f nm; est. %.1f h over the threshold in a year" % [ride.id, ["there", "back"][direction], best.off, best.ride, best.on, best_gain])
+			out[direction].tried = int(out[direction].tried) + 1
+			var leave_pair: Array = best.leave
+			var join_pair: Array = best.join
+			var middle := _ride_way(way[leave_pair[0]] + Vector2(shift, 0.0), way[join_pair[0]] + Vector2(shift, 0.0), ride_points,
+				leave_pair[1], join_pair[1], _near_shift(ride_points[leave_pair[1]], way[leave_pair[0]]) + shift, coarse, astar)
+			if middle.is_empty():
+				if _why_currents:
+					print("      couldn't be sailed")
+				continue
+			# The whole way, in the grid's longitudes (rounding looks at the grid), then put back.
+			var oriented := way if direction == 0 else reversed
+			var whole := PackedVector2Array()
+			for k in int(best.at_leave):
+				whole.append(oriented[k] + Vector2(shift, 0.0))
+			whole.append_array(middle)
+			for k in range(int(best.at_join) + 1, count):
+				whole.append(oriented[k] + Vector2(shift, 0.0))
+			whole = _splice_canals(whole)
+			whole = _round_corners(whole)
+			for k in whole.size():
+				whole[k].x -= shift
+			var length := _length_nm(whole)
+			if length - total > absf(miles[join_pair[0]] - miles[leave_pair[0]]) * (detour - 1.0):
+				if _why_currents:
+					print("      too long once sailed: %.0f nm vs %.0f" % [length, total])
+				continue
+			var months := 0
+			var score := 0.0
+			for m in 13:
+				var lane_h: float = cum[m][count - 1]
+				var mine := _way_hours(currents, whole, m, ref_speed, limit)
+				if mine < lane_h - threshold:
+					months |= 1 << m
+					if m < 12:
+						score += lane_h - mine
+			if _why_currents:
+				print("      routed: %.0f nm vs %.0f; months %s, %.1f h saved over the year" % [length, total, String.num_int64(months, 2).lpad(13, "0").reverse(), score])
+			if months != 0 and score > best_score[direction]:
+				best_score[direction] = score
+				out[direction] = {points = whole, months = months, current = ride.id, tried = out[direction].tried}
+	return out
+
+
+## The hours to each of a way's points at the reference speed with its
+## currents, in a month (each stretch between points at its middle's push).
+static func _cumulative_hours(currents: Currents, points: PackedVector2Array, month: int, ref_speed: float, limit: float) -> PackedFloat64Array:
+	var hours := PackedFloat64Array([0.0])
+	for k in range(1, points.size()):
+		var a := points[k - 1]
+		var b := points[k]
+		var nm := Geo.distance_nm(a, b)
+		var way := Vector2((b.x - a.x) * cos(deg_to_rad((a.y + b.y) / 2.0)), b.y - a.y)
+		var factor := 1.0
+		if way.length_squared() > 0.0:
+			var push := currents.velocity(a.lerp(b, 0.5), month).dot(way.normalized())
+			factor = clampf((ref_speed + push) / ref_speed, 1.0 - limit, 1.0 + limit)
+		hours.append(hours[k - 1] + nm / (ref_speed * factor))
+	return hours
+
+
+## At most `most` of a list's items, spread evenly over it (its ends kept).
+static func _spread(items: Array, most: int) -> Array:
+	if items.size() <= most:
+		return items
+	var out := []
+	for k in most:
+		out.append(items[roundi(float(k) * (items.size() - 1) / (most - 1))])
+	return out
+
+
+## The longest run of [lane point, ride point, nm] (in lane order) whose ride
+## points go steadily one way (a ride doubling back, or coming near the lane
+## twice, starts a new run).
+static func _steady_run(pairs: Array) -> Array:
+	var best := []
+	var run := []
+	var sign := 0
+	for pair: Array in pairs:
+		if run.is_empty():
+			run = [pair]
+			sign = 0
+			continue
+		var last: Array = run[run.size() - 1]
+		var step: int = pair[1] - last[1]
+		var gap: int = pair[0] - last[0]
+		var going := signi(step)
+		if gap <= 2 and (step == 0 or sign == 0 or going == sign):
+			run.append(pair)
+			if going != 0:
+				sign = going
+		else:
+			if run.size() > best.size():
+				best = run
+			run = [pair]
+			sign = 0
+	if run.size() > best.size():
+		best = run
+	return best if best.size() >= 2 else []
+
+
+## A ride's point moved by whole turns of the globe to be nearest `to` (lanes
+## and rides keep their longitudes running on past 180 their own ways).
+static func _near_copy(p: Vector2, to: Vector2) -> Vector2:
+	return p + Vector2(_near_shift(p, to), 0.0)
+
+
+static func _near_shift(p: Vector2, to: Vector2) -> float:
+	return roundf((to.x - p.x) / 360.0) * 360.0
+
+
+## The middle of a second way round (in the grid's longitudes): from the lane
+## at `from` out to the ride's point `entry`, along the ride to `exit` (either
+## way along it), and back to the lane at `to`. [] if it can't be sailed.
+func _ride_way(from: Vector2, to: Vector2, points: PackedVector2Array, entry: int, exit: int, lon_shift: float, coarse: AStar2D, astar: AStarGrid2D) -> PackedVector2Array:
+	var ride := PackedVector2Array()
+	var step := 1 if exit >= entry else -1
+	for k in range(entry, exit + step, step):
+		ride.append(points[k] + Vector2(lon_shift, 0.0))
+	for p in ride:
+		if p.x < GRID_WEST + 0.5 or p.x > GRID_EAST - 0.5:
+			return PackedVector2Array()
+	var out := PackedVector2Array()
+	# Out to the current, the way a lane is found.
+	var start := _nearest_water(_cell_of(Geo.project(from)))
+	var on := _nearest_water(_cell_of(Geo.project(ride[0])))
+	if start.x < 0 or on.x < 0:
+		return PackedVector2Array()
+	var cells := _route(coarse, astar, start, on)
+	if cells.is_empty():
+		return PackedVector2Array()
+	out.append_array(_lane_points(from, cells, ride[0]))
+	# Along it, hop by hop (round any land between with the fine grid).
+	for k in range(1, ride.size()):
+		var a := _nearest_water(_cell_of(Geo.project(ride[k - 1])))
+		var b := _nearest_water(_cell_of(Geo.project(ride[k])))
+		if a.x < 0 or b.x < 0:
+			return PackedVector2Array()
+		if not _clear_of_land(a, b):
+			var hop := astar.get_id_path(a, b)
+			if hop.is_empty() or hop.size() > 400:
+				return PackedVector2Array()
+			for h in range(1, hop.size() - 1):
+				out.append(Geo.unproject(_cell_center(hop[h])))
+		out.append(ride[k])
+	# And back in to the lane.
+	var off := _nearest_water(_cell_of(Geo.project(ride[ride.size() - 1])))
+	var end := _nearest_water(_cell_of(Geo.project(to)))
+	if off.x < 0 or end.x < 0:
+		return PackedVector2Array()
+	cells = _route(coarse, astar, off, end)
+	if cells.is_empty():
+		return PackedVector2Array()
+	out.append_array(_lane_points(ride[ride.size() - 1], cells, to).slice(1))
+	return out
+
+
+## True if a lane runs through one of data/canals.json's canals (it has a
+## point on or right by a canal's course).
+func _through_canal(points: PackedVector2Array) -> bool:
+	for canal: Dictionary in _canals:
+		var bounds: Rect2 = canal.bounds
+		for p in points:
+			if bounds.has_point(p) or bounds.has_point(p - Vector2(360.0, 0.0)) or bounds.has_point(p + Vector2(360.0, 0.0)):
+				return true
+	return false
+
+
+# --- Fishing grounds' lanes -------------------------------------------------
+
+## Fishing lanes ("-- --fishing-only", into the existing lanes; run last,
+## after the lanes, channels and currents): from each of a fishing ground's
+## nearest ports (data/fisheries.json grounds) a lane out to the ground,
+## routed round the land like any lane, keyed "PORT-@ground" (the ground's
+## end, its middle on the water). A boat's trip is its base's lane to one of
+## those ports, then out along that lane (Fisheries.legs()).
+const FISHING_PORTS := 4
+const FISHING_MAX_NM := 2500.0
+
+func _plan_fishing_lanes() -> void:
+	var started := Time.get_ticks_msec()
+	var land_rings := _read_land_rings()
+	_build_grid(land_rings)
+	land_rings.clear()
+	var coarse := _build_coarse_graph()
+	var astar := _fine_astar()
+	_set_arctic_blocked(coarse, astar, false)
+	var fish: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/fisheries.json"))
+	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
+	var old: SeaLaneData = load(LANES_OUT)
+	# Everything but the old fishing lanes, as it was.
+	var data := SeaLaneData.new()
+	for i in old.keys.size():
+		if old.keys[i].contains("@"):
+			continue
+		data.keys.append(old.keys[i])
+		data.starts.append(data.points.size())
+		data.points.append_array(old.points.slice(old.starts[i], old.starts[i + 1]))
+		data.distances.append(old.distances[i])
+	for field: String in ["variant_keys", "variant_months", "variant_currents", "variant_starts", "variant_points", "variant_distances"]:
+		data.set(field, old.get(field))
+	var made := 0
+	for ground: Dictionary in fish.grounds:
+		var middle := Vector2(float(ground.lon), float(ground.lat))
+		var near := ports.duplicate()
+		near.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return Geo.distance_nm(middle, Vector2(a.lon, a.lat)) < Geo.distance_nm(middle, Vector2(b.lon, b.lat)))
+		var count := 0
+		for port: Dictionary in near:
+			if count >= FISHING_PORTS or Geo.distance_nm(middle, Vector2(port.lon, port.lat)) > FISHING_MAX_NM:
+				break
+			var best := PackedVector2Array()
+			var best_nm := INF
+			# The ground's end at its own longitude, or a turn of the globe either way (the Pacific seam).
+			for shift: float in [0.0, 360.0, -360.0]:
+				var spot := middle + Vector2(shift, 0.0)
+				var to := Geo.project(spot)
+				if to.x < GRID_WEST + 0.5 or to.x > GRID_EAST - 0.5:
+					continue
+				for offset: float in [0.0, 360.0]:
+					var from := Geo.project(Vector2(port.lon + offset, port.lat))
+					if from.x > GRID_EAST - 1.0 or absf(from.x - to.x) > MAX_ROUTE_SPAN:
+						continue
+					var a := _nearest_water(_cell_of(from))
+					var b := _nearest_water(_cell_of(to))
+					if a.x < 0 or b.x < 0:
+						continue
+					var cells := _route(coarse, astar, a, b)
+					if cells.is_empty():
+						continue
+					var points := _round_corners(_lane_points(Vector2(port.lon + offset, port.lat), cells, Geo.unproject(_cell_center(b))))
+					var nm := _length_nm(points)
+					if nm < best_nm:
+						best_nm = nm
+						best = points
+			if best.is_empty():
+				continue
+			var shift_back: float = port.lon - best[0].x
+			data.keys.append("%s-@%s" % [port.id, ground.id])
+			data.starts.append(data.points.size())
+			for p in best:
+				data.points.append(Vector2(snappedf(p.x + shift_back, 0.0001), snappedf(p.y, 0.0001)))
+			data.distances.append(best_nm)
+			count += 1
+			made += 1
+		if count == 0:
+			push_error("No fishing lane to %s" % ground.id)
+	data.starts.append(data.points.size())
+	var err := ResourceSaver.save(data, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
+	assert(err == OK, "Couldn't save %s" % LANES_OUT)
+	print("Fishing lanes: %d to %d grounds (%.1f min)" % [made, fish.grounds.size(), (Time.get_ticks_msec() - started) / 60000.0])

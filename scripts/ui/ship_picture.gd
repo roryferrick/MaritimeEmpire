@@ -16,7 +16,7 @@ var _art: Dictionary
 func _init(for_model: Dictionary, pixels_long: float) -> void:
 	model = for_model
 	length = pixels_long
-	_art = MapView.load_ship_art(str(model.get("category", "")))
+	_art = MapView.load_ship_art(str(model.get("art", model.get("category", ""))))
 	mouse_filter = MOUSE_FILTER_IGNORE
 	# The art is drawn well below its size: mipmaps keep it smooth.
 	texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS

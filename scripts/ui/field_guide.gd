@@ -21,7 +21,7 @@ const PANEL_SIZE := Vector2(820, 640)
 const TEXT_WIDTH := 600.0
 const SMALL_FONT := 14
 const ICON_SIZE := 56.0
-const TABS := ["Birds", "Sea animals", "Land animals", "Wonders"]
+const TABS := ["Birds", "Sea animals", "Land animals", "Catch", "Wonders"]
 ## The sea animals' groups: [heading, note, kinds (data/sea_life.json kind)].
 const SEA_GROUPS := [
 	["Whales, dolphins and orcas", "Pods that spend parts of the year in their waters and migrate between them; whales and orcas come up to breathe and breach, dolphins leap.", ["whale", "orca", "dolphin"]],
@@ -134,6 +134,8 @@ func _show(tab: int) -> void:
 			for id: String in land:
 				_land_entry(id, land[id])
 		3:
+			_show_catch()
+		4:
 			for group: Array in [["Man-made wonders", "man_made", "The New 7 Wonders of the World, the Great Pyramid of Giza and other world-famous landmarks."],
 					["Lost wonders of the ancient world", "ancient", "Six of the Seven Wonders of the Ancient World are long gone: drawn on the map as they were, faded, where they stood."],
 					["Natural wonders", "natural", "The Seven Natural Wonders of the World, the New 7 Wonders of Nature and other famous sights."]]:
@@ -141,6 +143,36 @@ func _show(tab: int) -> void:
 				for item: Dictionary in GameData.wonders:
 					if item.get("kind", "") == group[1]:
 						_wonder_entry(item)
+
+
+## The Catch tab: every crab and fish the fishing and crabbing boats go
+## after (Fisheries), family by family: where it's caught and in which months,
+## how, and what a crate of it fetches.
+func _show_catch() -> void:
+	var fish := Fisheries.shared()
+	var sea := SeaLife.shared()
+	var gear_words := {trap = "Caught in crab pots", troll = "Caught on trolled lines", net = "Caught in nets (gillnets and purse seines)", trawl = "Caught in trawls"}
+	for kind: String in ["crab", "fish"]:
+		_heading("Crabs" if kind == "crab" else "Fish", "Every crab is caught in pots: small skiffs set a few dozen inshore, the big crabbers hundreds out in the Bering Sea." if kind == "crab" else "Caught by the fishing boats in the seasons on their grounds: small boats troll (and may hook a giant that fills the hold), bigger ones net and trawl.")
+		for family_id: String in fish.family_order:
+			var family: Dictionary = fish.families[family_id]
+			if family.kind != kind:
+				continue
+			for species_id: String in fish.species:
+				var info: Dictionary = fish.species[species_id]
+				if info.family != family_id:
+					continue
+				var places := PackedStringArray()
+				for ground_id: String in fish.ground_order:
+					if (fish.grounds[ground_id].species as Dictionary).has(species_id):
+						places.append("%s (%s)" % [str(fish.grounds[ground_id].name), fish.season_text(ground_id, species_id)])
+				var lines: Array[String] = ["Where: %s." % ", ".join(places), "%s · %s, about %s a crate" % [gear_words.get(str(info.gear), ""), family.name, Fmt.money(roundi(float(GameData.commodity(family_id).get("base", 0.0)) * float(info.grade)))]]
+				var fact := str(info.get("fact", (sea.species.get(species_id, {}) as Dictionary).get("fact", "")))
+				if not fact.is_empty():
+					lines.append(fact)
+				var art := "res://art/catch/%s.svg" % species_id if kind == "crab" else MapView.SEA_ART_DIR + species_id + ".svg"
+				var side := Vector2.ONE * ICON_SIZE if kind == "crab" else Vector2(ICON_SIZE * 1.6, ICON_SIZE * 0.6)
+				_entry("catch:" + species_id, _picture(art, side), str(info.name), str(info.latin), lines)
 
 
 func _heading(text: String, note: String) -> void:

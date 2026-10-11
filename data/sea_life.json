@@ -55,7 +55,20 @@
 		"australian_sea_lion": {"name": "Australian sea lion", "plural": "Australian sea lions", "word": "sea lions", "kind": "sea_lion", "art": "australian_sea_lion", "length_px": 12, "spacing_px": 9, "shown": 12, "surface": [5.0, 0.45], "breach": [12.0, 0.2], "length_m": 2.5, "fact": "Found only on the south and west coasts of Australia; the bulls' chocolate coats go cream on the head and neck."},
 		"sea_otter": {"name": "Sea otter", "plural": "Sea otters", "word": "otters", "kind": "otter", "art": "sea_otter", "length_px": 9, "spacing_px": 7, "shown": 12, "surface": [4.0, 0.6], "length_m": 1.5, "fact": "It floats on its back cracking clams on a stone it keeps in a pocket of skin, wrapped in kelp so it doesn't drift off while it sleeps."},
 		"marine_otter": {"name": "Marine otter", "plural": "Marine otters", "word": "otters", "kind": "otter", "art": "marine_otter", "length_px": 7, "spacing_px": 6, "shown": 6, "surface": [4.0, 0.5], "length_m": 1.15, "fact": "The chungungo, the smallest sea mammal, hunting crabs along the wave-washed rocks of Chile and Peru."}
-
+,
+		"atlantic_herring": {"name": "Atlantic herring", "plural": "Atlantic herring", "word": "herring", "kind": "fish", "art": "atlantic_herring", "length_px": 6, "spacing_px": 3, "shown": 36, "length_m": 0.35, "fact": "Shoals of herring a few kilometres long fed the Hanseatic League; they spawn in their billions on the gravel banks of the North Sea and off Norway."},
+		"sardine": {"name": "Sardine", "plural": "sardines", "word": "sardines", "kind": "fish", "art": "sardine", "length_px": 5, "spacing_px": 3, "shown": 36, "length_m": 0.25, "fact": "Pilchards in the Atlantic, sardines in the Mediterranean: Portugal and Galicia grill them by the million each summer."},
+		"anchovy": {"name": "European anchovy", "plural": "anchovies", "word": "anchovies", "kind": "fish", "art": "anchovy", "length_px": 4, "spacing_px": 2.5, "shown": 40, "length_m": 0.2, "fact": "Salted in Collioure and Cantabria since the Romans; the Bay of Biscay's spring fishery runs from April to June."},
+		"anchoveta": {"name": "Peruvian anchoveta", "plural": "anchoveta", "word": "anchoveta", "kind": "fish", "art": "anchoveta", "length_px": 4, "spacing_px": 2.5, "shown": 40, "length_m": 0.2, "fact": "The world's biggest fishery by weight: up to 10 million tonnes a year off Peru, most of it ground into fishmeal."},
+		"capelin": {"name": "Capelin", "plural": "capelin", "word": "capelin", "kind": "fish", "art": "capelin", "length_px": 4.5, "spacing_px": 2.5, "shown": 36, "length_m": 0.2, "fact": "A small smelt the cod, seals and whales of the North Atlantic live on; it rolls up the beaches of Newfoundland to spawn each June."},
+		"menhaden": {"name": "Atlantic menhaden", "plural": "menhaden", "word": "menhaden", "kind": "fish", "art": "menhaden", "length_px": 6, "spacing_px": 3, "shown": 30, "length_m": 0.35, "fact": "'The most important fish in the sea': too bony to eat, it's caught by the hundred thousand tonnes for oil and bait in Chesapeake Bay and the Gulf."},
+		"sprat": {"name": "European sprat", "plural": "sprats", "word": "sprats", "kind": "fish", "art": "sprat", "length_px": 4, "spacing_px": 2.5, "shown": 36, "length_m": 0.15, "fact": "The Baltic's most-caught fish: smoked in Riga as brisling, tinned in Norway."},
+		"pacific_saury": {"name": "Pacific saury", "plural": "saury", "word": "saury", "kind": "fish", "art": "pacific_saury", "length_px": 7, "spacing_px": 3, "shown": 30, "length_m": 0.4, "fact": "Sanma, the taste of autumn in Japan: caught at night off Hokkaido with lights that draw the shoals to the boats."},
+		"atlantic_mackerel": {"name": "Atlantic mackerel", "plural": "mackerel", "word": "mackerel", "kind": "fish", "art": "atlantic_mackerel", "length_px": 7, "spacing_px": 3, "shown": 30, "length_m": 0.45, "fact": "Tiger-striped and fast: the North Atlantic's mackerel shoals sweep from Biscay to Norway and Iceland each year."},
+		"jack_mackerel": {"name": "Jack mackerel", "plural": "jack mackerel", "word": "jack mackerel", "kind": "fish", "art": "jack_mackerel", "length_px": 7, "spacing_px": 3, "shown": 30, "length_m": 0.5, "fact": "Its shoals once spanned the South Pacific from Chile almost to New Zealand; Chile's purse seiners still land hundreds of thousands of tonnes."},
+		"alaska_pollock": {"name": "Alaska pollock", "plural": "pollock", "word": "pollock", "kind": "fish", "art": "alaska_pollock", "length_px": 9, "spacing_px": 5, "shown": 24, "length_m": 0.8, "fact": "The fish in fish sticks and surimi: the Bering Sea's pollock fishery lands over a million tonnes a year."},
+		"haddock": {"name": "Haddock", "plural": "haddock", "word": "haddock", "kind": "fish", "art": "haddock", "length_px": 9, "spacing_px": 5, "shown": 24, "length_m": 0.7, "fact": "Known by its black lateral line and the dark 'thumbprint' over its fin: the fish in Britain's fish and chips."},
+		"hake": {"name": "Hake", "plural": "hake", "word": "hake", "kind": "fish", "art": "hake", "length_px": 10, "spacing_px": 6, "shown": 20, "length_m": 1.0, "fact": "Spain eats more hake than anywhere: from Galician trawlers, and from the Patagonian and Namibian shelves."}
 	},
 	"areas": {
 		"ligurian": {"name": "the Ligurian Sea", "lon": 8.5, "lat": 43.2, "radius_nm": 80},
@@ -170,7 +183,20 @@
 		"monterey_bay": {"name": "Monterey Bay", "lon": -122.375, "lat": 36.625, "radius_nm": 25},
 		"prince_william_sound": {"name": "the mouth of Prince William Sound", "lon": -146.875, "lat": 59.875, "radius_nm": 40},
 		"chiloe": {"name": "the coast of Chiloe", "lon": -74.625, "lat": -42.125, "radius_nm": 45}
-
+,
+		"north_sea": {"name": "the North Sea", "lon": 3.0, "lat": 56.0, "radius_nm": 150},
+		"humboldt": {"name": "the Humboldt Current off Peru", "lon": -78.5, "lat": -11.0, "radius_nm": 200},
+		"baltic": {"name": "the Baltic Sea", "lon": 18.5, "lat": 55.8, "radius_nm": 120},
+		"east_china_sea": {"name": "the East China Sea", "lon": 125.0, "lat": 30.0, "radius_nm": 180},
+		"kuroshio_japan": {"name": "the Kuroshio off Japan", "lon": 142.0, "lat": 35.0, "radius_nm": 150},
+		"benguela": {"name": "the Benguela coast", "lon": 13.0, "lat": -23.0, "radius_nm": 160},
+		"yellow_sea": {"name": "the Yellow Sea", "lon": 123.5, "lat": 36.0, "radius_nm": 140},
+		"okhotsk": {"name": "the Sea of Okhotsk", "lon": 151.0, "lat": 54.5, "radius_nm": 200},
+		"east_hokkaido": {"name": "the waters off eastern Hokkaido", "lon": 146.0, "lat": 42.5, "radius_nm": 120},
+		"gulf_of_thailand": {"name": "the Gulf of Thailand", "lon": 101.0, "lat": 11.0, "radius_nm": 120},
+		"portugal": {"name": "the Portuguese coast", "lon": -9.6, "lat": 40.0, "radius_nm": 110},
+		"chilean_coast": {"name": "the central Chilean coast", "lon": -73.0, "lat": -35.0, "radius_nm": 180},
+		"patagonia": {"name": "the Patagonian shelf", "lon": -61.5, "lat": -45.5, "radius_nm": 200}
 	},
 	"pods": [
 		{"species": "humpback", "name": "Alaska to Mexico humpbacks", "size": 2, "stays": [["gulf_of_alaska", "06-01", "10-20"], ["mexico_pacific", "12-20", "03-20"]]},
@@ -285,6 +311,38 @@
 		{"species": "sea_otter", "name": "Prince William Sound sea otters", "size": 40, "stays": [["prince_william_sound", "01-01", "12-31"]]},
 		{"species": "sea_otter", "name": "Kuril sea otters", "size": 30, "stays": [["kuril", "01-01", "12-31"]]},
 		{"species": "marine_otter", "name": "Chiloe marine otters", "size": 6, "stays": [["chiloe", "01-01", "12-31"]]}
-
+,
+		{"species": "atlantic_herring", "name": "North Sea herring", "size": 50000, "stays": [["north_sea", "05-15", "10-15"], ["norwegian_sea", "11-01", "04-30"]]},
+		{"species": "atlantic_herring", "name": "Gulf of Maine herring", "size": 30000, "stays": [["gulf_of_maine", "01-01", "12-31"]]},
+		{"species": "atlantic_herring", "name": "Baltic herring", "size": 20000, "stays": [["baltic", "01-01", "12-31"]]},
+		{"species": "sardine", "name": "Iberian sardines", "size": 40000, "stays": [["portugal", "01-01", "12-31"]]},
+		{"species": "sardine", "name": "Biscay sardines", "size": 20000, "stays": [["biscay", "04-01", "10-31"]]},
+		{"species": "sardine", "name": "Benguela pilchards", "size": 30000, "stays": [["benguela", "01-01", "12-31"]]},
+		{"species": "sardine", "name": "West African sardinella", "size": 40000, "stays": [["nw_africa", "01-01", "12-31"]]},
+		{"species": "sardine", "name": "California sardines", "size": 20000, "stays": [["so_cal_bight", "01-01", "12-31"]]},
+		{"species": "anchovy", "name": "Biscay anchovies", "size": 40000, "stays": [["biscay", "03-01", "07-15"]]},
+		{"species": "anchovy", "name": "Yellow Sea anchovies", "size": 50000, "stays": [["yellow_sea", "04-01", "10-31"]]},
+		{"species": "anchovy", "name": "Gulf of Thailand anchovies", "size": 40000, "stays": [["gulf_of_thailand", "01-01", "12-31"]]},
+		{"species": "anchoveta", "name": "Peruvian anchoveta", "size": 200000, "stays": [["humboldt", "01-01", "12-31"]]},
+		{"species": "capelin", "name": "Barents capelin", "size": 80000, "stays": [["barents", "05-01", "12-31"], ["norway_north", "01-15", "04-15"]]},
+		{"species": "capelin", "name": "Newfoundland capelin", "size": 60000, "stays": [["grand_banks", "01-01", "12-31"]]},
+		{"species": "capelin", "name": "Icelandic capelin", "size": 50000, "stays": [["iceland", "01-01", "12-31"]]},
+		{"species": "menhaden", "name": "Chesapeake menhaden", "size": 40000, "stays": [["chesapeake_mouth", "04-15", "11-15"], ["carolina_coast", "11-20", "04-10"]]},
+		{"species": "menhaden", "name": "Gulf menhaden", "size": 60000, "stays": [["gulf_of_mexico", "01-01", "12-31"]]},
+		{"species": "sprat", "name": "Baltic sprats", "size": 60000, "stays": [["baltic", "01-01", "12-31"]]},
+		{"species": "sprat", "name": "North Sea sprats", "size": 30000, "stays": [["north_sea", "10-01", "03-31"]]},
+		{"species": "pacific_saury", "name": "Saury off Hokkaido", "size": 60000, "stays": [["east_hokkaido", "08-01", "11-30"], ["north_pacific_transition", "12-15", "07-15"]]},
+		{"species": "atlantic_mackerel", "name": "Northeast Atlantic mackerel", "size": 60000, "stays": [["biscay", "01-15", "04-15"], ["norwegian_sea", "06-01", "10-31"], ["north_sea", "11-10", "01-05"]]},
+		{"species": "atlantic_mackerel", "name": "Celtic Sea mackerel", "size": 30000, "stays": [["celtic_sea", "01-01", "12-31"]]},
+		{"species": "jack_mackerel", "name": "Chilean jack mackerel", "size": 60000, "stays": [["chilean_coast", "01-01", "12-31"]]},
+		{"species": "jack_mackerel", "name": "East China Sea jack mackerel", "size": 40000, "stays": [["east_china_sea", "01-01", "12-31"]]},
+		{"species": "alaska_pollock", "name": "Bering Sea pollock", "size": 80000, "stays": [["bering", "01-01", "12-31"]]},
+		{"species": "alaska_pollock", "name": "Okhotsk pollock", "size": 60000, "stays": [["okhotsk", "01-01", "12-31"]]},
+		{"species": "haddock", "name": "North Sea haddock", "size": 30000, "stays": [["north_sea", "01-01", "12-31"]]},
+		{"species": "haddock", "name": "Georges Bank haddock", "size": 30000, "stays": [["gulf_of_maine", "01-01", "12-31"]]},
+		{"species": "haddock", "name": "Barents haddock", "size": 30000, "stays": [["barents", "01-01", "12-31"]]},
+		{"species": "hake", "name": "Patagonian hake", "size": 40000, "stays": [["patagonia", "01-01", "12-31"]]},
+		{"species": "hake", "name": "Namibian hake", "size": 30000, "stays": [["benguela", "01-01", "12-31"]]},
+		{"species": "hake", "name": "Biscay hake", "size": 20000, "stays": [["biscay", "01-01", "12-31"]]}
 	]
 }

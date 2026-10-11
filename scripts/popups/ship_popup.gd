@@ -57,6 +57,13 @@ func _ready() -> void:
 		$Content/Stats/RangeName.text = "Reach"
 		$Content/Stats/CapacityName.text = "Job"
 		%CapacityValue.text = "Tows in ships lost near its port"
+	elif ship.is_fishing():
+		var gear: Dictionary = model.get("fishing", {})
+		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
+		$Content/Stats/CapacityName.text = "Hold"
+		%CapacityValue.text = "%s crates" % Fmt.thousands(ship.capacity())
+		%CapacityValue.tooltip_text = "%s, %d crew; %s" % [Fisheries.gear_text(gear), int(gear.get("crew", 0)), Fisheries.trip_text(gear)]
+		%CapacityValue.mouse_filter = Control.MOUSE_FILTER_PASS
 	else:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 		%CapacityValue.text = GameData.cargo_text(model)
@@ -71,6 +78,9 @@ func _ready() -> void:
 	_update_birds()
 	if ship.is_icebreaker():
 		%Buttons.add_sibling(_station_picker())
+		%Buttons.get_parent().move_child(%Buttons, -1)
+	if ship.is_fishing() and GameState.is_mine(ship):
+		%Buttons.add_sibling(FishingPanel.new(ship))
 		%Buttons.get_parent().move_child(%Buttons, -1)
 	%BarsSlot.add_child(ShipBars.new(ship))
 	%SkillsButton.toggled.connect(_show_skills)
@@ -409,7 +419,7 @@ func _refresh() -> void:
 	%RescueToggle.visible = not ship.is_service()
 	%FullToggle.visible = not ship.is_service()
 	%AssignButton.visible = not ship.is_service()
-	%PauseButton.visible = not ship.is_service()
+	%PauseButton.visible = not ship.is_service() or ship.is_fishing()
 	%RouteLabel.visible = not ship.is_service()
 	if ship.has_route():
 		%RouteLabel.text = "Route: %s (loops)" % GameData.route_text(ship.route)
@@ -417,7 +427,7 @@ func _refresh() -> void:
 		%RouteLabel.text = "No route assigned."
 	%PendingLabel.visible = not ship.pending_route.is_empty()
 	%PendingLabel.text = "After this leg: %s" % GameData.route_text(ship.pending_route)
-	%PauseButton.disabled = not ship.has_route()
+	%PauseButton.disabled = not ship.has_route() and not ship.is_fishing()
 	%PauseButton.text = "Go" if ship.paused else "Pause"
 	# Another player's ship (multiplayer): to look at, not to run.
 	if not GameState.is_mine(ship):
@@ -474,7 +484,7 @@ func _add_captain() -> void:
 	var crew := GameState.crew_of(ship.model())
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 8)
-	var picture := Portrait.new(ship.captain(), true)
+	var picture := Portrait.new(CrewLooks.dressed(ship.captain(), ship), true)
 	picture.custom_minimum_size = Vector2(44, 44)
 	row.add_child(picture)
 	var column := VBoxContainer.new()
@@ -508,7 +518,7 @@ func _add_captain() -> void:
 		var officer: Dictionary = ship.captains[i]
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override(&"separation", 10)
-		var face := Portrait.new(officer, true)
+		var face := Portrait.new(CrewLooks.dressed(officer, ship), true)
 		face.custom_minimum_size = Vector2(56, 56)
 		line.add_child(face)
 		var text := VBoxContainer.new()
@@ -529,6 +539,12 @@ func _add_captain() -> void:
 	hands.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hands.text = "And %d crew. Wages %s every %d days it works." % [int(crew[1]), Fmt.money(GameState.crew_wages(ship.model())), int(settings.get("period_days", 14))]
 	_crew_box.add_child(hands)
+	var uniform := Button.new()  # What they wear on deck (UniformsPage, on this ship's line).
+	uniform.text = "Uniform"
+	uniform.tooltip_text = "What the captain and crew of your %s wear on deck." % CrewLooks.line_title(CrewLooks.line_of(ship.model())).to_lower()
+	uniform.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	uniform.pressed.connect(func() -> void: get_tree().root.add_child(UniformsPage.new(CrewLooks.line_of(ship.model()))))
+	_crew_box.add_child(uniform)
 
 
 func _show_crew(on: bool) -> void:

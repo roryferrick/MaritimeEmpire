@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="59" viewBox="0 0 180 59">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M6.4,4.0 L136.8,4.0 Q170.0,5.0 177,29.5 Q170.0,54.0 136.8,55.0 L6.4,55.0 Q4,55.0 4,52.6 L4,6.4 Q4,4.0 6.4,4.0 Z" fill="none" stroke="#3c3c3c" stroke-width="7"/>
+<path d="M6.4,4.0 L136.8,4.0 Q170.0,5.0 177,29.5 Q170.0,54.0 136.8,55.0 L6.4,55.0 Q4,55.0 4,52.6 L4,6.4 Q4,4.0 6.4,4.0 Z" fill="none" stroke="#a7adb4" stroke-width="2" opacity="0.9"/>
+<rect x="4.0" y="22.0" width="18.0" height="15.0" rx="1.0" fill="#4a4f55" stroke="#1a1a1a" stroke-width="1.0" />
+<path d="M8.5,23.0 L8.5,36.0" stroke="#6a7078" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M13.0,23.0 L13.0,36.0" stroke="#6a7078" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M17.5,23.0 L17.5,36.0" stroke="#6a7078" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<rect x="24.0" y="6.0" width="6.0" height="47.0" rx="1.0" fill="#e0b030" stroke="#1a1a1a" stroke-width="1.0" />
+<rect x="34.0" y="12.0" width="22.0" height="14.0" rx="3.0" fill="#3f6e48" stroke="#1a1a1a" stroke-width="1.0" />
+<rect x="34.0" y="33.0" width="22.0" height="14.0" rx="3.0" fill="#3f6e48" stroke="#1a1a1a" stroke-width="1.0" />
+<path d="M38.4,13.0 L38.4,25.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M38.4,34.0 L38.4,46.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M42.8,13.0 L42.8,25.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M42.8,34.0 L42.8,46.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M47.2,13.0 L47.2,25.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M47.2,34.0 L47.2,46.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M51.6,13.0 L51.6,25.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M51.6,34.0 L51.6,46.0" stroke="#284a30" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<rect x="26.0" y="4.0" width="8.0" height="6.0" rx="1.0" fill="#5c6168" stroke="#1a1a1a" stroke-width="0.8" />
+<rect x="26.0" y="49.0" width="8.0" height="6.0" rx="1.0" fill="#5c6168" stroke="#1a1a1a" stroke-width="0.8" />
+<rect x="60.0" y="10.0" width="54.0" height="39.0" rx="3.0" fill="#d9dcdf" stroke="#6a7078" stroke-width="1.0" />
+<rect x="64.0" y="14.0" width="7.0" height="31.0" rx="1.0" fill="#c7cbd0" stroke="none" stroke-width="0.0" />
+<rect x="74.0" y="14.0" width="7.0" height="31.0" rx="1.0" fill="#c7cbd0" stroke="none" stroke-width="0.0" />
+<rect x="84.0" y="14.0" width="7.0" height="31.0" rx="1.0" fill="#c7cbd0" stroke="none" stroke-width="0.0" />
+<rect x="94.0" y="14.0" width="7.0" height="31.0" rx="1.0" fill="#c7cbd0" stroke="none" stroke-width="0.0" />
+<rect x="104.0" y="14.0" width="7.0" height="31.0" rx="1.0" fill="#c7cbd0" stroke="none" stroke-width="0.0" />
+<rect x="116.0" y="8.0" width="32.0" height="43.0" rx="4.0" fill="#f1efe8" stroke="#1a1a1a" stroke-width="1.2" />
+<rect x="140.0" y="12.0" width="6.0" height="35.0" rx="1.0" fill="#2f4a63" stroke="none" stroke-width="0.0" />
+<circle cx="128.0" cy="29.5" r="4.0" fill="#c9ced3" stroke="#1a1a1a" stroke-width="0.8"/>
+<rect x="104.0" y="25.0" width="8.0" height="9.0" rx="2.0" fill="#1f2328" stroke="#1a1a1a" stroke-width="1.2" />
+</svg>
