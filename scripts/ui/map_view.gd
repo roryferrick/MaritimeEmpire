@@ -9006,7 +9006,7 @@ func _draw_bird_mesh(at: Vector2, heading: float, info: Dictionary, wings: float
 		draw_bird(recorder, Vector2.ZERO, 0.0, info, step * BIRD_WING_STEP, made, false)
 		mesh = _keep_bird_mesh(key, recorder)
 	var scale := Vector2.ONE * (span / made)
-	if height >= 0.0:
+	if height >= 0.0 and bird_shadows:
 		var off := Vector2(span * 0.45, span * 0.55) * height
 		_canvas.draw_mesh(mesh, null, Transform2D(heading, scale, 0.0, at + off), Color(0, 0, 0, 0.16 / sqrt(maxf(height, 0.5))))
 	_canvas.draw_mesh(mesh, null, Transform2D(heading, scale, 0.0, at))
@@ -9028,8 +9028,10 @@ func _draw_duck_mesh(at: Vector2, heading: float, info: Dictionary, span: float,
 
 ## A wader on the ground (draw_wader()): its long shadow drawn as it falls,
 ## the bird itself as one mesh, the same way as _draw_bird_mesh().
+var bird_shadows := true  # (Off while the sound tracker draws its bird: a shadow there falls apart from it.)
 func _draw_wader_mesh(at: Vector2, heading: float, info: Dictionary, span: float, neck: float, bill_up: bool) -> void:
-	draw_wader(_canvas, at, heading, info, span, neck, 0.0, bill_up, 0.0, false, true, false)
+	if bird_shadows:
+		draw_wader(_canvas, at, heading, info, span, neck, 0.0, bill_up, 0.0, false, true, false)
 	var bucket := _mesh_bucket(span)
 	var shape := roundi(clampf(neck, 0.0, 1.0) * 20.0) * 2 + (1 if bill_up else 0)
 	var key := ((_bird_mesh_id(info) * 64 + shape) * 256 + bucket) * 4 + 3

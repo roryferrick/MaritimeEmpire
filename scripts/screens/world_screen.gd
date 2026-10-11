@@ -52,6 +52,7 @@ func _ready() -> void:
 	_add_price_picker()
 	_add_region_choice()
 	_add_zoom_buttons()
+	_add_side_buttons()
 	_add_field_guide_button()
 	_add_achievements_button()
 	if GameState.divine.on:
@@ -393,25 +394,41 @@ func _open_birds_popup(about: Dictionary, _flock: Dictionary) -> void:
 	PopupHost.find(self).open(popup)
 
 
-## The field guide's square paw button at the map's top right, beside the
-## Routes panel (see FieldGuide).
+## The field guide, achievements and Divine Actions buttons: a column down the
+## right side under the Routes panel, moved down as the panel grows (its
+## tutorial row, the region button).
+var _side_buttons := VBoxContainer.new()
+
+
+func _add_side_buttons() -> void:
+	_side_buttons.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_side_buttons.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_side_buttons.offset_right = $RoutesPanel.offset_right
+	_side_buttons.offset_left = _side_buttons.offset_right - FIELD_GUIDE_BUTTON
+	_side_buttons.add_theme_constant_override(&"separation", 8)
+	add_child(_side_buttons)
+	$RoutesPanel.resized.connect(_place_side_buttons)
+	_place_side_buttons()
+
+
+func _place_side_buttons() -> void:
+	_side_buttons.offset_top = $RoutesPanel.offset_top + $RoutesPanel.size.y + 10.0
+
+## The field guide's square paw button at the map's top right, first in the
+## column under the Routes panel (see FieldGuide).
 func _add_field_guide_button() -> void:
 	var button := Button.new()
 	button.tooltip_text = "Field guide: every bird, sea animal and land animal in the game"
 	button.focus_mode = Control.FOCUS_NONE
-	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	button.offset_right = $RoutesPanel.offset_left - 10.0
-	button.offset_left = button.offset_right - FIELD_GUIDE_BUTTON
-	button.offset_top = $RoutesPanel.offset_top
-	button.offset_bottom = button.offset_top + FIELD_GUIDE_BUTTON
-	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	button.custom_minimum_size = Vector2.ONE * FIELD_GUIDE_BUTTON
+	button.size_flags_horizontal = Control.SIZE_SHRINK_END
 	var paw := PawIcon.new()
 	paw.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 5)
 	button.add_child(paw)
 	button.pressed.connect(func() -> void:
 		PopupHost.find(self).close()
 		add_child(FieldGuide.new()))
-	add_child(button)
+	_side_buttons.add_child(button)
 
 
 ## The achievements' trophy button, under the field guide's (see
@@ -421,19 +438,15 @@ func _add_achievements_button() -> void:
 	var button := Button.new()
 	button.tooltip_text = "Achievements"
 	button.focus_mode = Control.FOCUS_NONE
-	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	button.offset_right = $RoutesPanel.offset_left - 10.0
-	button.offset_left = button.offset_right - FIELD_GUIDE_BUTTON
-	button.offset_top = $RoutesPanel.offset_top + FIELD_GUIDE_BUTTON + 8.0
-	button.offset_bottom = button.offset_top + FIELD_GUIDE_BUTTON
-	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	button.custom_minimum_size = Vector2.ONE * FIELD_GUIDE_BUTTON
+	button.size_flags_horizontal = Control.SIZE_SHRINK_END
 	var trophy := TrophyIcon.new()
 	trophy.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
 	button.add_child(trophy)
 	button.pressed.connect(func() -> void:
 		PopupHost.find(self).close()
 		add_child(AchievementsPage.new()))
-	add_child(button)
+	_side_buttons.add_child(button)
 	var timer := Timer.new()
 	timer.wait_time = Achievements.CHECK_S
 	timer.autostart = true
@@ -441,7 +454,7 @@ func _add_achievements_button() -> void:
 	add_child(timer)
 
 
-## Divine Actions (Divine): the bolt button under the trophy opens the panel;
+## Divine Actions (Divine): the bolt button under the trophy (in the side column) opens the panel;
 ## a power with a target has the map pick it (choosing_divine), with a hint
 ## at the top saying what to click, then it's done (GameState.divine_act()).
 var _divine_hint := Label.new()
@@ -451,12 +464,8 @@ func _add_divine_button() -> void:
 	var button := Button.new()
 	button.tooltip_text = "Divine Actions"
 	button.focus_mode = Control.FOCUS_NONE
-	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	button.offset_right = $RoutesPanel.offset_left - 10.0
-	button.offset_left = button.offset_right - FIELD_GUIDE_BUTTON
-	button.offset_top = $RoutesPanel.offset_top + (FIELD_GUIDE_BUTTON + 8.0) * 2.0
-	button.offset_bottom = button.offset_top + FIELD_GUIDE_BUTTON
-	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	button.custom_minimum_size = Vector2.ONE * FIELD_GUIDE_BUTTON
+	button.size_flags_horizontal = Control.SIZE_SHRINK_END
 	var bolt := DivinePanel.BoltIcon.new()
 	bolt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
 	button.add_child(bolt)
@@ -466,7 +475,7 @@ func _add_divine_button() -> void:
 		var panel := DivinePanel.new()
 		panel.pick.connect(_start_divine)
 		add_child(panel))
-	add_child(button)
+	_side_buttons.add_child(button)
 	_divine_hint.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_divine_hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_divine_hint.offset_top = 12.0

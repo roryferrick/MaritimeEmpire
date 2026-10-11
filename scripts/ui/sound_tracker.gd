@@ -6,7 +6,7 @@ extends PanelContainer
 ## in its mirror image, then the species' name, then a speaker mark; shown
 ## while the call plays and fading after.
 
-const SPRITE_PX := 56.0
+const SPRITE_PX := 46.0
 const FADE_S := 0.8
 
 var _map: Control
@@ -27,6 +27,10 @@ func _init(map: Control) -> void:
 
 func _ready() -> void:
 	theme_type_variation = &"CardPanel"
+	var style := get_theme_stylebox(&"panel", &"CardPanel").duplicate() as StyleBox  # (Snug round its row.)
+	style.set_content_margin_all(6.0)
+	style.content_margin_right = 14.0
+	add_theme_stylebox_override(&"panel", style)
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	offset_left = 12.0
 	offset_top = 12.0
@@ -57,6 +61,7 @@ func show_call(bird: Dictionary, colony: Dictionary, info: Dictionary, state: Di
 	_info = info
 	_state = state
 	_name.text = str(info.get("name", "A bird"))
+	reset_size.call_deferred()  # (Fitted to this name: a shorter one shrinks it.)
 	_started = Time.get_ticks_msec() / 1000.0
 	_until = _started + seconds
 	visible = true
@@ -76,14 +81,19 @@ func _process(_delta: float) -> void:
 
 
 ## The calling bird itself, as the map draws it (MapView._draw_one_bird(), on
-## this control for a moment), mirrored and big.
+## this control for a moment), mirrored and big. No shadow here:
+## a flying bird's falls far off, apart from it.
 func _draw_sprite() -> void:
 	if _bird.is_empty() or _colony.is_empty() or _state.is_empty():
 		return
 	var canvas_before: Control = _map._canvas
 	_map._canvas = _sprite
 	var mirrored := Transform2D(Vector2(-1.0, 0.0), Vector2(0.0, 1.0), Vector2.ZERO)
-	_map._draw_one_bird(_bird, _colony, _info, _state, _sprite.size / 2.0, SPRITE_PX * 0.9, GameState.play_time, mirrored)
+	# (Wings folded, a bird is about half its span long: drawn bigger to fill its box.)
+	var span := SPRITE_PX * (0.95 if MapView.FLYING_MODES.has(str(_state.get("mode", ""))) else 1.6)
+	_map.bird_shadows = false
+	_map._draw_one_bird(_bird, _colony, _info, _state, _sprite.size / 2.0, span, GameState.play_time, mirrored)
+	_map.bird_shadows = true
 	_map._canvas = canvas_before
 
 
