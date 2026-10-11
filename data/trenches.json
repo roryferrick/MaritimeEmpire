@@ -1,0 +1,15 @@
+{
+	"_comment": "Ocean trench labels (MapView FeatureKind.TRENCH), added to the map's feature labels at load (GameData._add_trench_labels()). lon/lat: the label's spot over the trench; min_zoom: the web-map zoom it's labeled from.",
+	"trenches": [
+		{"name": "Mariana Trench", "lon": 147.8, "lat": 17.0, "min_zoom": 2.5},
+		{"name": "Tonga Trench", "lon": -173.9, "lat": -21.5, "min_zoom": 3.0},
+		{"name": "Kermadec Trench", "lon": -176.9, "lat": -31.0, "min_zoom": 3.0},
+		{"name": "Philippine Trench", "lon": 127.3, "lat": 9.0, "min_zoom": 3.0},
+		{"name": "Kuril-Kamchatka Trench", "lon": 153.5, "lat": 45.8, "min_zoom": 3.0},
+		{"name": "Japan Trench", "lon": 144.2, "lat": 38.0, "min_zoom": 3.5},
+		{"name": "Aleutian Trench", "lon": -170.0, "lat": 50.6, "min_zoom": 3.0},
+		{"name": "Peru-Chile Trench", "lon": -75.5, "lat": -20.0, "min_zoom": 3.0},
+		{"name": "Puerto Rico Trench", "lon": -66.0, "lat": 19.9, "min_zoom": 3.5},
+		{"name": "Java Trench", "lon": 108.0, "lat": -10.4, "min_zoom": 3.0}
+	]
+}

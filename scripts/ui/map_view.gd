@@ -362,7 +362,7 @@ const OTHER_LANE_MIN_LUMINANCE := 0.5
 const ORE_LANE_WHITEN := 0.65
 const ORE_LANE_ALPHA := 0.7
 ## Kinds of named geography (WorldMapData.feature_label_kinds).
-enum FeatureKind { OCEAN, SEA, STRAIT, RANGE, DESERT, LAKE, RIVER }
+enum FeatureKind { OCEAN, SEA, STRAIT, RANGE, DESERT, LAKE, RIVER, TRENCH }  # (TRENCH: GameData.TRENCH_KIND.)
 ## How each kind is labeled: [font size, color name, slanted, extra letter
 ## spacing, zoom offset (added to the label's own min zoom, to keep the map
 ## from filling up with small lakes and rivers)].
@@ -374,11 +374,14 @@ const FEATURE_STYLES := {
 	FeatureKind.DESERT: [12, &"desert_label", false, 2, 0.0],
 	FeatureKind.LAKE: [11, &"lake_label", true, 0, 1.0],
 	FeatureKind.RIVER: [11, &"lake_label", true, 0, 1.5],
+	FeatureKind.TRENCH: [12, &"trench_label", true, 2, 0.0],
 }
 ## Which kinds get placed first when labels would overlap (after ports and
 ## countries); rivers before mountain ranges, so a river shows across a range.
 const FEATURE_PRIORITY: Array[int] = [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.RIVER, FeatureKind.RANGE,
-	FeatureKind.DESERT, FeatureKind.STRAIT, FeatureKind.LAKE]
+	FeatureKind.DESERT, FeatureKind.STRAIT, FeatureKind.TRENCH, FeatureKind.LAKE]
+## The kinds over the sea, drawn with a dark edge so they read over shallow (light) water too.
+const OUTLINED_FEATURES: Array[int] = [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT, FeatureKind.TRENCH]
 ## Words that already mean "river" in a river's name ("Rio Grande", "Syr Darya",
 ## "Shishhid Gol"), so it isn't given another; the rest get " River" added.
 const RIVER_WORDS: Array[String] = ["river", "rio", "río", "canal", "delta", "darya", "bahr", "gol"]
@@ -516,6 +519,7 @@ const FALLBACK_COLORS := {
 	&"country_label": Color(0.3, 0.27, 0.2, 0.85),
 	&"ocean_label": Color(0.8, 0.9, 1.0, 0.7),
 	&"sea_label": Color(0.82, 0.91, 1.0, 0.75),
+	&"trench_label": Color(0.55, 0.86, 0.9, 0.8),
 	&"range_label": Color(0.33, 0.25, 0.17, 0.9),
 	&"desert_label": Color(0.55, 0.35, 0.16, 0.9),
 	&"lake_label": Color(0.1, 0.3, 0.55, 0.95),
@@ -3037,7 +3041,7 @@ func _preload_label_atlas() -> void:
 	for i in data.feature_label_names.size():
 		var kind := data.feature_label_kinds[i]
 		var style: Array = FEATURE_STYLES[kind]
-		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
+		if OUTLINED_FEATURES.has(kind):
 			_label_atlas.add(_feature_font(kind), style[0], SEA_LABEL_OUTLINE, _feature_text(i))
 		_label_atlas.add(_feature_font(kind), style[0], 0, _feature_text(i))
 
@@ -3067,7 +3071,7 @@ func _draw_label_layer() -> void:
 		var style: Array = FEATURE_STYLES[kind]
 		var font := _feature_font(kind)
 		var text := _feature_text(label[0])
-		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
+		if OUTLINED_FEATURES.has(kind):
 			_label_quad(font, style[0], SEA_LABEL_OUTLINE, text, rect.position, outline_color, pixels)
 		_label_quad(font, style[0], 0, text, rect.position, _color(style[1]), pixels)
 	var font := get_theme_default_font()
@@ -5858,7 +5862,7 @@ func _draw_feature_labels() -> void:
 			continue  # (Off screen since it was placed, or drawn from the atlas: see _draw_label_layer().)
 		var baseline := rect.position + Vector2(0, font.get_ascent(style[0]))
 		# Pale sea names get a dark edge, so they read over shallow (light) water too.
-		if kind in [FeatureKind.OCEAN, FeatureKind.SEA, FeatureKind.STRAIT]:
+		if OUTLINED_FEATURES.has(kind):
 			_canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, style[0], SEA_LABEL_OUTLINE,
 				_color(&"sea_label_outline"))
 		_canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, style[0], _color(style[1]))
@@ -11258,16 +11262,29 @@ func _town_mesh(port_id: String, town: Dictionary, flip: float) -> ArrayMesh:
 	if _town_mesher == null and ClassDB.class_exists(&"TownMesh"):
 		_town_mesher = ClassDB.instantiate(&"TownMesh")
 	if _town_mesher != null:
-		# Natively (TownMesh: the same shapes in the same order), the landmark's details after.
+		# Natively (TownMesh: the same shapes in the same order), each landmark's
+		# details spliced into the triangles' order right after its walls.
 		var built: Dictionary = _town_mesher.build(town.get("roads", []), town.buildings, town.parks, drop,
 			{walk = TOWN_WALK, road = TOWN_ROAD, lane = TOWN_LANE, shadow = TOWN_SHADOW, park = TOWN_PARK})
 		batch.points = built.points
 		batch.colors = built.colors
-		batch.indices = built.indices
 		batch.uvs.resize(batch.points.size())
-		for i: int in built.landmarks:
-			var block: Array = town.buildings[i]
+		var native_indices: PackedInt32Array = built.indices
+		var landmark_at: PackedInt32Array = built.get("landmark_at", PackedInt32Array())
+		if landmark_at.size() != (built.landmarks as PackedInt32Array).size():  # (An older library: details last.)
+			landmark_at.resize((built.landmarks as PackedInt32Array).size())
+			landmark_at.fill(native_indices.size())
+		var indices := PackedInt32Array()
+		var cursor := 0
+		for k in (built.landmarks as PackedInt32Array).size():
+			indices.append_array(native_indices.slice(cursor, landmark_at[k]))
+			cursor = landmark_at[k]
+			var block: Array = town.buildings[built.landmarks[k]]
+			batch.indices = PackedInt32Array()
 			_draw_landmark(batch, str(block[4]).trim_prefix("landmark:"), block[0], block[1], block[2])
+			indices.append_array(batch.indices)
+		indices.append_array(native_indices.slice(cursor))
+		batch.indices = indices
 	else:
 		_build_town_batch(batch, town, drop)
 	var mesh := batch.to_mesh()

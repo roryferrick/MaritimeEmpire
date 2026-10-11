@@ -93,6 +93,7 @@ Dictionary TownMesh::build(const Array &roads, const Array &buildings, const Arr
 		_disc(at + Vector2(r * 0.4f, -r * 0.3f), r * 0.55f, park_light, 20);
 	}
 	PackedInt32Array landmarks;
+	PackedInt32Array landmark_at; // (Where in the indices each landmark's details go: right after its walls.)
 	for (int64_t i = 0; i < buildings.size(); i++) {
 		Array block = buildings[i];
 		Rect2 rect = block[0];
@@ -104,6 +105,7 @@ Dictionary TownMesh::build(const Array &roads, const Array &buildings, const Arr
 		Rect2 top = rect.grow(-0.14f);
 		if (kind.begins_with("landmark:")) {
 			landmarks.push_back((int32_t)i);
+			landmark_at.push_back((int32_t)_indices.size());
 			continue;
 		}
 		if (kind == "pitched") {
@@ -151,6 +153,7 @@ Dictionary TownMesh::build(const Array &roads, const Array &buildings, const Arr
 	out["colors"] = out_colors;
 	out["indices"] = indices;
 	out["landmarks"] = landmarks;
+	out["landmark_at"] = landmark_at;
 	return out;
 }
 

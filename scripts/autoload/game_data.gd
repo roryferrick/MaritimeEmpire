@@ -16,6 +16,9 @@ const CANALS_PATH := "res://data/canals.json"
 const MARKETS_PATH := "res://data/markets.json"
 const STARTS_PATH := "res://data/starts.json"
 const WONDERS_PATH := "res://data/wonders.json"
+const TRENCHES_PATH := "res://data/trenches.json"
+## MapView.FeatureKind.TRENCH (the map's feature labels are written by the map tool; trenches are added at load).
+const TRENCH_KIND := 7
 ## How close (in projected degrees) a lane must pass a lock chamber to go through it.
 const CHAMBER_ON_LANE := 0.002
 const _NO_LANE := 1 << 30
@@ -140,6 +143,7 @@ func _ready() -> void:
 		_models_by_id[model.id] = model
 	ship_names = _load_json(SHIP_NAMES_PATH)
 	world_map = load(WORLD_MAP_PATH)
+	_add_trench_labels()
 	_load_lanes()
 	_load_canals()
 	_load_markets()
@@ -706,6 +710,18 @@ func _load_lanes() -> void:
 		var ids := _lane_data.keys[i].split("-")
 		_lane_index["%s-%s" % [ids[0], ids[1]]] = i
 		_lane_index["%s-%s" % [ids[1], ids[0]]] = -i - 1
+
+
+## The ocean trenches' labels (data/trenches.json) added to the map's feature
+## labels, once (the map resource is shared).
+func _add_trench_labels() -> void:
+	if world_map.feature_label_kinds.has(TRENCH_KIND):
+		return
+	for trench: Dictionary in _load_json(TRENCHES_PATH).get("trenches", []):
+		world_map.feature_label_names.append(str(trench.name))
+		world_map.feature_label_positions.append(Geo.project(Vector2(float(trench.lon), float(trench.lat))))
+		world_map.feature_label_kinds.append(TRENCH_KIND)
+		world_map.feature_label_min_zoom.append(float(trench.get("min_zoom", 3.0)))
 
 
 func _load_canals() -> void:

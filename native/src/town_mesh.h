@@ -19,7 +19,8 @@ namespace godot {
 // in dock units: the roads (an avenue with its dashes), every building's
 // shadow, the parks, then each building's walls and roof by its kind
 // (pitched, pagoda, warehouse, tall, flat with roof gear); a landmark's
-// walls go in and its index is handed back for the map to draw its details after.
+// walls go in, and its index and where its details belong in the indices are
+// handed back for the map to draw them in their place.
 class TownMesh : public RefCounted {
 	GDCLASS(TownMesh, RefCounted)
 
@@ -38,7 +39,8 @@ public:
 	// roads: [[Rect2, kind], ...]; buildings: [[Rect2, wall, roof, height, kind, salt], ...];
 	// parks: [[Vector2, radius], ...]; drop: the shadows' offset per unit of
 	// height (dock units); colors: {walk, road, lane, shadow, park}. Gives
-	// {points, colors, indices, landmarks (the buildings' places in `buildings`)}.
+	// {points, colors, indices, landmarks (the buildings' places in `buildings`),
+	// landmark_at (where in `indices` each one's details go)}.
 	Dictionary build(const Array &roads, const Array &buildings, const Array &parks, const Vector2 &drop, const Dictionary &colors);
 };
 
