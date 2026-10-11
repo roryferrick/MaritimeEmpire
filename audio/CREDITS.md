@@ -4,16 +4,16 @@ Every sound in this folder comes from Wikimedia Commons under a free licence; th
 
 | Game file | Original | Author | Licence | Source |
 |---|---|---|---|---|
-| gull.mp3 | Larus argentatus - European Herring Gull XC488995.mp3 | Marie-Lan Ta? Pamart | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Larus_argentatus_-_European_Herring_Gull_XC488995.mp3 |
+| gull.mp3 | Larus argentatus - European Herring Gull XC488995.mp3 | Marie-Lan Taÿ Pamart | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Larus_argentatus_-_European_Herring_Gull_XC488995.mp3 |
 | tern.mp3 | Chlidonias niger - Black Tern XC428429.mp3 | Jonathon Jongsma | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Chlidonias_niger_-_Black_Tern_XC428429.mp3 |
 | pelican.ogg | Great White Pelican (Pelecanus onocrotalus) sounds.ogg | Marco Dragonetti | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Great_White_Pelican_(Pelecanus_onocrotalus)_sounds.ogg |
 | shearwater.ogg | Puffin de Scopoli - Calonectris diomedea.ogg | Cedric Mroczko | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Puffin_de_Scopoli_-_Calonectris_diomedea.ogg |
 | eider.ogg | Common Eider (Somateria mollissima) (W1CDR0001491 BD11).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Common_Eider_(Somateria_mollissima)_(W1CDR0001491_BD11).ogg |
 | scoter.mp3 | Melanitta nigra - Common Scoter XC542372.mp3 | Luis Alvarez Menendez | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Melanitta_nigra_-_Common_Scoter_XC542372.mp3 |
-| heron.mp3 | Ardea cinerea - Grey Heron XC550579.mp3 | Beno?t Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ardea_cinerea_-_Grey_Heron_XC550579.mp3 |
+| heron.mp3 | Ardea cinerea - Grey Heron XC550579.mp3 | Benoît Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ardea_cinerea_-_Grey_Heron_XC550579.mp3 |
 | egret.wav | Greater egret call recorded in December 1998 at Sangli.wav | Sharadapte | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Greater_egret_call_recorded_in_December_1998_at_Sangli.wav |
 | bittern.ogg | Eurasian Bittern (Botaurus stellaris) (W BOTAURUS STELLARIS R1 C1).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Eurasian_Bittern_(Botaurus_stellaris)_(W_BOTAURUS_STELLARIS_R1_C1).ogg |
-| crane.mp3 | Grus grus - Common Crane XC596509.mp3 | Beno?t Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Grus_grus_-_Common_Crane_XC596509.mp3 |
+| crane.mp3 | Grus grus - Common Crane XC596509.mp3 | Benoît Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Grus_grus_-_Common_Crane_XC596509.mp3 |
 | night_heron.mp3 | Nycticorax nycticorax - Black-crowned Night Heron XC543137.mp3 | Luis Alvarez Menendez | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Nycticorax_nycticorax_-_Black-crowned_Night_Heron_XC543137.mp3 |
 | eagle.mp3 | Haliaeetus leucogaster - White-bellied Sea Eagle XC492979.mp3 | Manoj Karingamadathil | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Haliaeetus_leucogaster_-_White-bellied_Sea_Eagle_XC492979.mp3 |
 | hawk.ogg | Buteo lineatus.ogg | Tony Phillips | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Buteo_lineatus.ogg |
@@ -29,10 +29,10 @@ Every sound in this folder comes from Wikimedia Commons under a free licence; th
 | seal.ogg | AudioElleSeals.oga | Hullwarren | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:AudioElleSeals.oga |
 | bison.ogg | Two.european.bison.grunting.ogg | LokYYs | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Two.european.bison.grunting.ogg |
 | brown_bear.mp3 | Yellowstone sound library - Grizzly Bears Roar - 001.mp3 | NPS &amp; MSU Acoustic Atlas / Jennifer Jerrett | Public domain | https://commons.wikimedia.org/wiki/File:Yellowstone_sound_library_-_Grizzly_Bears_Roar_-_001.mp3 |
-| elephant.ogg | Elephant voice - trumpeting.ogg | ????????? | CC0 | https://commons.wikimedia.org/wiki/File:Elephant_voice_-_trumpeting.ogg |
+| elephant.ogg | Elephant voice - trumpeting.ogg | தகவலுழவன் | CC0 | https://commons.wikimedia.org/wiki/File:Elephant_voice_-_trumpeting.ogg |
 | giraffe.ogg | Giraffe Hum.oga | Anton Baotic, Florian Sicks and Angela S. Stoeger | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Giraffe_Hum.oga |
 | lemur.ogg | Lemur catta--infant contact calls1.ogg | Joseph M. Macedonia | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Lemur_catta--infant_contact_calls1.ogg |
-| lion.ogg | Lion raring-sound1TamilNadu178.ogg | ?*????? | Public domain | https://commons.wikimedia.org/wiki/File:Lion_raring-sound1TamilNadu178.ogg |
+| lion.ogg | Lion raring-sound1TamilNadu178.ogg | த*உழவன் | Public domain | https://commons.wikimedia.org/wiki/File:Lion_raring-sound1TamilNadu178.ogg |
 | orangutan.ogg | Speech-Like-Rhythm-in-a-Voiced-and-Voiceless-Orangutan-Call-pone.0116136.s001.oga | Lameira A, Hardus M, Bartlett A, Shumaker R, Wich S, Menken S | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Speech-Like-Rhythm-in-a-Voiced-and-Voiceless-Orangutan-Call-pone.0116136.s001.oga |
 | tiger.wav | 439280 schots angry-tiger.wav | schots | CC0 | https://commons.wikimedia.org/wiki/File:439280_schots_angry-tiger.wav |
 | ship_horn.ogg | Cruise ship Albatros ship horn.ogg | Tvabutzku1234 | CC0 | https://commons.wikimedia.org/wiki/File:Cruise_ship_Albatros_ship_horn.ogg |
@@ -50,7 +50,7 @@ One recording per species (audio/birds/<species>.*), the same way: Wikimedia Com
 |---|---|---|---|---|
 | birds/herring.mp3 | Larus argentatus - European Herring Gull XC436943.mp3 | Joost van Bruggen | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Larus_argentatus_-_European_Herring_Gull_XC436943.mp3 |
 | birds/great_black_backed.mp3 | Gavi\u00f3n atl\u00e1ntico (Larus marinus).mp3 | Doug Hynes | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Gavi\u00f3n_atl\u00e1ntico_(Larus_marinus).mp3 |
-| birds/lesser_black_backed.wav | Gaviota sombr\u00eda (Larus fuscus).wav | Tanguy Lo?s | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Gaviota_sombr\u00eda_(Larus_fuscus).wav |
+| birds/lesser_black_backed.wav | Gaviota sombr\u00eda (Larus fuscus).wav | Tanguy Loïs | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Gaviota_sombría_(Larus_fuscus).wav |
 | birds/yellow_legged.ogg | Yellow-legged Gull - Larus michahellis michahellis.ogg | Cedric MROCZKO | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Yellow-legged_Gull_-_Larus_michahellis_michahellis.ogg |
 | birds/black_headed.mp3 | Chroicocephalus ridibundus - Black-headed Gull XC143894.mp3 | Dan Stowell | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Chroicocephalus_ridibundus_-_Black-headed_Gull_XC143894.mp3 |
 | birds/ring_billed.ogg | Larus delawarensis - Ring-billed Gull - XC75111.ogg | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Larus_delawarensis_-_Ring-billed_Gull_-_XC75111.ogg |
@@ -61,7 +61,7 @@ One recording per species (audio/birds/<species>.*), the same way: Wikimedia Com
 | birds/caspian_tern.mp3 | Hydroprogne caspia - Caspian Tern XC432679.mp3 | Joost van Bruggen | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Hydroprogne_caspia_-_Caspian_Tern_XC432679.mp3 |
 | birds/great_white_pelican.ogg | Great White Pelican (Pelecanus onocrotalus) sounds.ogg | Marco Dragonetti | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Great_White_Pelican_(Pelecanus_onocrotalus)_sounds.ogg |
 | birds/manx_shearwater.ogg | Manx Shearwater (Puffinus puffinus) (W1CDR0001420 BD4).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Manx_Shearwater_(Puffinus_puffinus)_(W1CDR0001420_BD4).ogg |
-| birds/great_cormorant.mp3 | Cormor\u00e1n grande (Phalacrocorax carbo).mp3 | Sonoth?que ADVL | CC0 | https://commons.wikimedia.org/wiki/File:Cormor\u00e1n_grande_(Phalacrocorax_carbo).mp3 |
+| birds/great_cormorant.mp3 | Cormor\u00e1n grande (Phalacrocorax carbo).mp3 | Sonothèque ADVL | CC0 | https://commons.wikimedia.org/wiki/File:Cormorán_grande_(Phalacrocorax_carbo).mp3 |
 | birds/double_crested_cormorant.ogg | Phalacrocorax auritus - Double-crested Cormorant - XC108658.ogg | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Phalacrocorax_auritus_-_Double-crested_Cormorant_-_XC108658.ogg |
 | birds/neotropic_cormorant.mp3 | Phalacrocorax brasilianus - Neotropic Cormorant XC463751.mp3 | Oliver Komar | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Phalacrocorax_brasilianus_-_Neotropic_Cormorant_XC463751.mp3 |
 | birds/common_eider.ogg | Common Eider (Somateria mollissima) (W1CDR0001491 BD11).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Common_Eider_(Somateria_mollissima)_(W1CDR0001491_BD11).ogg |
@@ -77,7 +77,7 @@ One recording per species (audio/birds/<species>.*), the same way: Wikimedia Com
 | birds/eurasian_bittern.mp3 | Botaurus stellaris - Eurasian Bittern XC362697.mp3 | Miro Demko | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Botaurus_stellaris_-_Eurasian_Bittern_XC362697.mp3 |
 | birds/american_bittern.ogg | Botaurus lentiginosus - American Bittern XC127371.ogg | Alejandro Erickson | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Botaurus_lentiginosus_-_American_Bittern_XC127371.ogg |
 | birds/least_bittern.mp3 | Ixobrychus exilis - Least Bittern XC251028.mp3 | Niels Krabbe | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Ixobrychus_exilis_-_Least_Bittern_XC251028.mp3 |
-| birds/common_crane.mp3 | Grus grus - Common Crane XC594758.mp3 | P?los L?rinc | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Grus_grus_-_Common_Crane_XC594758.mp3 |
+| birds/common_crane.mp3 | Grus grus - Common Crane XC594758.mp3 | Pálos Lőrinc | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Grus_grus_-_Common_Crane_XC594758.mp3 |
 | birds/sandhill_crane.ogg | Grus canadensis - Sandhill Crane - XC111489.ogg | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Grus_canadensis_-_Sandhill_Crane_-_XC111489.ogg |
 | birds/peregrine_falcon.wav | Peregrine falcon call recorded in February 2010 at Yana, Karnataka.wav | Sharadapte | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Peregrine_falcon_call_recorded_in_February_2010_at_Yana,_Karnataka.wav |
 | birds/gyrfalcon.ogg | Falco rusticolus.ogg | Bubulcus | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Falco_rusticolus.ogg |
@@ -88,7 +88,7 @@ One recording per species (audio/birds/<species>.*), the same way: Wikimedia Com
 | birds/swainsons_hawk.mp3 | Buteo swainsoni - Swainson's Hawk XC493363.mp3 | Diana Doyle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Buteo_swainsoni_-_Swainson's_Hawk_XC493363.mp3 |
 | birds/harris_hawk.mp3 | Parabuteo unicinctus - Harris's Hawk XC202066.mp3 | Gabriele Magurno | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Parabuteo_unicinctus_-_Harris's_Hawk_XC202066.mp3 |
 | birds/northern_goshawk.ogg | Accipiter gentilis - Northern Goshawk XC124806.ogg | Adrienne Eaton | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Accipiter_gentilis_-_Northern_Goshawk_XC124806.ogg |
-| birds/common_buzzard.mp3 | Buteo buteo - Common Buzzard XC538277.mp3 | Beno?t Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Buteo_buteo_-_Common_Buzzard_XC538277.mp3 |
+| birds/common_buzzard.mp3 | Buteo buteo - Common Buzzard XC538277.mp3 | Benoît Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Buteo_buteo_-_Common_Buzzard_XC538277.mp3 |
 | birds/coopers_hawk.ogg | Accipiter cooperii - Cooper's Hawk - XC74741.ogg | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Accipiter_cooperii_-_Cooper's_Hawk_-_XC74741.ogg |
 | birds/silver.ogg | Red Billed Gull (Chroicocephalus novaehollandiae scopulinus) voice during food fight.ogg | Michal Klajban | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Red_Billed_Gull_(Chroicocephalus_novaehollandiae_scopulinus)_voice_during_food_fight.ogg |
 | birds/silver_2.ogg | Red-billed gulls calling, Otago Peninsula, NZ.ogg | Benchill | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Red-billed_gulls_calling,_Otago_Peninsula,_NZ.ogg |
