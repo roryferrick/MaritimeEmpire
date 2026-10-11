@@ -388,14 +388,13 @@ func _step(delta: float) -> void:
 	MapView._prof("sim.rest", t_s)
 
 
-## The clock (the calendar's time of day) is the home port's local time: the
-## longitude (degrees) the clock is read at, 0 with no home port yet. The sun
-## stands over it at 12:00 (MapView._update_night()), and the birds' day and
-## night go by it (Birds.local_hour()).
+## The calendar runs on Greenwich time (GMT): the longitude (degrees) its
+## time of day is read at, 0. The sun stands over Greenwich at 12:00
+## (MapView._update_night()), each place's own hour by the sun is an hour on
+## for every 15 degrees east (Birds.local_hour()), and the top bar shows it as
+## London time (Fmt.calendar(): GMT, or BST in the summer).
 func clock_longitude() -> float:
-	if home_port.is_empty():
-		return 0.0
-	return float(GameData.get_port(home_port).get("lon", 0.0))
+	return 0.0
 
 
 ## The calendar date and time now, as a Unix time (see game_config calendar).
@@ -2014,13 +2013,13 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 		var sale := ship.cargo_qty * company_sell_price(port, ship.cargo_id, owner_of(ship))
 		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost, ship.model_id, owner_of(ship)))
 		ship.cargo_leg_nm = GameData.distance_nm(ship.from_port, port) if paid and ship.from_port != port else 0.0
-	ship.unloaded = ship.is_service()
+	ship.unloaded = ship.is_service() and not ship.is_fishing()
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""
 	ship.traveled_nm = 0.0
-	if not ship.is_service():
-		# Its stop waits for a berth: it anchors and queues (see _advance_docked()).
+	if not ship.is_service() or ship.is_fishing():
+		# Its stop waits for a berth: it anchors and queues (see _advance_docked()); a fishing boat lands its catch alongside.
 		ship.berth = -1
 		ship.berth_half = -1
 		ship.berth_phase = Ship.BERTH_WAIT
@@ -2156,6 +2155,8 @@ func _unload(ship: Ship) -> void:
 
 func _unload_timed(ship: Ship) -> void:
 	ship.unloaded = true
+	if ship.is_fishing() and ship.catch > 0.0:
+		_land_catch(ship, ship.docked_at)
 	if not ship.cargo_id.is_empty():
 		var t_u := Time.get_ticks_usec()
 		_sell_cargo(ship)
@@ -3996,12 +3997,19 @@ func fishing_plan(ship: Ship) -> Dictionary:
 	if choices.is_empty():
 		return {wait = "no fishing grounds within reach for its gear"}
 	var pick := {}
+	var full := ""  # (A ground it would have gone to, with GROUND_BOATS boats on it already.)
+	var counts := _ground_boats(ship)
 	if ship.fish_target.is_empty():
 		for option: Dictionary in choices:
 			if option.in_season:
+				if int(counts.get(option.ground, 0)) >= GROUND_BOATS:
+					full = option.ground
+					continue
 				pick = option
 				break
 		if pick.is_empty():
+			if not full.is_empty():
+				return {wait = "every ground in season within reach has %d boats on it" % GROUND_BOATS}
 			return {wait = "nothing it can catch is in season within reach"}
 	else:
 		var later := {}
@@ -4009,12 +4017,17 @@ func fishing_plan(ship: Ship) -> Dictionary:
 			if option.species != ship.fish_target or (not ship.fish_area.is_empty() and option.ground != ship.fish_area):
 				continue
 			if option.in_season:
+				if int(counts.get(option.ground, 0)) >= GROUND_BOATS:
+					full = option.ground
+					continue
 				pick = option
 				break
 			if later.is_empty():
 				later = option
 		if pick.is_empty():
-			var what := fish.species_name(ship.fish_target).to_lower()
+			var what := fish.species_word(ship.fish_target)
+			if not full.is_empty():
+				return {wait = "%s has %d boats on it already" % [GameData.port_name(Fisheries.end_of(full)), GROUND_BOATS]}
 			if later.is_empty():
 				return {wait = "no %s within reach" % what}
 			return {wait = "%s at %s is in season %s" % [what, GameData.port_name(Fisheries.end_of(later.ground)), later.season]}
@@ -4051,6 +4064,8 @@ func _fishing_in_port(ship: Ship) -> void:
 	var plan := fishing_plan(ship)
 	if plan.has("wait"):
 		_set_fish_wait(ship, plan.wait)
+		if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
+			_pull_out(ship, "")  # Waiting: off to the moorings, the pier free for others.
 		return
 	var need := ship.fuel_per_s() * (2.0 * ship.sailing_seconds(float(plan.miles), maxf(ship.maintenance, 0.5)) + float(plan.work_limit_s) * Fisheries.WORK_FUEL * 0.25 + DEPARTURE_MARGIN_S)
 	if ship.fuel < need:
@@ -4059,6 +4074,11 @@ func _fishing_in_port(ship: Ship) -> void:
 		if ship.fuel < need:
 			_set_fish_wait(ship, "waiting for the money for fuel")
 			return
+	# Off its pier first (it sets out from the harbour once it's clear).
+	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
+		_pull_out(ship, "")
+		ship.set_meta(&"fish_check", 0.0)
+		return
 	# The work it can do on what's in its tank.
 	var spare_s := (ship.fuel / maxf(ship.fuel_per_s(), 0.0001) - 2.0 * ship.sailing_seconds(float(plan.miles), maxf(ship.maintenance, 0.5)) - DEPARTURE_MARGIN_S) / Fisheries.WORK_FUEL
 	_start_fishing(ship, plan.ground, plan.species, minf(float(plan.work_limit_s), spare_s))
@@ -4068,6 +4088,33 @@ func _set_fish_wait(ship: Ship, why: String) -> void:
 	if ship.fish_wait != why:
 		ship.fish_wait = why
 		ship_changed.emit(ship)
+
+
+## How many boats (every company's) can work a ground at once: each its own
+## spot on it (Ship.fish_slot), so they spread out over it.
+const GROUND_BOATS := 4
+
+
+## Each ground's boats heading out to it or working it (not those on their way
+## home), but `except`: {ground: count}.
+func _ground_boats(except: Ship = null) -> Dictionary:
+	var counts := {}
+	for other in ships:
+		if other != except and other.job_phase == Ship.JOB_FISH and (other.fish_phase == "out" or other.fish_phase == "work"):
+			counts[other.fish_ground] = int(counts.get(other.fish_ground, 0)) + 1
+	return counts
+
+
+## The lowest of a ground's spots no other boat out to it or on it has.
+func _free_ground_slot(ground: String, ship: Ship) -> int:
+	var used := {}
+	for other in ships:
+		if other != ship and other.job_phase == Ship.JOB_FISH and other.fish_ground == ground and other.fish_phase != "home":
+			used[other.fish_slot] = true
+	for slot in GROUND_BOATS:
+		if not used.has(slot):
+			return slot
+	return 0
 
 
 ## Sets out for a ground: on a job the whole trip (Ship.JOB_FISH), sailing its legs out.
@@ -4081,6 +4128,7 @@ func _start_fishing(ship: Ship, ground: String, species: String, work_limit_s: f
 	ship.fish_phase = "out"
 	ship.fish_ground = ground
 	ship.fish_species = species
+	ship.fish_slot = _free_ground_slot(ground, ship)
 	ship.catch = 0.0
 	ship.catch_grade = float(Fisheries.shared().species[species].grade)
 	ship.work_s = 0.0

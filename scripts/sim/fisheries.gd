@@ -78,6 +78,20 @@ func species_name(species_id: String) -> String:
 	return str((species.get(species_id, {}) as Dictionary).get("name", species_id))
 
 
+## A species' name inside a sentence ("trolling for japanese sea bass" no:
+## "for Japanese sea bass", "for snow crab"): its first letter lower case
+## unless its first word is a name (Atlantic, Japanese, Alaska...).
+func species_word(species_id: String) -> String:
+	var name := species_name(species_id)
+	if name.get_slice(" ", 0) in PROPER_WORDS:
+		return name
+	return name.left(1).to_lower() + name.substr(1)
+
+## First words of species names that keep their capital in a sentence.
+const PROPER_WORDS := ["Atlantic", "Pacific", "Arctic", "Antarctic", "Alaska", "Japanese", "Australian", "European", "Spanish", "Peruvian",
+	"Dungeness", "Jonah", "Tanner", "Tasmanian", "Florida", "Chinook", "Coho", "Sockeye"]
+
+
 ## The family (commodity) a species is landed as.
 func family_of(species_id: String) -> String:
 	return str((species.get(species_id, {}) as Dictionary).get("family", ""))
@@ -152,11 +166,22 @@ func way_to(base: String, ground_id: String) -> Array:
 	var best_nm := INF
 	var end := end_of(ground_id)
 	for port: String in (grounds.get(ground_id, {}) as Dictionary).get("ports", []):
-		var nm := (0.0 if port == base else GameData.distance_nm(base, port, -1)) + GameData.distance_nm(port, end, -1)
+		if port == base:
+			continue
+		var nm := GameData.distance_nm(base, port, -1) + GameData.distance_nm(port, end, -1)
 		if nm < best_nm:
 			best_nm = nm
 			best = port
+	# Its own route straight out, unless going by another port is much shorter.
+	var straight := GameData.distance_nm(base, end, -1)
+	if straight < INF and straight <= best_nm * DIRECT_SLACK:
+		return [base, straight]
 	return [best, best_nm]
+
+
+## How much longer (times) a boat's own route straight out to a ground may be
+## than going by way of another port, and still be taken.
+const DIRECT_SLACK := 1.3
 
 
 ## The sea miles from a port to a ground, INF if there's no way.

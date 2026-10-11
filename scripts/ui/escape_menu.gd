@@ -43,6 +43,7 @@ func _ready() -> void:
 	if Net.is_client():
 		save.disabled = true
 		save.tooltip_text = "The host's game saves every company."
+	_button(box, "Appearance", func() -> void: add_child(AppearancePage.new()))
 	_button(box, "Exit to Menu", _exit_to_menu)
 	_button(box, "Exit to Desktop", _exit_to_desktop)
 	_status.theme_type_variation = &"DimLabel"

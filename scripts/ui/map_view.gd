@@ -6819,6 +6819,10 @@ static func _bent_point(made: Dictionary, mile: float) -> Vector2:
 func _ship_world(ship: Ship) -> Vector2:
 	if ship.is_carried() or ship.is_towed():
 		return _ship_world(ship.rescuer)
+	if ship.job_phase == Ship.JOB_FISH:
+		var fishing := _fishing_pose(ship)
+		if not fishing.is_empty():
+			return fishing[0]
 	var here := _ship_bent(ship)
 	return here[0] if not here.is_empty() else ship.world_position()
 
@@ -6831,8 +6835,126 @@ func _ship_heading(ship: Ship) -> Vector2:
 		return _ship_heading(ship.rescuer)
 	if ship.job_phase == Ship.JOB_ALIGN:
 		return ship.heading()
+	if ship.job_phase == Ship.JOB_FISH:
+		var fishing := _fishing_pose(ship)
+		if not fishing.is_empty():
+			return fishing[1]
 	var here := _ship_bent(ship)
 	return here[1] if not here.is_empty() else ship.heading()
+
+## Fishing boats spread out (so a ground's boats, and boats on one lane, don't
+## sit on top of each other): sailing, each keeps its own way off to one side
+## of the lane (up to FISH_LANE_SPREAD_NM, eased in over FISH_LANE_EASE_NM from
+## a port, never onto land); at the ground each has its own spot
+## (Ship.fish_slot: one of GameState.GROUND_BOATS round its middle, on the
+## water), easing out to it over the last FISH_APPROACH_NM of the way and back
+## in over the first going home. Working, a troller or trawler works slow
+## loops round its spot (FISH_LOOP_NM across, one every FISH_LOOP_S); a
+## crabber or netter lies at its spot by its gear.
+const FISH_LANE_SPREAD_NM := 1.6
+const FISH_LANE_EASE_NM := 6.0
+const FISH_APPROACH_NM := 12.0
+const FISH_SPOT_SHARE := 0.4
+const FISH_LOOP_NM := 1.2
+const FISH_LOOP_S := 80.0
+var _fish_spots := {}  # [ground, slot] -> its spot (projected), found once.
+var _fish_poses := {}  # ship -> [frame, [position, heading]].
+
+## A fishing boat on its trip: [position (projected), heading (projected,
+## normalised)] as spread out, or [] off its lane.
+func _fishing_pose(ship: Ship) -> Array:
+	var frame := Engine.get_process_frames()
+	var kept: Array = _fish_poses.get(ship, [])
+	if not kept.is_empty() and kept[0] == frame:
+		return kept[1]
+	var pose := _fishing_pose_now(ship)
+	_fish_poses[ship] = [frame, pose]
+	return pose
+
+func _fishing_pose_now(ship: Ship) -> Array:
+	var ground := ship.fish_ground
+	if ship.fish_phase == "work" and not ground.is_empty():
+		var spot := _fish_spot(ground, ship.fish_slot)
+		var units := _units_per_nm(spot)
+		var gear := _fishing_gear_kind(ship)
+		if gear == "troll" or gear == "trawl":
+			var turn := TAU * fposmod(GameState.play_time / FISH_LOOP_S + float(ship.id % 17) / 17.0, 1.0)
+			var loop := Vector2(cos(turn), sin(turn)) * FISH_LOOP_NM * units
+			return [spot + loop, Vector2(-sin(turn), cos(turn))]
+		var lying := float(ship.fish_slot) * TAU / GameState.GROUND_BOATS + PI / 2.0
+		return [spot, Vector2.from_angle(lying)]
+	var here := _ship_bent(ship)
+	if here.is_empty():
+		return []
+	var at: Vector2 = here[0]
+	var heading: Vector2 = here[1]
+	var length := 0.0
+	var lane = ship.leg_lane()
+	if lane != null:
+		length = lane.length()
+	var from_start := ship.traveled_nm
+	var to_end := length - ship.traveled_nm
+	# Off to its side of the lane, eased in from either end of the leg.
+	var side := (float(ship.id * 7919 % 1000) / 1000.0 * 2.0 - 1.0) * FISH_LANE_SPREAD_NM
+	var ease := smoothstep(0.0, FISH_LANE_EASE_NM, minf(from_start, to_end))
+	var offset := heading.orthogonal() * side * ease * _units_per_nm(at)
+	if offset != Vector2.ZERO and _on_land(Geo.unproject(at + offset)):
+		offset = Vector2.ZERO
+	# Out to its spot on the ground, or back in from it.
+	if not ground.is_empty():
+		var middle := GameData.port_position(Fisheries.end_of(ground))
+		var toward := 0.0
+		if ship.to_port == Fisheries.end_of(ground):
+			toward = 1.0 - smoothstep(0.0, FISH_APPROACH_NM, to_end)
+		elif ship.from_port == Fisheries.end_of(ground):
+			toward = 1.0 - smoothstep(0.0, FISH_APPROACH_NM, from_start)
+		if toward > 0.0:
+			offset = offset.lerp(_fish_spot(ground, ship.fish_slot) - middle, toward)
+	return [at + offset, heading]
+
+## A ground's spot for a slot (projected): round its middle, FISH_SPOT_SHARE
+## of its radius out (each slot its own way round), pulled in till it and its
+## loop are on the water.
+func _fish_spot(ground: String, slot: int) -> Vector2:
+	var key := [ground, slot]
+	if _fish_spots.has(key):
+		return _fish_spots[key]
+	var middle := GameData.port_position(Fisheries.end_of(ground))
+	var radius := float(Fisheries.shared().grounds.get(ground, {}).get("radius_nm", 20.0)) * FISH_SPOT_SHARE
+	var units := _units_per_nm(middle)
+	var first := float(absi(hash(ground)) % 360) * PI / 180.0
+	var spot := middle
+	for turn in 8:  # (Its own way round first, then the ways either side of it.)
+		var angle := first + float(slot) * TAU / GameState.GROUND_BOATS + float((turn + 1) / 2) * (0.3 if turn % 2 == 1 else -0.3)
+		for share: float in [1.0, 0.75, 0.5, 0.3]:
+			var at := middle + Vector2.from_angle(angle) * radius * share * units
+			var wet := true
+			for k in 5:
+				var check := at if k == 4 else at + Vector2.from_angle(k * PI / 2.0) * (FISH_LOOP_NM + 0.3) * units
+				if _on_land(Geo.unproject(check)):
+					wet = false
+					break
+			if wet:
+				spot = at
+				break
+		if spot != middle:
+			break
+	_fish_spots[key] = spot
+	return spot
+
+## Projected map units in a nautical mile there (Web Mercator degrees: 1/60 of
+## a degree, stretched by the latitude).
+static func _units_per_nm(at: Vector2) -> float:
+	return 1.0 / (60.0 * maxf(cos(deg_to_rad(Geo.unproject(at).y)), 0.05))
+
+## What a fishing boat's working now: the gear for its species, if its model
+## has it, else its model's first.
+static func _fishing_gear_kind(ship: Ship) -> String:
+	var gear: Array = ship.model().get("fishing", {}).get("gear", [])
+	var kind := str(Fisheries.shared().species.get(ship.fish_species, {}).get("gear", "troll"))
+	if not gear.has(kind):
+		kind = str(gear[0]) if not gear.is_empty() else "troll"
+	return kind
 
 ## A ship's place on its bent lane ([position, direction]), or [] off a lane.
 func _ship_bent(ship: Ship) -> Array:
@@ -7451,10 +7573,7 @@ func _draw_fishing_gear(ship: Ship, at: Vector2, angle: float, long: float, fade
 	var t := GameState.play_time
 	var ahead := Vector2.from_angle(angle)
 	var side := ahead.orthogonal()
-	var gear: Array = ship.model().get("fishing", {}).get("gear", [])
-	var kind := str(Fisheries.shared().species.get(ship.fish_species, {}).get("gear", "troll"))
-	if not gear.has(kind):
-		kind = str(gear[0]) if not gear.is_empty() else "troll"
+	var kind := _fishing_gear_kind(ship)
 	var line := Color(0.12, 0.12, 0.12, 0.55 * fade.a)
 	match kind:
 		"trap":
@@ -9309,6 +9428,7 @@ func _draw_bird_pass(still: bool, now: float, cal: float) -> void:
 	var wraps := box.position.x < -180.0 or box.end.x > 180.0
 	var box_east := Rect2(box.position + Vector2(360.0, 0.0), box.size)
 	var box_west := Rect2(box.position - Vector2(360.0, 0.0), box.size)
+	var flyers := []  # (Birds in the air, drawn after those on the water and the ground: over them.)
 	for index: int in colonies:
 		var colony: Dictionary = wildlife.colonies[index]
 		var info := Birds.shared().species(colony.species)
@@ -9345,10 +9465,16 @@ func _draw_bird_pass(still: bool, now: float, cal: float) -> void:
 				continue
 			if span >= BIRD_FULL_PX and (each_own or basis.x == Vector2.ZERO):
 				basis = _screen_basis(pos, at)
-			_draw_one_bird(life.birds[b], colony, info, state, at, span, now, basis)
 			if about.is_empty():
 				about = [{colony = index}, {count = int(colony.count), species = [colony.species]}]
+			if not still and FLYING_MODES.has(state.mode):
+				flyers.append([life.birds[b], colony, info, state, at, span, basis, about])
+				continue
+			_draw_one_bird(life.birds[b], colony, info, state, at, span, now, basis)
 			hits.append([at, maxf(span * 0.6, BIRD_HIT_MIN_PX), about[0], about[1]])
+	for flyer: Array in flyers:
+		_draw_one_bird(flyer[0], flyer[1], flyer[2], flyer[3], flyer[4], flyer[5], now, flyer[6])
+		hits.append([flyer[4], maxf(float(flyer[5]) * 0.6, BIRD_HIT_MIN_PX), flyer[7][0], flyer[7][1]])
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -10613,8 +10739,8 @@ func _decor_texture_now(i: int, kind: int) -> int:
 ## turned from the sun is darkened (scripts/ui/night.gdshader), with dusk and
 ## dawn a soft band between. The sun stands over the sub-solar point of the
 ## calendar's moment (game_config calendar: 20 calendar minutes a second of
-## play, so a day is 72 s at 1x; the clock being the home port's local time,
-## GameState.clock_longitude(), it is noon there at 12:00), tilted with the seasons (SUN_TILT_DEG). Two
+## play, so a day is 72 s at 1x; the calendar being Greenwich time,
+## GameState.clock_longitude(), it is noon at Greenwich at 12:00 GMT), tilted with the seasons (SUN_TILT_DEG). Two
 ## darkenings: NIGHT_DARKNESS of the map art, land drawings, marinas and
 ## weather is lost at the darkest, and NIGHT_OVER_DARKNESS more of the lanes,
 ## ports, labels, birds and ships over them (so the names still read), and
@@ -10709,7 +10835,7 @@ func _update_night() -> void:
 	var day_of_year := int([0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][int(date.month) - 1]) + int(date.day)
 	var tilt := deg_to_rad(SUN_TILT_DEG) * sin(TAU * (day_of_year - 81) / 365.0)
 	var hours := fposmod(float(unix), 86400.0) / 3600.0
-	var lon := deg_to_rad((12.0 - hours) * 15.0 + GameState.clock_longitude())  # (The clock is the home port's local time.)
+	var lon := deg_to_rad((12.0 - hours) * 15.0 + GameState.clock_longitude())  # (The calendar is Greenwich time.)
 	_sun = Vector3(cos(tilt) * cos(lon), cos(tilt) * sin(lon), sin(tilt))
 	_update_shadow_dir()
 	_storm_shade.clear()

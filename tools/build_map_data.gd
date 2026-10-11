@@ -3504,6 +3504,10 @@ func _through_canal(points: PackedVector2Array) -> bool:
 ## those ports, then out along that lane (Fisheries.legs()).
 const FISHING_PORTS := 4
 const FISHING_MAX_NM := 2500.0
+## And a fishing route straight out to it from every port within this (as the
+## crow flies; the reach of the tier 3 boats), so a boat based there sails
+## straight out to it and home, not by way of another port.
+const FISHING_DIRECT_NM := 1600.0
 
 func _plan_fishing_lanes() -> void:
 	var started := Time.get_ticks_msec()
@@ -3535,7 +3539,8 @@ func _plan_fishing_lanes() -> void:
 			return Geo.distance_nm(middle, Vector2(a.lon, a.lat)) < Geo.distance_nm(middle, Vector2(b.lon, b.lat)))
 		var count := 0
 		for port: Dictionary in near:
-			if count >= FISHING_PORTS or Geo.distance_nm(middle, Vector2(port.lon, port.lat)) > FISHING_MAX_NM:
+			var away := Geo.distance_nm(middle, Vector2(port.lon, port.lat))
+			if away > FISHING_MAX_NM or (count >= FISHING_PORTS and away > FISHING_DIRECT_NM):
 				break
 			var best := PackedVector2Array()
 			var best_nm := INF

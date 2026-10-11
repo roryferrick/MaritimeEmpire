@@ -245,7 +245,7 @@ func _on_cargo_sold(ship: Ship, port_id: String, commodity_id: String, _quantity
 func _on_catch_landed(ship: Ship, port_id: String, species: String, crates: int, value: int, stored: bool) -> void:
 	if not GameState.is_mine(ship) or GameState.muted_models.has(ship.model_id):
 		return
-	var what := Fisheries.shared().species_name(species).to_lower()
+	var what := Fisheries.shared().species_word(species)
 	var text := "%s %s %s crates of %s %s %s: %s" % [ship.name, "put" if stored else "landed", Fmt.thousands(crates), what,
 		"in the cold store at" if stored else "at", GameData.port_name(port_id), Fmt.money(value)]
 	ActivityLog.add(text, ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
@@ -255,7 +255,7 @@ func _on_catch_landed(ship: Ship, port_id: String, species: String, crates: int,
 func _on_trophy_caught(ship: Ship, species: String) -> void:
 	if not GameState.is_mine(ship):
 		return
-	ActivityLog.add("%s hooked a giant %s: its hold's full, heading home" % [ship.name, Fisheries.shared().species_name(species).to_lower()],
+	ActivityLog.add("%s hooked a giant %s: its hold's full, heading home" % [ship.name, Fisheries.shared().species_word(species)],
 		ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
 
 

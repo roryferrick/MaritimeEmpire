@@ -39,7 +39,8 @@ func _ready() -> void:
 	_warm_up()
 	Net.leave()  # Back at the title screen: no longer hosting or joined.
 	if not _booted:
-		# The game's opening: a loading screen till the scenes are loaded and the world's art built.
+		# The game's opening: the player's chosen look (UiLook), then a loading screen till the scenes are loaded and the world's art built.
+		UiLook.apply_saved()
 		_booted = true
 		LoadingScreen.show_until(get_tree(), _scenes_loaded, true)
 	if Net.invited_lobby != 0:  # A Steam invite accepted while playing: join it now.
@@ -255,6 +256,18 @@ func _add_copyright() -> void:
 	licences.offset_right = 60.0
 	licences.pressed.connect(func() -> void: add_child(Licences.new()))
 	add_child(licences)
+	# The look of the game (see AppearancePage), above it.
+	var appearance := Button.new()
+	appearance.text = "Appearance"
+	appearance.flat = true
+	appearance.add_theme_font_size_override(&"font_size", 13)
+	appearance.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	appearance.offset_top = -96.0
+	appearance.offset_bottom = -64.0
+	appearance.offset_left = -70.0
+	appearance.offset_right = 70.0
+	appearance.pressed.connect(func() -> void: add_child(AppearancePage.new()))
+	add_child(appearance)
 
 
 ## True once _warm_up()'s scenes are loaded.

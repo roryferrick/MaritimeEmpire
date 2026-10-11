@@ -88,6 +88,7 @@ static func notices() -> String:
 	out.append("[b]Maritime Empire[/b]\n© 2026 Rory Ferrick. All rights reserved.")
 	out.append("[b]Map data[/b]\nMade with Natural Earth: free vector and raster map data @ naturalearthdata.com (public domain).")
 	out.append("[b]GodotSteam[/b]\n" + _plain(GODOTSTEAM_LICENSE))
+	out.append("[b]Fonts[/b]\n" + _font_notices())
 	out.append("[b]Steamworks SDK[/b]\nSteamworks SDK © Valve Corporation, used under the Steamworks SDK Access Agreement. Steam and the Steam logo are trademarks of Valve Corporation.")
 	out.append("[b]Godot Engine[/b]\nThis game uses Godot Engine, available under the following license:\n\n" + _plain(Engine.get_license_text()))
 	# The parts Godot is built from, each with its copyright and license.
@@ -105,6 +106,18 @@ static func notices() -> String:
 	names.sort()
 	for license_name in names:
 		out.append("[b]%s[/b]\n%s" % [_plain(str(license_name)), _plain(str(licenses[license_name]))])
+	return "\n\n".join(out)
+
+
+## The bundled fonts (fonts/, see UiLook), each with its licence in full
+## (SIL Open Font License 1.1).
+static func _font_notices() -> String:
+	var out := PackedStringArray()
+	var families := DirAccess.get_directories_at("res://fonts")
+	for family in families:
+		var path := "res://fonts/%s/OFL.txt" % family
+		if FileAccess.file_exists(path):
+			out.append("[b]%s[/b]\n%s" % [family, _plain(FileAccess.get_file_as_string(path))])
 	return "\n\n".join(out)
 
 

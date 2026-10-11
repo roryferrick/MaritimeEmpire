@@ -1345,6 +1345,17 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 	};
 	uint64_t t_loop = Time::get_singleton()->get_ticks_usec();
 	bool drew = false;
+	// Birds in the air are drawn after (over) those on the water and the
+	// ground, whatever their colonies: kept here till the rest are down.
+	struct Flyer {
+		int b;
+		State s;
+		Vector2 at;
+		double span;
+		Transform2D basis;
+		int colony;
+	};
+	std::vector<Flyer> flyers;
 	for (size_t ci = 0; ci < _colonies.size(); ci++) {
 		Colony &colony = _colonies[ci];
 		const Species &info = _species[colony.species];
@@ -1421,10 +1432,19 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 				basis = _basis(s.pos, at);
 				basis_set = true;
 			}
+			if (!still && is_flying(s.mode)) {
+				flyers.push_back({ b, s, at, span, basis, (int)ci });
+				continue;
+			}
 			_draw_one(b, s, at, span, now, basis);
 			hits.push_back({ at, (float)std::max(span * 0.6, 6.0), (int)ci });
 			drew = true;
 		}
+	}
+	for (const Flyer &f : flyers) {
+		_draw_one(f.b, f.s, f.at, f.span, now, f.basis);
+		hits.push_back({ f.at, (float)std::max(f.span * 0.6, 6.0), f.colony });
+		drew = true;
 	}
 	_stats[6] += Time::get_singleton()->get_ticks_usec() - t_loop;
 	uint64_t t_flush = Time::get_singleton()->get_ticks_usec();

@@ -492,7 +492,7 @@ func _pod_near(lon_lat: Vector2, nm: float, sharks: bool) -> bool:
 
 
 ## How dark it is at a point (0 day, 1 the dead of night), as the World map
-## draws it (MapView._update_night(): the clock is the home port's local time).
+## draws it (MapView._update_night(): the calendar is Greenwich time).
 static func night_at(lon_lat: Vector2) -> float:
 	var unix := GameState.calendar_time()
 	var date := Time.get_datetime_dict_from_unix_time(unix)

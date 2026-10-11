@@ -90,6 +90,7 @@ func _init(for_ship: Ship) -> void:
 
 
 func _ready() -> void:
+	theme_type_variation = &"TileButton"  # (A tile, in the theme's panel colours: see UiLook.)
 	# A Button doesn't size itself to its children: fit the tile to its content.
 	var row: Control = get_child(0)
 	custom_minimum_size.y = row.get_combined_minimum_size().y + 2.0 * PADDING

@@ -79,13 +79,31 @@ const _MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
 
 ## A Unix time as "Sat 1 Jan 2000, 14:30".
 static func calendar(unix_time: int) -> String:
+	var summer := is_british_summer_time(unix_time)
+	var d := Time.get_datetime_dict_from_unix_time(unix_time + (3600 if summer else 0))
+	return "%s %d %s %d, %02d:%02d %s" % [_DAYS[d.weekday], d.day, _MONTHS[d.month - 1], d.year, d.hour, d.minute, "BST" if summer else "GMT"]
+
+
+## True if a moment (the calendar's, on Greenwich time) falls in British Summer
+## Time, when London's clocks are an hour ahead: from 01:00 GMT on the last
+## Sunday in March to 01:00 GMT on the last Sunday in October.
+static func is_british_summer_time(unix_time: int) -> bool:
 	var d := Time.get_datetime_dict_from_unix_time(unix_time)
-	return "%s %d %s %d, %02d:%02d" % [_DAYS[d.weekday], d.day, _MONTHS[d.month - 1], d.year, d.hour, d.minute]
+	var month := int(d.month)
+	if month < 3 or month > 10:
+		return false
+	if month > 3 and month < 10:
+		return true
+	# The last Sunday of March or October, at 01:00 GMT.
+	var last := Time.get_unix_time_from_datetime_dict({year = d.year, month = month, day = 31, hour = 1, minute = 0, second = 0})
+	var weekday := int(Time.get_datetime_dict_from_unix_time(last).weekday)  # (0 is Sunday.)
+	var change := last - weekday * 86400
+	return unix_time >= change if month == 3 else unix_time < change
 
 
 ## A Unix time as "3 Jan 09:10" (no weekday or year), for arrivals and log lines.
 static func calendar_short(unix_time: int) -> String:
-	var d := Time.get_datetime_dict_from_unix_time(unix_time)
+	var d := Time.get_datetime_dict_from_unix_time(unix_time + (3600 if is_british_summer_time(unix_time) else 0))
 	return "%d %s %02d:%02d" % [d.day, _MONTHS[d.month - 1], d.hour, d.minute]
 
 

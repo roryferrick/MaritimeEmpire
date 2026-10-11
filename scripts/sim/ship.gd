@@ -317,6 +317,8 @@ var catch_grade := 1.0
 var work_s := 0.0
 var work_limit_s := 0.0
 var fish_wait := ""
+## Which of a ground's GameState.GROUND_BOATS spots it works (0 up), so boats on one ground spread out (MapView).
+var fish_slot := 0
 ## Icebreaker only: the ice area (game_config icebreaking) it's stationed at,
 ## or ""; base_port is then the port there it waits at.
 var station := ""
@@ -1244,7 +1246,7 @@ func tug_crew_text() -> String:
 ## Harbor with 6,000 crates of red king crab", "At Dutch Harbor: no red king
 ## crab in season till October"; "" when it's just in port.
 func _fishing_status_text() -> String:
-	var what := Fisheries.shared().species_name(fish_species).to_lower()
+	var what := Fisheries.shared().species_word(fish_species)
 	var where := GameData.port_name(Fisheries.end_of(fish_ground))
 	match fish_phase:
 		"out":
@@ -1323,6 +1325,7 @@ func to_dict() -> Dictionary:
 		"work_s": work_s,
 		"work_limit_s": work_limit_s,
 		"fish_wait": fish_wait,
+		"fish_slot": fish_slot,
 		"leg_key": leg_key,
 		"leg_current": leg_current,
 		"leg_month": leg_month,
@@ -1412,6 +1415,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.work_s = float(data.get("work_s", 0.0))
 	ship.work_limit_s = float(data.get("work_limit_s", 0.0))
 	ship.fish_wait = str(data.get("fish_wait", ""))
+	ship.fish_slot = int(data.get("fish_slot", 0))
 	ship.leg_key = str(data.get("leg_key", ""))
 	ship.leg_current = bool(data.get("leg_current", false))
 	ship.leg_month = int(data.get("leg_month", Currents.MEAN))
