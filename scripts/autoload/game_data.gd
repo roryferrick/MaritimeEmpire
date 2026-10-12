@@ -268,12 +268,12 @@ func lane(from_port: String, to_port: String, way := -2) -> SeaLane:
 	var stored := index if index >= 0 else -index - 1
 	var sea_lane := SeaLane.new()
 	if native_lanes:
-		var made: Array = LaneMath.lane_points(_lane_data.points.slice(_lane_data.starts[stored], _lane_data.starts[stored + 1]))
+		var made: Array = ClassDB.class_call_static(&"LaneMath", &"lane_points", _lane_data.points.slice(_lane_data.starts[stored], _lane_data.starts[stored + 1]))
 		sea_lane.points = made[0]
 		sea_lane.miles = made[1]
 		if index < 0:
 			sea_lane = sea_lane.reversed()
-		sea_lane._bounds = LaneMath.lane_bounds(sea_lane.points)
+		sea_lane._bounds = ClassDB.class_call_static(&"LaneMath", &"lane_bounds", sea_lane.points)
 		sea_lane._has_bounds = true
 		_lane_cache[key] = sea_lane
 		return sea_lane
@@ -298,7 +298,7 @@ func _variant_lane(way: int) -> SeaLane:
 	if _lane_cache.has(key):
 		return _lane_cache[key]
 	var sea_lane := SeaLane.new()
-	var made: Array = LaneMath.lane_points(_lane_data.variant_points.slice(_lane_data.variant_starts[way], _lane_data.variant_starts[way + 1])) if native_lanes else []
+	var made: Array = ClassDB.class_call_static(&"LaneMath", &"lane_points", _lane_data.variant_points.slice(_lane_data.variant_starts[way], _lane_data.variant_starts[way + 1])) if native_lanes else []
 	if not made.is_empty():
 		sea_lane.points = made[0]
 		sea_lane.miles = made[1]
@@ -387,7 +387,7 @@ func canal_crossings(from_port: String, to_port: String) -> Array:
 	var sea_lane := lane(from_port, to_port)
 	if sea_lane != null:
 		for canal in canals:
-			var crossing := LaneMath.crossing(sea_lane.points, sea_lane.miles, sea_lane.bounds(), canal, CHAMBER_ON_LANE) if native_lanes else _crossing(sea_lane, canal)
+			var crossing: Dictionary = ClassDB.class_call_static(&"LaneMath", &"crossing", sea_lane.points, sea_lane.miles, sea_lane.bounds(), canal, CHAMBER_ON_LANE) if native_lanes else _crossing(sea_lane, canal)
 			if not crossing.is_empty():
 				crossings.append(crossing)
 		crossings.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.start_nm < b.start_nm)
@@ -646,7 +646,7 @@ func _lane_zones_plain(from_port: String, to_port: String, way: int) -> Array:
 		if factor != 1.0:
 			slow.append([crossing.start_nm, crossing.end_nm, factor])
 	if native_lanes:
-		return LaneMath.zones(sea_lane.points, sea_lane.miles, slow, rough_lat, rough_wear)
+		return ClassDB.class_call_static(&"LaneMath", &"zones", sea_lane.points, sea_lane.miles, slow, rough_lat, rough_wear)
 	var breaks := PackedFloat64Array([sea_lane.length()])
 	for i in range(1, sea_lane.points.size()):
 		var a := Geo.unproject(sea_lane.points[i - 1]).y < rough_lat

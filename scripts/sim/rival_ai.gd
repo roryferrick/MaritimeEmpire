@@ -558,7 +558,7 @@ func _best_loops(rival: Company, model: Dictionary, start: String, settings: Dic
 ## The loop search natively (RouteFinder: the same loops, in the same order),
 ## when the native library's there and use_native_routes is on (tests turn it
 ## off to compare).
-var _route_finder: Object = RouteFinder.new() if ClassDB.class_exists(&"RouteFinder") else null
+var _route_finder: Object = ClassDB.instantiate(&"RouteFinder") if ClassDB.class_exists(&"RouteFinder") else null
 var use_native_routes := true
 var _route_probe: Ship = null
 

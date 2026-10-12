@@ -3368,6 +3368,9 @@ const TUG_LET_GO_SHARE := 0.5
 ## jetty's end first, out past it by JETTY_ROUND of its radius each way (see _round_jetty()).
 const JETTY_ROUND := 1.5
 const JETTY_ROUND_FROM := 0.9
+## A plain curve in that keeps this many of the jetty's radius off the port
+## (and never behind the coast) needn't round it.
+const JETTY_CLEAR := 1.15
 const ENTRANCE_WIDTHS := 3.0
 ## Points round the marina's circle, for drawing.
 const MARINA_ARC_POINTS := 64
@@ -5445,7 +5448,7 @@ func _harbour_corridors(port_id: String) -> Array[PackedVector2Array]:
 				# From behind the jetty: round its end first (see _round_jetty()).
 				var in_dock: Vector2 = edge.rotated(-sea_angle) / dock_nm
 				in_dock.y *= flip
-				var round_poses := _round_jetty(port_id, in_dock, arriving)
+				var round_poses := _round_jetty(port_id, [in_dock, (heading - sea_angle) * flip], arriving)
 				for r in round_poses.size():
 					var pose: Array = round_poses[r]
 					poses.insert(1 + r, [dock_point.call(pose[0]), dock_angle.call(float(pose[1]))])
@@ -5573,7 +5576,7 @@ func _lane_curve(lane, from_port: String, to_port: String, length: float, arrivi
 	# From behind the jetty (a lane that comes in along the coast): round its end first.
 	var port := to_port if arriving else from_port
 	var round_poses := []
-	for pose: Array in _round_jetty(port, _screen_to_local(port, on_lane)[0], arriving):
+	for pose: Array in _round_jetty(port, _screen_to_local(port, on_lane), arriving):
 		round_poses.append(_local_to_screen(port, pose))
 	via = round_poses + via if arriving else via + round_poses
 	var poses := [on_lane] + via + [harbour] if arriving else [harbour] + via + [on_lane]
@@ -5582,25 +5585,41 @@ func _lane_curve(lane, from_port: String, to_port: String, length: float, arrivi
 
 ## Coming in to a port's harbour from behind or beside its jetty (a lane
 ## that comes in along the coast), or leaving that way: the poses to go by,
-## along past the marina's wall and round the jetty's end, out past it on
-## the lane's side (dock units, [point, facing] each, in sailing order), or
-## [] when the lane's out in front of the entrance already.
-func _round_jetty(port_id: String, lane_local: Vector2, arriving: bool) -> Array:
+## round the jetty's end, out past it on the lane's side (dock units, [point,
+## facing] each, in sailing order), or [] when the lane's out in front of the
+## entrance already or a plain curve to the mouth clears the jetty anyway.
+## lane_pose: where the ship leaves (or joins) its lane, [point, facing] in
+## dock units. From behind the marina (level with the jetty's end or nearer)
+## it first goes along past the marina's wall; from further along the coast
+## it makes straight for the jetty's end (by the wall it would have to turn
+## out to sea and back again, a loop: Shanghai's lanes from the north).
+func _round_jetty(port_id: String, lane_pose: Array, arriving: bool) -> Array:
 	var layout := _port_layout(port_id)
 	var radius := float(layout.radius)
-	if lane_local.x >= radius * JETTY_ROUND_FROM:
+	var lane_local: Vector2 = lane_pose[0]
+	if lane_local.x >= radius * JETTY_ROUND_FROM or _clears_jetty(layout, lane_pose, arriving):
 		return []
 	var side := 1.0 if lane_local.y >= 0.0 else -1.0
-	# Along past the marina's wall (the lane comes in along the coast behind
-	# it), then round the jetty's end to the mouth.
-	var beside := Vector2(-radius * 0.3, side * radius * JETTY_ROUND)
 	var corner := Vector2(radius * JETTY_ROUND, side * radius * JETTY_ROUND)
 	var mouth: Vector2 = layout.mouth
 	var way := mouth - corner if arriving else corner - mouth
-	var poses := [[beside, 0.0 if arriving else PI], [corner, way.angle()]]
+	var poses := [[corner, way.angle()]]
+	if absf(lane_local.y) < radius * JETTY_ROUND:
+		poses.push_front([Vector2(-radius * 0.3, side * radius * JETTY_ROUND), 0.0 if arriving else PI])
 	if not arriving:
 		poses.reverse()
 	return poses
+
+## True if the plain curve between a lane's pose (dock units) and a marina's
+## mouth keeps outside its jetty (JETTY_CLEAR of its radius) and off the coast
+## behind it (see _round_jetty()).
+static func _clears_jetty(layout: Dictionary, lane_pose: Array, arriving: bool) -> bool:
+	var radius := float(layout.radius)
+	var mouth := [layout.mouth, PI if arriving else 0.0]
+	for p: Vector2 in _pose_path([lane_pose, mouth] if arriving else [mouth, lane_pose], HARBOUR_CURVE_HANDLE):
+		if p.length() < radius * JETTY_CLEAR or p.x < 0.0:
+			return false
+	return true
 
 ## How far (nm of lane) from each end of its leg a ship sails its curve in or
 ## out of port: [arriving, leaving], worked out once a leg (0 for none).

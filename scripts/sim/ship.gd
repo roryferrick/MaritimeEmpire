@@ -635,7 +635,7 @@ func _leg_seconds(from: String, to: String, start_mile: float, end_mile: float, 
 	if from != from_port or to != to_port:
 		zones = leg_zones(from, to)
 	if GameData.native_lanes:
-		return LaneMath.leg_seconds(zones, start_mile, end_mile, start_maintenance, top_speed(), wear_per_s())  # (The same, natively.)
+		return ClassDB.class_call_static(&"LaneMath", &"leg_seconds", zones, start_mile, end_mile, start_maintenance, top_speed(), wear_per_s())  # (The same, natively.)
 	for zone: Array in zones:
 		if mile >= end_mile - 0.0001:
 			break
@@ -932,7 +932,7 @@ func leg_zones(from: String, to: String) -> Array:
 func _with_harbor_speed(zones: Array, length: float) -> Array:
 	var settings: Dictionary = GameData.config.get("harbor_speed", {})
 	if GameData.native_lanes:
-		return LaneMath.with_harbor_speed(zones, length, top_speed(), settings)  # (The same, natively.)
+		return ClassDB.class_call_static(&"LaneMath", &"with_harbor_speed", zones, length, top_speed(), settings)  # (The same, natively.)
 	var start := float(settings.get("start", 1.0))
 	var steps := int(settings.get("steps", 0))
 	# Distance covered speeding up from start x top speed at a steady rate.
