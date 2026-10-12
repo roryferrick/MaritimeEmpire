@@ -1122,6 +1122,12 @@ func _ready() -> void:
 	clip_contents = true
 	mouse_filter = MOUSE_FILTER_STOP
 	resized.connect(_on_resized)
+	Settings.changed.connect(func() -> void:  # (Day and night or the birds switched: the layers kept between changes are drawn again.)
+		if _still_birds != null:
+			_still_birds.queue_redraw()
+		if _lights_layer != null:
+			_lights_layer.queue_redraw()
+		_changed())
 	if not GameState.berth_route.is_valid():
 		GameState.berth_route = berth_route_seconds  # (The first map open measures ships' ways in and out of port.)
 	if not GameState.anchor_route.is_valid():
@@ -2323,6 +2329,7 @@ func _tug_tick(ship: Ship) -> PackedVector2Array:
 ## Turns the globe to center a port, keeping the zoom.
 func focus_port(port_id: String) -> void:
 	followed = null
+	followed_bird = -1
 	_look_at(GameData.port_position(port_id))
 	_changed()
 
@@ -2330,6 +2337,7 @@ func focus_port(port_id: String) -> void:
 ## across, and raised_px above the middle (to leave room for its popup below).
 func focus_ship(ship: Ship, raised_px := 0.0) -> void:
 	followed = null
+	followed_bird = -1
 	_look_at(GameData.port_position(ship.docked_at) if ship.is_docked() else _ship_world(ship))
 	_look_at(screen_to_world(size / 2.0 + Vector2(0.0, raised_px)))
 	_changed()
@@ -2364,6 +2372,7 @@ func follow_zoom() -> float:
 ## drag or a click on the map, another ship followed, or this called again
 ## for the same ship stops it.
 func follow_ship(ship: Ship) -> void:
+	followed_bird = -1
 	if followed == ship:
 		followed = null
 		return
@@ -2372,9 +2381,40 @@ func follow_ship(ship: Ship) -> void:
 	_zoom_about = size / 2.0
 	_track_followed()
 
-## Keeps the followed ship in the middle of the view (every frame).
+## The bird the view follows (a BirdLife bird; see follow_bird()), or -1.
+var followed_bird := -1
+## Following a bird, the view zooms in this many times follow_zoom(), so it's
+## big enough to watch.
+const BIRD_FOLLOW_ZOOM := 3.0
+
+## True while the view follows a ship or a bird.
+func _following() -> bool:
+	return followed != null or followed_bird >= 0
+
+## Follows a bird (a BirdLife bird): the view keeps it in the middle wherever
+## it goes, zoomed in to BIRD_FOLLOW_ZOOM times follow_zoom(); stopped as
+## following a ship is (see follow_ship()), or by following a ship.
+func follow_bird(index: int) -> void:
+	followed = null
+	if followed_bird == index or index < 0:
+		followed_bird = -1
+		return
+	followed_bird = index
+	_zoom_goal = clampf(follow_zoom() * BIRD_FOLLOW_ZOOM, _min_zoom(), MAX_ZOOM)
+	_zoom_about = size / 2.0
+	_track_followed()
+
+## Keeps the followed ship (or bird) in the middle of the view (every frame).
 func _track_followed() -> void:
 	if followed == null:
+		if followed_bird >= 0:
+			var life := BirdLife.shared()
+			if not life.ensure_built() or followed_bird >= life.bird_count():
+				followed_bird = -1
+				return
+			var state: Dictionary = life.bird_state(followed_bird, Wildlife.shared().bird_time, float(GameState.calendar_time()))
+			_look_at(Geo.project(state.pos))
+			_changed()
 		return
 	if not is_instance_valid(followed) or not GameState.ships.has(followed):
 		followed = null
@@ -2392,6 +2432,7 @@ func _track_followed() -> void:
 ## game_config.json's initial_view_width_deg degrees of the globe across.
 func reset_view(center_port := "") -> void:
 	followed = null
+	followed_bird = -1
 	if center_port.is_empty():
 		center_port = GameState.home_port
 	var width := float(GameData.config.get("initial_view_width_deg", 45.0))
@@ -2432,7 +2473,7 @@ func zoom_by(factor: float, about := Vector2(-1.0, -1.0)) -> void:
 	if factor <= 0.0:
 		return
 	_zoom_goal = clampf(_zoom_goal * factor, _min_zoom(), MAX_ZOOM)
-	_zoom_about = about if about.x >= 0.0 and followed == null else size / 2.0  # (Following: about the ship, in the middle.)
+	_zoom_about = about if about.x >= 0.0 and not _following() else size / 2.0  # (Following: about the ship or bird, in the middle.)
 	_fling = Vector2.ZERO
 
 ## The + and - keys zoom about the middle (for trackpads without gestures).
@@ -2472,7 +2513,7 @@ func _gui_input(event: InputEvent) -> void:
 				if button.pressed:
 					var step := ZOOM_STEP if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / ZOOM_STEP
 					_zoom_goal = clampf(_zoom_goal * step, _min_zoom(), MAX_ZOOM)
-					_zoom_about = size / 2.0 if followed != null else button.position  # (Following: about the ship.)
+					_zoom_about = size / 2.0 if _following() else button.position  # (Following: about the ship or bird.)
 					_fling = Vector2.ZERO
 			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT:
 				if button.pressed and _pressed_button == MOUSE_BUTTON_NONE:
@@ -2485,6 +2526,7 @@ func _gui_input(event: InputEvent) -> void:
 				elif not button.pressed and button.button_index == _pressed_button:
 					if not _dragging and button.button_index == MOUSE_BUTTON_LEFT:
 						followed = null  # (A click anywhere lets the followed ship go.)
+						followed_bird = -1
 						_click(button.position)
 					elif _dragging:
 						_fling = _drag_fling()
@@ -2498,6 +2540,7 @@ func _gui_input(event: InputEvent) -> void:
 		if not _dragging and motion.position.distance_to(_press_pos) > DRAG_THRESHOLD:
 			_dragging = true
 			followed = null
+			followed_bird = -1
 		if _dragging:
 			var turn := _drag_turn(motion.position, motion.relative)
 			_turn_by(turn)
@@ -8130,7 +8173,10 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 		_draw_hatches(ship, art.hatches, rect, open, fade)
 		_canvas.draw_texture_rect(art.open_details, rect, false, fade)
 		return
-	_canvas.draw_texture_rect(art.details, rect, false, fade)
+	# A fishing boat at work has its gear rigged (rods out, outriggers spread:
+	# <art>_details_fishing.svg); otherwise it's stowed.
+	var rigged: bool = art.has("fishing_details") and ship != null and ship.is_fishing() and ship.fish_phase == "work"
+	_canvas.draw_texture_rect(art.fishing_details if rigged else art.details, rect, false, fade)
 
 ## How far open a bulk carrier's hatches are (0 shut to 1 open): moored for
 ## its stop, they fold open over its first HATCH_S and shut over its last
@@ -8208,6 +8254,8 @@ static func load_ship_art(category: String) -> Dictionary:
 	if HATCHES.has(category) and ResourceLoader.exists(path % "details_open"):
 		art.open_details = load(path % "details_open")  # (Its hatch covers drawn as they open: see _draw_hatches().)
 		art.hatches = HATCHES[category]
+	if ResourceLoader.exists(path % "details_fishing"):
+		art.fishing_details = load(path % "details_fishing")  # (Its gear rigged, fishing: see _draw_ship_art().)
 	if CARGO_ZONES.has(category) and ResourceLoader.exists(path % "cargo"):
 		art.cargo = load(path % "cargo")
 		art.zone = CARGO_ZONES[category]
@@ -9611,8 +9659,8 @@ func _draw_still_birds() -> void:
 ## One pass over the birds in view (see _draw_birds()): those keeping still
 ## for STILL_LAYER_S or more (marked in _still_drawn), or all the others.
 func _draw_bird_pass(still: bool, now: float, cal: float) -> void:
-	if gray_mode or not show_ships:
-		return
+	if gray_mode or not show_ships or not Settings.birds:
+		return  # (Nor with the birds switched off in Settings.)
 	var scale := _ship_scale()
 	if BIRD_SMALLEST_SPAN * BIRD_SCALE * scale < BIRD_DOT_PX:
 		return
@@ -10362,7 +10410,8 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 	var wader := colors.has("legs")
 	var kind := str(info.get("kind", ""))
 	var frigate := kind == "Frigatebird"
-	var shape := _bird_shape(raptor or wader, raptor and str(info.get("behavior", "")) == "plunge", 3 if frigate else (4 if kind == "Falcon" else 0))
+	var owl := kind == "Owl"
+	var shape := _bird_shape(raptor or wader, raptor and str(info.get("behavior", "")) == "plunge", 3 if frigate else (4 if kind == "Falcon" else (5 if owl else 0)))
 	# The shapes are a bird a unit across: the wings (out to their beat) drawn
 	# scaled by its span along and its span times the beat across, the rest by its span.
 	var wingspan := Vector2(span, span * wings)
@@ -10404,7 +10453,9 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 		canvas.draw_circle(Vector2(0.1, 0.0), 0.028, Color(0.85, 0.12, 0.16))  # The male's scarlet throat pouch.
 	else:
 		canvas.draw_colored_polygon(_bird_body, body)
-	if raptor:
+	if owl:
+		_draw_owl_head(canvas, colors, head, bill)
+	elif raptor:
 		# A big head and a short hooked bill.
 		canvas.draw_circle(Vector2(0.17, 0.0), 0.065, head)
 		canvas.draw_colored_polygon(_raptor_bill, bill)
@@ -10447,7 +10498,8 @@ static func draw_bird(canvas: Object, at: Vector2, heading: float, info: Diction
 ## seabird's wings swept back to their tips; a raptor's broad and square (bent
 ## forward at the wrist for an osprey), the tips spread into fingers.
 ## `special`: 3 a frigatebird (long angular wings, a long forked tail), 4 a
-## falcon (swept pointed wings, a long narrow tail).
+## falcon (swept pointed wings, a long narrow tail), 5 an owl (broad rounded
+## wings, a short round tail).
 static func _bird_shape(raptor: bool, bent: bool, special := 0) -> Dictionary:
 	var key := special if special > 0 else (2 if bent else (1 if raptor else 0))
 	if _bird_shapes.has(key):
@@ -10461,6 +10513,13 @@ static func _bird_shape(raptor: bool, bent: bool, special := 0) -> Dictionary:
 		wing = PackedVector2Array([Vector2(0.03, 0.0), Vector2(0.07, half * 0.42), Vector2(-0.015, half), Vector2(-0.04, half * 0.5), Vector2(-0.035, 0.0)])
 		tip_part = PackedVector2Array([Vector2(0.01, half * 0.7), Vector2(-0.015, half), Vector2(-0.035, half * 0.72)])
 		tail = PackedVector2Array([Vector2(-0.12, 0.018), Vector2(-0.44, 0.075), Vector2(-0.42, 0.045), Vector2(-0.3, 0.0), Vector2(-0.42, -0.045), Vector2(-0.44, -0.075), Vector2(-0.12, -0.018)])
+	elif special == 5:
+		# An owl's wings: broad and rounded at the end, soft-edged, the
+		# fingers barely parted; a short, rounded tail.
+		wing = PackedVector2Array([Vector2(0.08, 0.0), Vector2(0.09, half * 0.45), Vector2(0.06, half * 0.85), Vector2(0.0, half), Vector2(-0.09, half * 0.96),
+			Vector2(-0.15, half * 0.7), Vector2(-0.14, 0.0)])
+		tip_part = PackedVector2Array([Vector2(0.05, half * 0.86), Vector2(0.0, half), Vector2(-0.09, half * 0.96), Vector2(-0.07, half * 0.82)])
+		tail = PackedVector2Array([Vector2(-0.16, 0.05), Vector2(-0.27, 0.07), Vector2(-0.3, 0.0), Vector2(-0.27, -0.07), Vector2(-0.16, -0.05)])
 	elif special == 4:
 		wing = PackedVector2Array([Vector2(0.08, 0.0), Vector2(0.1, half * 0.4), Vector2(-0.06, half), Vector2(-0.13, half * 0.5), Vector2(-0.13, 0.0)])
 		tip_part = PackedVector2Array([Vector2(0.0, half * 0.7), Vector2(-0.06, half), Vector2(-0.11, half * 0.72)])
@@ -10483,6 +10542,22 @@ static func _bird_shape(raptor: bool, bent: bool, special := 0) -> Dictionary:
 	_bird_shapes[key] = {wing = wing, wing_mirrored = _mirror_y(wing), tip = tip_part, tip_mirrored = _mirror_y(tip_part), tail = tail}
 	return _bird_shapes[key]
 
+## An owl's big round head from above (see draw_bird()): its pale facial
+## disc forward, two big eyes in it (colors face, eyes), a small hooked bill
+## between them, and ear tufts at the back for the horned owls (colors tufts).
+static func _draw_owl_head(canvas: Object, colors: Dictionary, head: Color, bill: Color) -> void:
+	if colors.has("tufts"):
+		var tufts := Color.from_string(str(colors.tufts), head)
+		for side: float in [-1.0, 1.0]:
+			canvas.draw_colored_polygon(PackedVector2Array([Vector2(0.1, side * 0.05), Vector2(0.06, side * 0.1), Vector2(0.14, side * 0.07)]), tufts)
+	canvas.draw_circle(Vector2(0.12, 0.0), 0.085, head)
+	canvas.draw_circle(Vector2(0.15, 0.0), 0.062, Color.from_string(str(colors.get("face", "")), head.lightened(0.3)))
+	var eyes := Color.from_string(str(colors.get("eyes", "")), Color(0.95, 0.75, 0.12))
+	for side: float in [-1.0, 1.0]:
+		canvas.draw_circle(Vector2(0.17, side * 0.026), 0.017, eyes)
+		canvas.draw_circle(Vector2(0.175, side * 0.026), 0.008, Color(0.05, 0.05, 0.05))
+	canvas.draw_colored_polygon(PackedVector2Array([Vector2(0.19, -0.008), Vector2(0.215, 0.0), Vector2(0.19, 0.008)]), bill)
+
 static func _mirror_y(points: PackedVector2Array) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	for p in points:
@@ -10493,6 +10568,8 @@ static func _mirror_y(points: PackedVector2Array) -> PackedVector2Array:
 ## [what it's round ({colony}), its colony ({count, species})], or []; `reach`
 ## times its usual reach (smaller: only right on a bird).
 func _birds_at(screen_pos: Vector2, reach := 1.0) -> Array:
+	if not Settings.birds:
+		return []  # (None drawn: none to click.)
 	reach *= BIRD_HIT_REACH
 	var native: Object = BirdLife.shared().native
 	if native != null:
@@ -11058,11 +11135,22 @@ func _add_night_layers() -> void:
 	add_child(_lights_layer)
 
 ## Where the sun stands now, and the night's shaders with it (every frame).
+## With day and night off (Settings.day_night) it's always day: no dark, no
+## lights, and the sun stands still over the view's north-west at
+## FIXED_SUN_ELEVATION, so the shadows fall south-east and stay put.
+const FIXED_SUN_ELEVATION := 0.6
 func _update_night() -> void:
-	_night_shown = show_ships and not gray_mode
+	var on := show_ships and not gray_mode
+	_night_shown = on and Settings.day_night
 	_night.visible = _night_shown
 	_night_over.visible = _night_shown
-	if not _night_shown:
+	if not on:
+		return
+	if not Settings.day_night:
+		var center := _unit(screen_to_world(size / 2.0))
+		var north_west := (_up - _right).normalized()
+		_sun = (center * FIXED_SUN_ELEVATION + north_west * sqrt(1.0 - FIXED_SUN_ELEVATION * FIXED_SUN_ELEVATION)).normalized()
+		_update_shadow_dir()
 		return
 	var unix := GameState.calendar_time()
 	var date := Time.get_datetime_dict_from_unix_time(unix)

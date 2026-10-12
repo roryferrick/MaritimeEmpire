@@ -194,6 +194,28 @@ func _ship_lists() -> Array:
 	return _ship_lists_made
 
 
+## How many birds there are (natively too); 0 till they're made.
+func bird_count() -> int:
+	if not ensure_built():
+		return 0
+	return int(native.bird_count()) if native != null else birds.size()
+
+
+## One of a colony's birds to follow on the map (see MapView.follow_bird()):
+## the first that's out and about now (flying, circling, hunting, following
+## a ship...), else the first; `mode` only one doing that ("follow": one
+## following a ship); -1 if it has none.
+func bird_to_follow(colony_index: int, now: float, cal: float, mode := "") -> int:
+	var list := birds_of(colony_index)
+	if list.is_empty():
+		return -1
+	for index: int in list:
+		var doing: String = bird_state(index, now, cal).mode
+		if (mode.is_empty() and not STILL.has(doing)) or doing == mode:
+			return index
+	return -1 if not mode.is_empty() else int(list[0])
+
+
 ## A colony's birds (indices into birds).
 func birds_of(colony_index: int) -> Array:
 	if not ensure_built():
@@ -347,6 +369,13 @@ func _spell_state(index: int, bird: Dictionary, colony: Dictionary, away: bool, 
 	return state
 
 
+## True for a bird about by night and asleep by day: night herons, and owls
+## (but those whose active is "day", as the snowy owl). (As BirdSim's nocturnal.)
+static func _nocturnal(info: Dictionary) -> bool:
+	var kind := str(info.get("kind", ""))
+	return kind == "Night heron" or (kind == "Owl" and str(info.get("active", "night")) != "day")
+
+
 ## Works out a bird's next spell: what, where, and from where it flies there.
 func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int, start: float, cal: float, now: float, with_from := true) -> Dictionary:
 	var cls: String = colony.cls
@@ -357,8 +386,8 @@ func _plan(index: int, bird: Dictionary, colony: Dictionary, away: bool, k: int,
 	var hour := Birds.local_hour(center.x, cal)
 	var info := Birds.shared().species(colony.species)
 	var night := hour < NIGHT.x or hour > NIGHT.y
-	if str(info.get("kind", "")) == "Night heron":
-		night = not night
+	if _nocturnal(info):
+		night = not night  # (Asleep by day, about by night.)
 	var roll := Wildlife._mix(bird.seed + k * 7919)
 	# Ducks and cormorants keep together: their colony picks for them.
 	var group_roll := Wildlife._mix(int(colony.seed) + k * 7919)

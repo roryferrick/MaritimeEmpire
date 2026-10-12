@@ -3,7 +3,7 @@ class_name SettingsPage
 extends Control
 ## Settings (from the Esc menu), in two tabs. General: how ships far off are
 ## drawn (Settings.ship_look), the map's Routes switch (the fleet's lanes shown
-## faintly) and, in a game with the tutorial, the Tutorial switch (its tips).
+## faintly), Day and night and Birds (Settings) and, in a game with the tutorial, the Tutorial switch (its tips).
 ## Audio: a volume for everything and for each kind of sound (Settings'
 ## buses). Over whatever opened it, dimming it; Esc, X or a click outside
 ## closes it. Routes and the tutorial are the company's own (kept in its
@@ -86,6 +86,18 @@ func _general_tab() -> Control:
 		GameState.show_active_routes = on
 		Settings.changed.emit())
 	box.add_child(routes)
+	var day_night := CheckButton.new()
+	day_night.text = "Day and night"
+	day_night.tooltip_text = "The side of the world away from the sun goes dark, with ships', harbours' and towns' lights. Off, it's always day."
+	day_night.button_pressed = Settings.day_night
+	day_night.toggled.connect(func(on: bool) -> void: Settings.day_night = on)
+	box.add_child(day_night)
+	var birds := CheckButton.new()
+	birds.text = "Birds"
+	birds.tooltip_text = "The birds round the ports and following ships. Off, none are drawn (their calls still play: see Audio)."
+	birds.button_pressed = Settings.birds
+	birds.toggled.connect(func(on: bool) -> void: Settings.birds = on)
+	box.add_child(birds)
 	if GameState.tutorials:
 		var tutorial := CheckButton.new()
 		tutorial.text = "Tutorial"

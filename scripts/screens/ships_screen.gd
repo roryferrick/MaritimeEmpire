@@ -59,7 +59,7 @@ var _changed_ships := {}
 var _dirty := false
 ## The fleet changed (a ship bought or sold): rebuild the tiles when next shown.
 var _needs_rebuild := false
-## Each ship's profit over the last 10 minutes (by name: GameState.recent_finances()),
+## Each ship's profit over the last 30 days of game time (by name: GameState.recent_finances() over ship_window_seconds()),
 ## as of the last rebuild, and how long since it.
 var _earnings := {}
 var _resort_clock := 0.0
@@ -68,7 +68,7 @@ var _resort_clock := 0.0
 func _ready() -> void:
 	for sort: Sort in SORT_NAMES:
 		%SortOption.add_item(SORT_NAMES[sort], sort)
-	%SortOption.tooltip_text = "Earnings: each ship's profit over the last %s of game time (10 minutes of play), best first (left to right), re-sorted every 30 seconds." % GameState.recent_window_text()
+	%SortOption.tooltip_text = "Earnings: each ship's profit over the last %s of game time (%s of play), best first (left to right), re-sorted every 30 seconds." % [GameState.recent_window_text(), Fmt.duration(GameState.ship_window_seconds())]
 	for filter: Filter in FILTER_NAMES:
 		%FilterOption.add_item(FILTER_NAMES[filter], filter)
 	%SortOption.item_selected.connect(_rebuild.unbind(1))
@@ -144,7 +144,7 @@ func _rebuild() -> void:
 	_megas.clear()
 	_tiles.clear()
 	_needs_rebuild = false
-	_earnings = GameState.recent_finances().ships
+	_earnings = GameState.recent_finances(null, GameState.ship_window_seconds()).ships
 	_resort_clock = 0.0
 	var sorted := GameState.fleet().duplicate()
 	sorted.sort_custom(_ship_before)

@@ -44,6 +44,8 @@ const LAND_GROUPS := 2
 const YOUNG_SIZE := 0.55
 ## The most species of each class of bird living at one port.
 const SPECIES_A_PORT := {raptors = 2, cormorants = 2, waders = 3, sea_ducks = 1}
+## And an owl species (raptors whose kind is Owl) at a port besides.
+const OWLS_A_PORT := 1
 ## The most birds of one species in a colony, by class (rafts and cormorant groups can be big).
 const COLONY_MOST := {cormorants = 8, sea_ducks = 16, waders = 3, raptors = 2}
 ## The share of each colony's birds that live (a fixed roll per colony
@@ -329,20 +331,26 @@ func _build_birds() -> void:
 			if cls == "gulls":
 				_add_gulls(port, spot, here)
 				continue
-			# Up to SPECIES_A_PORT of the class's species live at a port (a steady pick).
+			# Up to SPECIES_A_PORT of the class's species live at a port (a steady
+			# pick); owls apart from the other raptors, up to OWLS_A_PORT more.
 			here.sort_custom(func(a: Array, b: Array) -> bool: return Birds.chance([port.id, a[0], "pick"]) < Birds.chance([port.id, b[0], "pick"]))
 			var kept := 0
+			var owls := 0
 			for entry: Array in here:
-				if kept >= int(SPECIES_A_PORT.get(cls, 2)):
-					break
 				var id: String = entry[0]
 				var info: Dictionary = all[id]
+				var owl := str(info.get("kind", "")) == "Owl"
+				if (owls >= OWLS_A_PORT) if owl else (kept >= int(SPECIES_A_PORT.get(cls, 2))):
+					continue
 				var odds: Array = info.get({raptors = "visit", sea_ducks = "raft"}.get(cls, "group"), [0.5, 1, 3])
 				if Birds.chance([port.id, id, "lives"]) >= float(odds[0]):
 					continue
 				var count := mini(int(odds[1]) + floori(Birds.chance([port.id, id, "count"]) * (int(odds[2]) - int(odds[1]) + 1)), int(COLONY_MOST.get(cls, 99)))
 				_add_colony(cls, id, port.id, spot, maxi(count, 1), str(species_homes.get(id, homes.get(cls, "nest"))), entry[1])
-				kept += 1
+				if owl:
+					owls += 1
+				else:
+					kept += 1
 		# Seabirds nest at some of the ports in their ranges.
 		for id: String in birds.seabirds:
 			var info: Dictionary = birds.seabirds[id]

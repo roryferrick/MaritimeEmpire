@@ -76,9 +76,12 @@ const DEPARTURE_MARGIN_S := 1.0
 ## A worn-out Mammoth still crawls at this fraction of top speed, so it can always finish a job.
 const MIN_RECOVERY_SPEED_FACTOR := 0.05
 ## The finances window: money is tallied in buckets this many seconds long,
-## kept for WINDOW_SECONDS.
-const BUCKET_SECONDS := 10.0
+## kept for as long as the longest window: WINDOW_SECONDS (the company's
+## recent figures: Finances, the XP rate, the AI rivals) or the ships' own,
+## SHIP_EARNINGS_DAYS of calendar time (each ship's earnings on the Ships tab).
+const BUCKET_SECONDS := 30.0
 const WINDOW_SECONDS := 600.0
+const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
@@ -402,19 +405,25 @@ func calendar_time() -> int:
 	return calendar_time_at(play_time)
 
 
-## How long the recent-finances window (WINDOW_SECONDS of play) is in game
-## time, as the Ships tab says it: "8 days", "1 day" or "12 hours".
-func recent_window_text() -> String:
-	var hours := WINDOW_SECONDS * calendar_seconds_per_second() / 3600.0
+## The ships' earnings window (SHIP_EARNINGS_DAYS of calendar time) in
+## seconds of play.
+func ship_window_seconds() -> float:
+	return SHIP_EARNINGS_DAYS * 86400.0 / maxf(calendar_seconds_per_second(), 1.0)
+
+
+## How long a finances window (`seconds` of play: the ships' earnings window by
+## default) is in game time, as the Ships tab says it: "30 days", "1 day" or "12 hours".
+func recent_window_text(seconds := -1.0) -> String:
+	var hours := (seconds if seconds > 0.0 else ship_window_seconds()) * calendar_seconds_per_second() / 3600.0
 	if hours >= 47.0:
 		return "%d days" % roundi(hours / 24.0)
 	if hours >= 23.0:
 		return "1 day"
 	return "%d hours" % maxi(roundi(hours), 1)
 
-## The same, short, for a ship tile: "8d", "1d" or "12h".
-func recent_window_short() -> String:
-	var hours := WINDOW_SECONDS * calendar_seconds_per_second() / 3600.0
+## The same, short, for a ship tile: "30d", "1d" or "12h".
+func recent_window_short(seconds := -1.0) -> String:
+	var hours := (seconds if seconds > 0.0 else ship_window_seconds()) * calendar_seconds_per_second() / 3600.0
 	if hours >= 23.0:
 		return "%dd" % maxi(roundi(hours / 24.0), 1)
 	return "%dh" % maxi(roundi(hours), 1)
@@ -3492,7 +3501,8 @@ func _current_bucket(of: Company = null) -> Dictionary:
 	var start := floorf(play_time / BUCKET_SECONDS) * BUCKET_SECONDS
 	if window.is_empty() or window[-1].start < start:
 		window.append({start = start, fleet = {}, ships = {}})
-	while window[0].start < play_time - WINDOW_SECONDS:
+	var keep := maxf(WINDOW_SECONDS, ship_window_seconds())
+	while window[0].start < play_time - keep:
 		window.pop_front()
 	return window[-1]
 
@@ -3504,13 +3514,14 @@ func recent_xp_per_minute() -> float:
 	return float(recent_finances().fleet.get("xp", 0.0)) / minutes if minutes > 0.0 else 0.0
 
 
-## A company's money (this player's by default) over the last WINDOW_SECONDS: {fleet: {kind: amount}, ships: {ship
-## name: profit}}.
-func recent_finances(of: Company = null) -> Dictionary:
+## A company's money (this player's by default) over the last `seconds` of
+## play (WINDOW_SECONDS by default; ship_window_seconds() for the ships'
+## earnings): {fleet: {kind: amount}, ships: {ship name: profit}}.
+func recent_finances(of: Company = null, seconds := WINDOW_SECONDS) -> Dictionary:
 	var fleet := {}
 	var ship_profit := {}
 	for bucket: Dictionary in (of if of != null else company).finance_window:
-		if bucket.start < play_time - WINDOW_SECONDS:
+		if bucket.start < play_time - seconds:
 			continue
 		for kind: String in bucket.fleet:
 			fleet[kind] = float(fleet.get(kind, 0.0)) + bucket.fleet[kind]

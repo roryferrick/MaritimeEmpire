@@ -4,7 +4,7 @@ extends Button
 ## One compact tile on the Ships screen: status dot, ship name, what it's
 ## carrying and its level (highlighted while it has skill points to spend), and
 ## mini maintenance, fuel and cargo bars, with its captain's picture and name,
-## and what it earned in the last 10 minutes under its name.
+## and what it earned in the last 30 days of game time under its name.
 ## Hovering shows the full name.
 
 const THEME_TYPE := &"StatusDot"
@@ -20,7 +20,7 @@ var _dot := Control.new()
 var _info := Label.new()
 var _name := Label.new()
 var _captain := Label.new()
-## What it has earned in the last 10 minutes (see show_earnings()).
+## What it has earned in the last 30 days of game time (see show_earnings()).
 var _earned := Label.new()
 
 
@@ -145,10 +145,10 @@ func _draw_dot() -> void:
 	_dot.draw_circle(_dot.size / 2.0, DOT_RADIUS, color, true, -1.0, true)
 
 
-## Shows what the ship has earned (profit) in the last 10 minutes under its
+## Shows what the ship has earned (profit) in the last 30 days of game time under its
 ## name, green or red; nothing for a ship that hasn't earned or spent.
 func show_earnings(amount: float) -> void:
 	_earned.visible = absf(amount) >= 1.0
 	_earned.text = "%s%s in %s" % ["+" if amount > 0.0 else "", Fmt.money_short(roundi(amount)), GameState.recent_window_short()]
 	_earned.theme_type_variation = &"GainLabel" if amount > 0.0 else &"ErrorLabel"
-	_earned.tooltip_text = "Earned over the last %s of game time (10 minutes of play)" % GameState.recent_window_text()
+	_earned.tooltip_text = "Earned over the last %s of game time (%s of play)" % [GameState.recent_window_text(), Fmt.duration(GameState.ship_window_seconds())]

@@ -2,7 +2,8 @@
 extends Node
 ## The player's own settings (the Settings page, from the Esc menu: see
 ## SettingsPage), kept on this computer in user://settings.cfg for every game
-## (not in a save): how ships look from afar, and the sound's volumes. The
+## (not in a save): how ships look from afar, day and night, the birds, and
+## the sound's volumes. The
 ## sound plays through its own audio buses, made here, so each has a volume:
 ## the sea and the weather (Ambience's loops), the animals' calls, and the
 ## ships' horns, all under Master.
@@ -24,6 +25,19 @@ var ship_look := "dot":
 		ship_look = value if value in SHIP_LOOKS else "dot"
 		_save()
 		changed.emit()
+## Day and night on the map (the dark side of the globe and its lights); off,
+## always day (MapView._update_night()).
+var day_night := true:
+	set(value):
+		day_night = value
+		_save()
+		changed.emit()
+## The birds drawn on the map (off: none drawn or clicked; their calls still play).
+var birds := true:
+	set(value):
+		birds = value
+		_save()
+		changed.emit()
 var _volumes := {}
 
 
@@ -39,6 +53,8 @@ func _ready() -> void:
 	if config.load(PATH) == OK:
 		var look := str(config.get_value("general", "ship_look", "dot"))
 		ship_look = look if look in SHIP_LOOKS else "dot"
+		day_night = bool(config.get_value("general", "day_night", true))
+		birds = bool(config.get_value("general", "birds", true))
 		for entry: Array in VOLUMES:
 			_volumes[entry[0]] = clampf(float(config.get_value("audio", str(entry[0]), 1.0)), 0.0, 1.0)
 	for entry: Array in VOLUMES:
@@ -71,6 +87,8 @@ func _save() -> void:
 		return  # (Loading: nothing new to write.)
 	var config := ConfigFile.new()
 	config.set_value("general", "ship_look", ship_look)
+	config.set_value("general", "day_night", day_night)
+	config.set_value("general", "birds", birds)
 	for entry: Array in VOLUMES:
 		config.set_value("audio", str(entry[0]), volume(str(entry[0])))
 	config.save(PATH)

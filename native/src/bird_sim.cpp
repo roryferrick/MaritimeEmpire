@@ -164,7 +164,8 @@ void BirdSim::setup(const Array &colonies, const Dictionary &species, double mig
 		s.id = id;
 		s.span = info.get("span", 1.0);
 		String kind = info.get("kind", "");
-		s.night_heron = kind == "Night heron";
+		// About by night, asleep by day: night herons, and owls but those active by day (the snowy owl).
+		s.night_heron = kind == "Night heron" || (kind == "Owl" && String(info.get("active", "night")) != "day");
 		s.frigate = kind == "Frigatebird";
 		s.crane = kind == "Crane";
 		s.hide = String(info.get("behavior", "")) == "hide";

@@ -19,7 +19,7 @@
 <rect x="70.0" y="18.0" width="34.0" height="28.0" rx="7.0" fill="#f2f2f0" stroke="#1a1a1a" stroke-width="1.0" />
 <rect x="92.0" y="22.0" width="8.0" height="20.0" rx="2.0" fill="#1f2b38" stroke="none" stroke-width="0.0" />
 <circle cx="82.0" cy="32.0" r="3.0" fill="#c9ced3" stroke="none" stroke-width="0.0"/>
-<path d="M76.0,18.0 L18.0,4.0" stroke="#c9ced3" stroke-width="1.4" stroke-linecap="round" fill="none" />
-<path d="M76.0,46.0 L18.0,60.0" stroke="#c9ced3" stroke-width="1.4" stroke-linecap="round" fill="none" />
+<path d="M76.0,18.0 L54.0,14.0" stroke="#c9ced3" stroke-width="1.4" stroke-linecap="round" fill="none" />
+<path d="M76.0,46.0 L54.0,50.0" stroke="#c9ced3" stroke-width="1.4" stroke-linecap="round" fill="none" />
 <path d="M124.0,32.0 L158.0,32.0" stroke="#c9ced3" stroke-width="1.0" stroke-linecap="round" fill="none" />
 </svg>

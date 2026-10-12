@@ -13,16 +13,16 @@
 <rect x="40.0" y="31.0" width="14.0" height="14.0" rx="3.0" fill="#f2f2f0" stroke="#7a7a7a" stroke-width="0.8" />
 <path d="M42.0,38.0 L52.0,38.0" stroke="#7a7a7a" stroke-width="0.8" stroke-linecap="round" fill="none" />
 <circle cx="18.0" cy="16.0" r="1.6" fill="#9aa0a6" stroke="none" stroke-width="0.0"/>
-<path d="M18.0,16.0 L8.0,11.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M18.0,16.0 L13.0,15.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
 <circle cx="28.0" cy="16.0" r="1.6" fill="#9aa0a6" stroke="none" stroke-width="0.0"/>
-<path d="M28.0,16.0 L18.0,11.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M28.0,16.0 L23.0,15.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
 <circle cx="98.0" cy="16.0" r="1.6" fill="#9aa0a6" stroke="none" stroke-width="0.0"/>
-<path d="M98.0,16.0 L88.0,11.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M98.0,16.0 L93.0,15.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
 <circle cx="18.0" cy="60.0" r="1.6" fill="#9aa0a6" stroke="none" stroke-width="0.0"/>
-<path d="M18.0,60.0 L8.0,65.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M18.0,60.0 L13.0,61.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
 <circle cx="28.0" cy="60.0" r="1.6" fill="#9aa0a6" stroke="none" stroke-width="0.0"/>
-<path d="M28.0,60.0 L18.0,65.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M28.0,60.0 L23.0,61.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
 <circle cx="98.0" cy="60.0" r="1.6" fill="#9aa0a6" stroke="none" stroke-width="0.0"/>
-<path d="M98.0,60.0 L88.0,65.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
+<path d="M98.0,60.0 L93.0,61.0" stroke="#2b2b2b" stroke-width="0.8" stroke-linecap="round" fill="none" />
 <circle cx="130.0" cy="38.0" r="2.4" fill="#c9ced3" stroke="none" stroke-width="0.0"/>
 </svg>

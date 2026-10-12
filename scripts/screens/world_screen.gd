@@ -358,6 +358,7 @@ func _open_animals_popup(key: String, kind: String) -> void:
 func _open_birds_popup(about: Dictionary, _flock: Dictionary) -> void:
 	var popup := BirdsPopup.new()
 	popup.about = about
+	popup.map = _map  # (Its Follow buttons follow a bird on it.)
 	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
 	popup.follow = func() -> Vector2:
 		var at := Vector2.INF
