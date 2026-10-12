@@ -1694,7 +1694,7 @@ const BIRD_BOOST_REFRESH_S := 5.0
 ## How many of a species the boosts count at most (they saturate: BirdBoosts.EXTRA_PER_BIRD up to 3),
 ## and how many birds are looked at closely for one ship (a big colony that all planned to follow it is a hitch).
 const BIRD_BOOST_COUNT_CAP := 8
-const BIRD_BOOST_LOOK_CAP := 40
+const BIRD_BOOST_LOOK_CAP := 8
 var _bird_boosts := {}  # Ship -> [until (play time), boosts].
 
 func bird_boosts(ship: Ship) -> Dictionary:
@@ -2082,7 +2082,10 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 	# room to spare (and goes back out if it fills up: see below).
 	if ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE and not ship.is_service() and not ship.is_docking() and not ship.is_on_job() and ship.is_running() and docks.free_berths(ship.docked_at) > WAIT_AT_PIER_FREE + 1:
 		ship.berth_phase = Ship.BERTH_WAIT  # (An idle or paused ship lies at the moorings: see _wake_waiting_ships().)
-	if not _advance_berth(ship, delta):
+	var t_ab := Time.get_ticks_usec()
+	var berthing := not _advance_berth(ship, delta)
+	MapView._prof("adv.berth", t_ab)
+	if berthing:
 		return
 	if ship.is_docking():
 		var end := ship.dock_time + delta
@@ -2104,16 +2107,22 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 			return
 		ship.dock_time = -1.0
 		ship_changed.emit(ship)
+	var t_ad := Time.get_ticks_usec()
 	if ship.is_service() and not ship.base_port.is_empty() and ship.docked_at != ship.base_port and not _on_ice_duty(ship):
 		_try_depart(ship, delta, ship.base_port)
+		MapView._prof("adv.try_depart", t_ad)
 	elif ship.is_fishing():
 		_fishing_in_port(ship)
+		MapView._prof("adv.fishing", t_ad)
 	elif ship.is_running():
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
+		MapView._prof("adv.try_depart", t_ad)
 	else:
 		_set_hold(ship, "")
 	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE and (docks.free_berths(ship.docked_at) < WAIT_AT_PIER_FREE or not ship.is_running() and not ship.is_service()):
+		t_ad = Time.get_ticks_usec()
 		_pull_out(ship, "")  # Done, but not going yet: it waits at its pier while the port has room, else off to the moorings; an idle or paused ship always goes to the moorings.
+		MapView._prof("adv.pull_out", t_ad)
 
 
 ## A cargo ship's berth: queuing for one, coming alongside, pulling out. True
@@ -2122,12 +2131,19 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 	var settings := Docks.settings()
 	match ship.berth_phase:
 		Ship.BERTH_WAIT:
-			if not docks.claim(ship):
+			var t_cl := Time.get_ticks_usec()
+			var claimed := docks.claim(ship)
+			MapView._prof("berth.claim", t_cl)
+			if not claimed:
 				return false
 			ship.berth_phase = Ship.BERTH_IN
 			ship.berth_time = 0.0
+			var t_bs := Time.get_ticks_usec()
 			ship.berth_duration = _berth_seconds(ship, true)
+			MapView._prof("berth.seconds", t_bs)
+			t_bs = Time.get_ticks_usec()
 			ship_changed.emit(ship)
+			MapView._prof("berth.changed", t_bs)
 			return false
 		Ship.BERTH_IN:
 			ship.berth_time += delta
@@ -2190,8 +2206,12 @@ func _unload_timed(ship: Ship) -> void:
 		_sell_cargo(ship)
 		MapView._prof("unload.sell", t_u)
 	if ship.is_running():
+		var t_l := Time.get_ticks_usec()
 		_load_cargo(ship, ship.route[ship.next_route_index()])
+		MapView._prof("unload.load", t_l)
+	var t_c := Time.get_ticks_usec()
 	ship_changed.emit(ship)
+	MapView._prof("unload.changed", t_c)
 
 
 func _sell_cargo(ship: Ship) -> void:
@@ -2205,6 +2225,7 @@ func _sell_cargo(ship: Ship) -> void:
 	ship.stop_cost = ship.cargo_cost
 	_add_money(who, ship.cargo_payment)
 	_record(ship, "income", ship.cargo_payment)
+	_tally_port_trade(who, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_payment, true)
 	var t_s := Time.get_ticks_usec()
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
 	MapView._prof("sell.trade", t_s)
@@ -2254,11 +2275,15 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	if ship.is_service() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return ""
 	if str(ship.model().get("category", "")) == "seafood":
+		var t_st := Time.get_ticks_usec()
 		var stored := _load_from_store(ship, to)
+		MapView._prof("load.store", t_st)
 		if not stored.is_empty():
 			return stored[0]
 	var who := owner_of(ship)
+	var t_b := Time.get_ticks_usec()
 	var best := market.best_cargo(ship.model(), ship.docked_at, to, who)
+	MapView._prof("load.best", t_b)
 	if best[0] == "":
 		return ""
 	var price := company_buy_price(ship.docked_at, best[0], who)
@@ -2272,15 +2297,22 @@ func _load_cargo(ship: Ship, to: String) -> String:
 		ship.load_need = roundi(room * price + ship.bill + reserve + who.bank_reserve)
 		return best[0]
 	var cost := roundi(quantity * price)
+	var t_m := Time.get_ticks_usec()
 	_add_money(who, -cost)
 	_record(ship, "cargo", cost)
+	_tally_port_trade(who, ship.docked_at, best[0], quantity, cost, false)
+	MapView._prof("load.money", t_m)
+	t_m = Time.get_ticks_usec()
 	market.trade(ship.docked_at, best[0], cost, true)
 	port_sizes.add_traffic(ship.docked_at, cost)
+	MapView._prof("load.trade", t_m)
 	ship.cargo_id = best[0]
 	ship.cargo_from = ship.docked_at
 	ship.cargo_qty = quantity
 	ship.cargo_cost = cost
+	var t_e := Time.get_ticks_usec()
 	cargo_loaded.emit(ship, ship.docked_at, best[0], quantity, cost, to)
+	MapView._prof("load.loaded", t_e)
 	# A ship that came in empty and leaves with a full hold (a one-way route out of
 	# a hub) earns the hub the XP the load will earn where it's delivered.
 	var hub := hub_at(ship.docked_at, who)
@@ -2776,6 +2808,10 @@ func _burn(ship: Ship, miles: float, speed: float) -> void:
 ## The ports on a company's (this player's by default) cargo ships' routes (and routes they'll take up
 ## after this leg), sorted: each takes tugs_per_port() tugs.
 func tug_ports(of: Company = null) -> Array[String]:
+	# (Asked for every tug model at once: a loop over the fleet, kept for the frame.)
+	var frame := Engine.get_process_frames()
+	if _tug_ports_frame == frame and _tug_ports_of == of:
+		return _tug_ports_kept
 	var ports := {}
 	for ship in fleet(of):
 		if ship.is_service():
@@ -2787,7 +2823,14 @@ func tug_ports(of: Company = null) -> Array[String]:
 	var out: Array[String] = []
 	out.assign(ports.keys())
 	out.sort()
+	_tug_ports_frame = frame
+	_tug_ports_of = of
+	_tug_ports_kept = out
 	return out
+
+var _tug_ports_frame := -1
+var _tug_ports_of: Company = null
+var _tug_ports_kept: Array[String] = []
 
 
 ## How many tugs each port on the routes takes (game_config tugs per_port).
@@ -3493,6 +3536,46 @@ func _record(ship: Ship, kind: String, amount: float, who: Company = null) -> vo
 		ship.ledger[kind] = float(ship.ledger.get(kind, 0.0)) + amount
 		var tally: Dictionary = bucket.ships.get_or_add(ship.name, {})
 		tally[kind] = float(tally.get(kind, 0.0)) + amount
+
+
+## Counts a company's trade at a port (Company.port_trade): `units` of a
+## commodity bought there for `money` (sold false) or sold there for it.
+func _tally_port_trade(who: Company, port: String, commodity: String, units: int, money: float, sold: bool) -> void:
+	if port.is_empty() or commodity.is_empty() or units <= 0:
+		return
+	var here: Dictionary = who.port_trade.get_or_add(port, {since = play_time, goods = {}})
+	var tally: Array = (here.goods as Dictionary).get_or_add(commodity, [0, 0.0, 0, 0.0])
+	var at := 2 if sold else 0
+	tally[at] = int(tally[at]) + units
+	tally[at + 1] = float(tally[at + 1]) + money
+
+
+## Game time (s of play) in a 30-day month, for the port trade summary's rates.
+const TRADE_MONTH_DAYS := 30.0
+
+## A company's (this player's by default) trade at a port, for the port
+## popup's trade tab: {days (of game time it's been counted), rows: [{id,
+## bought, spent, sold, earned, industry (what a building for it here
+## would have saved and added, a month: its buy discount off the spending
+## and its sell bonus on the earnings, the HQ's more), built (one stands
+## here)}] most worth an industry first}.
+func port_trade_summary(port: String, of: Company = null) -> Dictionary:
+	var who := of if of != null else company
+	var here: Dictionary = who.port_trade.get(port, {})
+	var days := maxf(play_time - float(here.get("since", play_time)), 0.0) * calendar_seconds_per_second() / 86400.0
+	var hub := who.hub_at(port)
+	var industry := Hub.industry_settings()
+	var boost := float(Hub.settings().get("hq_multiplier", 1.5)) if hub != null and hub.is_hq else 1.0
+	var per_month := TRADE_MONTH_DAYS / maxf(days, 1.0)
+	var rows := []
+	for id: String in here.get("goods", {}):
+		var tally: Array = here.goods[id]
+		var built := hub != null and hub.has_industry(id)
+		var worth := (float(tally[1]) * float(industry.get("buy_discount", 0.2)) + float(tally[3]) * float(industry.get("sell_bonus", 0.2))) * boost
+		rows.append({id = id, bought = int(tally[0]), spent = float(tally[1]), sold = int(tally[2]), earned = float(tally[3]),
+			industry = worth * per_month, built = built})
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.industry) > float(b.industry))
+	return {days = days, rows = rows}
 
 
 ## A company's (this player's by default) bucket of recent money for now.
@@ -4284,6 +4367,7 @@ func _land_catch(ship: Ship, port: String) -> void:
 	else:
 		_add_money(who, value)
 		_record(ship, "income", value)
+		_tally_port_trade(who, port, family, crates, value, true)
 		market.trade(port, family, value, false)
 		port_sizes.add_traffic(port, value)
 	var miles := Fisheries.shared().miles_to(port, ship.fish_ground) * 2.0

@@ -543,6 +543,7 @@
 			"unlock_level": 8,
 			"icebreaker": "diesel",
 			"price": 8000000,
+			"first_price": 3000000,
 			"xp_first_level": 600,
 			"speed_nm_per_s": 4.5,
 			"capacity": 0,

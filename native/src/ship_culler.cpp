@@ -72,6 +72,10 @@ ShipCuller::Lane &ShipCuller::_lane(const String &from, const String &to) {
 	if (_lane_provider.is_valid()) {
 		made = _lane_provider.call(from, to);
 	}
+	if (made.size() < 4) {
+		static Lane none; // (Not kept: the map may give it next pass, once it's bent the lane.)
+		return none;
+	}
 	Lane &lane = _lanes[key];
 	{
 		if (made.size() >= 4) {
@@ -192,6 +196,8 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 	Object *mine = params.get("mine", Variant());
 	Callable port_shown = params.get("port_shown", Callable());
 	bool dots = params.get("dots", false);
+	Rect2 near = params.get("near", Rect2());
+	bool culls = params.has("near") && params.has("right");
 	RID dots_canvas = params.get("dots_canvas", RID());
 	Vector3 right = params.get("right", Vector3());
 	Vector3 up = params.get("up", Vector3());
@@ -274,8 +280,23 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 				}
 			}
 		} else if ((!plain_sailing && !idle_service) || in_view) {
-			// A cargo ship plainly on its lane, too small to make out: a dot
-			// where it is (MapView._draw_tiny_ship()), drawn here.
+			// A cargo ship plainly on its lane: where it is, natively. Off the
+			// screen by more than the map's margin (or round the far side), it
+			// isn't drawn at all; too small to make out, it's a dot where it is
+			// (MapView._draw_tiny_ship()), drawn here.
+			if (plain_sailing && !from.is_empty() && !to.is_empty() && culls) {
+				Lane &lane = _lane(from, to);
+				if (lane.valid) {
+					Vector3 p = _at_mile(lane, mile);
+					if (p.dot(_toward) < 0.0f) {
+						continue;
+					}
+					Vector2 at = middle + Vector2(p.dot(right), -p.dot(up)) * (real_t)radius;
+					if (!near.has_point(at)) {
+						continue;
+					}
+				}
+			}
 			if (dots && plain_sailing && !from.is_empty() && !to.is_empty() && (double)lengths[i] * scale < dot_px) {
 				Lane &lane = _lane(from, to);
 				if (lane.valid) {

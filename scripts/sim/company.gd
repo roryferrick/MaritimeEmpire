@@ -58,6 +58,10 @@ var totals := {}
 ## port for its seafood carriers to take (see GameState._land_catch()):
 ## port id -> {family: crates}.
 var cold_stores := {}
+## What it has traded at each port (see GameState._tally_port_trade()): port id ->
+## {since (play time it began keeping count there), goods: {commodity id:
+## [units bought, money spent, units sold, money earned]}}.
+var port_trade := {}
 ## Per canal id: {crossings, tolls, xp (the extra company XP its bonus gave)}.
 var canal_stats := {}
 ## Recent money, oldest first: {start (play_time), fleet: {kind: amount},
@@ -143,6 +147,7 @@ func to_dict() -> Dictionary:
 		"regions": regions,
 		"totals": totals,
 		"cold_stores": cold_stores,
+		"port_trade": port_trade,
 		"canal_stats": canal_stats,
 		"finance_window": finance_window,
 		"tutorials": tutorials,
@@ -183,6 +188,7 @@ static func from_dict(data: Dictionary) -> Company:
 		company.hubs.append(Hub.new(company.home_port, true))
 	company.totals = data.get("totals", {})
 	company.cold_stores = data.get("cold_stores", {})
+	company.port_trade = data.get("port_trade", {})
 	company.canal_stats = data.get("canal_stats", {})
 	company.finance_window = data.get("finance_window", [])
 	company.tutorials = bool(data.get("tutorials", false))

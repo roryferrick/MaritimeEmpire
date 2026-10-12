@@ -68,7 +68,7 @@ func _pick_port(port_id: String) -> void:
 	_home_port = port_id
 	%MapView.selected_port = port_id
 	var port := GameData.get_port(port_id)
-	%PortName.text = "%s, %s" % [port.name, port.get("country", "")]
+	%PortName.text = "Headquarters: %s, %s" % [port.name, port.get("country", "")]
 	_show_start_note()
 	%StartNote.tooltip_text = %StartNote.text
 

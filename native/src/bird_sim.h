@@ -161,6 +161,7 @@ private:
 	std::vector<Colony> _colonies;
 	std::vector<Bird> _birds;
 	std::vector<Plan> _plans;
+	Array _following_stats; // [ms, states, colonies near] of the last following().
 	std::vector<Last> _last;
 	std::vector<Fixed> _fixed;
 	std::vector<Bound> _bounds;
@@ -262,6 +263,7 @@ public:
 	Dictionary bird_state(int index, double now, double cal);
 	Dictionary doing_counts(int colony, double now, double cal);
 	Dictionary following(int64_t ship, Vector2 at, double now, double cal, int64_t cap = 0, int64_t max_states = 0);
+	Array following_stats() const { return _following_stats; }
 	int64_t where_changes() const { return _where_changes; }
 	void forget_spots();
 	bool draw(const RID &canvas, bool still, const Dictionary &params);

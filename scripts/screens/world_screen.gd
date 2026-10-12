@@ -249,20 +249,40 @@ func open_ship_popup(ship: Ship) -> void:
 ## "Prices: Grain carriers ▾" at the map's top right: puts a
 ## box over the ports with each of that ship line's commodities and its price
 ## there, or, while a port's popup is open, what it would make carried from
-## that port (see MapView.price_line); or "Prices: off". Its menu has a swatch
-## of each line's color, and the chosen line's name is shown in that color.
+## that port (see MapView.price_line); or, picked from its second column,
+## colors the ports by one commodity's price, green where cheap to red where
+## dear (MapView.price_commodity); or "Prices: off". Its menu has a swatch
+## of each line's color, and the chosen line's (or commodity's) name is shown in that color.
 func _add_price_picker() -> void:
-	_price_button.tooltip_text = "Show a ship line's prices over the ports: blue where its cargo is cheap, orange where it's dear.\nClick a port to see instead what each would make carried from there."
+	_price_button.tooltip_text = "Show a ship line's prices over the ports: blue where its cargo is cheap, orange where it's dear.\nClick a port to see instead what each would make carried from there.\nOr color the ports by one commodity's price: green where it's cheap, red where it's dear."
 	_price_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_price_button.pressed.connect(_open_price_menu)
 	%MapControls.add_child(_price_button)
 
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override(&"separation", 18)
+	_price_menu.add_child(columns)
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override(&"separation", 0)
-	_price_menu.add_child(list)
+	columns.add_child(list)
+	list.add_child(_price_heading("Price boxes"))
 	list.add_child(_price_item(""))
 	for line: Array in PRICE_LINES:
 		list.add_child(_price_item(line[1]))
+	# Coloring the ports by one commodity's price: green where cheap, red where dear.
+	var colors := VBoxContainer.new()
+	colors.add_theme_constant_override(&"separation", 0)
+	columns.add_child(colors)
+	colors.add_child(_price_heading("Port colors: green cheap, red dear"))
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override(&"h_separation", 4)
+	grid.add_theme_constant_override(&"v_separation", 0)
+	colors.add_child(grid)
+	for line: Array in PRICE_LINES:
+		for commodity: Dictionary in GameData.commodities:
+			if _line_of(commodity.id) == line[1]:
+				grid.add_child(_color_item(commodity.id, line[1]))
 	_price_menu.add_theme_stylebox_override(&"panel", get_theme_stylebox(&"panel", &"MapPopup"))
 	add_child(_price_menu)
 	_choose_price("")
@@ -288,6 +308,45 @@ func _price_item(category: String) -> Button:
 	return item
 
 
+## A heading over one of the price menu's columns.
+func _price_heading(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.theme_type_variation = &"DimLabel"
+	return label
+
+
+## One entry in the price menu's port colors: a commodity, with its line's swatch.
+func _color_item(commodity_id: String, category: String) -> Button:
+	var item := Button.new()
+	item.flat = true
+	item.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	item.text = str(GameData.commodity(commodity_id).get("name", commodity_id))
+	item.icon = _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
+	item.tooltip_text = "Color the ports by its price: green where it's cheap, white about its world average, red where it's dear (full color at 1.4 times cheaper or dearer)."
+	item.pressed.connect(_choose_commodity.bind(commodity_id))
+	return item
+
+
+## The ship line (category) that carries a commodity, as the menu lists them; "" for none.
+static func _line_of(commodity_id: String) -> String:
+	for model: Dictionary in GameData.ship_models:
+		if not model.get("recovery", false) and model.get("cargo", []).has(commodity_id):
+			return str(model.get("category", ""))
+	return ""
+
+
+## A commodity picked in the price menu: the ports colored by its price, the boxes off.
+func _choose_commodity(commodity_id: String) -> void:
+	_choose_price("")
+	_map.price_commodity = commodity_id
+	var color := GameData.category_color(_line_of(commodity_id), LINE_MIN_LUMINANCE)
+	_price_button.text = "Prices: %s  ▾" % GameData.commodity(commodity_id).get("name", commodity_id)
+	_price_button.icon = _swatch(color)
+	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color"]:
+		_price_button.add_theme_color_override(color_name, color)
+
+
 func _price_text(category: String) -> String:
 	for line: Array in PRICE_LINES:
 		if line[1] == category:
@@ -297,12 +356,15 @@ func _price_text(category: String) -> String:
 
 func _open_price_menu() -> void:
 	var rect := _price_button.get_global_rect()
-	_price_menu.popup(Rect2i(Vector2i(rect.position + Vector2(0, rect.size.y + 4)), Vector2i(int(rect.size.x), 0)))
+	# (Wider than the button: lined up with its right edge, so it stays on screen.)
+	var width := maxf(_price_menu.get_contents_minimum_size().x, rect.size.x)
+	_price_menu.popup(Rect2i(Vector2i(Vector2(rect.end.x - width, rect.position.y + rect.size.y + 4)), Vector2i(int(width), 0)))
 
 
 func _choose_price(category: String) -> void:
 	_price_menu.hide()
 	_map.price_line = category
+	_map.price_commodity = ""
 	_price_button.text = _price_text(category) + "  ▾"
 	_price_button.icon = null if category.is_empty() else _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
 	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color"]:

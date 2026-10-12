@@ -6,7 +6,10 @@ extends AnchoredPopup
 ## market (each commodity's buy and sell price, green where it's cheap
 ## compared with the world average and red where expensive), its HQ or hub
 ## (level, XP and upgrade tree) or a button to found a hub there when one is
-## available, and the player's ships docked there with their bars.
+## available, the player's trade there (what it has bought and sold, each
+## commodity ranked by what an industry building for it would be worth here:
+## see GameState.port_trade_summary()), and the player's ships docked there
+## with their bars.
 
 const SHIP_BARS_WIDTH := 80.0
 ## Founding a hub takes a second click within this many seconds (it's permanent).
@@ -23,7 +26,7 @@ const MARKET_EXPENSIVE := 1.25
 ## The docked ships' list scrolls past this height (pixels).
 const SHIP_LIST_MAX_HEIGHT := 300.0
 
-## The tab picked last in any port popup ("market", "hub" or "ships").
+## The tab picked last in any port popup ("market", "hub", "trade" or "ships").
 static var _last_tab := "market"
 
 ## Set before adding to the tree.
@@ -39,6 +42,10 @@ var _size_bar := ProgressBar.new()
 var _size_effects := Label.new()
 ## The gulls over the port now (see Birds).
 var _birds_label := Label.new()
+## The trade tab (see _refresh_trade()).
+var _trade_page := VBoxContainer.new()
+var _trade_note := Label.new()
+var _trade_grid := GridContainer.new()
 
 
 func _ready() -> void:
@@ -50,6 +57,7 @@ func _ready() -> void:
 	GameState.hubs_changed.connect(_refresh_hub)
 	GameState.company_leveled.connect(_refresh_hub.unbind(2))
 	%Tabs.tab_changed.connect(_on_tab_changed)
+	_build_trade()
 	_refresh_hub()
 	_refresh_ships()
 	_refresh_market()
@@ -64,6 +72,8 @@ func _process(delta: float) -> void:
 		_update_size()
 		_update_birds()
 		_refresh_market()
+		if _trade_page.visible:
+			_refresh_trade()
 
 
 ## The port's size: how far through its band it is and which way it's going,
@@ -148,6 +158,7 @@ func _update_tabs() -> void:
 		tabs.append(["hub", "Headquarters" if hub.is_hq else "Hub"])
 	elif GameState.hubs_available() > 0:
 		tabs.append(["hub", "Build a hub"])
+	tabs.append(["trade", "Your trade"])
 	tabs.append(["ships", "Ships (%d)" % _ship_count])
 	_tab_keys.clear()
 	%Tabs.tab_count = tabs.size()
@@ -171,6 +182,9 @@ func _show_page() -> void:
 	%MarketPage.visible = key == "market"
 	%HubBox.visible = key == "hub"
 	%ShipsPage.visible = key == "ships"
+	_trade_page.visible = key == "trade"
+	if _trade_page.visible:
+		_refresh_trade()
 	reset_size.call_deferred()
 
 
@@ -307,3 +321,61 @@ func _update_birds() -> void:
 		gulls.append({id = id, count = totals[id]})
 	gulls.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.count) > int(b.count))
 	_birds_label.text = "Gulls: %s" % Birds.shared().counts_text(gulls) if not gulls.is_empty() else ""
+
+
+# --- Your trade --------------------------------------------------------------
+
+## The trade tab's page, under the others in the popup.
+func _build_trade() -> void:
+	_trade_page.add_theme_constant_override(&"separation", 6)
+	_trade_page.visible = false
+	_trade_note.theme_type_variation = &"DimLabel"
+	_trade_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_trade_note.custom_minimum_size.x = 420.0
+	_trade_page.add_child(_trade_note)
+	_trade_grid.columns = 4
+	_trade_grid.add_theme_constant_override(&"h_separation", 18)
+	_trade_grid.add_theme_constant_override(&"v_separation", 2)
+	_trade_page.add_child(_trade_grid)
+	%ShipsPage.add_sibling(_trade_page)
+
+
+## What the company has bought and sold here (since it began keeping count),
+## each commodity with what an industry building for it here would have been
+## worth a month, the most first: the commodities best worth a building.
+func _refresh_trade() -> void:
+	for child in _trade_grid.get_children():
+		_trade_grid.remove_child(child)
+		child.queue_free()
+	var summary := GameState.port_trade_summary(port_id)
+	var rows: Array = summary.rows
+	var settings := Hub.industry_settings()
+	var hub := GameState.hub_at(port_id)
+	var boost := float(Hub.settings().get("hq_multiplier", 1.5)) if hub != null and hub.is_hq else 1.0
+	var terms := "An industry building here makes its commodity %d%% cheaper to buy and %d%% dearer to sell here, and its deliveries earn %d%% more XP" % [
+		roundi(float(settings.get("buy_discount", 0.2)) * boost * 100.0), roundi(float(settings.get("sell_bonus", 0.2)) * boost * 100.0), roundi(float(settings.get("xp_bonus", 0.5)) * boost * 100.0)]
+	var where := " (built at your HQ or a hub)." if hub == null else "."
+	if rows.is_empty():
+		_trade_note.text = "Your ships haven't bought or sold anything here yet. %s%s" % [terms, where]
+		reset_size.call_deferred()
+		return
+	_trade_note.text = "Your trade here over the last %s. %s%s The last column is what a building for each would have saved and added, a month." % [
+		("%d days" % roundi(float(summary.days))) if float(summary.days) >= 1.5 else "day", terms, where]
+	for title: String in ["", "Bought here", "Sold here", "Industry a month"]:
+		_add_trade_cell(title, &"DimLabel")
+	for row: Dictionary in rows:
+		var commodity := GameData.commodity(str(row.id))
+		var units := str(commodity.get("units", "units"))
+		_add_trade_cell(str(commodity.get("name", row.id)), &"")
+		_add_trade_cell("%s %s, %s" % [Fmt.short(int(row.bought)), units, Fmt.money_short(roundi(float(row.spent)))] if int(row.bought) > 0 else "-", &"")
+		_add_trade_cell("%s %s, %s" % [Fmt.short(int(row.sold)), units, Fmt.money_short(roundi(float(row.earned)))] if int(row.sold) > 0 else "-", &"")
+		_add_trade_cell("Built" if bool(row.built) else "+%s" % Fmt.money_short(roundi(float(row.industry))), &"DimLabel" if bool(row.built) else &"GainLabel")
+	reset_size.call_deferred()
+
+
+func _add_trade_cell(text: String, variation: StringName) -> void:
+	var label := Label.new()
+	label.text = text
+	label.theme_type_variation = variation
+	label.add_theme_font_size_override(&"font_size", MARKET_FONT_SIZE)
+	_trade_grid.add_child(label)

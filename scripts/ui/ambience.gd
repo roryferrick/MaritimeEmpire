@@ -152,32 +152,29 @@ func _stream(key: String, looping: bool, now := false) -> AudioStream:
 	return stream
 
 
-## A sound's file (ogg, mp3 or wav in AUDIO_DIR), or "" if there's none; looked up once.
+## A sound's file (ogg, mp3 or wav in AUDIO_DIR), or "" if there's none: from
+## the listing made at the start (see _preload_sounds()), never a look at the
+## disk (asking whether a file exists is slow, and a port's birds are many).
 var _paths := {}
 func _stream_path(key: String) -> String:
-	if _paths.has(key):
-		return _paths[key]
-	var found := ""
-	for ext: String in ["ogg", "mp3", "wav"]:
-		var path := AUDIO_DIR + key + "." + ext
-		if ResourceLoader.exists(path):
-			found = path
-			break
-	_paths[key] = found
-	return found
+	return _paths.get(key, "")
 
 ## Asks for every recording in the background at the start (the kinds' and the
 ## birds' species'), so none is read on the main thread when its animal first calls.
 func _preload_sounds() -> void:
 	for dir_path: String in [AUDIO_DIR, AUDIO_DIR + "birds/"]:
 		for file: String in DirAccess.get_files_at(dir_path):
-			var key := file
-			while key.get_extension() != "":  # (Exported, a file may be listed as .ogg.import.)
-				key = key.get_basename()
+			var name := file
+			if name.get_extension() in ["import", "remap"]:  # (Exported, a file may be listed as .ogg.import.)
+				name = name.get_basename()
+			if not name.get_extension() in ["ogg", "mp3", "wav"]:
+				continue
+			var key := name.get_basename()
 			if dir_path != AUDIO_DIR:
 				key = "birds/" + key
-			var path := _stream_path(key)
-			if not path.is_empty() and not _streams.has(key) and ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			var path := dir_path + name
+			_paths[key] = path
+			if not _streams.has(key) and ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
 				ResourceLoader.load_threaded_request(path)
 
 ## The zoom's share of its range, 0 with the whole world in view to 1 close in (log scale, bent by ZOOM_CURVE).
@@ -274,18 +271,31 @@ func _marina_in_view() -> float:
 
 ## A call from the animals in view: the birds at the ports on screen (each
 ## species by its numbers), the pods, and the land's animals; "" if none.
+var _t_pick := 0
 func _pick_call() -> String:
+	_t_pick = Time.get_ticks_usec()
 	var picks := []  # [key, weight]
 	var area := Rect2(Vector2.ZERO, _map.size)
 	var cal := float(GameState.calendar_time())
 	var wildlife := Wildlife.shared()
 	var birds := Birds.shared()
-	for index: int in _map.marinas_in_view(area):
+	MapView._prof("pick.setup", _t_pick)
+	var t_m := Time.get_ticks_usec()
+	var marinas: PackedInt32Array = _map.marinas_in_view(area)
+	MapView._prof("pick.marinas", t_m)
+	for index: int in marinas:
 		var id: String = GameData.ports[index].id
-		if not area.has_point(_map.port_screen_position(id)) or not _map._marina_shown(id):
+		var t_sh := Time.get_ticks_usec()
+		var shown: bool = area.has_point(_map.port_screen_position(id)) and _map._marina_shown(id)
+		MapView._prof("pick.shown", t_sh)
+		if not shown:
 			continue
 		for cls: String in BIRD_CLASSES:
-			for entry: Dictionary in wildlife.birds_at(id, cls, cal):
+			var t_b := Time.get_ticks_usec()
+			var at_port := wildlife.birds_at(id, cls, cal)
+			MapView._prof("pick.birds_at", t_b)
+			var t_in := Time.get_ticks_usec()
+			for entry: Dictionary in at_port:
 				var species := str(entry.id)
 				var key := "birds/" + species
 				if _stream_path(key).is_empty():  # No recording of the species itself: its kind's.
@@ -294,6 +304,9 @@ func _pick_call() -> String:
 					key += "_2"
 				if not key.is_empty() and not _stream_path(key).is_empty():
 					picks.append([key, sqrt(float(entry.count)) * float(CALL_WEIGHTS.get(species, 1.0)), int(entry.colony)])
+			MapView._prof("pick.inner", t_in)
+	MapView._prof("pick.ports", _t_pick)
+	_t_pick = Time.get_ticks_usec()
 	var sea := SeaLife.shared()
 	for hit: Array in _map._pod_hit_list():
 		var pod: Dictionary = sea.pods[int(hit[0])]
@@ -301,8 +314,12 @@ func _pick_call() -> String:
 		var key := str(SEA_CALLS.get(kind, ""))
 		if not key.is_empty() and not _stream_path(key).is_empty():
 			picks.append([key, 3.0])
+	MapView._prof("pick.pods", _t_pick)
+	_t_pick = Time.get_ticks_usec()
 	if not _land_scanned:
 		_scan_land_animals()
+	MapView._prof("pick.scan", _t_pick)
+	_t_pick = Time.get_ticks_usec()
 	for animal: Array in _land_animals:
 		if area.has_point(_map.world_to_screen(animal[1])):
 			picks.append([animal[0], 3.0])
@@ -334,7 +351,7 @@ func _scan_land_animals() -> void:
 			_land_animals.append([str(LAND_CALLS[kind]), data.decor_positions[i]])
 
 
-## Plays a call on a free voice (none free: skipped), from a random point in
+## Plays a call on a free voice (none free: skipped), from the start (seeking in
 ## the recording, fading out after CALL_MAX_S. True if it played.
 func _play_call(key: String, db: float) -> bool:
 	var stream := _stream(key, false)
@@ -343,11 +360,20 @@ func _play_call(key: String, db: float) -> bool:
 	for voice in _voices:
 		if voice.playing:
 			continue
+		var t_v := Time.get_ticks_usec()
 		voice.stream = stream
 		voice.volume_db = db
 		var length := stream.get_length()
-		var from := _rng.randf() * maxf(length - CALL_MAX_S, 0.0) if length > CALL_MAX_S + 2.0 else 0.0
-		voice.play(from)
+		MapView._prof("play.set", t_v)
+		# (From the start, always: seeking into a recording decodes its way there, tens of ms.)
+		var from := 0.0
+		t_v = Time.get_ticks_usec()
+		voice.play()
+		MapView._prof("play.play", t_v)
+		t_v = Time.get_ticks_usec()
+		if from > 0.0:
+			voice.seek(from)
+		MapView._prof("play.seek", t_v)
 		if length - from > CALL_MAX_S:
 			var tween := create_tween()
 			tween.tween_interval(CALL_MAX_S - CALL_FADE_S)

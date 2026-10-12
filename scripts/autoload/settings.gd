@@ -32,6 +32,13 @@ var day_night := true:
 		day_night = value
 		_save()
 		changed.emit()
+## Only this player's own routes drawn with the Routes switch (not the other
+## companies', players' or AI rivals': MapView._draw_active_lanes()).
+var own_routes_only := false:
+	set(value):
+		own_routes_only = value
+		_save()
+		changed.emit()
 ## The birds drawn on the map (off: none drawn or clicked; their calls still play).
 var birds := true:
 	set(value):
@@ -55,6 +62,7 @@ func _ready() -> void:
 		ship_look = look if look in SHIP_LOOKS else "dot"
 		day_night = bool(config.get_value("general", "day_night", true))
 		birds = bool(config.get_value("general", "birds", true))
+		own_routes_only = bool(config.get_value("general", "own_routes_only", false))
 		for entry: Array in VOLUMES:
 			_volumes[entry[0]] = clampf(float(config.get_value("audio", str(entry[0]), 1.0)), 0.0, 1.0)
 	for entry: Array in VOLUMES:
@@ -89,6 +97,7 @@ func _save() -> void:
 	config.set_value("general", "ship_look", ship_look)
 	config.set_value("general", "day_night", day_night)
 	config.set_value("general", "birds", birds)
+	config.set_value("general", "own_routes_only", own_routes_only)
 	for entry: Array in VOLUMES:
 		config.set_value("audio", str(entry[0]), volume(str(entry[0])))
 	config.save(PATH)

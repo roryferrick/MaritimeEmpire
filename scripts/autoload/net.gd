@@ -656,8 +656,10 @@ func _collect() -> Dictionary:
 		ships[ship.id] = data.duplicate(true)  # A copy: the ship's own tables (skills, ledger) change in place.
 	return {
 		t = GameState.play_time, speed = GameState.time_speed,
-		weather = GameState.weather.to_dict(false), market = GameState.market.to_dict(), divine = GameState.divine.to_dict(),
-		ports = GameState.port_sizes.to_dict(),
+		# (Copies: these hold the live tables, which change in place, and what
+		# was sent must stay as it was or later changes look like no change.)
+		weather = GameState.weather.to_dict(false).duplicate(true), market = GameState.market.to_dict().duplicate(true),
+		divine = GameState.divine.to_dict().duplicate(true), ports = GameState.port_sizes.to_dict().duplicate(true),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
 		ships = ships,
 	}

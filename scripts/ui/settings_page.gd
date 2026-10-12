@@ -86,6 +86,12 @@ func _general_tab() -> Control:
 		GameState.show_active_routes = on
 		Settings.changed.emit())
 	box.add_child(routes)
+	var own := CheckButton.new()
+	own.text = "Only my routes"
+	own.tooltip_text = "With Routes on, show only your own ships' routes, not the other companies' (other players' or the AI rivals')."
+	own.button_pressed = Settings.own_routes_only
+	own.toggled.connect(func(on: bool) -> void: Settings.own_routes_only = on)
+	box.add_child(own)
 	var day_night := CheckButton.new()
 	day_night.text = "Day and night"
 	day_night.tooltip_text = "The side of the world away from the sun goes dark, with ships', harbours' and towns' lights. Off, it's always day."

@@ -587,6 +587,19 @@ var price_line := "":
 	set(value):
 		price_line = value
 		_prices_changed()
+## A commodity id to color the ports by (green where it's cheap, white about
+## its world average, red where it's dear: see _price_color()), or "" for none.
+var price_commodity := "":
+	set(value):
+		price_commodity = value
+		_static_layer.queue_redraw()
+## The ports' colors by price (see price_commodity): full green at its world
+## average price over PORT_PRICE_SPAN or less, white at the average, full red at
+## PORT_PRICE_SPAN times it or more (most prices run from about half to one
+## and a half times the average).
+const PORT_PRICE_CHEAP := Color(0.2, 0.85, 0.3)
+const PORT_PRICE_DEAR := Color(0.95, 0.2, 0.15)
+const PORT_PRICE_SPAN := 1.4
 ## Where the cargo would be loaded, for price_line's boxes: its own box shows
 ## what each commodity costs to buy there, every other port's the profit per
 ## unit (per load with price_ship) of carrying it there. "" for plain prices.
@@ -794,7 +807,10 @@ var _price_epoch := 0
 ## what their looks were last worked out for (see _update_port_styles()).
 var _port_painter: Object = null
 var _port_styles_key := []
-var _port_styles_radii := PackedFloat32Array()  # (Each port's dot's radius, to a tenth of a px, as last looked at.)
+var _port_styles_radii := PackedFloat32Array()  # (Each port's dot's radius, to a quarter px, as last looked at.)
+var _port_bands := PackedStringArray()  # Each port's size band as its marina's radius was last worked out...
+var _port_layout_radii := PackedFloat32Array()  # ...and that radius.
+var _port_styles_key_hubs := []
 var _port_styles_time := -1000000
 ## Label text sizes, measured once (see _label_size()).
 var _label_sizes := {}
@@ -1488,10 +1504,27 @@ func _draw_tiled_lines(canvas: CanvasItem, whole: PackedVector2Array, tiles: Arr
 	if not _art_tiled or tiles.is_empty():
 		canvas.draw_multiline(whole, color, -1.0)
 	else:
+		# Each tile's lines as a mesh made once and kept with it (drawn by the
+		# GPU from then on), not thousands of points sent again at every redraw.
 		for tile: Array in tiles:
 			if _tile_in_view(tile):
-				canvas.draw_multiline(tile[0], color, -1.0)
+				if tile.size() < 4:
+					tile.resize(4)
+				if tile[3] == null:
+					tile[3] = _line_mesh(tile[0])
+				canvas.draw_mesh(tile[3], null, Transform2D.IDENTITY, color)
 	_prof("art.lines", t_a)
+
+## Line segments (pairs of points) as a mesh of lines (a pixel wide, like draw_multiline()).
+static func _line_mesh(segments: PackedVector2Array) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	if segments.size() < 2:
+		return mesh
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = segments
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_2D_VERTICES)
+	return mesh
 
 ## The art's tiles (see _shared_meshes), or {} if they weren't made.
 func _art_tiles() -> Dictionary:
@@ -3894,15 +3927,22 @@ static func _berth_ship(kind: String) -> Vector2:
 
 ## A port's marina as it is now (its berths, and whether it's a hub port).
 func _port_layout(port_id: String) -> Dictionary:
-	# Asked for very often (every port and docked ship, every frame): worked out
-	# once a frame per port (a port's berths change only with its size and hubs).
+	# Asked for very often (every port and docked ship, every frame): kept
+	# while what it's made of stays (its berths, by the port's size and hubs,
+	# and whether a canal runs through), looked at again once a frame per port.
 	var frame := Engine.get_process_frames()
-	if frame != _port_layouts_frame:
-		_port_layouts_frame = frame
-		_port_layouts.clear()
-	if not _port_layouts.has(port_id):
-		_port_layouts[port_id] = _marina_layout(GameState.docks.berth_kinds(port_id), GameState.docks.has_hub(port_id), _is_canal_port(port_id))
-	return _port_layouts[port_id]
+	var kept: Array = _port_layouts.get(port_id, [])
+	if not kept.is_empty() and kept[0] == frame:
+		return kept[2]
+	var key := [GameState.docks.berth_kinds(port_id), GameState.docks.has_hub(port_id), _is_canal_port(port_id)]
+	if not kept.is_empty() and kept[1] == key:
+		kept[0] = frame
+		return kept[2]
+	var t_l := Time.get_ticks_usec()
+	var layout := _marina_layout(key[0], key[1], key[2])
+	_prof("layout", t_l)
+	_port_layouts[port_id] = [frame, key, layout]
+	return layout
 
 ## A point of a port's marina (dock units) on screen.
 func _dock_point(port_id: String, local: Vector2) -> Vector2:
@@ -5792,6 +5832,7 @@ func _draw_overlay() -> void:
 	_canvas = _overlay
 	_frames_drawn += 1
 	_lit_ships.clear()
+	_draw_price_rings()
 	if show_ships:
 		var t0 := Time.get_ticks_usec()
 		_draw_ships()
@@ -6206,6 +6247,30 @@ func _overlaps(rect: Rect2, placed: Array[Rect2]) -> bool:
 					return true
 	return false
 
+## Coloring the ports by a price (price_commodity): a port grown into its
+## marina has no dot to color, so a ring in its color goes round the marina
+## (just outside its jetty) instead.
+const PRICE_RING_WIDTH := 4.0
+func _draw_price_rings() -> void:
+	if price_commodity.is_empty() or not _any_marina_shown():
+		return
+	var area := Rect2(Vector2.ZERO, size)
+	for index in _ports_near_view():
+		var port_id := str((GameData.ports[index] as Dictionary).id)
+		if not _marina_shown(port_id) or _port_locked(port_id):
+			continue
+		var at := port_screen_position(port_id)
+		var radius := (float(_port_layout(port_id).radius) + JETTY_WIDTH * 2.0) * _ship_scale()
+		if _is_hidden(at) or not area.grow(radius).has_point(at):
+			continue
+		_canvas.draw_arc(at, radius, 0.0, TAU, 64, Color(_price_color(port_id), 0.85), PRICE_RING_WIDTH, true)
+
+## A port's color for price_commodity (see PORT_PRICE_CHEAP).
+func _price_color(port_id: String) -> Color:
+	var ratio := GameState.market.sell_price(port_id, price_commodity) / maxf(GameData.world_price(price_commodity), 0.001)
+	var t := clampf(log(maxf(ratio, 0.001)) / log(PORT_PRICE_SPAN), -1.0, 1.0)
+	return Color.WHITE.lerp(PORT_PRICE_CHEAP if t < 0.0 else PORT_PRICE_DEAR, absf(t))
+
 func _port_radius(port_id: String) -> float:
 	var port_size: float = GameState.port_sizes.size(port_id)
 	if port_size <= PORT_RADIUS_SIZE:
@@ -6234,6 +6299,8 @@ func _draw_ports(labels: Array) -> void:
 		var port_fill := fill
 		if selectable_ports.get(port_id) is Color:
 			port_fill = selectable_ports[port_id]
+		elif not price_commodity.is_empty():
+			port_fill = _price_color(port_id)
 		var radius := _port_radius(port_id)
 		var shining := shining_ports.has(port_id)
 		if shining:
@@ -6298,7 +6365,8 @@ func _draw_ports(labels: Array) -> void:
 ## anything that sets it has changed: a port picked, dimmed or shining, the regions open, the
 ## hubs, the ports' sizes, the colors. Dragging the map doesn't change them.
 func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, locked_fill: Color) -> void:
-	var key := [selectable_ports, dimmed_ports, shining_ports, GameState.regions.duplicate(), hub_ports.keys(), fill, dimmed, locked_fill]
+	var key := [selectable_ports, dimmed_ports, shining_ports, GameState.regions.duplicate(), hub_ports.keys(), fill, dimmed, locked_fill, price_commodity,
+		-1 if price_commodity.is_empty() else floori(Time.get_ticks_msec() / (PRICE_REFRESH_S * 1000.0))]  # (Colored by price: looked at again as prices drift.)
 	var now := Time.get_ticks_msec()
 	# (Ports grow a little all the time: their dots' sizes are looked at again
 	# as often as the ports are drawn when the view's still, to a tenth of a
@@ -6309,7 +6377,7 @@ func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, lock
 		seen = PackedFloat32Array()
 		seen.resize(GameData.ports.size())
 		for i in GameData.ports.size():
-			seen[i] = snappedf(_port_radius(GameData.ports[i].id), 0.1)
+			seen[i] = snappedf(_port_radius(GameData.ports[i].id), 0.25)
 	if key == _port_styles_key and seen == _port_styles_radii:
 		return
 	_port_styles_key = key
@@ -6323,13 +6391,27 @@ func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, lock
 	layout_radii.resize(count)
 	fills.resize(count)
 	flags.resize(count)
+	# (A marina's radius follows its port's size band, and the hubs: worked out
+	# again only when one of those has changed; a layout is a lot to work out, and there are hundreds.)
+	var same_hubs: bool = key.size() == _port_styles_key_hubs.size() and key[4] == _port_styles_key_hubs[4] and key[0] == _port_styles_key_hubs[0]
+	if _port_bands.size() != count or _port_layout_radii.size() != count or not same_hubs:
+		_port_bands.resize(count)
+		_port_bands.fill("")
+		_port_layout_radii.resize(count)
+	_port_styles_key_hubs = key
 	for i in count:
 		var port_id: String = GameData.ports[i].id
 		radii[i] = _port_radius(port_id)
-		layout_radii[i] = float(_port_layout(port_id).radius)
+		var band := GameState.port_sizes.band(port_id)
+		if band != _port_bands[i]:
+			_port_bands[i] = band
+			_port_layout_radii[i] = float(_port_layout(port_id).radius)
+		layout_radii[i] = _port_layout_radii[i]
 		var port_fill := fill
 		if selectable_ports.get(port_id) is Color:
 			port_fill = selectable_ports[port_id]
+		elif not price_commodity.is_empty():
+			port_fill = _price_color(port_id)
 		fills[i] = port_fill
 		flags[i] = (1 if _port_locked(port_id) else 0) | (2 if shining_ports.has(port_id) else 0) | (4 if hub_ports.has(port_id) else 0) | (8 if dimmed_ports.has(port_id) else 0)
 	_port_painter.set_styles(radii, layout_radii, fills, flags)
@@ -6362,11 +6444,17 @@ func _draw_route() -> void:
 
 ## Every lane the fleet sails: each cargo ship's route loop, any route waiting
 ## to replace it, and the leg it's on now. A lane shared by several ships is
-## drawn once, in the first one's color (see ORE_LANE_WHITEN). In multiplayer,
-## other players' lanes go underneath, each company's once in its own color
-## (see OTHER_LANE_ALPHA).
+## drawn once, in the first one's color (see ORE_LANE_WHITEN). Other
+## companies' lanes (other players', the AI rivals') go underneath, each
+## company's once in its own color (see OTHER_LANE_ALPHA), unless Settings'
+## own routes only is on.
 func _draw_active_lanes() -> void:
 	var lanes := _active_lanes()
+	# Only this player's own with Settings' own routes only (the others still
+	# keep anchored ships off their lanes: see _anchors_in_lanes()).
+	var own_only: bool = Settings.own_routes_only
+	if own_only:
+		lanes = _own_lanes_cache
 	if _lane_painter == null and ClassDB.class_exists(&"LanePainter"):
 		_lane_painter = ClassDB.instantiate(&"LanePainter")
 		_lane_painter.setup({chunk = LANE_CHUNK, min_px = ACTIVE_LANE_MIN_PX, hidden = HIDDEN})
@@ -6377,11 +6465,14 @@ func _draw_active_lanes() -> void:
 		# marinas can show, for lanes with a port on or near the screen: see
 		# _lane_curve_ends().)
 		_lane_painter.draw(_canvas.get_canvas_item(), lanes, {toward = _toward, right = _right, up = _up, radius = _radius(), middle = size / 2.0,
-			view_angle = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0)), width = ACTIVE_LANE_WIDTH, epoch = _active_lanes_epoch,
+			view_angle = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0)), width = ACTIVE_LANE_WIDTH, epoch = _active_lanes_epoch * 2 + (1 if own_only else 0),
 			curves = docks_shown() and _any_marina_shown(), near = Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)})
 		return
 	for lane: Array in lanes:
 		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH, lane[3])
+
+## This player's own lanes of those (see _active_lanes()).
+var _own_lanes_cache := []
 
 ## The lanes _draw_active_lanes() draws: [from, to, color, sailed both ways],
 ## other players' first. Kept for half a STATIC_REFRESH_S (so each redraw while
@@ -6428,6 +6519,7 @@ func _active_lanes() -> Array:
 				into[key] = [leg[0], leg[1], color, false]
 			elif into[key][0] != leg[0]:
 				into[key][3] = true  # (Sailed both ways: the way back's harbour curves too.)
+	_own_lanes_cache = lanes.values()  # (Drawn alone with Settings' own routes only: see _draw_active_lanes().)
 	var fresh: Array = others.values() + lanes.values()
 	if fresh != _active_lanes_cache:
 		_active_lanes_cache = fresh
@@ -6637,6 +6729,19 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 var _zones: Array = []
 var _zone_cells := {}
 var _bent_lanes := {}
+## Lanes a frame that drew wanted bent (sea lane -> [from, to]): bent by the next frames (see _warm_lanes()).
+var _lanes_wanted := {}
+
+## A lane bent round the harbours (see _bent_lane()) if it has been already,
+## else {} (and it's bent over the next frames: bending one is a few ms, not
+## for a frame that draws; the ships on it sail the lane as laid meanwhile).
+func _bent_lane_if_ready(sea_lane, from_port: String, to_port: String) -> Dictionary:
+	_port_zones()  # (Clears the bent lanes when the ports' zones have changed.)
+	if _bent_lanes.has(sea_lane):
+		return _bent_lanes[sea_lane]
+	if not _lanes_wanted.has(sea_lane):
+		_lanes_wanted[sea_lane] = [from_port, to_port]
+	return {}
 var _zones_checked := -1
 
 ## Every port's keep-out zone, round its marina and its approach curves: [(lon,
@@ -6831,9 +6936,21 @@ static func _smoothed(values: PackedFloat32Array, reach: int) -> PackedFloat32Ar
 ## of each is only drawn once a marina shows, so the first zoom in found them
 ## all to do in one frame.
 func _warm_lanes() -> void:
-	if _lanes_warm or _land_cells.is_empty():
-		return  # (All bent already; or bending waits for the land's cells: not here, while they're still being made.)
+	if _land_cells.is_empty():
+		return  # (Bending waits for the land's cells: not here, while they're still being made.)
 	var start := Time.get_ticks_usec()
+	# The lanes a frame that drew asked for first (see _bent_lane_if_ready()).
+	while not _lanes_wanted.is_empty():
+		var sea_lane: Variant = _lanes_wanted.keys()[0]
+		var way: Array = _lanes_wanted[sea_lane]
+		_lanes_wanted.erase(sea_lane)
+		if not _bent_lanes.has(sea_lane):
+			_bent_lane(sea_lane, way[0], way[1])
+			_count("n.bent")
+			if Time.get_ticks_usec() - start >= LANE_WARM_MS * 1000.0:
+				return
+	if _lanes_warm:
+		return  # (All bent already.)
 	for lane: Array in _active_lanes():
 		for way: Array in [[lane[0], lane[1]], [lane[1], lane[0]]]:
 			var sea_lane = GameData.lane(way[0], way[1])
@@ -6926,7 +7043,9 @@ func _in_canal(lon_lat: Vector2) -> bool:
 ## way it's heading: [projected position, direction], as the lane's own
 ## sample() where it isn't bent.
 func _bent_sample(sea_lane, from_port: String, to_port: String, mile: float) -> Array:
-	var made := _bent_lane(sea_lane, from_port, to_port)
+	var made := _bent_lane_if_ready(sea_lane, from_port, to_port)
+	if made.is_empty():
+		return sea_lane.sample(mile)  # (On the lane as laid, till it's bent: see _warm_lanes().)
 	var miles: PackedFloat64Array = made.miles
 	var points: PackedVector2Array = made.points
 	var bent: PackedByteArray = made.bent
@@ -7522,6 +7641,9 @@ func _draw_ships() -> void:
 	var fleet := _fleet_pass(order)
 	var draw: PackedInt32Array = fleet.draw
 	var plain: PackedByteArray = fleet.plain
+	if profiling:
+		profile["n.dotted"] = float(profile.get("n.dotted", 0.0)) + float(fleet.get("dots", 0))
+		profile["n.plain_drawn"] = float(profile.get("n.plain_drawn", 0.0)) + float(plain.count(1))
 	for k in draw.size():
 		var ship: Ship = order[draw[k]]
 		_draw_ship(ship, outline, plain[k] == 1)
@@ -7572,7 +7694,7 @@ func _fleet_pass(order: Array[Ship]) -> Dictionary:
 			end_slack_angle = asin(minf(MARINA_MAX_REACH * 2.0 * _ship_scale() / _radius(), 1.0)),
 			docks_shown = docks_shown(), mine = GameState.company, port_shown = _port_ships_shown,
 			dots = Settings.ship_look != "grow", dot_half_px = _ship_dot_half(), dots_canvas = _canvas.get_canvas_item(), right = _right, up = _up, radius = _radius(), middle = size / 2.0,
-			screen = Rect2(Vector2.ZERO, size), scale = _ship_scale(), dot_px = TINY_SHIP_PX, lengths = _order_lengths, colors = _order_colors})
+			screen = Rect2(Vector2.ZERO, size), near = Rect2(Vector2.ZERO, size).grow(margin), scale = _ship_scale(), dot_px = TINY_SHIP_PX, lengths = _order_lengths, colors = _order_colors})
 	var draw := PackedInt32Array()
 	var plain := PackedByteArray()
 	var carried := PackedInt32Array()
@@ -7622,8 +7744,12 @@ static func _held_at_canal(ship: Ship) -> bool:
 func _lane_chunks(from_port: String, to_port: String) -> Array:
 	var sea_lane = GameData.lane(from_port, to_port)
 	if sea_lane == null:
+		_count("n.lane_none")
 		return []
-	var bent := _bent_lane(sea_lane, from_port, to_port)
+	var bent := _bent_lane_if_ready(sea_lane, from_port, to_port)
+	if bent.is_empty():
+		_count("n.lane_unbent")
+		return []  # (Asked again next pass, once it's bent: see _warm_lanes().)
 	var units := _bent_units(sea_lane, bent)  # (Makes its caps.)
 	var caps: Array = _lane_caps[sea_lane]
 	return [bent.miles, caps[0], caps[1], units]
@@ -7693,6 +7819,11 @@ func _ships_biggest_first() -> Array[Ship]:
 ## be in view (see _fleet_pass()), so nothing more need be checked.
 func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	var look := _model_look(ship.model_id)
+	_count("n.ships")
+	if ship.is_service():
+		_count("n.service")
+	elif ship.is_docked():
+		_count("n.docked")
 	var color: Color = look[0]
 	# Another player's ship (multiplayer): a little faded, with a flag in its
 	# company's color at the stern (worked out once it's known to be drawn).
@@ -7733,17 +7864,24 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 		# one sample of the lane.
 		if not plain and not _ship_maybe_in_view(ship):
 			return  # (Its stretch of lane is well out of view.)
+		var t_sb := Time.get_ticks_usec()
 		var here := _ship_bent(ship)
 		if here.is_empty():
 			return
+		_prof("ship.bent", t_sb)
 		var on_lane := world_to_screen(here[0])
 		if not near.has_point(on_lane):
 			return
 		scale = _ship_draw_scale(ship, on_lane)
 		if length * scale < TINY_SHIP_PX:
+			_count("n.tiny_lane")
+			if ship.is_fishing():
+				_count("n.tiny_fishing")
 			_draw_tiny_ship(on_lane, color * _ship_fade(ship))
 			return
+		var t_sh := Time.get_ticks_usec()
 		var harbour := _harbour_pose(ship)
+		_prof("ship.harbour", t_sh)
 		if harbour.is_empty():
 			at = on_lane + _canal_lane_offset(ship)
 			angle = _heading_angle(here[1], here[0])
@@ -7754,6 +7892,7 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 		at = ship_screen_position(ship)
 		scale = _ship_draw_scale(ship, at)
 		if length * scale < TINY_SHIP_PX:
+			_count("n.tiny_other")
 			_draw_tiny_ship(at, color * _ship_fade(ship))
 			return
 		angle = _screen_angle(ship)
@@ -7762,6 +7901,7 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	fade = _ship_fade(ship)
 	color *= fade
 	outline *= fade
+	_count("n.full")
 	_note_lit_ship(at, angle, look, scale)
 	if ship.is_docked() and docks_shown() and not ship.is_tug() and ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
@@ -11372,7 +11512,8 @@ func _draw_lights() -> void:
 			if lit >= mm.instance_count:
 				mm.instance_count = lit + 64
 			mm.set_instance_transform_2d(lit, Transform2D(0.0, Vector2.ONE * r * 2.0, 0.0, at))
-			mm.set_instance_color(lit, Color(LIGHT_WARM, 0.8 * night))
+			# (Coloring the ports by a price: the glow takes the port's color, so it shows by night.)
+			mm.set_instance_color(lit, Color(LIGHT_WARM if price_commodity.is_empty() else _price_color(port_id), 0.8 * night))
 			lit += 1
 	mm.visible_instance_count = lit
 	if lit > 0:
@@ -12394,6 +12535,9 @@ static func _prof(name: String, start_usec: int) -> void:
 	if not profiling:
 		return
 	profile[name] = float(profile.get(name, 0.0)) + (Time.get_ticks_usec() - start_usec) / 1000.0
+static func _count(name: String) -> void:
+	if profiling:
+		profile[name] = float(profile.get(name, 0.0)) + 1.0
 ## The World map's sound (see Ambience).
 var ambience: Ambience = null
 

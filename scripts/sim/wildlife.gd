@@ -461,6 +461,7 @@ func colony_where(colony: Dictionary, cal: float) -> Array:
 		return ALL_YEAR
 	var hour := floori(cal / 3600.0)  # (Worked out once an hour of the calendar: it's asked for a lot.)
 	if int(colony.get("where_hour", -1)) != hour:
+		var t_w := Time.get_ticks_usec()
 		# (Colonies away the same months share the working out: it's dates.)
 		var months_key: String = colony.get("months_key", "")
 		if months_key.is_empty():
@@ -481,6 +482,7 @@ func colony_where(colony: Dictionary, cal: float) -> Array:
 		if not was.is_empty() and was[0] != colony.where[0]:
 			where_changes += 1
 			colony.changes = int(colony.get("changes", 0)) + 1  # (Its own birds are worked out again: see BirdLife.)
+		MapView._prof("colony.where", t_w)
 	return colony.where
 
 
@@ -508,8 +510,10 @@ func _season(away_months: Array, cal: float, _land: bool) -> Array:
 ## living there in their home months and those spending their away months
 ## there (not those on their way).
 func birds_at(port_id: String, cls: String, cal: float) -> Array:
+	var t_e := Time.get_ticks_usec()
 	if not ensure_built():
 		return []
+	MapView._prof("birds_at.built", t_e)
 	var out := []
 	for index: int in _colonies_at.get(port_id, []):
 		var colony: Dictionary = colonies[index]

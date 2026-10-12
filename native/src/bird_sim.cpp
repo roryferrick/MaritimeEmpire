@@ -11,6 +11,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <numeric>
 
@@ -1004,15 +1005,35 @@ Dictionary BirdSim::following(int64_t ship, Vector2 at, double now, double cal, 
 	Dictionary out;
 	V2 here = v2(at);
 	int64_t states = 0;
+	int64_t near_colonies = 0;
+	auto t_start = std::chrono::steady_clock::now();
+	const double km_per_deg = 111.2;
+	const double lon_km = km_per_deg * std::max(std::cos(deg2rad(here.y)), 0.05);
 	for (size_t ci = 0; ci < _colonies.size(); ci++) {
 		const Colony &c = _colonies[ci];
-		double reach = c.cls == SEABIRDS ? c.range_km + SEABIRD_ROAM_KM + SEABIRD_FOLLOW_KM : GULL_FOLLOW_KM * 2.0;
 		if (c.cls != GULLS && c.cls != SEABIRDS) {
 			continue; // (Only gulls and seabirds follow ships.)
+		}
+		double reach = c.cls == SEABIRDS ? c.range_km + SEABIRD_ROAM_KM + SEABIRD_FOLLOW_KM : GULL_FOLLOW_KM * 2.0;
+		// (A box round each spot first: the distances are trigonometry, and
+		// there are thousands of colonies, nearly all far away.)
+		auto maybe_near = [&](const V2 &spot) {
+			if (std::abs(spot.y - here.y) * km_per_deg > reach) {
+				return false;
+			}
+			double dlon = std::abs(spot.x - here.x);
+			if (dlon > 180.0) {
+				dlon = 360.0 - dlon;
+			}
+			return dlon * lon_km <= reach;
+		};
+		if (!maybe_near(c.spot) && !maybe_near(c.away_spot)) {
+			continue;
 		}
 		if (_distance_km(c.spot, here) > reach && _distance_km(c.away_spot, here) > reach) {
 			continue;
 		}
+		near_colonies++;
 		String species_id = _species[c.species].id;
 		if (cap > 0 && (int)out.get(species_id, 0) >= cap) {
 			continue;
@@ -1025,6 +1046,11 @@ Dictionary BirdSim::following(int64_t ship, Vector2 at, double now, double cal, 
 				continue;
 			}
 			if (max_states > 0 && states >= max_states) {
+				double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_start).count();
+				_following_stats.clear();
+				_following_stats.push_back(ms);
+				_following_stats.push_back(states);
+				_following_stats.push_back(near_colonies);
 				return out;
 			}
 			states++;
@@ -1036,6 +1062,13 @@ Dictionary BirdSim::following(int64_t ship, Vector2 at, double now, double cal, 
 				break;
 			}
 		}
+	}
+	{
+		double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_start).count();
+		_following_stats.clear();
+		_following_stats.push_back(ms);
+		_following_stats.push_back(states);
+		_following_stats.push_back(near_colonies);
 	}
 	return out;
 }
@@ -1487,6 +1520,7 @@ void BirdSim::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("bird_state", "index", "now", "cal"), &BirdSim::bird_state);
 	ClassDB::bind_method(D_METHOD("doing_counts", "colony", "now", "cal"), &BirdSim::doing_counts);
 	ClassDB::bind_method(D_METHOD("following", "ship", "at", "now", "cal", "cap", "max_states"), &BirdSim::following, DEFVAL(0), DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("following_stats"), &BirdSim::following_stats);
 	ClassDB::bind_method(D_METHOD("where_changes"), &BirdSim::where_changes);
 	ClassDB::bind_method(D_METHOD("forget_spots"), &BirdSim::forget_spots);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "still", "params"), &BirdSim::draw);

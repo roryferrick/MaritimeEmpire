@@ -57,6 +57,10 @@ LanePainter::Lane &LanePainter::_lane(const String &from, const String &to) {
 	if (_lane_provider.is_valid()) {
 		made = _lane_provider.call(from, to);
 	}
+	if (made.size() < 4) {
+		static Lane none; // (Not kept: the map may give it next pass, once it's bent the lane.)
+		return none;
+	}
 	Lane &lane = _lanes[key];
 	{
 		if (made.size() >= 4) {
