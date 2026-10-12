@@ -5,7 +5,7 @@
 		{"port": "DUB", "note": "Scooters: toys to Nantes, coffee back (about $2,900 a minute each)."},
 		{"port": "SHA", "note": "Scooters: toys to Xiamen, coffee back (about $3,300 a minute each)."},
 		{"port": "CSL", "note": "Scooters: toys to Manzanillo, coffee back (about $3,900 a minute each)."},
-		{"port": "ROM", "note": "Scooters: coffee to Marsaxlokk, toys back (about $2,800 a minute each)."}
+		{"port": "ROM", "note": "Scooters: coffee to Malta, toys back (about $2,800 a minute each)."}
 	],
 	"great": [
 		{"port": "NKC", "note": "Scooters: furniture to Bissau, coffee back (about $3,600 a minute each)."},
@@ -36,14 +36,14 @@
 		{"port": "MRS", "note": "Scooters: coffee to Tunis, toys back (about $2,300 a minute each)."},
 		{"port": "TBU", "note": "Scooters: coffee to Apia, toys back (about $2,500 a minute each)."},
 		{"port": "APW", "note": "Scooters: toys to Nuku'alofa, coffee back (about $2,500 a minute each)."},
-		{"port": "GIT", "note": "Scooters: furniture to Rome, coffee on to Marsaxlokk, toys home (about $1,800 a minute each)."},
+		{"port": "GIT", "note": "Scooters: furniture to Rome, coffee on to Malta, toys home (about $1,800 a minute each)."},
 		{"port": "MIA", "note": "Scooters: coffee to Charleston, toys back (about $3,100 a minute each)."},
 		{"port": "PMO", "note": "Scooters: furniture to La Spezia, coffee back (about $1,900 a minute each)."},
 		{"port": "MLW", "note": "Scooters: coffee to Bissau, back empty (about $1,200 a minute each)."},
 		{"port": "SAV", "note": "Scooters: toys to Miami, coffee back (about $3,100 a minute each)."},
 		{"port": "CHS", "note": "Scooters: toys to Miami, coffee back (about $3,100 a minute each)."},
-		{"port": "DRZ", "note": "Scooters: coffee to Marsaxlokk, toys back (about $1,900 a minute each)."},
-		{"port": "CAG", "note": "Scooters: sail empty to Rome, coffee on to Marsaxlokk, toys home (about $1,900 a minute each)."},
+		{"port": "DRZ", "note": "Scooters: coffee to Malta, toys back (about $1,900 a minute each)."},
+		{"port": "CAG", "note": "Scooters: sail empty to Rome, coffee on to Malta, toys home (about $1,900 a minute each)."},
 		{"port": "BCN", "note": "Scooters: sail empty to Genoa, coffee on to Tunis, toys home (about $2,000 a minute each)."},
 		{"port": "LZC", "note": "Scooters: coffee to Manzanillo, back empty (about $1,600 a minute each)."},
 		{"port": "FNC", "note": "Scooters: furniture to Las Palmas, toys back (about $1,300 a minute each)."},

@@ -11,6 +11,16 @@
 			"quay": "left",
 			"note": "Gibraltar: in line above Tanger Med, out south-west into the strait"
 		},
+		"BFS": {
+			"bearing": 29.0,
+			"quay": "right",
+			"note": "Belfast: at the mouth of Belfast Lough, out north-north-east into the North Channel"
+		},
+		"ORK": {
+			"bearing": 136.0,
+			"quay": "right",
+			"note": "Cork: off Roches Point at the mouth of Cork Harbour, out south-east"
+		},
 		"AQJ": {
 			"bearing": 180.0,
 			"quay": "left",
