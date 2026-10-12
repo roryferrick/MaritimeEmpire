@@ -25,13 +25,24 @@ var ship_look := "dot":
 		ship_look = value if value in SHIP_LOOKS else "dot"
 		_save()
 		changed.emit()
-## Day and night on the map (the dark side of the globe and its lights); off,
-## always day (MapView._update_night()).
-var day_night := true:
+## Day and night on the map (the dark side of the globe and its lights):
+## "off" (always day), "half" (the night only half as dark) or "full"
+## (MapView._update_night(), NIGHT_SHARES for the darkness each).
+const NIGHTS := ["off", "half", "full"]
+const NIGHT_NAMES := {off = "Always day", half = "Half as dark", full = "Full night"}
+const NIGHT_SHARES := {off = 0.0, half = 0.5, full = 1.0}
+var night := "full":
 	set(value):
-		day_night = value
+		night = value if value in NIGHTS else "full"
 		_save()
 		changed.emit()
+## Whether the night falls at all (the night setting is not "off").
+var day_night: bool:
+	get: return night != "off"
+	set(value): night = "full" if value else "off"
+## How dark the night gets, 0 to 1 of the full dark.
+func night_share() -> float:
+	return float(NIGHT_SHARES.get(night, 1.0))
 ## Only this player's own routes drawn with the Routes switch (not the other
 ## companies', players' or AI rivals': MapView._draw_active_lanes()).
 var own_routes_only := false:
@@ -60,7 +71,8 @@ func _ready() -> void:
 	if config.load(PATH) == OK:
 		var look := str(config.get_value("general", "ship_look", "dot"))
 		ship_look = look if look in SHIP_LOOKS else "dot"
-		day_night = bool(config.get_value("general", "day_night", true))
+		var dark := str(config.get_value("general", "night", "full" if bool(config.get_value("general", "day_night", true)) else "off"))
+		night = dark if dark in NIGHTS else "full"
 		birds = bool(config.get_value("general", "birds", true))
 		own_routes_only = bool(config.get_value("general", "own_routes_only", false))
 		for entry: Array in VOLUMES:
@@ -95,7 +107,7 @@ func _save() -> void:
 		return  # (Loading: nothing new to write.)
 	var config := ConfigFile.new()
 	config.set_value("general", "ship_look", ship_look)
-	config.set_value("general", "day_night", day_night)
+	config.set_value("general", "night", night)
 	config.set_value("general", "birds", birds)
 	config.set_value("general", "own_routes_only", own_routes_only)
 	for entry: Array in VOLUMES:

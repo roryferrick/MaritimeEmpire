@@ -90,6 +90,7 @@ public:
 	void forget_lanes();
 	int64_t draw(const RID &canvas, const Array &lanes, const Dictionary &params);
 	Dictionary build_mesh(const Array &lanes, double step_nm);
+	PackedByteArray anchors_in_lines(const PackedVector2Array &points, const Array &lines, double port_x, const Rect2 &near, double swing);
 };
 
 } // namespace godot

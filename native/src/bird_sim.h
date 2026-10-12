@@ -202,7 +202,7 @@ private:
 	std::vector<Hit> _still_hits;
 	double _still_redraw_at = -INFINITY;
 	double _full_px = 4.0;
-	int64_t _stats[11] = {};
+	int64_t _stats[12] = {};
 	int64_t _still_epoch = -1;
 
 	// The view, for a draw (see draw()).

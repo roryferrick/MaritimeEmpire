@@ -5,6 +5,8 @@
 
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/core/math.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
@@ -516,10 +518,66 @@ Dictionary LanePainter::build_mesh(const Array &lanes, double step_nm) {
 	return out;
 }
 
+// Which of a port's anchor points (projected) a line passes within swing
+// of: 1 for each (MapView._anchors_in_lanes(), the same test). Each line's
+// points are brought round the world to the port's side (wrapped about
+// port_x), and only a stretch whose box crosses `near` (the anchorage's) is
+// tried against the points.
+PackedByteArray LanePainter::anchors_in_lines(const PackedVector2Array &points, const Array &lines, double port_x, const Rect2 &near, double swing) {
+	const int64_t count = points.size();
+	PackedByteArray flags;
+	flags.resize(count);
+	uint8_t *out = flags.ptrw();
+	for (int64_t k = 0; k < count; k++) {
+		out[k] = 0;
+	}
+	const Vector2 *spots = points.ptr();
+	const real_t reach = (real_t)swing;
+	for (int64_t li = 0; li < lines.size(); li++) {
+		PackedVector2Array line = lines[li];
+		const int64_t n = line.size();
+		const Vector2 *p = line.ptr();
+		for (int64_t i = 1; i < n; i++) {
+			Vector2 a = p[i - 1];
+			Vector2 b = p[i];
+			a.x = (real_t)(port_x + Math::wrapf((double)a.x - port_x, -180.0, 180.0));
+			b.x = a.x + (b.x - p[i - 1].x);
+			Rect2 box = Rect2(a, Vector2()).expand(b);
+			if (!near.intersects(box)) {
+				continue;
+			}
+			Rect2 close = box.grow(reach);
+			Vector2 ab = b - a;
+			real_t len2 = ab.length_squared();
+			for (int64_t k = 0; k < count; k++) {
+				if (out[k] != 0 || !close.has_point(spots[k])) {
+					continue;
+				}
+				// Geometry2D.get_closest_point_to_segment().
+				Vector2 ap = spots[k] - a;
+				Vector2 nearest = a;
+				if (len2 >= (real_t)1e-20) {
+					real_t t = ap.dot(ab) / len2;
+					if (t >= (real_t)1.0) {
+						nearest = b;
+					} else if (t > (real_t)0.0) {
+						nearest = a + ab * t;
+					}
+				}
+				if (nearest.distance_to(spots[k]) < reach) {
+					out[k] = 1;
+				}
+			}
+		}
+	}
+	return flags;
+}
+
 void LanePainter::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("setup", "constants"), &LanePainter::setup);
 	ClassDB::bind_method(D_METHOD("set_providers", "lanes", "ends"), &LanePainter::set_providers);
 	ClassDB::bind_method(D_METHOD("forget_lanes"), &LanePainter::forget_lanes);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "lanes", "params"), &LanePainter::draw);
 	ClassDB::bind_method(D_METHOD("build_mesh", "lanes", "step_nm"), &LanePainter::build_mesh);
+	ClassDB::bind_method(D_METHOD("anchors_in_lines", "points", "lines", "port_x", "near", "swing"), &LanePainter::anchors_in_lines);
 }

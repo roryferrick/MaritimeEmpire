@@ -398,8 +398,59 @@ func _read_land_rings() -> Array:
 			for i in range(1, polygon.size()):
 				holes.append(_to_points(polygon[i]))
 			polygons.append({"outline": _to_points(polygon[0]), "holes": holes})
-	# _dredge(polygons) is off for now: the cut Eurasia polygon loses its land north of about 46 N in the
-	# tiled triangulation (Germany, France, Quebec drew as water); the DREDGES still carve the lanes' grid (see _build_grid()).
+	# _dredge(polygons) is off: the cut Eurasia polygon lost its land north of about 46 N in the
+	# tiled triangulation (Germany, France, Quebec drew as water). The straits are widened
+	# instead by moving their shores (_widen()); the DREDGES still carve the lanes' grid (see _build_grid()).
+	return _widen(polygons)
+
+
+## Widens the DREDGES in the land outlines (lon, lat) without cutting them:
+## every outline (or hole) vertex within half a dredge's width of its course
+## is pushed out, square to the course, to that distance (in the map's
+## projection), so the drawn coast, the sea grid and the lanes agree on an
+## open passage. The outlines keep their points' order and winding, so the
+## triangulation is untouched (see _dredge()). Only a strait the data already
+## has open gets wider: where there's no shore point, nothing is pushed.
+func _widen(polygons: Array) -> Array:
+	for dredge: Array in DREDGES:
+		var course := _project_all(_to_points(dredge[1]))
+		var lat := 0.0
+		for p: Array in dredge[1]:
+			lat += float(p[1]) / (dredge[1] as Array).size()
+		var radius := float(dredge[2]) / 60.0 / 2.0 / maxf(cos(deg_to_rad(lat)), 0.1)
+		var box := Rect2(course[0], Vector2.ZERO)
+		for p in course:
+			box = box.expand(p)
+		box = box.grow(radius * 1.5)
+		var pushed := 0
+		for polygon: Dictionary in polygons:
+			var rings: Array = [polygon.outline] + polygon.holes
+			for r in rings.size():
+				var ring: PackedVector2Array = rings[r]
+				var changed := false
+				for i in ring.size():
+					var p := Geo.project(ring[i])
+					if not box.has_point(p):
+						continue
+					var nearest := Vector2.INF
+					var best := INF
+					for k in range(1, course.size()):
+						var q := Geometry2D.get_closest_point_to_segment(p, course[k - 1], course[k])
+						var d := q.distance_to(p)
+						if d < best:
+							best = d
+							nearest = q
+					if best >= radius or best < 0.000001:
+						continue
+					ring[i] = Geo.unproject(nearest + (p - nearest) / best * radius)
+					changed = true
+					pushed += 1
+				if changed:
+					if r == 0:
+						polygon.outline = ring
+					else:
+						polygon.holes[r - 1] = ring
+		print("%s widened to %.0f nm: %d shore points moved" % [dredge[0], float(dredge[2]), pushed])
 	return polygons
 
 

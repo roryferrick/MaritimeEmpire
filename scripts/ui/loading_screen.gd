@@ -122,11 +122,20 @@ func _process(delta: float) -> void:
 	for ship: Dictionary in _ships:
 		var heading: float = ship.heading + sin(_elapsed * 0.6 + float(ship.seed)) * 0.06
 		ship.at += Vector2.from_angle(heading) * float(ship.speed) * delta
+		# Where its stern has been, for its wake to run along (see MapView.draw_wake()).
+		var trail: PackedVector2Array = ship.get("trail", PackedVector2Array())
+		var stern: Vector2 = ship.at - Vector2.from_angle(heading) * (float(ship.length) * 0.5 - float(ship.width) * 0.3)
+		if trail.is_empty() or trail[-1].distance_to(stern) >= float(ship.length) * MapView.WAKE_TRAIL_STEP:
+			trail.append(stern)
+			if trail.size() > MapView.WAKE_TRAIL_POINTS:
+				trail = trail.slice(trail.size() - MapView.WAKE_TRAIL_POINTS)
+			ship.trail = trail
 		var margin: float = float(ship.length) * 1.3
 		if ship.at.x < -margin or ship.at.x > size.x + margin or ship.at.y < -margin or ship.at.y > size.y + margin:
 			var again := _spawn(size)
 			for key in again:
 				ship[key] = again[key]
+			ship.trail = PackedVector2Array()
 	for wave: Dictionary in _waves:
 		wave.at.x -= float(wave.speed) * delta
 		if wave.at.x < -40.0:
@@ -167,11 +176,13 @@ func _draw_ship(ship: Dictionary) -> void:
 	var length: float = ship.length
 	var width: float = ship.width
 	var at: Vector2 = ship.at
-	var back := Vector2.from_angle(heading) * -1.0
-	for k in 4:
-		var from := at + back * length * (0.45 + k * 0.35)
-		var to := at + back * length * (0.45 + (k + 1) * 0.35)
-		_page.draw_line(from, to, Color(WAKE, 0.22 * (1.0 - k / 4.0)), width * (0.9 - k * 0.15), true)
+	# Its wake as the map draws them (MapView.draw_wake()), longer the faster it crosses.
+	var way := inverse_lerp(SPEED_PX.x, SPEED_PX.y, float(ship.speed))
+	var trail := PackedVector2Array()
+	var track: PackedVector2Array = ship.get("trail", PackedVector2Array())
+	for i in range(track.size() - 1, -1, -1):
+		trail.append(track[i])
+	MapView.draw_wake(_page, at, heading, length, width, clampf(0.3 + 0.7 * way, 0.0, 1.0), 0.8, trail)
 	var art: Dictionary = ship.art
 	if art.is_empty():
 		return

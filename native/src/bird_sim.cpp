@@ -1348,6 +1348,7 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 	_full_px = params.get("full_px", 4.0);
 	double reach_gulls = (double)params.get("reach_gulls_km", 80.0) / KM_PER_DEGREE;
 	double reach_other = (double)params.get("reach_other_km", 60.0) / KM_PER_DEGREE;
+	double follow_reach = 12.0 / KM_PER_DEGREE; // (A follower keeps within a few km of its ship.)
 	double view_lat = params.get("view_lat", 0.0);
 	double still_s = params.get("still_s", 4.0);
 	double still_margin = params.get("still_margin_s", 0.5);
@@ -1403,10 +1404,32 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 		// The colonies whose birds could be in view: those of the ports near it
 		// (no further from their port than reach_*_km), the seabirds whose range
 		// reaches it, and those on the wing.
+		// A colony whose bird is following a ship that's in view is never
+		// culled by its reach: its ship may have carried the bird anywhere
+		// (a bird that vanished and popped back as its colony went in and out
+		// of reach was the user's "birds appearing out of nowhere").
+		auto follower_in_view = [&]() {
+			if (colony.cls != GULLS && colony.cls != SEABIRDS) {
+				return false;
+			}
+			for (int i = 0; i < colony.count; i++) {
+				const Plan &plan = _plans[(size_t)(colony.first_bird + i)];
+				if (!plan.valid || plan.act != A_FOLLOW || plan.ship < 0) {
+					continue;
+				}
+				auto slot = _ship_slot.find(plan.ship);
+				if (slot != _ship_slot.end() && in_box(_ship_spots[slot->second], follow_reach * wide_by, follow_reach)) {
+					return true;
+				}
+			}
+			return false;
+		};
 		if (flying_off) {
 			if (still) {
 				continue;
 			}
+		} else if (follower_in_view()) {
+			_stats[11]++;
 		} else if (colony.cls == SEABIRDS) {
 			double reach = colony.range_km / KM_PER_DEGREE;
 			double wide = reach / std::max(std::cos(deg2rad(colony.spot.y)), 0.1);

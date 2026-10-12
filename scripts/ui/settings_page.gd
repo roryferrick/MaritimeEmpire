@@ -1,9 +1,11 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name SettingsPage
 extends Control
-## Settings (from the Esc menu), in two tabs. General: how ships far off are
-## drawn (Settings.ship_look), the map's Routes switch (the fleet's lanes shown
-## faintly), Day and night and Birds (Settings) and, in a game with the tutorial, the Tutorial switch (its tips).
+## Settings (from the Esc menu), in two tabs. General: three-step sliders for
+## how ships far off are drawn (Settings.ship_look), the map's routes (none,
+## only mine, all: GameState.show_active_routes and Settings.own_routes_only)
+## and the night (always day, half as dark, full: Settings.night), and the
+## Birds switch (Settings) and, in a game with the tutorial, the Tutorial switch (its tips).
 ## Audio: a volume for everything and for each kind of sound (Settings'
 ## buses). Over whatever opened it, dimming it; Esc, X or a click outside
 ## closes it. Routes and the tutorial are the company's own (kept in its
@@ -61,43 +63,24 @@ func _unhandled_input(event: InputEvent) -> void:
 func _general_tab() -> Control:
 	var box := _tab_box("General")
 	box.add_child(_heading("Ships seen from afar"))
-	var group := ButtonGroup.new()
-	var tips := {
-		dot = "Ships are drawn their true size in the world: zoomed well out, each is a small dot in its colour.",
-		big_dot = "As the default, but the dots are bigger, so ships far off are easier to see.",
-		grow = "Ships never get smaller than a few pixels long: zoomed out they stand out over the map with their art showing, as they used to. They shrink back to their true size coming into port.",
-	}
-	for look: String in Settings.SHIP_LOOKS:
-		var option := CheckBox.new()
-		option.button_group = group
-		option.text = str(Settings.SHIP_LOOK_NAMES[look])
-		option.tooltip_text = str(tips[look])
-		option.button_pressed = Settings.ship_look == look
-		option.toggled.connect(func(on: bool) -> void:
-			if on:
-				Settings.ship_look = look)
-		box.add_child(option)
+	var look_names: Array = Settings.SHIP_LOOKS.map(func(look: String) -> String: return str(Settings.SHIP_LOOK_NAMES[look]))
+	box.add_child(_levels(look_names, Settings.SHIP_LOOKS.find(Settings.ship_look),
+		"Ships are drawn their true size in the world: zoomed well out, each is a small dot in its colour; or bigger dots, easier to see far off; or ships never smaller than a few pixels long, their art showing over the map zoomed out (they shrink back to their true size coming into port).",
+		func(level: int) -> void: Settings.ship_look = Settings.SHIP_LOOKS[level]))
+	box.add_child(_heading("Routes"))
+	var routes_level := 0 if not GameState.show_active_routes else (1 if Settings.own_routes_only else 2)
+	box.add_child(_levels(["No routes", "Only my routes", "All routes"], routes_level,
+		"The sea lanes ships' routes use, drawn as faint lines: none, only your own ships' routes, or every company's (other players' and the AI rivals' too).",
+		func(level: int) -> void:
+			GameState.show_active_routes = level > 0
+			Settings.own_routes_only = level == 1  # (Saves and tells the map.)
+			))
+	box.add_child(_heading("Day and night"))
+	var night_names: Array = Settings.NIGHTS.map(func(n: String) -> String: return str(Settings.NIGHT_NAMES[n]))
+	box.add_child(_levels(night_names, Settings.NIGHTS.find(Settings.night),
+		"The side of the world away from the sun goes dark, with ships', harbours' and towns' lights: always day, only half as dark, or the full night.",
+		func(level: int) -> void: Settings.night = Settings.NIGHTS[level]))
 	box.add_child(_heading("Map"))
-	var routes := CheckButton.new()
-	routes.text = "Routes"
-	routes.tooltip_text = "Show the sea lanes your ships' routes use, as faint lines."
-	routes.button_pressed = GameState.show_active_routes
-	routes.toggled.connect(func(on: bool) -> void:
-		GameState.show_active_routes = on
-		Settings.changed.emit())
-	box.add_child(routes)
-	var own := CheckButton.new()
-	own.text = "Only my routes"
-	own.tooltip_text = "With Routes on, show only your own ships' routes, not the other companies' (other players' or the AI rivals')."
-	own.button_pressed = Settings.own_routes_only
-	own.toggled.connect(func(on: bool) -> void: Settings.own_routes_only = on)
-	box.add_child(own)
-	var day_night := CheckButton.new()
-	day_night.text = "Day and night"
-	day_night.tooltip_text = "The side of the world away from the sun goes dark, with ships', harbours' and towns' lights. Off, it's always day."
-	day_night.button_pressed = Settings.day_night
-	day_night.toggled.connect(func(on: bool) -> void: Settings.day_night = on)
-	box.add_child(day_night)
 	var birds := CheckButton.new()
 	birds.text = "Birds"
 	birds.tooltip_text = "The birds round the ports and following ships. Off, none are drawn (their calls still play: see Audio)."
@@ -149,6 +132,33 @@ func _audio_tab() -> Control:
 	note.text = "Sea and weather: the waves, wind and rain. Wildlife: the birds' and animals' calls. Ship horns: ships setting off and the fog signal. All of it gets quieter the further out you zoom."
 	box.add_child(note)
 	return box
+
+
+## A three-step slider with the step's name beside it: `names` per level,
+## `level` the one set now, `on_level` called with the new level as it's moved.
+func _levels(names: Array, level: int, tip: String, on_level: Callable) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 14)
+	row.tooltip_text = tip
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = names.size() - 1
+	slider.step = 1.0
+	slider.tick_count = names.size()
+	slider.ticks_on_borders = true
+	slider.custom_minimum_size = Vector2(220, 0)
+	slider.size_flags_vertical = SIZE_SHRINK_CENTER
+	slider.value = clampi(level, 0, names.size() - 1)
+	slider.tooltip_text = tip
+	row.add_child(slider)
+	var label := Label.new()
+	label.text = str(names[int(slider.value)])
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	row.add_child(label)
+	slider.value_changed.connect(func(value: float) -> void:
+		label.text = str(names[int(value)])
+		on_level.call(int(value)))
+	return row
 
 
 func _tab_box(tab_name: String) -> VBoxContainer:

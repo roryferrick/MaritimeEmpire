@@ -2,14 +2,14 @@
 	"_comment": "Which way each port's docks face (tools/port_facing.gd): bearing is the compass bearing out to sea (0 north, 90 east), from the coastline round the port; quay is which side of the piers, looking out to sea, the quay, tugs and anchorage go (the side with more open water). Entries under manual win over the worked-out ones and are kept when the tool runs again.",
 	"manual": {
 		"TNG": {
-			"bearing": 30.0,
+			"bearing": 315.0,
 			"quay": "left",
-			"note": "Tanger Med: moved south and east into open water, out north-east into the strait"
+			"note": "2026-10-12: moved 0.02 deg W, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"GIB": {
 			"bearing": 225.0,
 			"quay": "left",
-			"note": "Gibraltar: in line above Tanger Med, out south-west into the strait"
+			"note": "2026-10-12: moved 0.02 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"BFS": {
 			"bearing": 29.0,
@@ -24,12 +24,12 @@
 		"AQJ": {
 			"bearing": 180.0,
 			"quay": "left",
-			"note": "Eilat & Aqaba: one port at the head of the gulf, out south"
+			"note": "2026-10-12: moved 0.20 deg SW, turned from 195 to 180, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"KOP": {
-			"bearing": 270.0,
+			"bearing": 255.0,
 			"quay": "right",
-			"note": "Koper: turned to face west about its old entrance"
+			"note": "2026-10-12: moved 0.02 deg SW, turned from 270 to 255, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"TEW": {
 			"bearing": 180.0,
@@ -47,9 +47,9 @@
 			"note": "Shanghai (Yangshan): out to the open East China Sea, not across the islands"
 		},
 		"PDX": {
-			"bearing": 30.0,
+			"bearing": 285.0,
 			"quay": "right",
-			"note": "Portland: up the Willamette, out towards the Columbia"
+			"note": "2026-10-12: moved 0.14 deg W, turned from 315 to 285, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"DAV": {
 			"bearing": 315.0,
@@ -57,9 +57,9 @@
 			"note": "Davis Station: out to Prydz Bay"
 		},
 		"SBT": {
-			"bearing": 270.0,
+			"bearing": 23.0,
 			"quay": "left",
-			"note": "Sabetta: on the Gulf of Ob's east shore"
+			"note": "2026-10-12: moved 0.02 deg NE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"DUD": {
 			"bearing": 270.0,
@@ -77,14 +77,14 @@
 			"note": "Duluth-Superior: out over the lake (the coastline's guess was 180 degrees off)"
 		},
 		"DET": {
-			"bearing": 128.0,
+			"bearing": 158.0,
 			"quay": "right",
-			"note": "Detroit: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "2026-10-12: moved 0.20 deg S, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"TOR": {
-			"bearing": 153.0,
+			"bearing": 123.0,
 			"quay": "left",
-			"note": "Toronto: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "2026-10-12: moved 0.04 deg N, turned from 153 to 123, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"CLE": {
 			"bearing": 346.0,
@@ -94,7 +94,7 @@
 		"YHM": {
 			"bearing": 64.0,
 			"quay": "right",
-			"note": "Hamilton: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "2026-10-12: moved 0.07 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"MKE": {
 			"bearing": 79.0,
@@ -104,12 +104,12 @@
 		"TOL": {
 			"bearing": 51.0,
 			"quay": "right",
-			"note": "Toledo: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "2026-10-12: moved 0.04 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"YQT": {
 			"bearing": 106.0,
 			"quay": "right",
-			"note": "Thunder Bay: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "2026-10-12: moved 0.07 deg S, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"GRY": {
 			"bearing": 1.0,
@@ -117,9 +117,9 @@
 			"note": "Gary: out over the lake, turned a little left so a full-sized Gary and Chicago stay clear of each other"
 		},
 		"PHL": {
-			"bearing": 210.0,
+			"bearing": 165.0,
 			"quay": "right",
-			"note": "Philadelphia: down the Delaware to the south-west"
+			"note": "2026-10-12: moved 0.10 deg S, turned from 180 to 165, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"YOK": {
 			"bearing": 180.0,
@@ -127,14 +127,14 @@
 			"note": "Yokohama: out south, down Tokyo Bay"
 		},
 		"NGB": {
-			"bearing": 112.5,
+			"bearing": 113.0,
 			"quay": "right",
-			"note": "Ningbo-Zhoushan: out east by south-east, past the Zhoushan islands"
+			"note": "2026-10-12: moved 0.04 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"TWH": {
-			"bearing": 139.0,
+			"bearing": 94.0,
 			"quay": "right",
-			"note": "Two Harbors: out over the lake (the coastline's guess was 180 degrees off)"
+			"note": "2026-10-12: moved 0.02 deg NW, turned from 139 to 94, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"MQT": {
 			"bearing": 51.0,
@@ -164,7 +164,7 @@
 		"MUN": {
 			"bearing": 248.0,
 			"quay": "right",
-			"note": "Mundra: mirrored about its middle, out west by south-west into the Gulf of Kutch"
+			"note": "2026-10-12: moved 0.04 deg N, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"RGN": {
 			"bearing": 180.0,
@@ -197,14 +197,404 @@
 			"note": "Shenzhen: the east step of the Pearl River podium, out south by south-east"
 		},
 		"MNL": {
-			"bearing": 239.0,
+			"bearing": 224.0,
 			"quay": "right",
-			"note": "Manila: out at the mouth of Manila Bay (past Corregidor)"
+			"note": "2026-10-12: moved 0.02 deg N, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		},
 		"OAK": {
-			"bearing": 345.0,
+			"bearing": 315.0,
 			"quay": "right",
-			"note": "Oakland: moved down into the bay clear of the Golden Gate Bridge (the bay as drawn is too small for it facing west), out north-north-west up the bay"
+			"note": "2026-10-12: moved 0.02 deg SW, turned from 345 to 315, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"ANC": {
+			"bearing": 257.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.02 deg S, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"ANR": {
+			"bearing": 311.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg NW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"ARH": {
+			"bearing": 344.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.02 deg NW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"BAL": {
+			"bearing": 140.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.04 deg NE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"BHI": {
+			"bearing": 176.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.04 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"BND": {
+			"bearing": 124.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.04 deg NE, turned from 154 to 124, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"BRV": {
+			"bearing": 315.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.02 deg N, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"BUE": {
+			"bearing": 20.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.07 deg S, turned from 50 to 20, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"CEB": {
+			"bearing": 106.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.07 deg NE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"CPH": {
+			"bearing": 140.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.14 deg SW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"DIL": {
+			"bearing": 349.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg W, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"GRG": {
+			"bearing": 91.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.09 deg nudge, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"GRK": {
+			"bearing": 198.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg S, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"HAM": {
+			"bearing": 293.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg NW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"HFT": {
+			"bearing": 338.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.02 deg NE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"HOU": {
+			"bearing": 116.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.10 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"ICN": {
+			"bearing": 254.0,
+			"quay": "left",
+			"note": "2026-10-12: turned from 239 to 254, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"IMM": {
+			"bearing": 111.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.01 deg nudge, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"IZM": {
+			"bearing": 274.0,
+			"quay": "right",
+			"note": "2026-10-12: turned from 289 to 274, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"JIB": {
+			"bearing": 48.0,
+			"quay": "left",
+			"note": "2026-10-12: turned from 33 to 48, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"JNU": {
+			"bearing": 241.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.85 deg W, turned from 316 to 241, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"KKN": {
+			"bearing": 45.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg N, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"KWI": {
+			"bearing": 48.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.07 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"LED": {
+			"bearing": 270.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.26 deg about its mouth, turned from 312 to 270, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"LEH": {
+			"bearing": 266.0,
+			"quay": "right",
+			"note": "2026-10-12: turned from 251 to 266, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"LGB": {
+			"bearing": 186.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg S, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"LGW": {
+			"bearing": 97.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.14 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"LYR": {
+			"bearing": 359.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.20 deg SW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"MCM": {
+			"bearing": 240.0,
+			"quay": "right",
+			"note": "2026-10-12: turned from 210 to 240, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"MMK": {
+			"bearing": 16.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.02 deg NE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"MOB": {
+			"bearing": 163.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg W, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"MPM": {
+			"bearing": 105.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.14 deg NE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"MSY": {
+			"bearing": 291.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.14 deg NE, turned from 336 to 291, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"NAM": {
+			"bearing": 246.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.14 deg NW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"NGO": {
+			"bearing": 202.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg SW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"ONN": {
+			"bearing": 183.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.28 deg S, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"OSA": {
+			"bearing": 244.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg NE, turned from 259 to 244, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"OSL": {
+			"bearing": 195.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg W, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"OXB": {
+			"bearing": 200.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.07 deg W, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"PAS": {
+			"bearing": 204.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"PIR": {
+			"bearing": 158.0,
+			"quay": "left",
+			"note": "2026-10-12: turned from 189 to 158, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"PKC": {
+			"bearing": 183.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.02 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"PUQ": {
+			"bearing": 140.0,
+			"quay": "left",
+			"note": "2026-10-12: turned from 125 to 140, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"RJK": {
+			"bearing": 202.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.07 deg SW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"SEA": {
+			"bearing": 325.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.14 deg N, turned from 355 to 325, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"SIN": {
+			"bearing": 213.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.07 deg W, turned from 168 to 213, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"SOU": {
+			"bearing": 137.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.04 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"SSA": {
+			"bearing": 218.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.04 deg NE, turned from 233 to 218, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"TAC": {
+			"bearing": 34.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.70 deg NE, turned from 109 to 34, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"TOS": {
+			"bearing": 313.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.02 deg NW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"TPP": {
+			"bearing": 219.0,
+			"quay": "left",
+			"note": "2026-10-12: turned from 189 to 219, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"TUN": {
+			"bearing": 45.0,
+			"quay": "left",
+			"note": "2026-10-12: turned from 65 to 45, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"TYO": {
+			"bearing": 148.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.20 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"UKB": {
+			"bearing": 199.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg S, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"ULU": {
+			"bearing": 322.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.07 deg N, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"UQR": {
+			"bearing": 120.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.07 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"VDC": {
+			"bearing": 16.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.10 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"VVO": {
+			"bearing": 209.0,
+			"quay": "left",
+			"note": "2026-10-12: turned from 224 to 209, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"YDP": {
+			"bearing": 51.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"YFB": {
+			"bearing": 157.0,
+			"quay": "right",
+			"note": "2026-10-12: turned from 202 to 157, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"YVR": {
+			"bearing": 286.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.14 deg N, turned from 211 to 286, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"IST": {
+			"bearing": 185.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.29 deg west, off the Bosporus mouth, so ships through the strait have room past its jetty"
+		},
+		"BUN": {
+			"bearing": 250.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.10 deg W, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"DLA": {
+			"bearing": 236.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.04 deg SW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"JAX": {
+			"bearing": 72.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.10 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"MEL": {
+			"bearing": 183.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg SW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"MNC": {
+			"bearing": 88.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.14 deg E, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"PEN": {
+			"bearing": 267.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.07 deg N, turned from 252 to 267, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"RIX": {
+			"bearing": 319.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.10 deg NW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"SAV": {
+			"bearing": 131.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.14 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"AAR": {
+			"bearing": 108.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.04 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"BNE": {
+			"bearing": 73.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg SE, turned from 58 to 73, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"DVO": {
+			"bearing": 141.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.14 deg SW, turned from 156 to 141, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"KWN": {
+			"bearing": 143.0,
+			"quay": "left",
+			"note": "2026-10-12: moved 0.02 deg W, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"LBV": {
+			"bearing": 234.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.10 deg NW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"NYC": {
+			"bearing": 163.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.07 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"PNG": {
+			"bearing": 85.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg SE, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
+		},
+		"SNR": {
+			"bearing": 196.0,
+			"quay": "right",
+			"note": "2026-10-12: moved 0.04 deg SW, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
 		}
 	},
 	"facing": {

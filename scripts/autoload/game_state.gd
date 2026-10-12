@@ -2007,8 +2007,8 @@ func _roll_breakdowns(delta: float) -> void:
 		for ship in ships:
 			if owner_of(ship).level() < from_level:
 				continue  # Each company's ships break down from its own level.
-			if ship.is_service() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or not ship.weather_wait.is_empty() or ship.escort != null or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
-				continue
+			if ship.is_service() and not ship.is_fishing() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or not ship.weather_wait.is_empty() or ship.escort != null or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
+				continue  # (A fishing boat breaks down like a cargo ship, and is towed in like one.)
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
 			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
 			ship_broke_down.emit(ship)
@@ -2159,7 +2159,10 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 			ship.berth_phase = Ship.BERTH_NONE
 			var to := ship.depart_to
 			ship.depart_to = ""
-			if not to.is_empty():
+			if ship.is_fishing() and ship.has_meta(&"fish_trip"):
+				ship.remove_meta(&"fish_trip")
+				_set_off_fishing(ship)  # (Clear of its pier: off on its trip. See _fishing_in_port().)
+			elif not to.is_empty():
 				_set_off(ship, to, true)
 			else:
 				ship_changed.emit(ship)
@@ -4155,7 +4158,36 @@ func fishing_plan(ship: Ship) -> Dictionary:
 	work_s = minf(work_s, tank_s)
 	if work_s < day_s * 0.25:
 		return {wait = "%s is too far for its tank" % GameData.port_name(Fisheries.end_of(pick.ground))}
+	# And what its hull can take: it's to come home with FISH_HOME_MAINTENANCE
+	# left (the sailing out and back, and the working, in the ground's weather
+	# this month), so it plans its time out from what it has to spend.
+	var hull_s := _fishing_hull_seconds(ship, pick.ground, sail_s)
+	if hull_s < day_s * 0.25:
+		if ship.maintenance < 0.999 and ship.auto_repair:
+			return {wait = "waiting for repairs before its next trip"}
+		if ship.maintenance < 0.999:
+			return {wait = "too worn for a trip; turn on repair"}
+		return {wait = "%s is too far for its hull" % GameData.port_name(Fisheries.end_of(pick.ground))}
+	work_s = minf(work_s, hull_s)
 	return {ground = pick.ground, species = pick.species, work_limit_s = work_s, miles = pick.miles}
+
+
+## What a fishing boat is to come home from a trip with (of its maintenance)
+## on a normal day: its trips are planned to it (fishing_plan()), and it turns
+## for home when what it has left would take it under (see _work_ground()).
+const FISH_HOME_MAINTENANCE := 0.7
+
+## How long (s of play) a boat can work a ground and still come home with
+## FISH_HOME_MAINTENANCE left: what it may spend less the sailing there and
+## back (`sail_s` one way), at its wear working there (ROUGH_WEAR in the
+## ground's rough months). INF for a boat that doesn't wear.
+func _fishing_hull_seconds(ship: Ship, ground: String, sail_s: float) -> float:
+	var wear := ship.wear_per_s()
+	if wear <= 0.0:
+		return INF
+	var rough := Fisheries.shared().rough(ground, fishing_month())
+	var spend := ship.maintenance - FISH_HOME_MAINTENANCE - 2.0 * wear * sail_s
+	return spend / (wear * (Fisheries.ROUGH_WEAR if rough else 1.0))
 
 
 ## A fishing boat in port at its base with its stop done: it lands anything
@@ -4187,12 +4219,29 @@ func _fishing_in_port(ship: Ship) -> void:
 		if ship.fuel < need:
 			_set_fish_wait(ship, "waiting for the money for fuel")
 			return
-	# Off its pier first (it sets out from the harbour once it's clear).
+	# At its pier: it pulls out and sails straight on out of the harbour onto
+	# its trip (its first leg's end as where it's bound: see _advance_berth(),
+	# which starts the trip once it's clear). From the moorings, it sets off
+	# from its spot (the map takes it out the way it came in).
 	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
-		_pull_out(ship, "")
-		ship.set_meta(&"fish_check", 0.0)
+		var legs := Fisheries.shared().legs(ship.base_port, plan.ground)
+		ship.set_meta(&"fish_trip", true)
+		_pull_out(ship, str((legs[0] as Array)[0][1]))
 		return
-	# The work it can do on what's in its tank.
+	_set_off_fishing(ship, plan)
+
+
+## A fishing boat clear of its pier (or at its spot) with a trip to make sets
+## out on it: the trip is planned again (what's in season, the ground's boats,
+## its fuel and hull can have changed while it pulled out), and it works the
+## ground for what its tank can do of the plan's time.
+func _set_off_fishing(ship: Ship, plan := {}) -> void:
+	if plan.is_empty():
+		plan = fishing_plan(ship)
+		if plan.has("wait"):
+			_set_fish_wait(ship, plan.wait)  # (It lies at the moorings meanwhile: see _update_spots().)
+			ship_changed.emit(ship)
+			return
 	var spare_s := (ship.fuel / maxf(ship.fuel_per_s(), 0.0001) - 2.0 * ship.sailing_seconds(float(plan.miles), maxf(ship.maintenance, 0.5)) - DEPARTURE_MARGIN_S) / Fisheries.WORK_FUEL
 	_start_fishing(ship, plan.ground, plan.species, minf(float(plan.work_limit_s), spare_s))
 
@@ -4323,7 +4372,8 @@ func _work_ground(ship: Ship, delta: float) -> void:
 	var home_nm := fish.miles_to(ship.base_port, ship.fish_ground)
 	var home_s := ship.sailing_seconds(home_nm, ship.maintenance)
 	var short := home_s == INF or ship.fuel < ship.fuel_per_s() * (home_s + DEPARTURE_MARGIN_S) * 1.05
-	if ship.catch >= float(ship.capacity()) - 0.01 or ship.work_s >= ship.work_limit_s or rate <= 0.0 or short:
+	var worn := ship.maintenance - ship.wear_per_s() * home_s * 1.05 <= FISH_HOME_MAINTENANCE  # (Home with FISH_HOME_MAINTENANCE left.)
+	if ship.catch >= float(ship.capacity()) - 0.01 or ship.work_s >= ship.work_limit_s or rate <= 0.0 or short or worn:
 		_head_home(ship)
 
 
