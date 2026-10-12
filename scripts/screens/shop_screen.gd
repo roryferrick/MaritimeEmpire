@@ -16,10 +16,10 @@ extends Control
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs (two per route port)", "tug"],
-	["Icebreakers (for seasonal ice)", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"]]
+	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
+	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"]]
 ## The sections side by side on each row (by category).
-const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery"], ["icebreaker", "tug"], ["fishing", "crabbing"], ["seafood"]]
+const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery"], ["fishing", "crabbing"], ["icebreaker", "tug"], ["seafood"]]
 ## Cards a section shows across, fewer if they don't fit. Six fit across a row
 ## beside the open activity log at the default window size: cards are
 ## CARD_WIDTH wide (plus padding), and long ship names and Buy button texts wrap.
@@ -322,7 +322,12 @@ func _update_cards() -> void:
 		var next := Progression.next_slot_level(model, level)
 		var price := GameState.ship_price(model_id)
 		_price_labels[model_id].text = _price_text(price)
-		if price < int(model.get("price", 0)):
+		if model.get("tug", false):
+			var off := roundi(GameState.tug_discount() * 100.0)
+			_price_labels[model_id].text += " (%d%% off: animals seen)" % off if off > 0 else ""
+			_price_labels[model_id].tooltip_text = "Tugs are %d%% cheaper for every third of the field guide's animals you've seen (click them on the map), up to %d%%." % [roundi(GameState.TUG_ANIMAL_DISCOUNT * 100.0), roundi(GameState.TUG_ANIMAL_DISCOUNT * 300.0)]
+			_price_labels[model_id].mouse_filter = Control.MOUSE_FILTER_PASS
+		elif price < int(model.get("price", 0)):
 			_price_labels[model_id].text += " for your first, then %s" % _price_text(int(model.price))
 		_owned_labels[model_id].text = "%d / %d" % [owned, slots]
 		if model.get("tug", false):

@@ -4323,19 +4323,11 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 		if hub != null and hub.is_hq:
 			owner = each
 			break
-	var region := _hq_region(layout)
-	if owner == null or region.size() < 3:
+	if owner == null:
 		return
 	var level := hq_level(owner)
 	var tint := GameState.company_color_value(owner.color)
-	var area := _bounds(region)
-	# Its footprint: from the corner furthest inland and from the channel, growing
-	# towards the basin; all of its corner at the top level.
-	var foot := region
-	if level < HQ_LEVELS:
-		var share := lerpf(0.22, 0.92, pow(float(level - 1) / float(HQ_LEVELS - 2), 1.1))
-		var size := area.size * share
-		foot = _clip_inside(_rect_points(Rect2(Vector2(area.position.x, area.end.y - size.y), size)), region)
+	var foot := _hq_foot(layout, level)
 	if foot.size() < 3:
 		return
 	var box := _bounds(foot)
@@ -4350,6 +4342,20 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 		_draw_hq_house(port_id, level, box, tint)
 	else:
 		_draw_hq_block(port_id, level, foot, box, tint)
+
+## An HQ building's footprint at a level (dock units): from the corner of its
+## half of the quay furthest inland and from the channel, growing towards the
+## basin; all of its half at the top level. [] if there's no room.
+func _hq_foot(layout: Dictionary, level: int) -> PackedVector2Array:
+	var region := _hq_region(layout)
+	if region.size() < 3:
+		return PackedVector2Array()
+	if level >= HQ_LEVELS:
+		return region
+	var area := _bounds(region)
+	var share := lerpf(0.22, 0.92, pow(float(level - 1) / float(HQ_LEVELS - 2), 1.1))
+	var size := area.size * share
+	return _clip_inside(_rect_points(Rect2(Vector2(area.position.x, area.end.y - size.y), size)), region)
 
 ## Levels 1 to 3: a wooden hut, a wooden house and a stone lodge, pitched roofs
 ## with their ridge along the long side, the company's flag at a corner (and
@@ -4638,27 +4644,50 @@ func _docked_screen_pose(ship: Ship) -> Array:
 				var total := ship.berth_duration if ship.berth_duration > 0.0 else float(settings.get("in_s", 6.0))
 				var sail := maxf(total - slide_s, 0.01)
 				if ship.berth_time < sail:
+					var start := _lying_pose(ship, GameState.play_time - ship.berth_time)
+					var rest := _rest_pose(ship)
+					var weighing := (start[0] as Vector2).distance_to(rest[0]) < 1.0  # (Lying at anchor, facing the wind, or at its mooring.)
+					# From its mooring: backing out of its slip and turning there first
+					# (see _mooring_leave_plan()), then the way it went there, backwards.
+					var leave := _mooring_leave_plan(ship) if weighing else {}
+					var t := ship.berth_time
+					var before := 0.0
+					var turned := 0.0
+					var back := Vector2.ZERO
+					if not leave.is_empty():
+						back = _dock_point(port, leave.back)
+						if t < float(leave.reverse_s):
+							var share := _sailed_share(t / float(leave.reverse_s), float(leave.reverse_units), float(leave.ease), true, true)
+							return [(rest[0] as Vector2).lerp(back, share), rest[1]]
+						t -= float(leave.reverse_s)
+						turned = _dock_angle(port, float(leave.out_angle))
+						if t < UNBERTH_TURN_S:
+							return [back, lerp_angle(float(rest[1]), turned, smoothstep(0.0, 1.0, t / UNBERTH_TURN_S))]
+						t -= UNBERTH_TURN_S
+						before = float(leave.reverse_s) + UNBERTH_TURN_S
 					# Its way in only changes with the view (or the berth): worked out
 					# once, and only how far along it it is each frame.
-					var key := [port, ship.berth, ship.berth_half, ship.model_id, "in", snappedf(GameState.play_time - ship.berth_time, 0.01), float(layout.radius), _view_epoch]
+					var key := [port, ship.berth, ship.berth_half, ship.model_id, "in", snappedf(GameState.play_time - ship.berth_time, 0.01), float(layout.radius), _view_epoch, leave.is_empty()]
 					var way := _berth_way(ship, key)
 					if way.is_empty():
-						var start := _lying_pose(ship, GameState.play_time - ship.berth_time)
+						var poses := [start]
+						if not leave.is_empty():
+							poses = [[back, turned]]
+							for pose: Array in leave.poses:
+								poses.append(_local_to_screen(port, pose))
 						# Through the mouth heading in, unless it's there already (coming in
 						# from sea), as near as makes no odds.
-						var weighing := (start[0] as Vector2).distance_to(_rest_pose(ship)[0]) < 1.0  # (Lying at anchor, facing the wind.)
-						var poses := [start]
 						var mouth := _keep_right(port, _entrance_pose(port, false, true))
 						var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * dock_scale(port) * 0.5
-						if (start[0] as Vector2).distance_to(mouth[0]) > maxf(length, mouth_room):
+						if not leave.is_empty() or (start[0] as Vector2).distance_to(mouth[0]) > maxf(length, mouth_room):
 							poses.append(mouth)
 						for pose: Array in _slot_approach(port, berth, ship):
 							poses.append(_local_to_screen(port, pose))
-						var shaped := _loosen(poses, weighing, false, length * ANCHOR_TURN_LENGTHS)
+						var shaped := _loosen(poses, weighing and leave.is_empty(), false, length * ANCHOR_TURN_LENGTHS)
 						var path := _pose_path(shaped, SLOT_PATH_HANDLE)
 						way = [poses, shaped, path, _path_times(path, _sea_speed_px(ship), length, length, weighing, true)]
 						_berth_ways[ship] = [key, way]
-					return _follow(way[0], way[1], way[2], _timed_share(way[2], way[3], ship.berth_time / sail))
+					return _follow(way[0], way[1], way[2], _timed_share(way[2], way[3], t / maxf(sail - before, 0.01)))
 				return _slide(off, at, (ship.berth_time - sail) / slide_s)
 			Ship.BERTH_OUT:
 				# Backing straight out of its slot stern first to the channel, turning
@@ -4781,6 +4810,36 @@ func _unberth_plan(ship: Ship) -> Dictionary:
 	plan.reverse_s = (units + 2.0 * plan.ease) / speed
 	return plan
 
+## How a ship lying at its long-term mooring gets back out to its harbour's
+## mouth (dock units): it backs straight out of its slip stern first to the
+## slip's mouth (back), like a ship out of its berth (see _unberth_plan()),
+## turns there on its thrusters to out_angle, then sails its way to the
+## mooring (_mooring_way()) the other way round, `poses` to just outside the
+## entrance. {} if it isn't at a mooring (or its way isn't known yet).
+## {back, out_angle, poses, reverse_units, reverse_s, ease}.
+func _mooring_leave_plan(ship: Ship) -> Dictionary:
+	var port := ship.docked_at
+	if str((_spot_keys.get(ship, ["", ""]) as Array)[1]) != "moor":
+		return {}
+	var moorings := _moorings(port)
+	var at := int(_spot_slots.get(ship, 0))
+	if at >= moorings.size():
+		return {}
+	var way := _mooring_way(port, moorings[at])
+	if way.size() < 2:
+		return {}
+	var middle: Vector2 = moorings[at][0]
+	var back: Vector2 = way[-1][0]
+	var poses := []
+	for k in range(way.size() - 2, -1, -1):
+		poses.append([way[k][0], float(way[k][1]) + PI])
+	var rect: Rect2 = _model_look(ship.model_id)[7]
+	var units := middle.distance_to(back)
+	var ease := minf(rect.size.x * 0.5, units / 3.0)
+	var speed := maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0 * UNBERTH_REVERSE_SPEED
+	return {back = back, out_angle = ((poses[0][0] as Vector2) - back).angle(), poses = poses,
+		reverse_units = units, reverse_s = (units + 2.0 * ease) / speed, ease = ease}
+
 ## Sliding sideways (on its thrusters) from one screen pose to another, eased.
 static func _slide(from: Array, to: Array, t: float) -> Array:
 	t = smoothstep(0.0, 1.0, t)
@@ -4891,11 +4950,17 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 		var anchor := _anchor_local(ship)
 		var weighing := not gliding and anchor.x == anchor.x  # (NAN when it has no spot.)
 		var poses := [_screen_to_local(port, _rest_pose(ship)) if weighing else mouth_in]
-		if weighing and anchor.distance_to(layout.mouth) > maxf(length, mouth_room):
+		# From its mooring: out of its slip backwards, turned, and its way there backwards.
+		var leave := _mooring_leave_plan(ship) if weighing else {}
+		var before := 0.0
+		if not leave.is_empty():
+			before = float(leave.reverse_s) + UNBERTH_TURN_S
+			poses = [[leave.back, float(leave.out_angle)]] + leave.poses + [mouth_in]
+		elif weighing and anchor.distance_to(layout.mouth) > maxf(length, mouth_room):
 			poses.append(mouth_in)
 		poses.append_array(_slot_approach(port, berth, ship))
-		var path := _pose_path(_loosen(poses, weighing, false, length * ANCHOR_TURN_LENGTHS), SLOT_PATH_HANDLE)
-		return _path_times(path, speed, length, length, weighing, true)[-1]
+		var path := _pose_path(_loosen(poses, weighing and leave.is_empty(), false, length * ANCHOR_TURN_LENGTHS), SLOT_PATH_HANDLE)
+		return before + _path_times(path, speed, length, length, weighing, true)[-1]
 	# Backing out and turning round first (see _unberth_plan()), then out.
 	var plan := _unberth_plan(ship)
 	var backing := float(plan.reverse_s) + UNBERTH_TURN_S
@@ -4903,7 +4968,11 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 	var anchoring := ship.depart_to.is_empty()
 	var anchor := _anchor_local(ship) if anchoring else Vector2(NAN, NAN)
 	if anchor.x == anchor.x:
-		if anchor.distance_to(layout.mouth) < maxf(length, mouth_room):
+		var moorings := _moorings(port) if str((_spot_keys.get(ship, ["", ""]) as Array)[1]) == "moor" else []
+		var at_moor := int(_spot_slots.get(ship, 0))
+		if at_moor < moorings.size():
+			poses.append_array(_mooring_way(port, moorings[at_moor]))  # (Round the jetty to its slip, as drawn.)
+		elif anchor.distance_to(layout.mouth) < maxf(length, mouth_room):
 			poses.pop_back()
 		poses.append(_screen_to_local(port, _rest_pose(ship)))
 	var path := _pose_path(_loosen(poses, false, anchoring and anchor.x == anchor.x, length * ANCHOR_TURN_LENGTHS), SLOT_PATH_HANDLE)
@@ -6899,43 +6968,131 @@ func _fishing_pose(ship: Ship) -> Array:
 func _fishing_pose_now(ship: Ship) -> Array:
 	var ground := ship.fish_ground
 	if ship.fish_phase == "work" and not ground.is_empty():
-		var spot := _fish_spot(ground, ship.fish_slot)
-		var units := _units_per_nm(spot)
-		var gear := _fishing_gear_kind(ship)
-		if gear == "troll" or gear == "trawl":
-			var turn := TAU * fposmod(GameState.play_time / FISH_LOOP_S + float(ship.id % 17) / 17.0, 1.0)
-			var loop := Vector2(cos(turn), sin(turn)) * FISH_LOOP_NM * units
-			return [spot + loop, Vector2(-sin(turn), cos(turn))]
-		var lying := float(ship.fish_slot) * TAU / GameState.GROUND_BOATS + PI / 2.0
-		return [spot, Vector2.from_angle(lying)]
+		return _fish_work_pose(ship, GameState.play_time)
 	var here := _ship_bent(ship)
 	if here.is_empty():
 		return []
-	var at: Vector2 = here[0]
-	var heading: Vector2 = here[1]
 	var length := 0.0
 	var lane = ship.leg_lane()
 	if lane != null:
 		length = lane.length()
 	var from_start := ship.traveled_nm
 	var to_end := length - ship.traveled_nm
-	# Off to its side of the lane, eased in from either end of the leg.
+	# Out to its spot on the ground, or back in from it: sailed, on a curve
+	# between its way along the lane and its spot (see _fish_approach()).
+	if not ground.is_empty():
+		var end := Fisheries.end_of(ground)
+		if ship.to_port == end or ship.from_port == end:
+			var arriving := ship.to_port == end
+			var approach := _fish_approach_nm(ship, ground, length)
+			var gone := to_end if arriving else from_start
+			if gone < approach:
+				var curve := _fish_approach(ship, ground, lane, length, approach, arriving)
+				if not curve.is_empty():
+					var on: Array = _along_path(curve, 1.0 - gone / approach if arriving else gone / approach)
+					return [on[0], Vector2.from_angle(float(on[1]))]
+			else:
+				_fish_left.erase(ship)
+	return [_fish_lane_point(ship, here, from_start, to_end), here[1]]
+
+## Where a fishing boat sailing its lane is drawn (projected): off to its own
+## side of the lane, eased in from either end of the leg, never onto land.
+func _fish_lane_point(ship: Ship, here: Array, from_start: float, to_end: float) -> Vector2:
+	var at: Vector2 = here[0]
 	var side := (float(ship.id * 7919 % 1000) / 1000.0 * 2.0 - 1.0) * FISH_LANE_SPREAD_NM
 	var ease := smoothstep(0.0, FISH_LANE_EASE_NM, minf(from_start, to_end))
-	var offset := heading.orthogonal() * side * ease * _units_per_nm(at)
+	var offset := (here[1] as Vector2).orthogonal() * side * ease * _units_per_nm(at)
 	if offset != Vector2.ZERO and _on_land(Geo.unproject(at + offset)):
 		offset = Vector2.ZERO
-	# Out to its spot on the ground, or back in from it.
-	if not ground.is_empty():
-		var middle := GameData.port_position(Fisheries.end_of(ground))
-		var toward := 0.0
-		if ship.to_port == Fisheries.end_of(ground):
-			toward = 1.0 - smoothstep(0.0, FISH_APPROACH_NM, to_end)
-		elif ship.from_port == Fisheries.end_of(ground):
-			toward = 1.0 - smoothstep(0.0, FISH_APPROACH_NM, from_start)
-		if toward > 0.0:
-			offset = offset.lerp(_fish_spot(ground, ship.fish_slot) - middle, toward)
-	return [at + offset, heading]
+	return at + offset
+
+## A fishing boat at work at a play time: [position, heading] (projected): a
+## troller or trawler on its slow loop round its spot, a crabber or netter
+## lying at it.
+func _fish_work_pose(ship: Ship, at_time: float) -> Array:
+	var spot := _fish_spot(ship.fish_ground, ship.fish_slot)
+	var gear := _fishing_gear_kind(ship)
+	if gear == "troll" or gear == "trawl":
+		var turn := TAU * fposmod(at_time / FISH_LOOP_S + float(ship.id % 17) / 17.0, 1.0)
+		var loop := Vector2(cos(turn), sin(turn)) * FISH_LOOP_NM * _units_per_nm(spot)
+		return [spot + loop, Vector2(-sin(turn), cos(turn))]
+	var lying := float(ship.fish_slot) * TAU / GameState.GROUND_BOATS + PI / 2.0
+	return [spot, Vector2.from_angle(lying)]
+
+## How much of its lane (nm, from the ground's end) a fishing boat sails its
+## curve to or from its spot over: as long as the curve itself (so it's never
+## faster than at sea), at least FISH_APPROACH_NM, at most the leg up to its
+## port end's harbour curve (half the leg if that isn't known). Worked out
+## once a leg.
+func _fish_approach_nm(ship: Ship, ground: String, length: float) -> float:
+	var key := [ship.from_port, ship.to_port, ship.fish_slot]
+	var kept: Array = _fish_approaches.get(ship, [])
+	if not kept.is_empty() and kept[0] == key:
+		return kept[1]
+	var arriving := ship.to_port == Fisheries.end_of(ground)
+	var middle := GameData.port_position(Fisheries.end_of(ground))
+	var per_nm := maxf(_units_per_nm(middle), 0.000001)
+	var off := middle.distance_to(_fish_spot(ground, ship.fish_slot)) / per_nm
+	var lane = ship.leg_lane()
+	var port_reach := 0.0
+	if lane != null:
+		var reaches := _harbour_reaches(ship, lane, length)
+		port_reach = reaches[1] if arriving else reaches[0]
+	var most := length * 0.5 if port_reach <= 0.0 else maxf(length * 0.5, length - port_reach - 1.0)
+	var approach := minf(FISH_APPROACH_NM + off + FISH_LOOP_NM, most)
+	for k in 3:
+		var curve := _fish_approach(ship, ground, lane, length, approach, arriving)
+		if curve.is_empty():
+			break
+		var curve_nm := _path_length(curve) / per_nm
+		if curve_nm <= approach * 1.02 or approach >= most:
+			break
+		approach = minf(curve_nm * 1.05, most)
+	_fish_approaches[ship] = [key, approach]
+	return approach
+
+var _fish_approaches := {}  # ship -> [leg, nm]
+
+## Each fishing boat's way home from its spot, [leg, pose it set off from].
+var _fish_left := {}
+
+## A fishing boat's curve (projected points) between where it leaves (or
+## joins) its lane `approach` nm from the ground's end and its spot: out, from
+## the lane's way to where its work starts (a troller's loop where it is now,
+## so it sails straight on into it); home, from where it was working when it
+## set off (kept for the leg) round onto the lane, heading the way it goes all
+## along (it never slips sideways). Through the ground's middle (where its
+## lane ends, always water) if the plain curve would cross land. [] if the
+## lane can't be sampled.
+func _fish_approach(ship: Ship, ground: String, lane, length: float, approach: float, arriving: bool) -> PackedVector2Array:
+	if lane == null:
+		return PackedVector2Array()
+	var mile := length - approach if arriving else approach
+	var sample: Array = _bent_sample(lane, ship.from_port, ship.to_port, clampf(mile, 0.0, length))
+	var join := [_fish_lane_point(ship, sample, mile, length - mile), (sample[1] as Vector2).angle()]
+	var work: Array
+	if arriving:
+		work = _fish_work_pose(ship, GameState.play_time)
+	else:
+		var key := [ship.from_port, ship.to_port]
+		var left: Array = _fish_left.get(ship, [])
+		if left.is_empty() or left[0] != key:
+			# Where it was when it stopped work: as near as the time it's sailed since tells.
+			var since := ship.traveled_nm / maxf(ship.speed(), 0.1)
+			left = [key, _fish_work_pose(ship, GameState.play_time - since)]
+			_fish_left[ship] = left
+		work = left[1]
+	var spot := [work[0], (work[1] as Vector2).angle()]
+	var poses := [join, spot] if arriving else [spot, join]
+	var curve := _pose_path(poses)
+	for k in range(0, curve.size(), 4):
+		if _on_land(Geo.unproject(curve[k])):
+			var middle := GameData.port_position(Fisheries.end_of(ground))
+			var through := [middle, ((spot[0] as Vector2) - middle).angle() if arriving else (middle - (spot[0] as Vector2)).angle()]
+			poses = [join, through, spot] if arriving else [spot, through, join]
+			curve = _pose_path(poses)
+			break
+	return curve
 
 ## A ground's spot for a slot (projected): round its middle, FISH_SPOT_SHARE
 ## of its radius out (each slot its own way round), pulled in till it and its
@@ -11170,7 +11327,7 @@ func _show_marina_lights(port_id: String, layout: Dictionary, night: float, glow
 		if not _lights_layer.visibility_changed.is_connected(_lights_visibility_changed):
 			_lights_layer.visibility_changed.connect(_lights_visibility_changed)
 	var town := _town(port_id, layout)
-	var key := [port_id, roundi(log(scale) / log(MARINA_LIGHTS_ZOOM_STEP)), _dock_flips.get(port_id, 1.0), layout.radius, layout.depth, town.is_empty()]
+	var key := [port_id, roundi(log(scale) / log(MARINA_LIGHTS_ZOOM_STEP)), _dock_flips.get(port_id, 1.0), layout.radius, layout.depth, town.is_empty(), _hq_look(port_id)]  # (The HQ's and industry's lights change with them.)
 	var recorded := item.has_meta(&"key")
 	if not recorded or item.get_meta(&"key") != key:
 		if _marina_light_records >= 1:
@@ -11216,6 +11373,9 @@ func _record_marina_lights(item: Control) -> void:
 	var along := radius * 2.2
 	var across := (-inland - depth) * 2.0
 	item.draw_texture_rect(glow, Rect2((inland - depth) / 2.0 - across / 2.0, -along / 2.0, across, along), false, Color(LIGHT_WARM, 0.4))
+	_record_harbour_lamps(item, layout, glow, scale)
+	_record_hq_lights(item, port_id, layout, glow, scale)
+	_record_industry_lights(item, port_id, layout, glow, scale)
 	# The lighthouse's halo and lantern (its beam is drawn each frame: see _draw_marina_lights()).
 	var tower := _lighthouse_spot(layout)
 	var halo := maxf(LIGHTHOUSE_RADIUS * 4.0, 8.0 / scale)
@@ -11232,6 +11392,109 @@ func _record_marina_lights(item: Control) -> void:
 		if scale >= TOWN_LIGHTS_MIN_SCALE and not (town.segments as PackedVector2Array).is_empty():
 			item.draw_multiline(town.segments, Color(tint, 0.9), maxf(0.22, 1.2 / scale))
 	_prof("lights.record", t0)
+
+## A lamp in a marina's lights item (dock units): a soft halo and its bright
+## point, each kept to a least size in px at the zoom it's drawn at.
+static func _record_lamp(item: Control, glow: Texture2D, at: Vector2, tint: Color, scale: float, size := 1.0) -> void:
+	var halo := maxf(HARBOUR_LAMP_HALO * size, 3.5 / scale)
+	item.draw_texture_rect(glow, Rect2(at - Vector2.ONE * halo, Vector2.ONE * halo * 2.0), false, Color(tint, 0.55))
+	item.draw_circle(at, maxf(HARBOUR_LAMP_DOT * size, 0.8 / scale), tint.lightened(0.35))
+
+## Lamps every HARBOUR_LAMP_STEP between two points (dock units), not at either end.
+static func _lamp_points(from: Vector2, to: Vector2) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var count := floori(from.distance_to(to) / HARBOUR_LAMP_STEP)
+	for k in count:
+		points.append(from.lerp(to, (k + 0.5) / count))
+	return points
+
+## The harbour's own lamps at night: down every pier to a lamp at its tip,
+## along the basin's walls, and round the jetty's arms.
+const HARBOUR_LAMP_STEP := 5.0
+const HARBOUR_LAMP_HALO := 1.3
+const HARBOUR_LAMP_DOT := 0.22
+func _record_harbour_lamps(item: Control, layout: Dictionary, glow: Texture2D, scale: float) -> void:
+	var half: float = layout.inner
+	var depth: float = layout.depth
+	var radius: float = layout.radius
+	var pier_length: float = layout.pier
+	for pier: Array in layout.piers:
+		var side: float = pier[0]
+		var x := (float(pier[1]) + float(pier[2])) / 2.0
+		var root := Vector2(x, side * half)
+		var tip := Vector2(x, side * (half - pier_length + 0.4))
+		for at in _lamp_points(root, tip):
+			_record_lamp(item, glow, at, LIGHT_WARM, scale, 0.8)
+		_record_lamp(item, glow, tip, LIGHT_WHITE, scale)
+	for wall: Array in [[Vector2(-depth, half), Vector2(-depth, -half)], [Vector2(-0.4, half), Vector2(-depth, half)], [Vector2(-0.4, -half), Vector2(-depth, -half)]]:
+		for at in _lamp_points(wall[0], wall[1]):
+			_record_lamp(item, glow, at, LIGHT_WARM, scale, 0.8)
+	var gap: float = layout.gap
+	for side: float in [-1.0, 1.0]:
+		var sweep := PI / 2.0 - gap
+		var count := maxi(floori(radius * sweep / (HARBOUR_LAMP_STEP * 1.4)), 1)
+		for k in count:
+			var angle := side * (gap + sweep * (k + 0.5) / count)
+			_record_lamp(item, glow, Vector2.from_angle(angle) * radius, LIGHT_WHITE, scale, 0.7)
+
+## An HQ's lights at night: the building's glow in its company's colour and
+## warm light, its lit windows (more, and cooler, the bigger it's grown: a
+## glass tower's whole face), and red aircraft lights on its corners from
+## level HQ_TALL_LEVEL.
+const HQ_TALL_LEVEL := 6
+func _record_hq_lights(item: Control, port_id: String, layout: Dictionary, glow: Texture2D, scale: float) -> void:
+	var owner: Company = null
+	for each in GameState.all_companies():
+		var hub := each.hub_at(port_id)
+		if hub != null and hub.is_hq:
+			owner = each
+			break
+	if owner == null:
+		return
+	var level := hq_level(owner)
+	var foot := _hq_foot(layout, level)
+	if foot.size() < 3:
+		return
+	var box := _bounds(foot)
+	var tint := GameState.company_color_value(owner.color)
+	item.draw_texture_rect(glow, box.grow(box.size.length() * 0.35), false, Color(LIGHT_WARM.lerp(tint, 0.35), 0.5))
+	var window := LIGHT_WARM.lerp(LIGHT_WHITE, clampf(float(level - 3) / 6.0, 0.0, 1.0))
+	var step := lerpf(1.6, 0.8, float(level - 1) / float(HQ_LEVELS - 1))
+	var dot := maxf(0.1 + 0.012 * level, 0.5 / scale)
+	var rows := floori(box.size.x / step)
+	var cols := floori(box.size.y / step)
+	for r in rows:
+		for c in cols:
+			var at := box.position + Vector2((r + 0.5) * box.size.x / rows, (c + 0.5) * box.size.y / cols)
+			if absi(hash([port_id, r, c, level])) % 5 == 0 or not Geometry2D.is_point_in_polygon(at, foot):
+				continue  # (A few windows dark.)
+			item.draw_rect(Rect2(at - Vector2.ONE * dot, Vector2.ONE * dot * 2.0), Color(window, 0.6))
+	if level >= HQ_TALL_LEVEL:
+		for corner: Vector2 in [box.position, Vector2(box.end.x, box.position.y), box.end, Vector2(box.position.x, box.end.y)]:
+			_record_lamp(item, glow, corner.lerp(box.get_center(), 0.08), LIGHT_RED, scale, 0.6)
+
+## A hub's industry lit at night: each building (not an empty plot) under a
+## sodium floodlight's orange glow, a lamp at each corner of its yard and a
+## few lit windows.
+const LIGHT_SODIUM := Color(1.0, 0.68, 0.32)
+func _record_industry_lights(item: Control, port_id: String, layout: Dictionary, glow: Texture2D, scale: float) -> void:
+	var hub := _industry_hub(port_id)
+	if hub == null:
+		return
+	var plots := _industry_plots(layout)
+	for slot in mini(plots.size(), Hub.INDUSTRY_SLOTS):
+		if str(hub.industries[slot]).is_empty():
+			continue
+		var plot: Rect2 = plots[slot]
+		item.draw_texture_rect(glow, plot.grow(plot.size.x * 0.45), false, Color(LIGHT_SODIUM, 0.5))
+		var yard := plot.grow(-plot.size.x * 0.08)
+		for corner: Vector2 in [yard.position, Vector2(yard.end.x, yard.position.y), yard.end, Vector2(yard.position.x, yard.end.y)]:
+			_record_lamp(item, glow, corner, LIGHT_SODIUM, scale, 0.75)
+		var dot := maxf(0.16, 0.6 / scale)
+		for k in 6:
+			var h := absi(hash([port_id, slot, k]))
+			var at := plot.position + plot.size * Vector2(0.25 + 0.5 * float(h % 97) / 97.0, 0.25 + 0.5 * float(h / 97 % 89) / 89.0)
+			item.draw_rect(Rect2(at - Vector2.ONE * dot, Vector2.ONE * dot * 2.0), Color(LIGHT_WARM, 0.85))
 
 func _set_marina_lights_shown(item: Control, shown: bool) -> void:
 	if bool(item.get_meta(&"shown", true)) != shown:

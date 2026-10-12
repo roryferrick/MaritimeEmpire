@@ -474,8 +474,8 @@ func tugs_to_buy() -> int:
 	if tug.is_empty() or not buy_error(tug).is_empty():
 		return 0
 	var free := tug_slots() - owned_count(tug)
-	var price := maxi(int(GameData.get_ship_model(tug).get("price", 1)), 1)
-	return clampi(1 + (money - ship_price(tug)) / price, 0, free)
+	var price := maxi(ship_price(tug), 1)
+	return clampi(1 + (money - price) / price, 0, free)
 
 
 ## Fills every free tug slot (as money allows), each tug with a suggested name
@@ -506,7 +506,7 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 		return null  # The host buys it (see Net).
 	ship_name = Net.clean_text(ship_name)
 	var price := ship_price(model_id)
-	if price < int(model.get("price", 0)):
+	if model.has("first_price") and price == int(model.first_price) and price < int(model.get("price", 0)):
 		first_prices_used.append(model_id)
 	money -= price
 	_record(null, "bought", price)
@@ -544,12 +544,31 @@ var _owned_counts_key := []
 
 ## What the next ship of this model costs: its first_price if it has one and
 ## the company has never bought one (and owns none, for saves from before
-## first prices), otherwise its price.
+## first prices), otherwise its price; a tug less its animal discount (see
+## tug_discount()).
 func ship_price(model_id: String) -> int:
 	var model := GameData.get_ship_model(model_id)
 	if model.has("first_price") and not first_prices_used.has(model_id) and owned_count(model_id) == 0:
 		return int(model.first_price)
+	if model.get("tug", false):
+		return roundi(int(model.get("price", 0)) * (1.0 - tug_discount()))
 	return int(model.get("price", 0))
+
+
+## Tugs cost TUG_ANIMAL_DISCOUNT less for every third of the field guide's
+## animals the company has seen (clicked on the map: the Field guide line's
+## stars, see Achievements), up to 60% with all of them.
+const TUG_ANIMAL_DISCOUNT := 0.2
+func tug_discount() -> float:
+	var seen := company.discovered.size()
+	if _tug_discount_key != [company, seen]:
+		_tug_discount_key = [company, seen]
+		var all := Achievements.animal_count()
+		var stars := Achievements.stars_for(Achievements.seen_count(company), Achievements.ANIMAL_STARS.map(func(share: float) -> int: return roundi(share * all)))
+		_tug_discount = TUG_ANIMAL_DISCOUNT * stars
+	return _tug_discount
+var _tug_discount := 0.0
+var _tug_discount_key := []
 
 
 ## Why the player can't buy another of this model, or "" if they can.
