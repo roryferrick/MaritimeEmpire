@@ -2639,11 +2639,11 @@ func _click(screen_pos: Vector2) -> void:
 ## turned and scaled), is under a screen point, or null; one drawn under
 ## SHIP_HIT_MIN_PX across or long is picked within that.
 func _ship_on_hull(screen_pos: Vector2) -> Ship:
-	var scale := _ship_scale()
 	for ship in _ships_topmost_first():
 		var hull: Array = _ship_hulls.get(ship, [])
 		if hull.is_empty():
 			continue
+		var scale := float(hull[2])  # (As drawn: see _ship_draw_scale().)
 		var rect: Rect2 = _model_look(ship.model_id)[7]
 		var grow := (Vector2.ONE * SHIP_HIT_MIN_PX / scale - rect.size).max(Vector2.ZERO) / 2.0
 		rect = rect.grow_individual(grow.x, grow.y, grow.x, grow.y)
@@ -7528,7 +7528,7 @@ func _fleet_pass(order: Array[Ship]) -> Dictionary:
 			tight_angle = asin(minf((size.length() / 2.0 + tight) / _radius(), 1.0)), end_zone_nm = HARBOUR_END_ZONE_NM,
 			end_slack_angle = asin(minf(MARINA_MAX_REACH * 2.0 * _ship_scale() / _radius(), 1.0)),
 			docks_shown = docks_shown(), mine = GameState.company, port_shown = _port_ships_shown,
-			dots = true, dots_canvas = _canvas.get_canvas_item(), right = _right, up = _up, radius = _radius(), middle = size / 2.0,
+			dots = Settings.ship_look != "grow", dot_half_px = _ship_dot_half(), dots_canvas = _canvas.get_canvas_item(), right = _right, up = _up, radius = _radius(), middle = size / 2.0,
 			screen = Rect2(Vector2.ZERO, size), scale = _ship_scale(), dot_px = TINY_SHIP_PX, lengths = _order_lengths, colors = _order_colors})
 	var draw := PackedInt32Array()
 	var plain := PackedByteArray()
@@ -7681,8 +7681,10 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	# In port while its marina is too small to show, its port's dot stands for it.
 	if ship.is_docked() and not _marina_shown(ship.docked_at):
 		return
-	# Too small to make out (zoomed well out): a dot in its color, where it is.
-	var tiny := (look[7] as Rect2).size.x * _ship_scale() < TINY_SHIP_PX
+	# Too small to make out (zoomed well out): a dot in its color, where it is
+	# (drawn at its size for how ships are shown far off: _ship_draw_scale()).
+	var length := (look[7] as Rect2).size.x
+	var scale := _ship_scale()
 	if not ship.is_docked() and not ship.is_service() and ship.rescuer == null and not _held_at_canal(ship):
 		# A cargo ship on its lane (most of them): where and which way from
 		# one sample of the lane.
@@ -7694,7 +7696,8 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 		var on_lane := world_to_screen(here[0])
 		if not near.has_point(on_lane):
 			return
-		if tiny:
+		scale = _ship_draw_scale(ship, on_lane)
+		if length * scale < TINY_SHIP_PX:
 			_draw_tiny_ship(on_lane, color * _ship_fade(ship))
 			return
 		var harbour := _harbour_pose(ship)
@@ -7706,23 +7709,23 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 			angle = harbour[1]
 	else:
 		at = ship_screen_position(ship)
-		if tiny:
+		scale = _ship_draw_scale(ship, at)
+		if length * scale < TINY_SHIP_PX:
 			_draw_tiny_ship(at, color * _ship_fade(ship))
 			return
 		angle = _screen_angle(ship)
-	if not Rect2(Vector2.ZERO, size).grow(SHIP_CULL_MARGIN * _ship_scale()).has_point(at):
+	if not Rect2(Vector2.ZERO, size).grow(SHIP_CULL_MARGIN * scale).has_point(at):
 		return  # Off screen.
 	fade = _ship_fade(ship)
 	color *= fade
 	outline *= fade
-	_note_lit_ship(at, angle, look)
+	_note_lit_ship(at, angle, look, scale)
 	if ship.is_docked() and docks_shown() and not ship.is_tug() and ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		_draw_mooring_ropes(ship)  # Moored: tied up to the bollards.
 	if ship.is_docked() and docks_shown() and not ship.is_tug() and ship.berth >= 0:
 		_draw_dock_workers(ship)  # (On the quay beside it, under it.)
-	_ship_hulls[ship] = [at, angle]
-	var scale := _ship_scale()
+	_ship_hulls[ship] = [at, angle, scale]
 	var rect7: Rect2 = look[7]
 	# Its shadow on the water, away from the sun (the hull's shape, dark), then
 	# the ship rolling with the sea (see _ship_roll()): narrower as it heels,
@@ -8074,7 +8077,39 @@ func _ship_fade(ship: Ship) -> Color:
 func _draw_tiny_ship(at: Vector2, color: Color) -> void:
 	if Rect2(Vector2.ZERO, size).has_point(at):
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
-		_canvas.draw_rect(Rect2(at - Vector2.ONE, Vector2.ONE * 2.0), color)
+		var half := _ship_dot_half()
+		_canvas.draw_rect(Rect2(at - Vector2.ONE * half, Vector2.ONE * half * 2.0), color)
+
+## Half a far-off ship's dot (px): bigger with Settings' "big_dot".
+const SHIP_DOT_HALF_PX := 1.0
+const SHIP_BIG_DOT_HALF_PX := 2.5
+func _ship_dot_half() -> float:
+	return SHIP_BIG_DOT_HALF_PX if Settings.ship_look == "big_dot" else SHIP_DOT_HALF_PX
+
+## With Settings' "grow" ships far off never get smaller than this many px a
+## dock unit: the size ships used to keep zoomed out (their map_size at 0.7),
+## so their art shows; from SHIP_GROW_PORT_RADII of their marina's radius in
+## to the mouth they shrink back to their true size (_ship_scale()), so they
+## fit their harbour.
+const SHIP_GROW_MIN_SCALE := 0.7 / SHIP_SIZE
+const SHIP_GROW_PORT_RADII := Vector2(1.2, 5.0)
+
+## How big (px a dock unit) a ship at a screen point is drawn: its true size
+## (_ship_scale()), or with Settings' "grow" at least SHIP_GROW_MIN_SCALE out
+## at sea, easing back to its true size near the ports at its leg's ends.
+func _ship_draw_scale(ship: Ship, at: Vector2) -> float:
+	var scale := _ship_scale()
+	if Settings.ship_look != "grow" or scale >= SHIP_GROW_MIN_SCALE:
+		return scale
+	if ship.is_docked() or ship.is_carried():
+		return scale if ship.is_docked() else _ship_draw_scale(ship.rescuer, at)
+	var near := INF
+	for port_id: String in [ship.from_port, ship.to_port]:
+		if not port_id.is_empty() and not Fisheries.is_ground(port_id):
+			near = minf(near, at.distance_to(port_screen_position(port_id)))
+	var reach := float(_marina_layout(str(Docks.settings().get("hub_berths", "LLLLLLLLLLLLLL")), true).radius) * scale
+	var t := smoothstep(reach * SHIP_GROW_PORT_RADII.x, reach * SHIP_GROW_PORT_RADII.y, near) if near < INF else 1.0
+	return lerpf(scale, SHIP_GROW_MIN_SCALE, t)
 
 ## The hull in the model's color, the cargo (cut off behind how full the hold
 ## is, in CARGO_STEPS steps, any cargo showing at least one) and the details.
@@ -11100,12 +11135,12 @@ func _dark_at(unit: Vector3) -> float:
 	return maxf(_night_at(unit), _storm_dark_at(unit))
 
 ## Notes a ship drawn where it's dark, for its lights (see _draw_lights()).
-func _note_lit_ship(at: Vector2, angle: float, look: Array) -> void:
+func _note_lit_ship(at: Vector2, angle: float, look: Array, scale: float) -> void:
 	if not _night_shown:
 		return
 	var night := _dark_at(_unit(screen_to_world(at)))
 	if night > 0.03:
-		var size_px: Vector2 = (look[7] as Rect2).size * _ship_scale()
+		var size_px: Vector2 = (look[7] as Rect2).size * scale
 		_lit_ships.append([at, angle, size_px.x, size_px.y, night])
 
 ## A marina smaller than this on screen (its jetty's radius, px) shows a town's glow at night, not its lamps.

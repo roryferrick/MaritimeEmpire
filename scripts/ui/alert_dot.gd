@@ -1,8 +1,9 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name AlertDot
 extends Control
-## A small red dot pinned to the top-right corner of its parent, e.g. a nav
-## button, to say something there needs the player.
+## A small black dot (with a thin pale ring, so it shows on the dark panels
+## too) pinned to the top-right corner of its parent, e.g. a nav button (red),
+## to say something there needs the player.
 
 const THEME_TYPE := &"AlertDot"
 
@@ -27,5 +28,6 @@ func _ready() -> void:
 
 
 func _draw() -> void:
-	var color := get_theme_color(&"color", THEME_TYPE) if has_theme_color(&"color", THEME_TYPE) else Color(0.9, 0.2, 0.2)
+	var color := get_theme_color(&"color", THEME_TYPE) if has_theme_color(&"color", THEME_TYPE) else Color(0.05, 0.05, 0.07)
 	draw_circle(size / 2.0, radius, color, true, -1.0, true)
+	draw_arc(size / 2.0, radius, 0.0, TAU, 24, Color(1.0, 1.0, 1.0, 0.55), 1.2, true)

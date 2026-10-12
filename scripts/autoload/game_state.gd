@@ -885,7 +885,7 @@ func _add_money(to: Company, amount: int) -> void:
 
 ## What a ship's next level of a skill costs: game_config skill_costs first
 ## share of the model's price, plus step more for each level the skill already
-## has (10%, 15% ... 55% for the 10th).
+## has (5%, 7.5% ... 27.5% for the 10th).
 func skill_cost(ship: Ship, skill: String) -> int:
 	return _skill_price(ship.model(), int(ship.skills.get(skill, 0)))
 

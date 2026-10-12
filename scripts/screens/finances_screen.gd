@@ -40,7 +40,7 @@ const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head o
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0
 ## The Compare companies table's columns, and how big (px) each company's CEO's face is in it.
-const COMPARE_COLUMNS: Array[String] = ["Company", "Level", "Money", "Ships", "Hubs", "Profit, last 10 min", "Profit, all time", "Delivered"]
+const COMPARE_COLUMNS: Array[String] = ["#", "Company", "Level", "Money", "Ships", "Hubs", "Profit, last 10 min", "Profit, all time ▼", "Delivered"]
 const CEO_FACE_SIZE := 34.0
 ## Choices for "Keep in the bank" (0 = spend everything on cargo).
 const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000]
@@ -396,7 +396,8 @@ func _show_page(compare: bool) -> void:
 	_refresh()
 
 
-## A row per company, richest first: its CEO's face (their name on hover) and
+## A row per company, ranked by operating profit all time (the most first),
+## numbered: its CEO's face (their name on hover) and
 ## its name (in its color; this player's marked), level, money, ships, hubs,
 ## operating profit over the last 10 minutes and all time, and units
 ## delivered.
@@ -405,8 +406,13 @@ func _fill_comparison() -> void:
 	for column: String in COMPARE_COLUMNS:
 		_add_label(_compare_grid, column, &"DimLabel")
 	var companies := GameState.all_companies().duplicate()
-	companies.sort_custom(func(a: Company, b: Company) -> bool: return a.money > b.money)
+	var all_time := {}
 	for each: Company in companies:
+		all_time[each] = _operating_profit(each.totals)
+	companies.sort_custom(func(a: Company, b: Company) -> bool: return float(all_time[a]) > float(all_time[b]))
+	for rank in companies.size():
+		var each: Company = companies[rank]
+		_add_label(_compare_grid, "%d" % (rank + 1), &"DimLabel")
 		# Its CEO's face, then its name.
 		var cell := HBoxContainer.new()
 		cell.add_theme_constant_override(&"separation", 8)

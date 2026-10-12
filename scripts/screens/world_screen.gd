@@ -1,10 +1,10 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
-## The main map: ports, ships, canal locks, storms and sea animals, with their popups, and the Routes switch,
-## Tutorial switch (in saves with the tutorial) and price picker in one panel in
-## the top right (the fleet's route lanes shown faintly; the tutorial's tips;
-## a ship line's prices over the ports), with an Unlock a region button over
-## them while a market region can be unlocked (see _add_region_choice()).
+## The main map: ports, ships, canal locks, storms and sea animals, with their
+## popups, and the price picker in the top right (a ship line's prices over the
+## ports), with an Unlock a region button over it while a market region can be
+## unlocked (see _add_region_choice()). The Routes and Tutorial switches are on
+## the Settings page (Esc menu: see SettingsPage); the map follows them.
 
 const ZOOM_BUTTON_SIZE := Vector2(44, 44)
 const ZOOM_BUTTON_MARGIN := 14
@@ -45,10 +45,7 @@ func _ready() -> void:
 	_map.wonder_clicked.connect(_open_wonder_popup)
 	_map.home_clicked.connect(_open_home_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
-	%RoutesToggle.set_pressed_no_signal(GameState.show_active_routes)
-	%RoutesToggle.toggled.connect(_on_routes_toggled)
-	if GameState.tutorials:
-		_add_tutorial_toggle()
+	Settings.changed.connect(func() -> void: _map.show_active_lanes = GameState.show_active_routes)  # (Routes, on the Settings page.)
 	_add_price_picker()
 	_add_region_choice()
 	_add_zoom_buttons()
@@ -173,22 +170,6 @@ func _label_region_buttons() -> void:
 		button.reset_size()
 
 
-## The Tutorial switch under Routes, only in saves started with the tutorial:
-## shows or hides the tutorial's tips (see TutorialCard).
-func _add_tutorial_toggle() -> void:
-	var toggle := CheckButton.new()
-	toggle.text = "Tutorial"
-	toggle.tooltip_text = "Show tips that explain the basics as you play."
-	toggle.set_pressed_no_signal(GameState.tutorials_on)
-	toggle.toggled.connect(func(on: bool) -> void: GameState.tutorials_on = on)
-	%MapControls.add_child(toggle)
-
-
-func _on_routes_toggled(on: bool) -> void:
-	GameState.show_active_routes = on
-	_map.show_active_lanes = on
-
-
 ## The port's popup; while it's open the price boxes (if shown) are worked out
 ## from there: what each commodity would make carried from it to each port.
 func _open_port_popup(port_id: String) -> void:
@@ -265,7 +246,7 @@ func open_ship_popup(ship: Ship) -> void:
 	PopupHost.find(self).show_ship(ship, follow)
 
 
-## "Prices: Grain carriers ▾" under the Routes switch, in the same panel: puts a
+## "Prices: Grain carriers ▾" at the map's top right: puts a
 ## box over the ports with each of that ship line's commodities and its price
 ## there, or, while a port's popup is open, what it would make carried from
 ## that port (see MapView.price_line); or "Prices: off". Its menu has a swatch

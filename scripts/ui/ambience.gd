@@ -93,16 +93,19 @@ func _ready() -> void:
 		player.stream = stream
 		player.volume_db = -80.0
 		player.autoplay = false
+		player.bus = &"Sea"  # (Its volume on the Settings page.)
 		add_child(player)
 		player.play(_rng.randf() * maxf(stream.get_length() - 1.0, 0.0))
 		_loops[key] = player
 		_targets[key] = -80.0
 	for i in CALL_VOICES:
 		var voice := AudioStreamPlayer.new()
+		voice.bus = &"Wildlife"
 		add_child(voice)
 		_voices.append(voice)
 	for i in 2:
 		var horn := AudioStreamPlayer.new()
+		horn.bus = &"Ships"
 		add_child(horn)
 		_horns.append(horn)
 	if GameState.has_signal(&"ship_departed"):

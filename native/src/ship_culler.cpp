@@ -169,7 +169,7 @@ bool ShipCuller::_lane_in_view(const String &from, const String &to, double mile
 // callable: port id -> whether ships in port there show); and for the dots
 // (see the top; left out when dots is false): dots_canvas (the RID to draw
 // on), right, up, radius, middle, screen (Rect2), scale (px a dock unit),
-// dot_px (a ship shorter than this on screen is a dot), lengths (each ship's
+// dot_px (a ship shorter than this on screen is a dot), dot_half_px (half a dot's side), lengths (each ship's
 // length in dock units, by its place in `order`) and colors (its dot's).
 // Gives {draw: the places in `order` of the ships to draw, plain: a byte for
 // each, 1 for a cargo ship plainly on its lane (its stretch of lane in view,
@@ -200,6 +200,7 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 	Rect2 screen = params.get("screen", Rect2());
 	double scale = params.get("scale", 1.0);
 	double dot_px = params.get("dot_px", 0.0);
+	real_t dot_half = (real_t)(double)params.get("dot_half_px", 1.0);
 	PackedFloat32Array lengths = params.get("lengths", PackedFloat32Array());
 	PackedColorArray colors = params.get("colors", PackedColorArray());
 	if (!dots_canvas.is_valid() || lengths.size() < order.size() || colors.size() < order.size()) {
@@ -283,10 +284,10 @@ Dictionary ShipCuller::sort(const Array &order, const Dictionary &params) {
 						Vector2 at = middle + Vector2(p.dot(right), -p.dot(up)) * (real_t)radius;
 						if (screen.has_point(at)) {
 							int32_t base = (int32_t)dot_points.size();
-							dot_points.push_back(at + Vector2(-1.0f, -1.0f));
-							dot_points.push_back(at + Vector2(1.0f, -1.0f));
-							dot_points.push_back(at + Vector2(1.0f, 1.0f));
-							dot_points.push_back(at + Vector2(-1.0f, 1.0f));
+							dot_points.push_back(at + Vector2(-dot_half, -dot_half));
+							dot_points.push_back(at + Vector2(dot_half, -dot_half));
+							dot_points.push_back(at + Vector2(dot_half, dot_half));
+							dot_points.push_back(at + Vector2(-dot_half, dot_half));
 							for (int k = 0; k < 4; k++) {
 								dot_colors.push_back(colors[i]);
 							}
