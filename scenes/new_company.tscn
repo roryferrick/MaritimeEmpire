@@ -48,7 +48,7 @@ theme_type_variation = &"CardPanel"
 
 [node name="Content" type="VBoxContainer" parent="Row/Side/Card"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 4
 
 [node name="Title" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
@@ -69,7 +69,7 @@ placeholder_text = "e.g. Blue Horizon Shipping"
 [node name="PortLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
-text = "Home port (new ships are delivered here): click one on the map. Shining green: excellent start, green: great, yellow: fair, red: hard, blue: the Great Lakes (a real challenge)."
+text = "Home port (new ships are delivered here): click one on the map. Green is a good start (shining: excellent), yellow fair, red hard, blue the Great Lakes."
 autowrap_mode = 3
 
 [node name="PortName" type="Label" parent="Row/Side/Card/Content"]
@@ -80,14 +80,14 @@ text = "Rome, Italy"
 
 [node name="StartNote" type="Label" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 150)
+custom_minimum_size = Vector2(0, 78)
 layout_mode = 2
 theme_type_variation = &"DimLabel"
 text = "Great start"
 autowrap_mode = 3
 mouse_filter = 1
 text_overrun_behavior = 3
-max_lines_visible = 6
+max_lines_visible = 5
 
 [node name="ColorLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
@@ -99,7 +99,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 8
 theme_override_constants/v_separation = 8
-columns = 6
+columns = 9
 
 [node name="SpeedRow" type="HBoxContainer" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true

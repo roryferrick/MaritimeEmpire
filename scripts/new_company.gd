@@ -15,7 +15,7 @@ const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const DEFAULT_HOME_PORT := "ROM"
 const DEFAULT_COLOR := "purple"
 const DEFAULT_STORMS := "moderate"
-const SWATCH_SIZE := Vector2(56, 36)
+const SWATCH_SIZE := Vector2(44, 30)
 ## The starting ports' colors on the map (and their notes'), by kind of start:
 ## excellent a bright green (shining on the map), great green, fair yellow,
 ## hard red, the Great Lakes blue.
