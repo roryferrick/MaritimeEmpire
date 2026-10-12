@@ -45,8 +45,16 @@ foreach ($t in $targets) {
 
 	if (Test-Path $zip) { Remove-Item -Force $zip }
 	if ($out.EndsWith(".zip")) {
-		# macOS exports straight to a zipped .app.
+		# macOS exports straight to a zipped .app. Beside it: how to get past
+		# Gatekeeper ("damaged" - the build is only ad-hoc signed).
 		Copy-Item $out $zip
+		Add-Type -AssemblyName System.IO.Compression.FileSystem
+		$archive = [IO.Compression.ZipFile]::Open($zip, "Update")
+		try {
+			[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $PSScriptRoot "mac_readme.txt"), "READ ME FIRST.txt") | Out-Null
+		} finally {
+			$archive.Dispose()
+		}
 	} else {
 		Compress-Archive -Path (Join-Path $dir "*") -DestinationPath $zip
 	}
