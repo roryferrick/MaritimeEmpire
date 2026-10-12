@@ -1278,6 +1278,14 @@ func _ready() -> void:
 		layer.mouse_filter = MOUSE_FILTER_IGNORE
 		layer.set_anchors_preset(PRESET_FULL_RECT)
 		add_child(layer)
+	_lane_material.shader = LANES_SHADER
+	_lane_mesh_node.material = _lane_material
+	_lane_mesh_node.visible = false
+	_lane_mesh_node.draw.connect(func() -> void:
+		if _lane_mesh != null:
+			_lane_mesh_node.draw_mesh(_lane_mesh, null))
+	add_child(_lane_mesh_node)
+	move_child(_lane_mesh_node, _static_layer.get_index())  # (Under the ports and labels, over the weather and canals.)
 	var label_material := ShaderMaterial.new()
 	label_material.shader = LabelAtlas.LABEL_SHADER
 	_label_layer.material = label_material
@@ -1301,6 +1309,7 @@ func _ready() -> void:
 		_prof("wonders", t0))
 	_wonder_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_load_decor()
+	_load_wildlife_art()
 	_start_land_cells()  # (For bending lanes round harbours: see _bent_lane().)
 	_weather_layer.draw.connect(_draw_weather_layer)
 	_canal_layer.draw.connect(func() -> void:
@@ -2767,6 +2776,12 @@ func _changed() -> void:
 		material.set_shader_parameter(&"toward", _toward)
 		material.set_shader_parameter(&"center", size / 2.0)
 		material.set_shader_parameter(&"radius", _radius())
+	_lane_material.set_shader_parameter(&"right", _right)
+	_lane_material.set_shader_parameter(&"up", _up)
+	_lane_material.set_shader_parameter(&"toward", _toward)
+	_lane_material.set_shader_parameter(&"radius", _radius())
+	_lane_material.set_shader_parameter(&"middle", size / 2.0)
+	_lane_material.set_shader_parameter(&"half_px", ACTIVE_LANE_WIDTH / 2.0 + 1.0)
 	var pixels := get_viewport().get_final_transform().get_scale().x if is_inside_tree() else 1.0
 	_land_mask.size = Vector2i((size * pixels).ceil()).max(Vector2i.ONE)
 	_land_mask_art.scale = Vector2.ONE * pixels
@@ -3226,6 +3241,8 @@ func _draw_static_layer() -> void:
 	t0 = Time.get_ticks_usec()
 	if show_ships and show_active_lanes:
 		_draw_active_lanes()
+	else:
+		_lane_mesh_node.visible = false
 	_prof("static.lanes", t0)
 	t0 = Time.get_ticks_usec()
 	_draw_route()
@@ -4302,6 +4319,7 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	t_m = Time.get_ticks_usec()
 	_draw_town(port_id, layout, scale)
 	_prof("marina.town", t_m)
+	t_m = Time.get_ticks_usec()
 	# The jetty: round the sea half, each side of the entrance, lit at its ends.
 	var gap: float = layout.gap
 	for side: float in [-1.0, 1.0]:
@@ -4309,7 +4327,9 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 		var points := _marina_polygon(port_id, arm)
 		_canvas.draw_polyline(points, QUAY_EDGE, JETTY_WIDTH * scale + 2.0, true)
 		_canvas.draw_polyline(points, JETTY_COLOR, JETTY_WIDTH * scale, true)
-		_canvas.draw_circle(points[0], maxf(JETTY_WIDTH * scale * 0.45, 1.2), ENTRANCE_LIGHTS[0 if side < 0.0 else 1])
+		_disc(points[0], maxf(JETTY_WIDTH * scale * 0.45, 1.2), ENTRANCE_LIGHTS[0 if side < 0.0 else 1])
+	_prof("marina.jetty", t_m)
+	t_m = Time.get_ticks_usec()
 	# The rocks the birds perch on (see ROCK_SPOTS), foam round each.
 	for rock: Array in layout.rocks:
 		var texture := _rock_texture(int(rock[2]))
@@ -4321,9 +4341,12 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	if BOLLARD_STEP * scale < 4.0:
 		return
 	var bollard := maxf(BOLLARD_RADIUS * scale, 0.9)
+	_batch.clear()  # (All of them as one batch: a big port has over a hundred.)
 	for berth: Array in layout.berths:
 		for post in _bollards(berth):
-			_canvas.draw_circle(_dock_point(port_id, post), bollard, BOLLARD_COLOR)
+			_batch.disc(_dock_point(port_id, post), bollard, BOLLARD_COLOR, 12)
+	_batch.flush(_canvas)
+	_prof("marina.bollards", t_m)
 
 ## A rock's art (see ROCK_SPOTS): rock_a, rock_b or rock_c in SEA_ART_DIR.
 static func _rock_texture(which: int) -> Texture2D:
@@ -5027,6 +5050,7 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 	var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * 0.5
 	var length := look_rect.size.x
 	var speed := maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0
+	var t_bl := Time.get_ticks_usec()
 	if coming_in:
 		var seen: Array = _dock_seen.get(ship, [])
 		var gliding := not seen.is_empty() and float(seen[1]) > -INF and (seen.size() < 3 or GameState.play_time < float(seen[2]))
@@ -5035,6 +5059,7 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 		var poses := [_screen_to_local(port, _rest_pose(ship)) if weighing else mouth_in]
 		# From its mooring: out of its slip backwards, turned, and its way there backwards.
 		var leave := _mooring_leave_plan(ship) if weighing else {}
+		_prof("br.leave", t_bl)
 		var before := 0.0
 		if not leave.is_empty():
 			before = float(leave.reverse_s) + UNBERTH_TURN_S
@@ -5042,8 +5067,13 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 		elif weighing and anchor.distance_to(layout.mouth) > maxf(length, mouth_room):
 			poses.append(mouth_in)
 		poses.append_array(_slot_approach(port, berth, ship))
+		var t_bp := Time.get_ticks_usec()
 		var path := _pose_path(_loosen(poses, weighing and leave.is_empty(), false, length * ANCHOR_TURN_LENGTHS), SLOT_PATH_HANDLE)
-		return before + _path_times(path, speed, length, length, weighing, true)[-1]
+		_prof("br.path", t_bp)
+		t_bp = Time.get_ticks_usec()
+		var seconds := before + _path_times(path, speed, length, length, weighing, true)[-1]
+		_prof("br.times", t_bp)
+		return seconds
 	# Backing out and turning round first (see _unberth_plan()), then out.
 	var plan := _unberth_plan(ship)
 	var backing := float(plan.reverse_s) + UNBERTH_TURN_S
@@ -6460,12 +6490,41 @@ func _draw_active_lanes() -> void:
 		_lane_painter.setup({chunk = LANE_CHUNK, min_px = ACTIVE_LANE_MIN_PX, hidden = HIDDEN})
 		_lane_painter.set_providers(_lane_chunks, _lane_ends)
 	if _lane_painter != null:
+		var epoch := _active_lanes_epoch * 2 + (1 if own_only else 0)
+		if lane_mesh and _lane_painter.has_method(&"build_mesh"):
+			# The lanes with neither port's marina showing (no harbour curves, which
+			# are worked out on screen) as the mesh on the globe; the rest, few, by
+			# the native pass each frame. Which show depends on the zoom alone, so
+			# the split (and the mesh) holds while the map drags.
+			# (Zooming, the split made last stands till the zoom settles: marinas
+			# come and go at every zoom step, and the mesh is a few ms to build.)
+			if _zooming() and _lane_mesh != null and not _lane_mesh_epoch.is_empty() and _lane_mesh_epoch[0] == epoch:
+				_lane_mesh_node.visible = true
+				if _lane_mesh_curved.is_empty():
+					return
+				lanes = _lane_mesh_curved
+			else:
+				var curved := []
+				var straight := []
+				var curves := docks_shown() and _any_marina_shown()
+				for lane: Array in lanes:
+					if curves and (_marina_shown(lane[0]) or _marina_shown(lane[1])):
+						curved.append(lane)
+					else:
+						straight.append(lane)
+				_lane_mesh_curved = curved
+				_show_lane_mesh(straight, [epoch, curved.hash()])
+				if curved.is_empty():
+					return
+				lanes = curved
+		else:
+			_lane_mesh_node.visible = false
 		# (All of them natively, as one batch of triangles: a big fleet's are
 		# drawn again every frame the map's dragged. Harbour curves only while
 		# marinas can show, for lanes with a port on or near the screen: see
 		# _lane_curve_ends().)
 		_lane_painter.draw(_canvas.get_canvas_item(), lanes, {toward = _toward, right = _right, up = _up, radius = _radius(), middle = size / 2.0,
-			view_angle = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0)), width = ACTIVE_LANE_WIDTH, epoch = _active_lanes_epoch * 2 + (1 if own_only else 0),
+			view_angle = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0)), width = ACTIVE_LANE_WIDTH, epoch = epoch,
 			curves = docks_shown() and _any_marina_shown(), near = Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)})
 		return
 	for lane: Array in lanes:
@@ -6473,6 +6532,45 @@ func _draw_active_lanes() -> void:
 
 ## This player's own lanes of those (see _active_lanes()).
 var _own_lanes_cache := []
+
+## The fleet's lanes as one mesh on the globe (LanePainter.build_mesh(),
+## drawn through scripts/ui/lanes.gdshader on a node of their own just under
+## the static layer) while no marina can show (the harbour curves are worked
+## out on screen, so the native pass draws the lanes then): the globe's turn
+## costs them a few uniforms, not a pass over every lane each frame. Built
+## again when the lanes change (their epoch), when they're bent afresh, and
+## LANE_MESH_RETRY_FRAMES after a build that left out a lane not yet bent.
+const LANES_SHADER := preload("res://scripts/ui/lanes.gdshader")
+static var lane_mesh := true  # (Off: the native pass draws them at every zoom; for comparing.)
+const LANE_MESH_STEP_NM := 150.0  # A stretch longer than this is cut into pieces along the way the ships sail (25 px at zoom 10).
+const LANE_MESH_RETRY_FRAMES := 30
+var _lane_mesh_node := Node2D.new()
+var _lane_mesh: ArrayMesh = null
+var _lane_mesh_epoch := []  # ([the lanes' epoch, a hash of the lanes drawn by the pass instead].)
+var _lane_mesh_curved := []  # The lanes the native pass draws (harbour curves), as split last.
+var _lane_mesh_retry := -1
+var _lane_material := ShaderMaterial.new()
+
+func _show_lane_mesh(lanes: Array, epoch: Array) -> void:
+	var frame := Engine.get_process_frames()
+	if _lane_mesh == null or epoch != _lane_mesh_epoch or (_lane_mesh_retry >= 0 and frame >= _lane_mesh_retry):
+		var t0 := Time.get_ticks_usec()
+		var built: Dictionary = _lane_painter.build_mesh(lanes, LANE_MESH_STEP_NM)
+		var mesh := ArrayMesh.new()
+		if not (built.indices as PackedInt32Array).is_empty():
+			var arrays := []
+			arrays.resize(Mesh.ARRAY_MAX)
+			arrays[Mesh.ARRAY_VERTEX] = built.points
+			arrays[Mesh.ARRAY_TEX_UV] = built.uvs
+			arrays[Mesh.ARRAY_COLOR] = built.colors
+			arrays[Mesh.ARRAY_INDEX] = built.indices
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_2D_VERTICES)
+		_lane_mesh = mesh
+		_lane_mesh_epoch = epoch
+		_lane_mesh_retry = -1 if bool(built.complete) else frame + LANE_MESH_RETRY_FRAMES
+		_lane_mesh_node.queue_redraw()
+		_prof("lanes.mesh", t0)
+	_lane_mesh_node.visible = true
 
 ## The lanes _draw_active_lanes() draws: [from, to, color, sailed both ways],
 ## other players' first. Kept for half a STATIC_REFRESH_S (so each redraw while
@@ -6779,6 +6877,7 @@ func _port_zones() -> Array:
 			_ship_culler.forget_lanes()
 		if _lane_painter != null:
 			_lane_painter.forget_lanes()
+			_lane_mesh_epoch = []  # (The mesh is built again from the lanes bent afresh.)
 		_lane_reach_memo.clear()
 	return _zones
 
@@ -8907,7 +9006,7 @@ func _draw_decor() -> void:
 		return
 	# The cells that can be in view: those within the stretch of globe the
 	# view's corners reach (all of the near side, zoomed right out).
-	var reach := rad_to_deg(asin(minf(size.length() / 2.0 / _radius(), 1.0))) + largest / _zoom
+	var reach := rad_to_deg(asin(minf(size.length() / 2.0 / _radius(), 1.0))) + largest / _zoom + _decor_reach_pad()
 	var across := 180.0
 	if absf(_view_lat) + reach < 89.0:
 		across = rad_to_deg(asin(minf(sin(deg_to_rad(minf(reach, 90.0))) / cos(deg_to_rad(_view_lat)), 1.0)))
@@ -8952,7 +9051,7 @@ func _draw_decor() -> void:
 				locked[r + 1] = 0 if GameState.is_region_unlocked(RegionMap.region_id(r)) else 1
 		_decor_native.draw(_canvas.get_canvas_item(), {right = _right, up = _up, toward = _toward, radius = _radius(), middle = size / 2.0,
 			screen = screen, zoom = _zoom, sides = kind_sides, tiers = kind_tiers, columns = Vector2i(first_column, last_column),
-			rows = Vector2i(floori(low.y / DECOR_BUCKET), floori(high.y / DECOR_BUCKET)), locked = locked})
+			rows = Vector2i(floori(low.y / DECOR_BUCKET), floori(high.y / DECOR_BUCKET)), locked = locked, rescan = _decor_rescan()})
 		return
 	for column in range(first_column, last_column + 1):
 		for row in range(floori(low.y / DECOR_BUCKET), floori(high.y / DECOR_BUCKET) + 1):
@@ -8980,6 +9079,31 @@ func _draw_decor() -> void:
 			continue
 		var side: float = item[2]
 		_canvas.draw_texture_rect(texture, Rect2(item[0] - Vector2(side / 2.0, side * 0.92), Vector2(side, side)), false)
+
+## Whether the native decor pass scans its cells again this frame (see
+## DecorSim.draw()): zooming, or every DECOR_RESCAN_FRAMES as the map moves;
+## between, the last scan's drawings are put on screen again. The scan
+## reaches DECOR_RESCAN_FRAMES of the view's last move further
+## (_decor_reach_pad()), so nothing pops in at the edge meanwhile.
+const DECOR_RESCAN_FRAMES := 4
+var _decor_scan_frame := -100
+var _decor_scan_zoom := -1.0
+var _decor_scan_toward := Vector3.ZERO
+var _decor_scan_pad := 0.0
+func _decor_rescan() -> bool:
+	var frame := Engine.get_process_frames()
+	if _zoom != _decor_scan_zoom or frame - _decor_scan_frame >= DECOR_RESCAN_FRAMES or _decor_scan_frame > frame:
+		var moved := rad_to_deg(_toward.angle_to(_decor_scan_toward)) if _decor_scan_toward != Vector3.ZERO else 0.0
+		var frames := maxi(frame - _decor_scan_frame, 1)
+		_decor_scan_pad = moved / frames * DECOR_RESCAN_FRAMES
+		_decor_scan_frame = frame
+		_decor_scan_zoom = _zoom
+		_decor_scan_toward = _toward
+		return true
+	return false
+
+func _decor_reach_pad() -> float:
+	return _decor_scan_pad
 
 ## A land drawing's art by its name (as _load_decor() loaded it), or null.
 static func _decor_texture(kind_name: String) -> Texture2D:
@@ -9169,6 +9293,15 @@ func _land_region(spot: Vector2) -> Variant:
 
 
 ## A wildlife drawing (art/wildlife/<name>.svg), loaded once, or null.
+## Every wildlife drawing loaded at the start (a load on first sight was a hitch of tens of ms).
+static func _load_wildlife_art() -> void:
+	for file: String in DirAccess.get_files_at(WILDLIFE_ART_DIR):
+		var name := file
+		if name.get_extension() in ["import", "remap"]:
+			name = name.get_basename()
+		if name.get_extension() == "svg":
+			_wildlife_texture(name.get_basename())
+
 static func _wildlife_texture(name: String) -> Texture2D:
 	if not _wildlife_art.has(name):
 		var path := WILDLIFE_ART_DIR + name + ".svg"
@@ -10763,6 +10896,7 @@ func _draw_wonders() -> void:
 			var line_box := _wonder_line_box(i)
 			if not line_box.intersects(view_box) and not line_box.intersects(Rect2(view_box.position + Vector2(360.0, 0.0), view_box.size)) and not line_box.intersects(Rect2(view_box.position - Vector2(360.0, 0.0), view_box.size)):
 				continue  # (Its whole course, and a good way round it, out of view.)
+			var t_w := Time.get_ticks_usec()
 			match str(item.id):
 				"great_wall":
 					_draw_great_wall(item, km)
@@ -10772,6 +10906,7 @@ func _draw_wonders() -> void:
 					_draw_barrier_reef(item, km)
 				"aurora_borealis":
 					_draw_aurora(item, km)
+			_prof("wonders.lines", t_w)
 			continue
 		var side := float(item.get("km", 25.0)) * km
 		if side < WONDER_MIN_PX:
@@ -11433,12 +11568,12 @@ static func _lighthouse_spot(layout: Dictionary) -> Vector2:
 func _draw_lighthouse(port_id: String, layout: Dictionary, scale: float) -> void:
 	var at := _dock_point(port_id, _lighthouse_spot(layout))
 	var r := maxf(LIGHTHOUSE_RADIUS * scale, 1.5)
-	_canvas.draw_circle(at + Vector2(r * 0.5, r * 0.5), r * 1.05, Color(0.0, 0.0, 0.0, 0.22))
-	_canvas.draw_circle(at, r, Color(0.96, 0.96, 0.95))
+	_disc(at + Vector2(r * 0.5, r * 0.5), r * 1.05, Color(0.0, 0.0, 0.0, 0.22))
+	_disc(at, r, Color(0.96, 0.96, 0.95))
 	_canvas.draw_arc(at, r, 0.0, TAU, 24, QUAY_EDGE, 1.0, true)
-	_canvas.draw_circle(at, r * 0.64, LIGHTHOUSE_RED)
-	_canvas.draw_circle(at, r * 0.4, Color(0.96, 0.96, 0.95))
-	_canvas.draw_circle(at, r * 0.24, Color(0.16, 0.17, 0.2))
+	_disc(at, r * 0.64, LIGHTHOUSE_RED)
+	_disc(at, r * 0.4, Color(0.96, 0.96, 0.95))
+	_disc(at, r * 0.24, Color(0.16, 0.17, 0.2))
 
 ## The lights in the dark (see _update_night()), over everything, drawn every frame.
 func _draw_lights() -> void:
@@ -12892,6 +13027,12 @@ func _build_town_batch(batch: PolyBatch, town: Dictionary, drop: Vector2) -> voi
 				if salt > 0.4:  # Roof gear: a tank or an air unit.
 					var at := top.position + Vector2(top.size.x * (0.25 + salt * 0.5), top.size.y * 0.3)
 					batch.poly(_rect_points(Rect2(at - Vector2(0.14, 0.14), Vector2(0.28, 0.28))), roof.darkened(0.35))
+
+## A filled circle as a fan of triangles (draw_circle() triangulates a 64-gon each call: slow in a marina record).
+func _disc(center: Vector2, r: float, color: Color) -> void:
+	_batch.clear()
+	_batch.disc(center, r, color, 32)
+	_batch.flush(_canvas)
 
 ## A port's pontoons (see _lay_moorings()): each a floating walkway with dark
 ## floats under it, its finger piers with a cleat at each root, in wood at the

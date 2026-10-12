@@ -84,6 +84,7 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 	Vector2i rows = params["rows"];
 	PackedByteArray locked = params["locked"];
 	bool check_locks = !locked.is_empty() && !_regions.is_empty();
+	bool rescan = (bool)params.get("rescan", true);
 	int max_tier = 0;
 	for (int64_t k = 0; k < kind_tiers.size(); k++) {
 		max_tier = std::max(max_tier, (int)kind_tiers[k]);
@@ -95,31 +96,47 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 		int texture;
 	};
 	std::vector<Shown> shown;
-	for (int column = columns.x; column <= columns.y; column++) {
-		int wrapped = (int)UtilityFunctions::posmod(column, _columns);
-		for (int row = rows.x; row <= rows.y; row++) {
-			auto found = _buckets.find(_cell(wrapped, row));
-			if (found == _buckets.end()) {
-				continue;
-			}
-			for (int32_t i : found->second) {
-				if (_tiers[i] >= max_tier) {
-					break; // (The rest of the cell is of higher tiers still: see setup().)
+	// The cells scanned for what's worth showing at this zoom (rescan: every
+	// few frames as the map drags, every frame as it zooms); between scans
+	// the last scan's drawings are put on screen again (the screen test
+	// stays per frame), which is most of a frame's work at the globe view.
+	if (rescan) {
+		_candidates.clear();
+		for (int column = columns.x; column <= columns.y; column++) {
+			int wrapped = (int)UtilityFunctions::posmod(column, _columns);
+			for (int row = rows.x; row <= rows.y; row++) {
+				auto found = _buckets.find(_cell(wrapped, row));
+				if (found == _buckets.end()) {
+					continue;
 				}
-				int kind = _kinds[i];
-				if (_tiers[i] >= kind_tiers[kind]) {
-					continue; // Too small to show (or thinned out at this size), or an animal.
-				}
-				double side = sides[kind];
-				if (_room[i] * zoom < side * 0.5) {
-					continue; // Would reach into the water (or onto the land).
-				}
-				if (check_locks) {
-					int region = _regions[i];
-					if (region < locked.size() && locked[region]) {
-						continue; // Its region is locked: shaded, bare.
+				for (int32_t i : found->second) {
+					if (_tiers[i] >= max_tier) {
+						break; // (The rest of the cell is of higher tiers still: see setup().)
 					}
+					int kind = _kinds[i];
+					if (_tiers[i] >= kind_tiers[kind]) {
+						continue; // Too small to show (or thinned out at this size), or an animal.
+					}
+					double side = sides[kind];
+					if (_room[i] * zoom < side * 0.5) {
+						continue; // Would reach into the water (or onto the land).
+					}
+					if (check_locks) {
+						int region = _regions[i];
+						if (region < locked.size() && locked[region]) {
+							continue; // Its region is locked: shaded, bare.
+						}
+					}
+					_candidates.push_back({ i, kind });
 				}
+			}
+		}
+	}
+	for (const auto &candidate : _candidates) {
+		{
+				int32_t i = candidate.first;
+				int kind = candidate.second;
+				double side = sides[kind];
 				// MapView._unit_to_screen().
 				Vector3 p = _units[i];
 				if (p.dot(toward) < 0.0f) {
@@ -147,7 +164,6 @@ void DecorSim::draw(const RID &canvas, const Dictionary &params) {
 					}
 				}
 				shown.push_back({ at, kind, side, texture });
-			}
 		}
 	}
 	std::stable_sort(shown.begin(), shown.end(), [](const Shown &a, const Shown &b) { return a.at.y < b.at.y; });

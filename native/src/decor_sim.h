@@ -43,6 +43,9 @@ class DecorSim : public RefCounted {
 	double _bucket = 2.5;
 	int _columns = 144;
 	std::unordered_map<int64_t, std::vector<int32_t>> _buckets;
+	// The drawings the last scan of the cells found worth showing (index, kind):
+	// put on screen again between scans (see draw()'s rescan).
+	std::vector<std::pair<int32_t, int>> _candidates;
 
 	static int64_t _cell(int column, int row) { return ((int64_t)column << 32) ^ (uint32_t)row; }
 

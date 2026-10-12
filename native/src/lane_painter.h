@@ -89,6 +89,7 @@ public:
 	void set_providers(const Callable &lanes, const Callable &ends);
 	void forget_lanes();
 	int64_t draw(const RID &canvas, const Array &lanes, const Dictionary &params);
+	Dictionary build_mesh(const Array &lanes, double step_nm);
 };
 
 } // namespace godot

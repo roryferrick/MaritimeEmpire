@@ -156,6 +156,7 @@ func _stream(key: String, looping: bool, now := false) -> AudioStream:
 ## the listing made at the start (see _preload_sounds()), never a look at the
 ## disk (asking whether a file exists is slow, and a port's birds are many).
 var _paths := {}
+var _lengths := {}  # Key -> the recording's length (s).
 func _stream_path(key: String) -> String:
 	return _paths.get(key, "")
 
@@ -363,7 +364,10 @@ func _play_call(key: String, db: float) -> bool:
 		var t_v := Time.get_ticks_usec()
 		voice.stream = stream
 		voice.volume_db = db
-		var length := stream.get_length()
+		var length: float = _lengths.get(key, -1.0)  # (Asking a recording its length reads it: kept.)
+		if length < 0.0:
+			length = stream.get_length()
+			_lengths[key] = length
 		MapView._prof("play.set", t_v)
 		# (From the start, always: seeking into a recording decodes its way there, tens of ms.)
 		var from := 0.0

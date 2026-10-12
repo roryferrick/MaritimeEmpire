@@ -333,15 +333,18 @@ int64_t LanePainter::draw(const RID &canvas, const Array &lanes, const Dictionar
 	_batch_points.clear();
 	_batch_colors.clear();
 	_batch_indices.clear();
-	for (const Entry &e : _entries) {
+	for (Entry &e : _entries) {
 		const String &from = e.from;
 		const String &to = e.to;
 		const Color &color = e.color;
 		bool both_ways = e.both_ways;
-		Lane &lane = *e.lane;
-		if (!lane.valid) {
-			continue;
+		if (!e.lane->valid) {
+			e.lane = &_lane(from, to); // (The map may not have bent it when the entries were made: asked again.)
+			if (!e.lane->valid) {
+				continue;
+			}
 		}
+		Lane &lane = *e.lane;
 		if (lane.cap_center.dot(_toward) < std::cos(std::min(_view_angle + lane.cap_span, PI_D))) {
 			continue; // (None of it can be in view.)
 		}
@@ -410,9 +413,113 @@ int64_t LanePainter::draw(const RID &canvas, const Array &lanes, const Dictionar
 	return drawn;
 }
 
+// The lanes as one mesh for the globe shader (scripts/ui/lanes.gdshader):
+// each lane point as two vertices, their position its longitude and latitude
+// (radians) and their UV the next point's (the last point's: the one before,
+// which puts its even vertex on the other side, so the last quad's corners
+// are swapped), coloured as the lane; a stretch longer than step_nm is cut
+// into pieces along the way the ships sail (_between()), so the line bends
+// with the globe as they do. Gives {points, uvs, colors, indices, complete
+// (false if a lane the map hasn't bent yet was left out: ask again)}.
+Dictionary LanePainter::build_mesh(const Array &lanes, double step_nm) {
+	if (_forget) {
+		_forget = false;
+		_lanes.clear();
+		_entries.clear();
+		_entries_epoch = -1;
+	}
+	std::vector<Vector2> points, uvs;
+	std::vector<Color> colors;
+	std::vector<int32_t> indices;
+	std::vector<Vector3> line;
+	bool complete = true;
+	auto lon_lat = [](const Vector3 &u) {
+		return Vector2((real_t)std::atan2((double)u.y, (double)u.x), (real_t)std::asin(std::clamp((double)u.z, -1.0, 1.0)));
+	};
+	for (int64_t li = 0; li < lanes.size(); li++) {
+		Array entry = lanes[li];
+		if (entry.size() < 3) {
+			continue;
+		}
+		String from = entry[0];
+		String to = entry[1];
+		Color color = entry[2];
+		Lane &lane = _lane(from, to);
+		if (!lane.valid) {
+			complete = false;
+			continue;
+		}
+		line.clear();
+		const int64_t count = (int64_t)lane.units.size();
+		for (int64_t k = 0; k < count; k++) {
+			if (k > 0) {
+				double span = lane.miles[k] - lane.miles[k - 1];
+				if (span > step_nm) {
+					int pieces = std::min((int)std::ceil(span / step_nm), 64);
+					for (int j = 1; j < pieces; j++) {
+						line.push_back(_between(lane.units[k - 1], lane.units[k], (double)j / pieces));
+					}
+				}
+			}
+			line.push_back(lane.units[k]);
+		}
+		const int64_t n = (int64_t)line.size();
+		if (n < 2) {
+			continue;
+		}
+		const int32_t base = (int32_t)points.size();
+		for (int64_t k = 0; k < n; k++) {
+			Vector2 p = lon_lat(line[(size_t)k]);
+			Vector2 q = lon_lat(line[(size_t)(k + 1 < n ? k + 1 : k - 1)]);
+			for (int side = 0; side < 2; side++) {
+				points.push_back(p);
+				uvs.push_back(q);
+				colors.push_back(color);
+			}
+		}
+		for (int64_t k = 0; k + 1 < n; k++) {
+			int32_t a = base + (int32_t)(2 * k); // (The - side at k, then the + side.)
+			int32_t b = a + 1;
+			int32_t c, d; // The - and + sides at k + 1.
+			if (k + 1 == n - 1) {
+				c = base + (int32_t)(2 * (k + 1)) + 1;
+				d = base + (int32_t)(2 * (k + 1));
+			} else {
+				c = base + (int32_t)(2 * (k + 1));
+				d = c + 1;
+			}
+			indices.push_back(a);
+			indices.push_back(b);
+			indices.push_back(d);
+			indices.push_back(a);
+			indices.push_back(d);
+			indices.push_back(c);
+		}
+	}
+	PackedVector2Array out_points, out_uvs;
+	PackedColorArray out_colors;
+	PackedInt32Array out_indices;
+	out_points.resize((int64_t)points.size());
+	out_uvs.resize((int64_t)uvs.size());
+	out_colors.resize((int64_t)colors.size());
+	out_indices.resize((int64_t)indices.size());
+	std::copy(points.begin(), points.end(), out_points.ptrw());
+	std::copy(uvs.begin(), uvs.end(), out_uvs.ptrw());
+	std::copy(colors.begin(), colors.end(), out_colors.ptrw());
+	std::copy(indices.begin(), indices.end(), out_indices.ptrw());
+	Dictionary out;
+	out["points"] = out_points;
+	out["uvs"] = out_uvs;
+	out["colors"] = out_colors;
+	out["indices"] = out_indices;
+	out["complete"] = complete;
+	return out;
+}
+
 void LanePainter::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("setup", "constants"), &LanePainter::setup);
 	ClassDB::bind_method(D_METHOD("set_providers", "lanes", "ends"), &LanePainter::set_providers);
 	ClassDB::bind_method(D_METHOD("forget_lanes"), &LanePainter::forget_lanes);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "lanes", "params"), &LanePainter::draw);
+	ClassDB::bind_method(D_METHOD("build_mesh", "lanes", "step_nm"), &LanePainter::build_mesh);
 }
