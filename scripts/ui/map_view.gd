@@ -4808,7 +4808,9 @@ func _docked_screen_pose(ship: Ship) -> Array:
 							poses.append(mouth)
 						for pose: Array in _slot_approach(port, berth, ship):
 							poses.append(_local_to_screen(port, pose))
-						var shaped := _loosen(poses, weighing and leave.is_empty(), false, length * ANCHOR_TURN_LENGTHS)
+						# (Coming round on a turning circle from however it lies: at anchor
+						# facing the wind, or part way to its spot when a berth came free.)
+						var shaped := _loosen(poses, leave.is_empty(), false, length * ANCHOR_TURN_LENGTHS)
 						var path := _pose_path(shaped, SLOT_PATH_HANDLE)
 						way = [poses, shaped, path, _path_times(path, _sea_speed_px(ship), length, length, weighing, true)]
 						_berth_ways[ship] = [key, way]
@@ -4834,7 +4836,7 @@ func _docked_screen_pose(ship: Ship) -> Array:
 						return [back[0], lerp_angle(float(at[1]), turned, smoothstep(0.0, 1.0, t / UNBERTH_TURN_S))]
 					t -= UNBERTH_TURN_S
 					poses = [[back[0], turned]]
-				poses.append(_local_to_screen(port, [layout.inside, 0.0]))
+				poses.append(_local_to_screen(port, _right_side(port, layout.inside, false)))
 				poses.append(_keep_right(port, _entrance_pose(port, false, false)))
 				var anchoring := ship.depart_to.is_empty()
 				if anchoring:
@@ -4906,12 +4908,24 @@ func _slot_approach(port_id: String, berth: Array, ship: Ship) -> Array:
 	var channel: float = layout.channel
 	var entry := [Vector2(lane.x, side * (channel / 2.0 - SLOT_ENTRY_CLEAR)), along.angle()]
 	var abreast := [Vector2(lane.x + maxf(length * SLOT_TURN_LENGTHS, float(layout.pitch)), -side * channel * CHANNEL_SIDE), PI]
+	var inside := _right_side(port_id, layout.inside, true)
 	if (abreast[0] as Vector2).x > (layout.inside as Vector2).x - length * 0.5:
 		# The first slot by the entrance: no room to come abreast of it first (a
 		# jog of a few units sideways and the ship wriggled and crawled round it):
 		# straight from inside the entrance round into the slot.
-		return [[layout.inside, PI], entry, off]
-	return [[layout.inside, PI], abreast, entry, off]
+		return [inside, entry, off]
+	return [inside, abreast, entry, off]
+
+## A point by a port's entrance (dock units, on the line through the mouth:
+## layout.inside or layout.mouth) as a pose on a ship's right-hand side there,
+## heading in or out: where _keep_right() puts it at the mouth, so a ship
+## comes through the entrance on its own side in a straight line. (From the
+## mouth on its right to the middle just inside was a sideways hop the curve
+## took in a few pixels: ships jolted left coming in, and right going out.)
+func _right_side(port_id: String, point: Vector2, coming_in: bool) -> Array:
+	var flip := float(_dock_flips.get(port_id, 1.0))
+	var side := float(_port_layout(port_id).width) * KEEP_RIGHT_WIDTHS * (-flip if coming_in else flip)
+	return [point + Vector2(0.0, side), PI if coming_in else 0.0]
 
 ## How a moored ship gets clear of its slot to head out (dock units): it backs
 ## straight out stern first along the slot's middle line until its bow is
@@ -4933,7 +4947,7 @@ func _unberth_plan(ship: Ship) -> Dictionary:
 	var units := absf(lane.y - clear)
 	plan.reverse = true
 	plan.back = Vector2(lane.x, clear)
-	plan.out_angle = ((layout.inside as Vector2) - plan.back).angle()
+	plan.out_angle = ((_right_side(ship.docked_at, layout.inside, false)[0] as Vector2) - plan.back).angle()
 	plan.reverse_units = units
 	plan.ease = minf(rect.size.x * 0.5, units / 3.0)
 	var speed := maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0 * UNBERTH_REVERSE_SPEED
@@ -5005,10 +5019,12 @@ func _lying_pose(ship: Ship, at_time: float) -> Array:
 	if not off.is_empty() and float(off[0]) == since:
 		# A tug that's just let go of the ship it brought in: from there.
 		poses = (off[1] as Array).map(func(pose: Array) -> Array: return _local_to_screen(ship.docked_at, pose)) + home + [rest]
-	# Coming round to face the wind on a turning circle as it comes up to its
-	# spot, slowing to a stop there (see _loosen()).
+	# Turning off for its spot on a turning circle (it came in heading into the
+	# harbour, and its spot may be back out past the jetty: never a snap round),
+	# and coming round to face the wind on another as it comes up to its spot,
+	# slowing to a stop there (see _loosen()).
 	var length := (_model_look(ship.model_id)[7] as Rect2).size.x * dock_scale(ship.docked_at)
-	var shaped := _loosen(poses, false, true, length * ANCHOR_TURN_LENGTHS)
+	var shaped := _loosen(poses, true, true, length * ANCHOR_TURN_LENGTHS)
 	var path := _pose_path(shaped)
 	var distance := _path_length(path)
 	var ease := minf(length, distance / 3.0)
@@ -5078,7 +5094,7 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 		return 0.0
 	var berth: Array = layout.berths[ship.berth]
 	var look_rect: Rect2 = _model_look(ship.model_id)[7]
-	var mouth_in := [layout.mouth, PI]
+	var mouth_in := _right_side(port, layout.mouth, true)  # (As drawn: on its right-hand side.)
 	var mouth_room := ((layout.mouth as Vector2) - (layout.inside as Vector2)).length() * 0.5
 	var length := look_rect.size.x
 	var speed := maxf(ship.speed(), MIN_HARBOUR_SPEED) * SHIP_WORLD_ZOOM / 60.0
@@ -5102,7 +5118,7 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 			poses.append(mouth_in)
 		poses.append_array(_slot_approach(port, berth, ship))
 		var t_bp := Time.get_ticks_usec()
-		var path := _pose_path(_loosen(poses, weighing and leave.is_empty(), false, length * ANCHOR_TURN_LENGTHS), SLOT_PATH_HANDLE)
+		var path := _pose_path(_loosen(poses, leave.is_empty(), false, length * ANCHOR_TURN_LENGTHS), SLOT_PATH_HANDLE)
 		_prof("br.path", t_bp)
 		t_bp = Time.get_ticks_usec()
 		var seconds := before + _path_times(path, speed, length, length, weighing, true)[-1]
@@ -5111,7 +5127,7 @@ func berth_route_seconds(ship: Ship, coming_in: bool) -> float:
 	# Backing out and turning round first (see _unberth_plan()), then out.
 	var plan := _unberth_plan(ship)
 	var backing := float(plan.reverse_s) + UNBERTH_TURN_S
-	var poses := [[plan.back, float(plan.out_angle)], [layout.inside, 0.0], [layout.mouth, 0.0]]
+	var poses := [[plan.back, float(plan.out_angle)], _right_side(port, layout.inside, false), _right_side(port, layout.mouth, false)]
 	var anchoring := ship.depart_to.is_empty()
 	var anchor := _anchor_local(ship) if anchoring else Vector2(NAN, NAN)
 	if anchor.x == anchor.x:
@@ -5849,7 +5865,7 @@ func _leaving_via(ship: Ship) -> Array:
 		return []
 	var port := ship.from_port
 	if ship.is_tug():
-		return [_local_to_screen(port, [_port_layout(port).inside, 0.0]), _keep_right(port, _entrance_pose(port, false, false))]
+		return [_local_to_screen(port, _right_side(port, _port_layout(port).inside, false)), _keep_right(port, _entrance_pose(port, false, false))]
 	var way := _mooring_way_out(ship, port)
 	if way.is_empty():
 		return []
@@ -11136,9 +11152,10 @@ static func _bird_shape(raptor: bool, bent: bool, special := 0) -> Dictionary:
 	var tip_part: PackedVector2Array
 	var tail := PackedVector2Array()
 	if special == 3:
-		# A frigatebird's wings: long and narrow, angled at the wrist (a W in the sky), as in life.
-		wing = PackedVector2Array([Vector2(0.03, 0.0), Vector2(0.07, half * 0.42), Vector2(-0.015, half), Vector2(-0.04, half * 0.5), Vector2(-0.035, 0.0)])
-		tip_part = PackedVector2Array([Vector2(0.01, half * 0.7), Vector2(-0.015, half), Vector2(-0.035, half * 0.72)])
+		# A frigatebird's wings: long and narrow, sharply angled at the wrist (a W
+		# in the sky), as in life: the hand swept back about 40 degrees off the arm.
+		wing = PackedVector2Array([Vector2(0.03, 0.0), Vector2(0.07, half * 0.42), Vector2(-0.106, half), Vector2(-0.061, half * 0.442), Vector2(-0.035, 0.0)])
+		tip_part = PackedVector2Array([Vector2(-0.036, half * 0.689), Vector2(-0.106, half), Vector2(-0.088, half * 0.685)])
 		tail = PackedVector2Array([Vector2(-0.12, 0.018), Vector2(-0.44, 0.075), Vector2(-0.42, 0.045), Vector2(-0.3, 0.0), Vector2(-0.42, -0.045), Vector2(-0.44, -0.075), Vector2(-0.12, -0.018)])
 	elif special == 5:
 		# An owl's wings: broad and rounded at the end, soft-edged, the

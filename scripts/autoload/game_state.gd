@@ -2066,6 +2066,11 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 	ship.stop_cost = 0
 	ship.stop_fuel_cost = 0.0
 	ship.stop_repair_cost = 0.0
+	if ship.berth_phase == Ship.BERTH_WAIT:
+		# With a berth free (and no one ahead of it), straight on in from the
+		# harbour mouth: never a tick "waiting", or the map has it set off for
+		# its spot to wait (a turn away) and back again.
+		_claim_berth(ship)
 	ship_changed.emit(ship)
 
 
@@ -2131,19 +2136,10 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 	var settings := Docks.settings()
 	match ship.berth_phase:
 		Ship.BERTH_WAIT:
-			var t_cl := Time.get_ticks_usec()
-			var claimed := docks.claim(ship)
-			MapView._prof("berth.claim", t_cl)
-			if not claimed:
-				return false
-			ship.berth_phase = Ship.BERTH_IN
-			ship.berth_time = 0.0
-			var t_bs := Time.get_ticks_usec()
-			ship.berth_duration = _berth_seconds(ship, true)
-			MapView._prof("berth.seconds", t_bs)
-			t_bs = Time.get_ticks_usec()
-			ship_changed.emit(ship)
-			MapView._prof("berth.changed", t_bs)
+			if _claim_berth(ship):
+				var t_bs := Time.get_ticks_usec()
+				ship_changed.emit(ship)
+				MapView._prof("berth.changed", t_bs)
 			return false
 		Ship.BERTH_IN:
 			ship.berth_time += delta
@@ -2167,6 +2163,22 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 			else:
 				ship_changed.emit(ship)
 			return false
+	return true
+
+
+## A ship waiting for a berth takes one if it's its turn and one's free, and
+## starts coming alongside (BERTH_IN): true if it did.
+func _claim_berth(ship: Ship) -> bool:
+	var t_cl := Time.get_ticks_usec()
+	var claimed := docks.claim(ship)
+	MapView._prof("berth.claim", t_cl)
+	if not claimed:
+		return false
+	ship.berth_phase = Ship.BERTH_IN
+	ship.berth_time = 0.0
+	var t_bs := Time.get_ticks_usec()
+	ship.berth_duration = _berth_seconds(ship, true)
+	MapView._prof("berth.seconds", t_bs)
 	return true
 
 
