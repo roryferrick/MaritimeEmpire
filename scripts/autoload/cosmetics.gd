@@ -19,7 +19,7 @@ const PROFILE_PATH := "user://cosmetics.json"
 const SKIN_ART_DIR := "res://art/skins/"
 ## Where the packs' options start in Characters.PARTS: the options before
 ## these are everyone's (see allowed()).
-const PACK_OPTIONS_FROM := {top = 18, bottoms = 12, shoes = 10, headwear = 21}
+const PACK_OPTIONS_FROM := {top = 18, bottoms = 12, shoes = 10, headwear = 21, facial_hair = 10}
 ## Steam Inventory results (EResult): OK.
 const STEAM_OK := 1
 
@@ -211,8 +211,25 @@ func buy_bundle(bundle: Dictionary) -> void:
 	message.emit("Steam is opening the checkout for %s (%s)..." % [amount(int(bundle.sand_dollars)), bundle_price(bundle)])
 
 
+## The game's owner plays with Sand Dollars to spare: running from the editor
+## (or the Godot binary), or on Steam as one of OWNER_STEAM_IDS, the balance
+## is topped up to OWNER_SAND_DOLLARS at every start (a ledger line each
+## time). Exported builds given to others have neither, so they get none.
+const OWNER_STEAM_IDS: Array[int] = []  # (Steam ID64s. Find yours at https://store.steampowered.com/account/ under "Steam ID".)
+const OWNER_SAND_DOLLARS := 10000
+
+func _owner_grant() -> void:
+	var owner := OS.has_feature("editor")
+	if not owner and _steam != null and _steam.has_method("getSteamID"):
+		owner = OWNER_STEAM_IDS.has(int(_steam.getSteamID()))
+	if owner and sand_dollars < OWNER_SAND_DOLLARS:
+		_grant(OWNER_SAND_DOLLARS - sand_dollars, "owner")
+
+
 func _hook_steam() -> void:
-	if Net.steam == null:
+	_steam = Net.steam
+	_owner_grant()
+	if _steam == null:
 		return
 	_steam = Net.steam
 	for pair: Array in [["inventory_start_purchase_result", _on_start_purchase], ["micro_txn_authorization_response", _on_authorization], ["inventory_result_ready", _on_inventory_result]]:

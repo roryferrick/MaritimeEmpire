@@ -38,18 +38,19 @@ const PARTS := [
 	["mouth", "Mouth", ["Smile", "Grin", "Straight", "Smirk", "Laugh", "Surprised", "Frown", "Red lips", "Cheeky", "Gentle"]],
 	["hair", "Hair style", ["Bald", "Buzz cut", "Short", "Side part", "Quiff", "Long", "Bob", "Ponytail", "Curly", "Braids", "Mohawk", "Bun", "Afro"]],
 	["hair_color", "Hair color", ["Black", "Dark brown", "Brown", "Light brown", "Auburn", "Ginger", "Strawberry blonde", "Blonde", "Platinum", "Grey", "White", "Blue", "Pink", "Green"]],
-	["facial_hair", "Facial hair", ["None", "Stubble", "Moustache", "Goatee", "Full beard", "Chinstrap", "Handlebar", "Soul patch", "Mutton chops", "Long beard"]],
+	["facial_hair", "Facial hair", ["None", "Stubble", "Moustache", "Goatee", "Full beard", "Chinstrap", "Handlebar", "Soul patch", "Mutton chops", "Long beard", "Santa's beard"]],  # (From "Santa's beard": a skin pack's, see Cosmetics.)
 	["top", "Top", ["Captain's jacket", "Sailor stripes", "Pea coat", "Yellow oilskin", "Fisherman's jumper", "Dress whites", "Deck tee", "Life vest", "Wetsuit", "Officer's shirt", "Tropical shirt", "Pirate coat",
 		"White tee", "Red tee", "Grey hoodie", "Black suit", "Plaid flannel", "Hi-vis vest",
 		"Pilgrim doublet", "Goodwife's gown", "Colonial coat", "Linen shirt and jerkin", "Farmhand's tunic",
-		"Home pinstripes", "Road greys", "Catcher's gear", "Umpire's polo", "Vendor's stripes", "1920s flannels"]],  # (From "Pilgrim doublet": the skin packs', see Cosmetics.)
+		"Home pinstripes", "Road greys", "Catcher's gear", "Umpire's polo", "Vendor's stripes", "1920s flannels",
+		"Santa suit", "Mrs Claus's gown", "Elf tunic", "Reindeer onesie", "Ugly Christmas sweater", "Nutcracker tunic", "Carol singer's coat"]],  # (From "Pilgrim doublet": the skin packs', see Cosmetics.)
 	["bottoms", "Bottoms", ["Navy trousers", "Sailor bell-bottoms", "Oilskin trousers", "Deck shorts", "Wetsuit legs", "Jeans", "Khakis", "Black trousers", "Cargo trousers", "Red skirt", "Navy skirt", "Denim shorts",
-		"Black breeches", "Buff breeches", "Sailor's slops", "Grey hose", "Pinstripe pants", "Grey baseball pants", "Catcher's shin guards", "Umpire slacks", "Knickers and stirrups"]],
-	["shoes", "Shoes", ["Deck shoes", "Sea boots", "Yellow wellies", "Barefoot", "Black boots", "Brown boots", "White trainers", "Dress shoes", "Sandals", "Red trainers", "Buckle shoes", "Cloth wraps", "Cleats"]],
+		"Black breeches", "Buff breeches", "Sailor's slops", "Grey hose", "Pinstripe pants", "Grey baseball pants", "Catcher's shin guards", "Umpire slacks", "Knickers and stirrups", "Santa trousers", "Elf tights", "Reindeer legs", "Nutcracker trousers"]],
+	["shoes", "Shoes", ["Deck shoes", "Sea boots", "Yellow wellies", "Barefoot", "Black boots", "Brown boots", "White trainers", "Dress shoes", "Sandals", "Red trainers", "Buckle shoes", "Cloth wraps", "Cleats", "Elf shoes"]],
 	["eyewear", "Glasses", ["None", "Round", "Square", "Sunglasses", "Aviators", "Monocle", "Half-rims", "Cat-eye", "Goggles", "Eye patch"]],
 	["headwear", "Hat", ["None", "Captain's cap", "Sailor cap", "Sou'wester", "Tricorne", "Bandana", "Watch cap", "Straw hat", "Bucket hat", "Baseball cap", "Top hat", "Hard hat", "Cowboy hat",
 		"Fisherman's cap", "Flat cap", "Beret", "Bicorne", "Pompom beanie", "Fedora", "Pith helmet", "Conical hat",
-		"Capotain", "Coif", "Monmouth cap", "Turkey hat", "Navy ball cap", "Red ball cap", "Batting helmet", "Catcher's mask", "Vendor's paper hat", "Umpire's cap", "Old-time ball cap"]],
+		"Capotain", "Coif", "Monmouth cap", "Turkey hat", "Navy ball cap", "Red ball cap", "Batting helmet", "Catcher's mask", "Vendor's paper hat", "Umpire's cap", "Old-time ball cap", "Santa hat", "Elf hat", "Antlers", "Earmuffs", "Holly top hat"]],
 ]
 ## The sliders of a look (0 to 100, 50 the middle): [key, title, low word, high word].
 const SLIDERS := [
@@ -135,7 +136,7 @@ static func random_look(rng: RandomNumberGenerator) -> Dictionary:
 	var look := {}
 	for part: Array in PARTS:
 		var key: String = part[0]
-		var count := (part[2] as Array).size()
+		var count := mini((part[2] as Array).size(), int(Cosmetics.PACK_OPTIONS_FROM.get(key, 1 << 30)))  # (Never a skin pack's option.)
 		if NONE_CHANCES.has(key):
 			look[key] = 0 if rng.randf() < float(NONE_CHANCES[key]) else rng.randi_range(1, count - 1)
 		else:

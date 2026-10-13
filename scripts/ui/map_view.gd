@@ -8935,7 +8935,7 @@ func _draw_fishing_gear(ship: Ship, at: Vector2, angle: float, long: float, fade
 ## cell across; a stride (legs swinging from one forward to the other) is this
 ## many shoulder widths; a person's shadow falls this many widths from them.
 const DECK_ATLAS_PATH := "res://art/people/deck_people.svg"
-const DECK_ATLAS_CELLS := Vector2(8, 5)
+const DECK_ATLAS_CELLS := Vector2(8, 6)
 const DECK_SHOULDER_SHARE := 0.75
 const DECK_STRIDE := 1.3
 const DECK_SHADOW_WIDTHS := 0.4

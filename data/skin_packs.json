@@ -55,6 +55,31 @@
 			"headwear": ["Navy ball cap", "Red ball cap", "Batting helmet", "Catcher's mask", "Vendor's paper hat", "Umpire's cap", "Old-time ball cap"],
 			"shirts": [["Pinstripe white", "#f6f6f6"], ["Road grey", "#a9adb3"], ["Vendor stripes", "#c8343a"]],
 			"trousers": [["Baseball pants white", "#f2f2f2"], ["Baseball pants grey", "#a9adb3"]]
+		},
+		{
+			"id": "christmas_2026", "title": "2026 Christmas Pack", "price": 799, "on_sale": true, "folder": "christmas",
+			"blurb": "The fleet wrapped for the holidays: five presents, a candy cane, a yule log, a gingerbread man, a tin of cookies, a nutcracker, a string of lights, baubles, a snowman, a stocking, a boiled sweet, a gingerbread house, a toboggan, Santa's sleigh and sack, and a Christmas tree. Santa and Mrs Claus, an elf, a reindeer, an ugly sweater, a nutcracker and a carol singer for your CEO and captains, with Santa's beard; Santa hats, elf hats, antlers, earmuffs and holly top hats for the crew.",
+			"ships": {
+				"model_1": "present_mini", "model_2": "present_stripes", "model_3": "present_gold", "model_4": "present_snow", "model_5": "present_candy",
+				"model_8": "candy_cane", "model_9": "candy_cane", "model_10": "candy_cane",
+				"model_11": "yule_log", "model_12": "yule_log", "model_13": "yule_log",
+				"model_14": "gingerbread_man", "model_15": "gingerbread_man", "model_16": "gingerbread_man",
+				"model_17": "cookie_tin", "model_18": "cookie_tin", "model_19": "cookie_tin",
+				"model_20": "nutcracker", "model_21": "nutcracker", "model_22": "nutcracker",
+				"model_32": "lights", "model_33": "lights",
+				"model_25": "bauble",
+				"model_26": "frosted", "model_27": "snowman", "model_28": "stocking",
+				"model_29": "candy", "model_30": "gingerbread_house", "model_31": "sled",
+				"model_6": "sleigh", "model_7": "sack",
+				"model_23": "tree", "model_24": "tree"
+			},
+			"top": ["Santa suit", "Mrs Claus's gown", "Elf tunic", "Reindeer onesie", "Ugly Christmas sweater", "Nutcracker tunic", "Carol singer's coat"],
+			"bottoms": ["Santa trousers", "Elf tights", "Reindeer legs", "Nutcracker trousers"],
+			"shoes": ["Elf shoes"],
+			"headwear": ["Santa hat", "Elf hat", "Antlers", "Earmuffs", "Holly top hat"],
+			"facial_hair": ["Santa's beard"],
+			"shirts": [["Santa red", "#c8232e"], ["Elf green", "#2f9a3a"], ["Reindeer brown", "#8a5a30"], ["Sweater green", "#1f6a2a"], ["Caroler green", "#1f4a2a"]],
+			"trousers": [["Santa red", "#c8232e"], ["Elf stripes", "#d8262a"]]
 		}
 	]
 }
