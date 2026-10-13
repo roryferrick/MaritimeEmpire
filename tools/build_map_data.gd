@@ -2474,35 +2474,112 @@ const LAND_PORT_NM := 15.0  # Within this of a lane's ends (the ports, on the co
 const LAND_PUSHES: Array[float] = [0.01, 0.02, 0.035, 0.05, 0.07, 0.1, 0.14, 0.2, 0.28, 0.4, 0.55, 0.75, 1.0, 1.3]
 const LAND_PUSH_ANGLES: Array[float] = [90.0, -90.0, 60.0, -60.0, 120.0, -120.0, 40.0, -40.0, 140.0, -140.0]  # Off the piece's own way, degrees.
 const LAND_PASSES := 16
+## A long piece (over LAND_SPLIT_NM) with a short stretch of land on it is first
+## cut LAND_SPLIT_MARGIN_NM either side of the stretch, so the way round is
+## found for the short middle piece alone: bending a thousand-mile piece as a
+## whole swung it into other coasts and failed (lanes through Palau's marina).
+const LAND_SPLIT_NM := 80.0
+const LAND_SPLIT_MARGIN_NM := 25.0  # (More than a marina disc, so the cut ends sit outside it.)
 ## A lane leaves its port out through its marina's mouth: this far out along
 ## the port's facing (dock units of 1/75 degree; the mouth is 19 to 35 out).
 const LAND_MOUTH_UNITS := 24.0
+## A lane whose way on from the mouth turns back sharply goes out to this many
+## mouth distances first (MapView.HARBOUR_APPROACH_OUT, where the approach pose lies).
+const LAND_STANDOFF_MOUTHS := 2.2
+## Every port's marina counts as land for the pass (a lane never crosses another
+## port's harbour): a disc this many dock units across from the port (the
+## biggest marina a port can have, a hub's, radius 21, its jetty and room),
+## at MapView.SHIP_WORLD_ZOOM dock units a degree. Not a canal port's (the
+## canal runs through it), nor a lane's own ports' (LAND_PORT_NM exempts them).
+const MARINA_KEEP_UNITS := 23.5
+const MARINA_DOCK_UNITS_PER_DEG := 88.235
 const FACING_PATH := "res://data/port_facing.json"
 var _mouths := {}  # Port id -> the point just outside its mouth (projected).
+var _marina_discs := []  # [centre (projected), radius, port id] of every marina counted as land.
+
+var _disc_cells := {}  # 1-degree projected cell -> the discs touching it.
+
+## The port whose marina disc a projected point is in, or "".
+func _marina_disc_at(p: Vector2) -> String:
+	var x := wrapf(p.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0)
+	for disc: Array in _disc_cells.get(Vector2i(floori(x), floori(p.y)), []):
+		var c: Vector2 = disc[0]
+		var dx: float = x - c.x
+		dx -= roundf(dx / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
+		if Vector2(dx, p.y - c.y).length() <= float(disc[1]):
+			return str(disc[2])
+	return ""
+
+
+func _sort_discs() -> void:
+	_disc_cells.clear()
+	for disc: Array in _marina_discs:
+		var c: Vector2 = disc[0]
+		var r: float = disc[1]
+		for x in range(floori(c.x - r), floori(c.x + r) + 1):
+			for y in range(floori(c.y - r), floori(c.y + r) + 1):
+				_disc_cells.get_or_add(Vector2i(posmod(x + 180, 360) - 180, y), []).append(disc)
 var _land_test: Object = null
 var _lake_test: Object = null
 var _island_test: Object = null
-var _land_stats := {lanes = 0, mouths = 0, moved = 0, stretches = 0, fixed = 0, pushed = 0, failed = 0, corners = 0, points_added = 0}
+var _land_stats := {lanes = 0, mouths = 0, moved = 0, stretches = 0, fixed = 0, pushed = 0, failed = 0, merged = 0, corners = 0, points_added = 0}
 var _land_left_bins := {}
 func _clear_lanes_of_land() -> void:
 	var map: WorldMapData = load(MAP_OUT)
-	_land_test = ClassDB.instantiate(&"LandTest")
-	_land_test.build(map.land_triangles, 1.0)
-	var lakes := PackedVector2Array()
-	for triangles: PackedVector2Array in map.lake_triangles:
-		lakes.append_array(triangles)
-	_lake_test = ClassDB.instantiate(&"LandTest")
-	_lake_test.build(lakes, 1.0)
-	_island_test = ClassDB.instantiate(&"LandTest")
-	_island_test.build(map.lake_island_triangles, 1.0)
-	var data: SeaLaneData = load(LANES_OUT)
-	# Where each port's lanes leave through its marina's mouth (not a canal port's: its lanes run on into the canal).
 	var facing: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FACING_PATH))
 	var canal_ports := {}
 	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
 		for id: String in canal.get("ports", []):
 			canal_ports[id] = true
-	for port: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports:
+	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
+	# Every marina as a disc of land (see MARINA_KEEP_UNITS), in the land test and
+	# the lake islands' (a marina on a lake is land there too).
+	var marinas := PackedVector2Array()
+	_marina_discs.clear()
+	for port: Dictionary in ports:
+		if canal_ports.has(port.id):
+			continue
+		var lat := float(port.lat)
+		var centre := Geo.project(Vector2(float(port.lon), lat))
+		var radius := MARINA_KEEP_UNITS / MARINA_DOCK_UNITS_PER_DEG / maxf(cos(deg_to_rad(lat)), 0.05)
+		_marina_discs.append([centre, radius, str(port.id)])
+		for k in 24:
+			marinas.append(centre)
+			marinas.append(centre + Vector2.from_angle(TAU * k / 24.0) * radius)
+			marinas.append(centre + Vector2.from_angle(TAU * (k + 1) / 24.0) * radius)
+	var land := PackedVector2Array(map.land_triangles)
+	land.append_array(marinas)
+	_land_test = ClassDB.instantiate(&"LandTest")
+	_land_test.build(land, 1.0)
+	var lakes := PackedVector2Array()
+	for triangles: PackedVector2Array in map.lake_triangles:
+		lakes.append_array(triangles)
+	_lake_test = ClassDB.instantiate(&"LandTest")
+	_lake_test.build(lakes, 1.0)
+	var islands := PackedVector2Array(map.lake_island_triangles)
+	islands.append_array(marinas)
+	_island_test = ClassDB.instantiate(&"LandTest")
+	_island_test.build(islands, 1.0)
+	_sort_discs()
+	print("Marinas as land: %d discs" % (marinas.size() / 72))
+	if "--land-probe" in OS.get_cmdline_user_args():  # (A look at the land and discs round a point: lon,lat.)
+		var at := OS.get_cmdline_user_args()[OS.get_cmdline_user_args().find("--land-probe") + 1].split(",")
+		var c := Vector2(float(at[0]), float(at[1]))
+		for disc: Array in _marina_discs:
+			if disc[2] == "ROR":
+				print("  ROR disc centre %s radius %.4f; probe at %s; land size %d (+%d marina points); land_test at centre+0.05: %s, island_test: %s" % [disc[0], disc[1], Geo.project(c), land.size(), marinas.size(), _land_test.contains(disc[0] + Vector2(0.05, 0.0)), _island_test.contains(disc[0] + Vector2(0.05, 0.0))])
+				var k := marinas.find(disc[0])
+				print("  first fan triangle: %s %s %s" % [marinas[k], marinas[k + 1], marinas[k + 2]])
+		for d: float in [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 0.9]:
+			var row := []
+			for k in 8:
+				var p := Geo.project(c + Vector2.from_angle(TAU * k / 8.0) * d)
+				row.append("%s%s" % ["L" if _drawn_land(p) else ".", _marina_disc_at(p)])
+			print("  ring %.2f: %s" % [d, " ".join(row)])
+		return
+	var data: SeaLaneData = load(LANES_OUT)
+	# Where each port's lanes leave through its marina's mouth (not a canal port's: its lanes run on into the canal).
+	for port: Dictionary in ports:
 		var entry: Dictionary = facing.get("manual", {}).get(port.id, facing.get("facing", {}).get(port.id, {}))
 		if canal_ports.has(port.id) or not entry.has("bearing"):
 			continue
@@ -2552,6 +2629,8 @@ func _drawn_land(p: Vector2) -> bool:
 	var q := Vector2(wrapf(p.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0), p.y)
 	if not _land_test.contains(q):
 		return false
+	if not _marina_disc_at(q).is_empty():
+		return true  # (A marina: land whatever the lakes say; Palau's lagoon is drawn as a lake.)
 	return not _lake_test.contains(q) or _island_test.contains(q)
 
 
@@ -2577,6 +2656,9 @@ func _land_stretches(line: PackedVector2Array) -> Array:
 ## water between them, so each stretch gets its own way round.
 func _lane_off_land(lane: PackedVector2Array, from_port := "", to_port := "") -> Array:
 	_land_stats.lanes += 1
+	for key in _land_stats.keys():
+		if str(key).begins_with("merged_"):
+			_land_stats.erase(key)
 	var line := _project_all(lane)
 	var changed := false
 	# Out through the mouth first (and in through it at the other end): the
@@ -2594,19 +2676,35 @@ func _lane_off_land(lane: PackedVector2Array, from_port := "", to_port := "") ->
 		var out_way := (mouth - root).normalized()
 		if out_way.dot((next - root).normalized()) > 0.94:
 			continue  # (Within 20 degrees of that way already.)
+		# Its way on from the mouth would turn more than 75 degrees (a port with
+		# the sea on one side and the lane going the other): out to a stand-off
+		# further along the facing first, so the lane goes out to sea and round
+		# the land rather than through the marina; the passes below take the
+		# rest of it off the land.
+		var via := [mouth]
 		if out_way.dot((next - mouth).normalized()) < 0.26:
-			continue  # (Its way on from the mouth would turn more than 75 degrees: a hairpin at the mouth. The harbour curve takes it round instead.)
+			via.append(root + (mouth - root) * LAND_STANDOFF_MOUTHS)
 		if end == 0:
-			line.insert(1, mouth)
+			for k in via.size():
+				line.insert(1 + k, via[k])
 		else:
-			line.insert(line.size() - 1, mouth)
+			for k in via.size():
+				line.insert(line.size() - 1, via[k])
 		changed = true
 		_land_stats.mouths += 1
 	for pass_ in LAND_PASSES:
 		# A lane point itself on the land (a water cell's middle that the drawn
 		# coast runs over): moved to the nearest water. Not the ends (the ports).
-		for i in range(1, line.size() - 1):
+		for i in range(line.size() - 2, 0, -1):
 			if _drawn_land(line[i]) and not _near_canal(Geo.unproject(line[i])):
+				# A point in another port's marina (a routed waypoint at that port): dropped,
+				# so the lane runs straight past and the stretch through the disc is gone round.
+				var disc := _marina_disc_at(line[i])
+				if not disc.is_empty() and disc != from_port and disc != to_port and line.size() > 2:
+					line.remove_at(i)
+					changed = true
+					_land_stats.moved += 1
+					continue
 				var moved := _nearest_drawn_water(line[i])
 				if moved != line[i]:
 					line[i] = moved
@@ -2637,6 +2735,19 @@ func _lane_off_land(lane: PackedVector2Array, from_port := "", to_port := "") ->
 				split = true
 				changed = true
 				continue
+			var piece_nm := Geo.distance_nm(Geo.unproject(a), Geo.unproject(b))
+			if piece_nm > LAND_SPLIT_NM:
+				var m := LAND_SPLIT_MARGIN_NM / piece_nm
+				var ta := maxf(float(runs[0][1]) - m, 0.0)
+				var tb := minf(float(runs[0][2]) + m, 1.0)
+				if ta > 0.02 or tb < 0.98:
+					if tb < 0.98:
+						line.insert(i, a.lerp(b, tb))
+					if ta > 0.02:
+						line.insert(i, a.lerp(b, ta))
+					split = true
+					changed = true
+					continue
 			_land_stats.stretches += 1
 			var detour := _detour(a, b, float(runs[0][1]), float(runs[0][2]))
 			if detour.is_empty():
@@ -2645,6 +2756,17 @@ func _lane_off_land(lane: PackedVector2Array, from_port := "", to_port := "") ->
 				# the passes to come (each stretch shorter, till it's off).
 				detour = _best_push(a, b, float(runs[0][1]), float(runs[0][2]))
 				if detour.is_empty():
+					# Stuck: a short piece whose ends sit on the shore (the routed lane's own
+					# points on an island's cells, Palau's). Its two ends are dropped, so the
+					# pieces either side join into one long piece, cut again 25 nm clear of
+					# the land and gone round from open water in the passes to come.
+					if i - 1 > 1 and i < line.size() - 2 and _land_stats.get("merged_" + str(i), 0) < 2:
+						_land_stats["merged_" + str(i)] = int(_land_stats.get("merged_" + str(i), 0)) + 1
+						line.remove_at(i)
+						line.remove_at(i - 1)
+						changed = true
+						split = true
+						_land_stats.merged += 1
 					continue
 				_land_stats.pushed += 1
 			else:

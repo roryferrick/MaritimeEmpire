@@ -104,7 +104,7 @@ func has_industry(commodity_id: String) -> bool:
 
 ## What its building for a commodity gives (0 without one): "buy" (its buy
 ## price here that much cheaper, e.g. 0.2), "sell" (its sell price here that
-## much dearer) or "xp" (that much more XP for deliveries of it to or from
+## much more expensive) or "xp" (that much more XP for deliveries of it to or from
 ## here), the HQ's hq_multiplier times a hub's.
 func industry_bonus(commodity_id: String, kind: String) -> float:
 	if not has_industry(commodity_id):

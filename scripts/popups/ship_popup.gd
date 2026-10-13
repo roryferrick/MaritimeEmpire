@@ -37,6 +37,7 @@ var _crew_box := VBoxContainer.new()
 ## The gulls round it and the seabirds following it (see Birds), redone every
 ## BIRDS_SECONDS.
 var _birds_label := Label.new()
+var _skin_button := Button.new()
 var _birds_clock := 0.0
 
 
@@ -100,6 +101,11 @@ func _ready() -> void:
 	%RescueToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_recover(ship, on))
 	%FullToggle.toggled.connect(func(on: bool) -> void: GameState.set_full_loads(ship, on))
 	%SellButton.pressed.connect(_on_sell_pressed)
+	_skin_button.text = "Skin"
+	_skin_button.tooltip_text = "Dress this ship in a skin you own, or the base ship."
+	_skin_button.pressed.connect(func() -> void: GameRoot.find(self).add_child(SkinPicker.new(ship)))
+	%Buttons.add_child(_skin_button)
+	%Buttons.move_child(_skin_button, %SellButton.get_index())
 	GameState.ship_sold.connect(func(sold: Ship, _price: int) -> void:
 		if sold == ship:
 			queue_free())
@@ -431,7 +437,7 @@ func _refresh() -> void:
 	%PauseButton.text = "Go" if ship.paused else "Pause"
 	# Another player's ship (multiplayer): to look at, not to run.
 	if not GameState.is_mine(ship):
-		for control: Control in [%Toggles, %AssignButton, %PauseButton, %SellButton, %SkillsButton]:
+		for control: Control in [%Toggles, %AssignButton, %PauseButton, %SellButton, %SkillsButton, _skin_button]:
 			control.visible = false
 	reset_size.call_deferred()
 

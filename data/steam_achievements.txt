@@ -1,0 +1,152 @@
+api_name,display_name,description,hidden
+DELIVER_TOYS_1,Toys ★,"2,000 containers delivered",0
+DELIVER_TOYS_2,Toys ★★,"250,000 containers delivered",0
+DELIVER_TOYS_3,Toys ★★★,"5,000,000 containers delivered",0
+DELIVER_CLOTHING_1,Clothing ★,"2,000 containers delivered",0
+DELIVER_CLOTHING_2,Clothing ★★,"250,000 containers delivered",0
+DELIVER_CLOTHING_3,Clothing ★★★,"5,000,000 containers delivered",0
+DELIVER_FURNITURE_1,Furniture ★,"2,000 containers delivered",0
+DELIVER_FURNITURE_2,Furniture ★★,"250,000 containers delivered",0
+DELIVER_FURNITURE_3,Furniture ★★★,"5,000,000 containers delivered",0
+DELIVER_COFFEE_1,Coffee ★,"2,000 containers delivered",0
+DELIVER_COFFEE_2,Coffee ★★,"250,000 containers delivered",0
+DELIVER_COFFEE_3,Coffee ★★★,"5,000,000 containers delivered",0
+DELIVER_OIL_1,Oil ★,"50,000 tons delivered",0
+DELIVER_OIL_2,Oil ★★,"10,000,000 tons delivered",0
+DELIVER_OIL_3,Oil ★★★,"100,000,000 tons delivered",0
+DELIVER_GAS_1,Gas ★,"50,000 tons delivered",0
+DELIVER_GAS_2,Gas ★★,"10,000,000 tons delivered",0
+DELIVER_GAS_3,Gas ★★★,"100,000,000 tons delivered",0
+DELIVER_IRON_1,Iron ore ★,"50,000 tons delivered",0
+DELIVER_IRON_2,Iron ore ★★,"10,000,000 tons delivered",0
+DELIVER_IRON_3,Iron ore ★★★,"100,000,000 tons delivered",0
+DELIVER_COAL_1,Coal ★,"50,000 tons delivered",0
+DELIVER_COAL_2,Coal ★★,"10,000,000 tons delivered",0
+DELIVER_COAL_3,Coal ★★★,"100,000,000 tons delivered",0
+DELIVER_GOLD_1,Gold ore ★,"50,000 tons delivered",0
+DELIVER_GOLD_2,Gold ore ★★,"10,000,000 tons delivered",0
+DELIVER_GOLD_3,Gold ore ★★★,"100,000,000 tons delivered",0
+DELIVER_WHEAT_1,Wheat ★,"50,000 tons delivered",0
+DELIVER_WHEAT_2,Wheat ★★,"10,000,000 tons delivered",0
+DELIVER_WHEAT_3,Wheat ★★★,"100,000,000 tons delivered",0
+DELIVER_CORN_1,Corn ★,"50,000 tons delivered",0
+DELIVER_CORN_2,Corn ★★,"10,000,000 tons delivered",0
+DELIVER_CORN_3,Corn ★★★,"100,000,000 tons delivered",0
+DELIVER_SOYBEANS_1,Soybeans ★,"50,000 tons delivered",0
+DELIVER_SOYBEANS_2,Soybeans ★★,"10,000,000 tons delivered",0
+DELIVER_SOYBEANS_3,Soybeans ★★★,"100,000,000 tons delivered",0
+DELIVER_RICE_1,Rice ★,"50,000 tons delivered",0
+DELIVER_RICE_2,Rice ★★,"10,000,000 tons delivered",0
+DELIVER_RICE_3,Rice ★★★,"100,000,000 tons delivered",0
+DELIVER_BARLEY_1,Barley ★,"50,000 tons delivered",0
+DELIVER_BARLEY_2,Barley ★★,"10,000,000 tons delivered",0
+DELIVER_BARLEY_3,Barley ★★★,"100,000,000 tons delivered",0
+DELIVER_COWS_1,Cattle ★,"5,000 head delivered",0
+DELIVER_COWS_2,Cattle ★★,"1,000,000 head delivered",0
+DELIVER_COWS_3,Cattle ★★★,"10,000,000 head delivered",0
+DELIVER_SHEEP_1,Sheep ★,"5,000 head delivered",0
+DELIVER_SHEEP_2,Sheep ★★,"1,000,000 head delivered",0
+DELIVER_SHEEP_3,Sheep ★★★,"10,000,000 head delivered",0
+DELIVER_PIGS_1,Pigs ★,"5,000 head delivered",0
+DELIVER_PIGS_2,Pigs ★★,"1,000,000 head delivered",0
+DELIVER_PIGS_3,Pigs ★★★,"10,000,000 head delivered",0
+DELIVER_CARS_1,Cars ★,"2,000 vehicles delivered",0
+DELIVER_CARS_2,Cars ★★,"250,000 vehicles delivered",0
+DELIVER_CARS_3,Cars ★★★,"5,000,000 vehicles delivered",0
+DELIVER_TRUCKS_1,Trucks ★,"2,000 vehicles delivered",0
+DELIVER_TRUCKS_2,Trucks ★★,"250,000 vehicles delivered",0
+DELIVER_TRUCKS_3,Trucks ★★★,"5,000,000 vehicles delivered",0
+DELIVER_BOATS_1,Boats ★,"2,000 vehicles delivered",0
+DELIVER_BOATS_2,Boats ★★,"250,000 vehicles delivered",0
+DELIVER_BOATS_3,Boats ★★★,"5,000,000 vehicles delivered",0
+DELIVER_KING_CRAB_1,King crab ★,"1,000 crates delivered",0
+DELIVER_KING_CRAB_2,King crab ★★,"100,000 crates delivered",0
+DELIVER_KING_CRAB_3,King crab ★★★,"2,000,000 crates delivered",0
+DELIVER_SNOW_CRAB_1,Snow & tanner crab ★,"1,000 crates delivered",0
+DELIVER_SNOW_CRAB_2,Snow & tanner crab ★★,"100,000 crates delivered",0
+DELIVER_SNOW_CRAB_3,Snow & tanner crab ★★★,"2,000,000 crates delivered",0
+DELIVER_DUNGENESS_CRAB_1,Dungeness crab ★,"1,000 crates delivered",0
+DELIVER_DUNGENESS_CRAB_2,Dungeness crab ★★,"100,000 crates delivered",0
+DELIVER_DUNGENESS_CRAB_3,Dungeness crab ★★★,"2,000,000 crates delivered",0
+DELIVER_BLUE_CRAB_1,Blue crab ★,"1,000 crates delivered",0
+DELIVER_BLUE_CRAB_2,Blue crab ★★,"100,000 crates delivered",0
+DELIVER_BLUE_CRAB_3,Blue crab ★★★,"2,000,000 crates delivered",0
+DELIVER_STONE_CRAB_1,Stone crab ★,"1,000 crates delivered",0
+DELIVER_STONE_CRAB_2,Stone crab ★★,"100,000 crates delivered",0
+DELIVER_STONE_CRAB_3,Stone crab ★★★,"2,000,000 crates delivered",0
+DELIVER_ROCK_CRAB_1,Rock & brown crab ★,"1,000 crates delivered",0
+DELIVER_ROCK_CRAB_2,Rock & brown crab ★★,"100,000 crates delivered",0
+DELIVER_ROCK_CRAB_3,Rock & brown crab ★★★,"2,000,000 crates delivered",0
+DELIVER_SWIMMING_CRAB_1,Swimming & mud crab ★,"1,000 crates delivered",0
+DELIVER_SWIMMING_CRAB_2,Swimming & mud crab ★★,"100,000 crates delivered",0
+DELIVER_SWIMMING_CRAB_3,Swimming & mud crab ★★★,"2,000,000 crates delivered",0
+DELIVER_DEEPWATER_CRAB_1,Deepwater crab ★,"1,000 crates delivered",0
+DELIVER_DEEPWATER_CRAB_2,Deepwater crab ★★,"100,000 crates delivered",0
+DELIVER_DEEPWATER_CRAB_3,Deepwater crab ★★★,"2,000,000 crates delivered",0
+DELIVER_CRAYFISH_1,Crayfish ★,"1,000 crates delivered",0
+DELIVER_CRAYFISH_2,Crayfish ★★,"100,000 crates delivered",0
+DELIVER_CRAYFISH_3,Crayfish ★★★,"2,000,000 crates delivered",0
+DELIVER_TUNA_1,Tuna ★,"1,000 crates delivered",0
+DELIVER_TUNA_2,Tuna ★★,"100,000 crates delivered",0
+DELIVER_TUNA_3,Tuna ★★★,"2,000,000 crates delivered",0
+DELIVER_BILLFISH_1,Billfish ★,"1,000 crates delivered",0
+DELIVER_BILLFISH_2,Billfish ★★,"100,000 crates delivered",0
+DELIVER_BILLFISH_3,Billfish ★★★,"2,000,000 crates delivered",0
+DELIVER_SALMON_1,Salmon ★,"1,000 crates delivered",0
+DELIVER_SALMON_2,Salmon ★★,"100,000 crates delivered",0
+DELIVER_SALMON_3,Salmon ★★★,"2,000,000 crates delivered",0
+DELIVER_WHITEFISH_1,Cod & whitefish ★,"1,000 crates delivered",0
+DELIVER_WHITEFISH_2,Cod & whitefish ★★,"100,000 crates delivered",0
+DELIVER_WHITEFISH_3,Cod & whitefish ★★★,"2,000,000 crates delivered",0
+DELIVER_FLATFISH_1,Flatfish ★,"1,000 crates delivered",0
+DELIVER_FLATFISH_2,Flatfish ★★,"100,000 crates delivered",0
+DELIVER_FLATFISH_3,Flatfish ★★★,"2,000,000 crates delivered",0
+DELIVER_SMALL_PELAGIC_1,"Herring, sardine & anchovy ★","1,000 crates delivered",0
+DELIVER_SMALL_PELAGIC_2,"Herring, sardine & anchovy ★★","100,000 crates delivered",0
+DELIVER_SMALL_PELAGIC_3,"Herring, sardine & anchovy ★★★","2,000,000 crates delivered",0
+DELIVER_MACKEREL_1,Mackerel ★,"1,000 crates delivered",0
+DELIVER_MACKEREL_2,Mackerel ★★,"100,000 crates delivered",0
+DELIVER_MACKEREL_3,Mackerel ★★★,"2,000,000 crates delivered",0
+DELIVER_GAME_FISH_1,"Snapper, mahi & reef fish ★","1,000 crates delivered",0
+DELIVER_GAME_FISH_2,"Snapper, mahi & reef fish ★★","100,000 crates delivered",0
+DELIVER_GAME_FISH_3,"Snapper, mahi & reef fish ★★★","2,000,000 crates delivered",0
+FLEET_1,Fleet ★,10 ships owned (not tugs),0
+FLEET_2,Fleet ★★,50 ships owned (not tugs),0
+FLEET_3,Fleet ★★★,200 ships owned (not tugs),0
+LEVEL_1,Company level ★,10 levels reached,0
+LEVEL_2,Company level ★★,30 levels reached,0
+LEVEL_3,Company level ★★★,60 levels reached,0
+MONEY_1,Money in the bank ★,"10,000,000 in the bank",0
+MONEY_2,Money in the bank ★★,"500,000,000 in the bank",0
+MONEY_3,Money in the bank ★★★,"5,000,000,000 in the bank",0
+ANIMALS_1,Field guide ★,62 animals seen,0
+ANIMALS_2,Field guide ★★,125 animals seen,0
+ANIMALS_3,Field guide ★★★,187 animals seen,0
+WONDERS_1,Wonders of the world ★,10 wonders seen,0
+WONDERS_2,Wonders of the world ★★,25 wonders seen,0
+WONDERS_3,Wonders of the world ★★★,49 wonders seen,0
+FIRST_DELIVERY,Maiden voyage,Deliver a cargo,0
+FIRST_HUB,Branching out,Build a hub,0
+FIVE_HUBS,Network,Have 5 hubs,0
+SECOND_REGION,New horizons,Unlock a second market region,0
+ALL_REGIONS,Seven seas,Unlock every market region,0
+EVERY_CARGO,Jack of all trades,Deliver every commodity,0
+FULL_HOUSE,Full house,Own a ship of every cargo line,0
+PANAMA,Between the oceans,Cross the Panama Canal,0
+SUEZ,Short cut,Cross the Suez Canal,0
+ALL_CANALS,Lock keeper,Cross every canal,0
+LOAN,Borrowed time,Take out a loan,0
+DEBT_FREE,Debt free,Pay a loan back in full,0
+MEGA,Mega,Give a ship model its mega upgrade,0
+HIDDEN_GEM,Hidden gem,Find the hidden gem,1
+HERE_WE_GO_AGAIN,Here we go again,Found your second company,0
+THE_GAME_STARTS_NOW,The game starts now,Buy your first Trans Atlantic,0
+TOP_OF_THE_LINE,Top of the line,Buy a Dominator,0
+CALL_THE_MAMMOTH,Call the Mammoth,Buy a Mammoth,0
+DRESSED_FOR_THE_OCCASION,Dressed for the occasion,Give a ship a skin,0
+FULL_WARDROBE,Full wardrobe,Own every skin of a skin pack,0
+OLD_SALT,Old salt,Play for ten hours in all,0
+NIGHT_WATCH,Night watch,Play between midnight and four in the morning,0
+THE_MORE_THE_MERRIER,The more the merrier,Play a multiplayer game,0
+LAKE_BUGS,Lake bugs,Deliver crayfish from the Great Lakes,0
+CAPTAIN_OF_EVERYTHING,Captain of everything,Earn every star and badge with one company,0

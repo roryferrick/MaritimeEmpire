@@ -257,10 +257,10 @@ func open_ship_popup(ship: Ship) -> void:
 ## there, or, while a port's popup is open, what it would make carried from
 ## that port (see MapView.price_line); or, picked from its second column,
 ## colors the ports by one commodity's price, green where cheap to red where
-## dear (MapView.price_commodity); or "Prices: off". Its menu has a swatch
+## expensive (MapView.price_commodity); or "Prices: off". Its menu has a swatch
 ## of each line's color (a fish or crab for the seafood), and the chosen line's (or commodity's) name is shown in that color.
 func _add_price_picker() -> void:
-	_price_button.tooltip_text = "Show a ship line's prices over the ports: blue where its cargo is cheap, orange where it's dear.\nClick a port to see instead what each would make carried from there.\nOr color the ports by one commodity's price: green where it's cheap, red where it's dear."
+	_price_button.tooltip_text = "Show a ship line's prices over the ports: blue where its cargo is cheap, orange where it's expensive.\nClick a port to see instead what each would make carried from there.\nOr color the ports by one commodity's price: green where it's cheap, red where it's expensive."
 	_price_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_price_button.pressed.connect(_open_price_menu)
 	%MapControls.add_child(_price_button)
@@ -275,11 +275,11 @@ func _add_price_picker() -> void:
 	list.add_child(_price_item(""))
 	for line: Array in PRICE_LINES:
 		list.add_child(_price_item(line[1]))
-	# Coloring the ports by one commodity's price: green where cheap, red where dear.
+	# Coloring the ports by one commodity's price: green where cheap, red where expensive.
 	var colors := VBoxContainer.new()
 	colors.add_theme_constant_override(&"separation", 0)
 	columns.add_child(colors)
-	colors.add_child(_price_heading("Port colors: green cheap, red dear"))
+	colors.add_child(_price_heading("Port colors: green cheap, red expensive"))
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override(&"h_separation", 4)
@@ -330,7 +330,7 @@ func _color_item(commodity_id: String, _category: String) -> Button:
 	item.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	item.text = str(GameData.commodity(commodity_id).get("name", commodity_id))
 	item.icon = _commodity_icon(commodity_id)
-	item.tooltip_text = "Color the ports by its price: green where it's cheap, white about its world average, red where it's dear (full color at 1.4 times cheaper or dearer)."
+	item.tooltip_text = "Color the ports by its price: green where it's cheap, white about its world average, red where it's expensive (full color at 1.4 times cheaper or more expensive)."
 	item.pressed.connect(_choose_commodity.bind(commodity_id))
 	return item
 
@@ -614,7 +614,13 @@ func _check_achievements() -> void:
 	# already had in one go on its first check: logged, but no cards for those.
 	var primed := _achievements_primed
 	_achievements_primed = true
-	for news: Dictionary in Achievements.check(GameState.company):
+	if not primed:
+		SteamAchievements.sync_company(GameState.company)  # (Everything the company had: set on Steam.)
+	var news_list := Achievements.check(GameState.company)
+	for news: Dictionary in news_list:
+		SteamAchievements.earned_ingame(str(news.id), int(news.stars))
+	news_list.append_array(SteamAchievements.check(GameState.company))  # (This player's own, across games: see SteamAchievements.)
+	for news: Dictionary in news_list:
 		var stars := int(news.stars)
 		var text := "Achievement: %s" % news.name if stars == 0 \
 			else "Achievement: %s %s (%d of 3 stars)" % [news.name, "★".repeat(stars), stars]

@@ -733,17 +733,17 @@ func _pick(loops: Array, settings: Dictionary) -> Array:
 
 
 ## The money it keeps back: half a load for each of its cargo ships (at the
-## world price of the dearest thing it carries), and its difficulty's share of the rest.
+## world price of the most expensive thing it carries), and its difficulty's share of the rest.
 func _needs(rival: Company, settings: Dictionary) -> int:
 	var mind: Dictionary = _minds.get_or_add(rival, {})
 	if not mind.has("loads"):
 		var loads := 0.0
 		for ship in _cargo_ships(rival):
 			var model := ship.model()
-			var dearest := 0.0
+			var priciest := 0.0
 			for commodity: String in model.get("cargo", []):
-				dearest = maxf(dearest, GameData.world_price(commodity))
-			loads += dearest * float(model.get("capacity", 0)) * 0.5
+				priciest = maxf(priciest, GameData.world_price(commodity))
+			loads += priciest * float(model.get("capacity", 0)) * 0.5
 		mind.loads = loads
 	var loads: float = mind.loads
 	return int(loads + maxf(rival.money - loads, 0.0) * float(settings.keep))
@@ -768,7 +768,7 @@ func _nearest_region(rival: Company) -> String:
 
 
 ## Where its next hub should go: of the 30 biggest ports it has unlocked (and no
-## hub at), the one its dearest cargo model would earn most from on a 2-port
+## hub at), the one its most expensive cargo model would earn most from on a 2-port
 ## loop. Worked out a few ports a think (HUB_PORTS_A_THINK, and within
 ## FRESH_LOOPS_A_THINK, so the game never
 ## stalls on it): "" until it's done.

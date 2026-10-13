@@ -1,7 +1,8 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
-## Lists purchasable ship models from data/ship_models.json, in sections by
-## category, laid out in rows (ROWS) with the sections of a row side by side,
+## Lists purchasable ship models from data/ship_models.json, in tabs (TABS:
+## cargo ships, bulk and tankers, seafood, service) of sections by category,
+## laid out in rows with the sections of a row side by side,
 ## each as wide as its models (up to 6 cards a row): container ships; ore and
 ## grain carriers; livestock carriers and tankers; vehicle carriers and recovery
 ## boats; icebreakers and tugs. A row too wide for the screen stacks its
@@ -18,8 +19,15 @@ extends Control
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
 	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"]]
-## The sections side by side on each row (by category).
-const ROWS := [["container"], ["ore", "grain"], ["livestock", "tanker"], ["vehicles", "recovery"], ["fishing", "crabbing"], ["icebreaker", "tug"], ["seafood"]]
+## The Shop's tabs: [title, rows], each row its sections side by side (by
+## category). Lines that belong together share a tab: the cargo ships, the
+## bulk carriers and tankers, everything to do with seafood, the service boats.
+const TABS := [
+	["Cargo ships", [["container"], ["vehicles", "livestock"]]],
+	["Bulk & tankers", [["ore", "grain"], ["tanker"]]],
+	["Seafood", [["fishing", "crabbing"], ["seafood"]]],
+	["Service", [["recovery", "tug"], ["icebreaker"]]],
+]
 ## Cards a section shows across, fewer if they don't fit. Six fit across a row
 ## beside the open activity log at the default window size: cards are
 ## CARD_WIDTH wide (plus padding), and long ship names and Buy button texts wrap.
@@ -64,12 +72,24 @@ func _ready() -> void:
 	var titles := {}
 	for section: Array in SECTIONS:
 		titles[section[1]] = section[0]
-	for row_categories: Array in ROWS:
+	var tabs := TabContainer.new()
+	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	%Items.add_child(tabs)
+	var row_tabs := []  # [row's categories, its tab's box]
+	for tab: Array in TABS:
+		var page := VBoxContainer.new()
+		page.name = tab[0]
+		page.add_theme_constant_override(&"separation", SECTION_GAP)
+		tabs.add_child(page)
+		for row_categories: Array in tab[1]:
+			row_tabs.append([row_categories, page])
+	for pair: Array in row_tabs:
+		var row_categories: Array = pair[0]
 		var row := GridContainer.new()
 		row.columns = row_categories.size()
 		row.add_theme_constant_override(&"h_separation", SECTION_GAP)
 		row.add_theme_constant_override(&"v_separation", SECTION_GAP)
-		%Items.add_child(row)
+		(pair[1] as Control).add_child(row)
 		var row_grids: Array[GridContainer] = []
 		for category: String in row_categories:
 			var box := _section_box(category, row)

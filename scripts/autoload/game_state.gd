@@ -530,6 +530,8 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 		ship.base_port = port_id
 		if ship.is_recovery():
 			_rebalance_recovery_boats()
+	if is_mine(ship):
+		SteamAchievements.note_ship_bought(model_id)
 	ships_changed.emit()
 	save_game()
 	return ship
@@ -1467,6 +1469,17 @@ func set_paused(ship: Ship, paused: bool) -> void:
 	if Net.command(&"set_paused", [ship, paused]):
 		return
 	ship.paused = paused
+	ship_changed.emit(ship)
+
+
+## A ship's skin (see Ship.skin): "" as the Shop, "base", or "pack/skin" (a
+## skin of the catalog: the player choosing it owns it; see SkinPicker).
+func set_skin(ship: Ship, skin: String) -> void:
+	if not skin.is_empty() and skin != "base" and not Cosmetics.is_skin_key(skin):
+		return
+	if Net.command(&"set_skin", [ship, skin]):
+		return
+	ship.skin = skin
 	ship_changed.emit(ship)
 
 
@@ -3849,6 +3862,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	rivals.reset()
 	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
+	SteamAchievements.note_game_created()
 	_begin_session()
 	save_game()
 

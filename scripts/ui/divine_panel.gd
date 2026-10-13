@@ -4,7 +4,7 @@ extends Control
 ## The Divine Actions panel (the bolt button on the World map, in games
 ## founded with Divine Actions: see Divine): every power with what it does,
 ## its price now and an Unleash button each (greyed, with why, while it can't
-## be used: too dear, on cooldown, Wrath used this year, three storms out),
+## be used: too expensive, on cooldown, Wrath used this year, three storms out),
 ## and the last few acts of every company. A power with a target closes the
 ## panel and has the player pick it on the map (WorldScreen._start_divine()).
 ## Over the map, dimming it; Esc, X or a click outside closes it.
@@ -122,7 +122,7 @@ func _refresh() -> void:
 		var why := divine.error(power, probe, who)
 		var picking := why.begins_with("Pick ") or why.begins_with("No rival has a hub") or why.begins_with("Not one of your") or why.begins_with("The Kraken")
 		var can := why.is_empty() or picking
-		button.text = "Unleash" if can else ("Not yet" if "ready again" in why or "once a year" in why or "are out already" in why else "Too dear")
+		button.text = "Unleash" if can else ("Not yet" if "ready again" in why or "once a year" in why or "are out already" in why else "Too expensive")
 		button.disabled = not can
 		button.tooltip_text = ("Pick the target on the map next." if target != "none" else "") if can else why
 		button.pressed.connect(func() -> void:

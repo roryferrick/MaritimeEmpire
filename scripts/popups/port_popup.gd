@@ -352,7 +352,7 @@ func _refresh_trade() -> void:
 	var settings := Hub.industry_settings()
 	var hub := GameState.hub_at(port_id)
 	var boost := float(Hub.settings().get("hq_multiplier", 1.5)) if hub != null and hub.is_hq else 1.0
-	var terms := "An industry building here makes its commodity %d%% cheaper to buy and %d%% dearer to sell here, and its deliveries earn %d%% more XP" % [
+	var terms := "An industry building here makes its commodity %d%% cheaper to buy and %d%% more expensive to sell here, and its deliveries earn %d%% more XP" % [
 		roundi(float(settings.get("buy_discount", 0.2)) * boost * 100.0), roundi(float(settings.get("sell_bonus", 0.2)) * boost * 100.0), roundi(float(settings.get("xp_bonus", 0.5)) * boost * 100.0)]
 	var where := " (built at your HQ or a hub)." if hub == null else "."
 	if rows.is_empty():

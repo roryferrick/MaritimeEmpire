@@ -309,6 +309,41 @@ func ship_skin(model_id: String) -> Texture2D:
 	return (_skins[equipped] as Dictionary).get(model_id, null)
 
 
+## True if a "pack/skin" key names a skin of the catalog.
+func is_skin_key(key: String) -> bool:
+	return _is_skin(key)
+
+
+## A skin's art for a model (any pack's, owned or not: another player's ship
+## wears what they chose), or null if it has none for that model.
+func skin_texture(key: String, model_id: String) -> Texture2D:
+	var parts := key.split("/")
+	if parts.size() != 2:
+		return null
+	var it := pack(parts[0])
+	var art := str((it.get("ships", {}) as Dictionary).get(model_id, ""))
+	if art.is_empty() or ship_skin_id(art) != parts[1]:
+		return null
+	var path := SKIN_ART_DIR + str(it.get("folder", parts[0])) + "/" + art + ".svg"
+	if not _textures.has(path):
+		_textures[path] = load(path) if ResourceLoader.exists(path) else null
+	return _textures[path]
+var _textures := {}
+
+
+## The owned skins that fit a model: [{pack, pack_title, id, name, texture}].
+func skins_for_model(model_id: String) -> Array:
+	var out := []
+	for it: Dictionary in catalog.get("packs", []):
+		var art := str((it.get("ships", {}) as Dictionary).get(model_id, ""))
+		if art.is_empty():
+			continue
+		var id := ship_skin_id(art)
+		if owns_skin(str(it.id), id):
+			out.append({pack = str(it.id), pack_title = str(it.get("title", it.id)), id = id, name = skin_name(str(it.id), id), texture = skin_texture(skin_key(str(it.id), id), model_id)})
+	return out
+
+
 # --- Outfits and crew looks --------------------------------------------------------
 
 ## Whether a look's option may be chosen: everyone's options always, a pack's

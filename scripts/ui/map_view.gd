@@ -459,7 +459,7 @@ const LOCK_WATER_SHADE := 0.3
 ## Price boxes (see price_line): their text size, padding (px) and gap
 ## between a commodity's name and its figure; their background; how often
 ## (seconds) their figures are worked out again as prices drift; the colors
-## for cheap and dear prices (against the world average, full at half or
+## for cheap and expensive prices (against the world average, full at half or
 ## twice it) and for a good profit (full at PRICE_GOOD_MARGIN of the buy
 ## price), and a loss's.
 const PRICE_FONT_SIZE := 12
@@ -562,7 +562,7 @@ var price_line := "":
 		price_line = value
 		_prices_changed()
 ## A commodity id to color the ports by (green where it's cheap, white about
-## its world average, red where it's dear: see _price_color()), or "" for none.
+## its world average, red where it's expensive: see _price_color()), or "" for none.
 var price_commodity := "":
 	set(value):
 		price_commodity = value
@@ -6672,8 +6672,12 @@ func _curve_on_land(path: PackedVector2Array, port: String) -> bool:
 			var at := a.lerp(b, float(k) / pieces)
 			if _marina_ground(layout, (_screen_to_local(port, [at, 0.0]) as Array)[0]):
 				continue
-			if _on_land(_screen_lon_lat(at)):
+			var spot := _screen_lon_lat(at)
+			if _on_land(spot):
 				return true
+			for other: String in _shore_neighbours_of(port):  # (Another port's marina close by: never through it.)
+				if _in_marina_at(other, spot):
+					return true
 	return false
 
 func _draw_overlay() -> void:
@@ -8670,6 +8674,8 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	# Its wake on the water, under everything of it: longer and brighter the
 	# faster it's going, along the track it's just sailed (so it bends as it turns).
 	var way := _wake_share(ship)
+	if way > 0.0 and _in_marina_wake(ship, at):
+		way = 0.0  # (No wake inside a marina: the harbour within the jetty and the basin, any port's.)
 	if way > 0.0 and rect7.size.x * scale >= WAKE_MIN_PX:
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 		draw_wake(_canvas, at, angle, rect7.size.x * scale, rect7.size.y * scale, way, fade.a, _wake_trail(ship, at, angle, rect7.size.x, scale))
@@ -8717,6 +8723,18 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	_canvas.draw_primitive(look[3], colors, PackedVector2Array())
 	_canvas.draw_primitive(look[4], colors, PackedVector2Array())
 	_canvas.draw_polyline(look[5], outline, 1.0)
+
+## True if a ship (at a screen point) is inside a marina: the harbour within
+## the jetty, the basin or the quay of the port it's at or sailing between
+## (see _in_marina_at()), where no ship leaves a wake.
+func _in_marina_wake(ship: Ship, at: Vector2) -> bool:
+	var spot := _screen_lon_lat(at)
+	for port_id: String in [ship.docked_at, ship.from_port, ship.to_port]:
+		if port_id.is_empty() or Fisheries.is_ground(port_id):
+			continue
+		if _in_marina_at(port_id, spot):
+			return true
+	return false
 
 ## A ship's track astern for its wake (see draw_wake()): where its stern has
 ## been, on the map (projected), a point every WAKE_TRAIL_STEP of its length,
@@ -9242,6 +9260,10 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 ## Cosmetics.ship_skin()), or null: other players' and the rivals' ships are
 ## drawn as they are.
 func _ship_skin(ship: Ship) -> Texture2D:
+	if ship.skin == "base":
+		return null
+	if not ship.skin.is_empty():
+		return Cosmetics.skin_texture(ship.skin, ship.model_id)  # (Its own choice: see SkinPicker.)
 	if Cosmetics.equipped.is_empty() or GameState.owner_of(ship) != GameState.company:
 		return null
 	return Cosmetics.ship_skin(ship.model_id)
@@ -10674,7 +10696,7 @@ func _draw_ice_sheet(canvas: CanvasItem) -> void:
 				heading += rng.randf_range(-0.8, 0.8)
 				point += Vector2.from_angle(heading) * radius * rng.randf_range(0.05, 0.14)
 				line.append(point)
-			canvas.draw_polyline(line, ICE_CRACK, -1.0)  # A hairline: antialiasing in map units costs dearly.
+			canvas.draw_polyline(line, ICE_CRACK, -1.0)  # A hairline: antialiasing in map units costs a lot.
 	var now := GameState.play_time
 	var width := maxf(ICE_CHANNEL_PX / _zoom, ICE_CHANNEL_WIDTH)
 	for track: Array in _ice_tracks.values():
