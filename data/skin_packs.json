@@ -1,6 +1,7 @@
 {
-	"_comment": "The skin packs sold in the Shop (Esc menu; scripts/ui/skin_shop.gd) for Sand Dollars, the in-game currency bought with Steam money (scripts/autoload/cosmetics.gd): one Sand Dollar is one cent. A pack: its ships' skins (model id -> art/skins/<folder>/<name>.svg, drawn in place of the model's art, untinted), the CEO and captain outfit options it unlocks (names in Characters.PARTS: tops, bottoms, shoes, headwear; drawn by Portrait), the crew hats (headwear names, in the deck atlas) and uniform colours it adds (CrewLooks). Bundles: the Sand Dollar bundles on the Sand Dollars page, each a Steam Inventory item definition (steam_itemdef: set up on the Steamworks partner site with its price; usd here is what's shown).",
+	"_comment": "The skin packs sold in the Shop (Esc menu; scripts/ui/skin_shop.gd) for Sand Dollars, the in-game currency bought with Steam money (scripts/autoload/cosmetics.gd): one Sand Dollar is one cent. prices: any one skin, every ship skin of a pack, every outfit of a pack, or a whole pack (Sand Dollars; a bundle never charges for skins already owned). A pack: its ship skins (ships: model id -> art/skins/<folder>/<name>.svg, drawn in place of the model's art, untinted; names with a _small/_mid/_big fit are one skin; ship_names: the skin's name in the Shop) and its outfits (each a human skin: the CEO and captain options it unlocks by name in Characters.PARTS (top, bottoms, shoes, headwear, facial_hair, drawn by Portrait), the crew hats it adds (headwear names, in the deck atlas) and the uniform colours (CrewLooks)). Bundles: the Sand Dollar bundles on the Sand Dollars page, each a Steam Inventory item definition (steam_itemdef: set up on the Steamworks partner site with its price; usd here is what's shown).",
 	"currency": {"name": "Sand Dollars", "singular": "Sand Dollar", "cents_each": 1},
+	"prices": {"skin": 100, "all_ships": 500, "all_humans": 500, "pack": 1000},
 	"bundles": [
 		{"id": "sd_500", "sand_dollars": 500, "usd": 5.00, "steam_itemdef": 1001},
 		{"id": "sd_1000", "sand_dollars": 1000, "usd": 10.00, "steam_itemdef": 1002},
@@ -9,7 +10,7 @@
 	],
 	"packs": [
 		{
-			"id": "thanksgiving_2026", "title": "2026 Thanksgiving Pack", "price": 799, "on_sale": true, "folder": "thanksgiving",
+			"id": "thanksgiving_2026", "title": "2026 Thanksgiving Pack", "on_sale": true, "folder": "thanksgiving",
 			"blurb": "The whole table, afloat: a roast turkey, corn on the cob, candied yams, green bean casserole, cranberry sauce, stuffing, a gravy boat, drumsticks, dinner rolls, pumpkin pie, mashed potatoes, a cornucopia and the Mayflower. Pilgrim, colonial and 1620 deckhand outfits for your CEO and captains, and the crew in capotains, coifs, Monmouth caps or a turkey hat.",
 			"ships": {
 				"model_11": "turkey", "model_12": "turkey", "model_13": "turkey",
@@ -25,15 +26,18 @@
 				"model_6": "mayflower", "model_7": "cornucopia",
 				"model_23": "mash", "model_24": "mash"
 			},
-			"top": ["Pilgrim doublet", "Goodwife's gown", "Colonial coat", "Linen shirt and jerkin", "Farmhand's tunic"],
-			"bottoms": ["Black breeches", "Buff breeches", "Sailor's slops", "Grey hose"],
-			"shoes": ["Buckle shoes", "Cloth wraps"],
-			"headwear": ["Capotain", "Coif", "Monmouth cap", "Turkey hat"],
-			"shirts": [["Pilgrim black", "#1f1d1f"], ["Homespun brown", "#8a6a46"], ["Linen cream", "#ece2c8"], ["Gown grey-blue", "#6b7489"]],
-			"trousers": [["Breeches brown", "#5a3c22"], ["Hose grey", "#8a8a86"]]
+			"ship_names": {"turkey": "Roast turkey", "corn": "Corn on the cob", "yams": "Candied yams", "beans": "Green bean casserole", "cranberry": "Cranberry sauce", "stuffing": "Stuffing", "gravy": "Gravy boat", "drumstick": "Turkey drumstick", "roll": "Dinner roll", "pie": "Pumpkin pie", "mayflower": "The Mayflower", "cornucopia": "Cornucopia", "mash": "Mashed potatoes"},
+			"outfits": [
+				{"id": "pilgrim", "name": "Pilgrim", "top": ["Pilgrim doublet"], "bottoms": ["Black breeches"], "shoes": ["Buckle shoes"], "headwear": ["Capotain"], "crew_hats": ["Capotain"], "shirts": [["Pilgrim black", "#1f1d1f"]], "trousers": [["Breeches brown", "#5a3c22"]]},
+				{"id": "goodwife", "name": "Goodwife", "top": ["Goodwife's gown"], "shoes": ["Buckle shoes"], "headwear": ["Coif"], "crew_hats": ["Coif"], "shirts": [["Gown grey-blue", "#6b7489"]]},
+				{"id": "colonial", "name": "Colonial gentleman", "top": ["Colonial coat"], "bottoms": ["Buff breeches"], "shoes": ["Buckle shoes"], "shirts": [["Linen cream", "#ece2c8"]]},
+				{"id": "deckhand", "name": "Ship's hand of 1620", "top": ["Linen shirt and jerkin"], "bottoms": ["Sailor's slops"], "headwear": ["Monmouth cap"], "crew_hats": ["Monmouth cap"], "shirts": [["Homespun brown", "#8a6a46"]]},
+				{"id": "farmhand", "name": "Farmhand", "top": ["Farmhand's tunic"], "bottoms": ["Grey hose"], "shoes": ["Cloth wraps"], "trousers": [["Hose grey", "#8a8a86"]]},
+				{"id": "turkey_hat", "name": "Turkey hat", "headwear": ["Turkey hat"], "crew_hats": ["Turkey hat"]}
+			]
 		},
 		{
-			"id": "baseball_2026", "title": "2026 Baseball Pack", "price": 799, "on_sale": true, "folder": "baseball",
+			"id": "baseball_2026", "title": "2026 Baseball Pack", "on_sale": true, "folder": "baseball",
 			"blurb": "Ballpark fare for the fleet: five hot dogs from the mini dog to the foot-long with everything, bats in ash, black and royal blue, peanuts, popcorn, a soda cup, a softball, two baseballs, a pretzel, a catcher's mitt, a batting helmet, home plate, a baseball, a giant foam finger, a scoreboard and cotton candy. Home pinstripes, road greys, catcher's gear, an umpire, a hot dog vendor and 1920s flannels for your CEO and captains; ball caps, helmets and masks for the crew.",
 			"ships": {
 				"model_1": "hotdog_mini", "model_2": "hotdog_ketchup", "model_3": "hotdog_chicago", "model_4": "hotdog_chili", "model_5": "hotdog_everything",
@@ -49,15 +53,19 @@
 				"model_6": "foam_finger", "model_7": "scoreboard",
 				"model_23": "cotton_candy", "model_24": "cotton_candy"
 			},
-			"top": ["Home pinstripes", "Road greys", "Catcher's gear", "Umpire's polo", "Vendor's stripes", "1920s flannels"],
-			"bottoms": ["Pinstripe pants", "Grey baseball pants", "Catcher's shin guards", "Umpire slacks", "Knickers and stirrups"],
-			"shoes": ["Cleats"],
-			"headwear": ["Navy ball cap", "Red ball cap", "Batting helmet", "Catcher's mask", "Vendor's paper hat", "Umpire's cap", "Old-time ball cap"],
-			"shirts": [["Pinstripe white", "#f6f6f6"], ["Road grey", "#a9adb3"], ["Vendor stripes", "#c8343a"]],
-			"trousers": [["Baseball pants white", "#f2f2f2"], ["Baseball pants grey", "#a9adb3"]]
+			"ship_names": {"hotdog_mini": "Mini dog", "hotdog_ketchup": "Ketchup and mustard dog", "hotdog_chicago": "Chicago dog", "hotdog_chili": "Chili cheese dog", "hotdog_everything": "Foot-long with everything", "bat_wood": "Ash bat", "bat_black": "Black bat", "bat_blue": "Royal blue bat", "peanuts": "Bag of peanuts", "popcorn": "Popcorn box", "soda": "Soda cup", "softball": "Softball", "two_balls": "Two baseballs", "pretzel": "Soft pretzel", "glove": "Catcher's mitt", "helmet": "Batting helmet", "home_plate": "Home plate", "baseball": "Baseball", "foam_finger": "Foam finger", "scoreboard": "Scoreboard", "cotton_candy": "Cotton candy"},
+			"outfits": [
+				{"id": "pinstripes", "name": "Home pinstripes", "top": ["Home pinstripes"], "bottoms": ["Pinstripe pants"], "shoes": ["Cleats"], "headwear": ["Navy ball cap"], "crew_hats": ["Navy ball cap"], "shirts": [["Pinstripe white", "#f6f6f6"]], "trousers": [["Baseball pants white", "#f2f2f2"]]},
+				{"id": "road_greys", "name": "Road greys", "top": ["Road greys"], "bottoms": ["Grey baseball pants"], "shoes": ["Cleats"], "headwear": ["Red ball cap"], "crew_hats": ["Red ball cap"], "shirts": [["Road grey", "#a9adb3"]], "trousers": [["Baseball pants grey", "#a9adb3"]]},
+				{"id": "catcher", "name": "Catcher", "top": ["Catcher's gear"], "bottoms": ["Catcher's shin guards"], "shoes": ["Cleats"], "headwear": ["Catcher's mask"], "crew_hats": ["Catcher's mask"]},
+				{"id": "umpire", "name": "Umpire", "top": ["Umpire's polo"], "bottoms": ["Umpire slacks"], "headwear": ["Umpire's cap"], "crew_hats": ["Umpire's cap"]},
+				{"id": "vendor", "name": "Hot dog vendor", "top": ["Vendor's stripes"], "headwear": ["Vendor's paper hat"], "crew_hats": ["Vendor's paper hat"], "shirts": [["Vendor stripes", "#c8343a"]]},
+				{"id": "flannels", "name": "1920s flannels", "top": ["1920s flannels"], "bottoms": ["Knickers and stirrups"], "shoes": ["Cleats"], "headwear": ["Old-time ball cap"], "crew_hats": ["Old-time ball cap"]},
+				{"id": "batting_helmet", "name": "Batting helmet", "headwear": ["Batting helmet"], "crew_hats": ["Batting helmet"]}
+			]
 		},
 		{
-			"id": "christmas_2026", "title": "2026 Christmas Pack", "price": 799, "on_sale": true, "folder": "christmas",
+			"id": "christmas_2026", "title": "2026 Christmas Pack", "on_sale": true, "folder": "christmas",
 			"blurb": "The fleet wrapped for the holidays: five presents, a candy cane, a yule log, a gingerbread man, a tin of cookies, a nutcracker, a string of lights, baubles, a snowman, a stocking, a boiled sweet, a gingerbread house, a toboggan, Santa's sleigh and sack, and a Christmas tree. Santa and Mrs Claus, an elf, a reindeer, an ugly sweater, a nutcracker and a carol singer for your CEO and captains, with Santa's beard; Santa hats, elf hats, antlers, earmuffs and holly top hats for the crew.",
 			"ships": {
 				"model_1": "present_mini", "model_2": "present_stripes", "model_3": "present_gold", "model_4": "present_snow", "model_5": "present_candy",
@@ -73,13 +81,16 @@
 				"model_6": "sleigh", "model_7": "sack",
 				"model_23": "tree", "model_24": "tree"
 			},
-			"top": ["Santa suit", "Mrs Claus's gown", "Elf tunic", "Reindeer onesie", "Ugly Christmas sweater", "Nutcracker tunic", "Carol singer's coat"],
-			"bottoms": ["Santa trousers", "Elf tights", "Reindeer legs", "Nutcracker trousers"],
-			"shoes": ["Elf shoes"],
-			"headwear": ["Santa hat", "Elf hat", "Antlers", "Earmuffs", "Holly top hat"],
-			"facial_hair": ["Santa's beard"],
-			"shirts": [["Santa red", "#c8232e"], ["Elf green", "#2f9a3a"], ["Reindeer brown", "#8a5a30"], ["Sweater green", "#1f6a2a"], ["Caroler green", "#1f4a2a"]],
-			"trousers": [["Santa red", "#c8232e"], ["Elf stripes", "#d8262a"]]
+			"ship_names": {"present_mini": "Present, red with dots", "present_stripes": "Present, green stripes", "present_gold": "Present, gold paper", "present_snow": "Present, snowflakes", "present_candy": "Present, candy-cane paper", "candy_cane": "Candy cane", "yule_log": "Yule log", "gingerbread_man": "Gingerbread man", "cookie_tin": "Tin of cookies", "nutcracker": "Nutcracker", "lights": "String of lights", "bauble": "Red bauble", "frosted": "Frosted bauble", "snowman": "Snowman", "stocking": "Stocking", "candy": "Boiled sweet", "gingerbread_house": "Gingerbread house", "sled": "Toboggan", "sleigh": "Santa's sleigh", "sack": "Santa's sack", "tree": "Christmas tree"},
+			"outfits": [
+				{"id": "santa", "name": "Santa", "top": ["Santa suit"], "bottoms": ["Santa trousers"], "headwear": ["Santa hat"], "facial_hair": ["Santa's beard"], "crew_hats": ["Santa hat"], "shirts": [["Santa red", "#c8232e"]], "trousers": [["Santa red", "#c8232e"]]},
+				{"id": "mrs_claus", "name": "Mrs Claus", "top": ["Mrs Claus's gown"], "headwear": ["Santa hat"], "crew_hats": ["Santa hat"]},
+				{"id": "elf", "name": "Elf", "top": ["Elf tunic"], "bottoms": ["Elf tights"], "shoes": ["Elf shoes"], "headwear": ["Elf hat"], "crew_hats": ["Elf hat"], "shirts": [["Elf green", "#2f9a3a"]], "trousers": [["Elf stripes", "#d8262a"]]},
+				{"id": "reindeer", "name": "Reindeer", "top": ["Reindeer onesie"], "bottoms": ["Reindeer legs"], "headwear": ["Antlers"], "crew_hats": ["Antlers"], "shirts": [["Reindeer brown", "#8a5a30"]]},
+				{"id": "sweater", "name": "Ugly Christmas sweater", "top": ["Ugly Christmas sweater"], "headwear": ["Earmuffs"], "crew_hats": ["Earmuffs"], "shirts": [["Sweater green", "#1f6a2a"]]},
+				{"id": "nutcracker", "name": "Nutcracker", "top": ["Nutcracker tunic"], "bottoms": ["Nutcracker trousers"], "headwear": ["Holly top hat"]},
+				{"id": "caroler", "name": "Carol singer", "top": ["Carol singer's coat"], "headwear": ["Holly top hat"], "crew_hats": ["Holly top hat"], "shirts": [["Caroler green", "#1f4a2a"]]}
+			]
 		}
 	]
 }
