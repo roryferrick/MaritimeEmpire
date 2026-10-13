@@ -196,7 +196,13 @@ func _step_button(text: String, key: String, step: int) -> Button:
 	button.text = text
 	button.custom_minimum_size = Vector2(34, 0)
 	button.pressed.connect(func() -> void:
-		ceo.look[key] = posmod(int(ceo.look.get(key, 0)) + step, Characters.option_count(key))
+		var count := Characters.option_count(key)
+		var index := int(ceo.look.get(key, 0))
+		for n in count:  # (A skin pack's options only once the pack is owned: see Cosmetics.)
+			index = posmod(index + step, count)
+			if Cosmetics.allowed(key, index):
+				break
+		ceo.look[key] = index
 		_show())
 	return button
 

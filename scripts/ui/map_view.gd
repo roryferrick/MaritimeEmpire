@@ -4440,8 +4440,7 @@ static func _marina_layout(kinds: String, hub: bool, canal := false) -> Dictiona
 		for j in range(1, piers_here + 1):
 			var sea_edge := -top - PIER_WIDTH - (j - 1) * pitch
 			var land_edge := sea_edge - double
-			if j < piers_here:
-				piers.append([side, land_edge, land_edge - PIER_WIDTH])
+			piers.append([side, land_edge, land_edge - PIER_WIDTH])  # (The last one's too: turning water beyond it.)
 			if k < count_here:
 				berth_list.append([Vector2(land_edge, y), Vector2(0.0, side), Vector2.RIGHT, length, Vector2(land_edge, y), kinds[s * per_side[0] + k], land_edge + BERTH_GAP + width / 2.0])
 				k += 1
@@ -8681,10 +8680,13 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	# shifted a little to the side it leans, its superstructure more.
 	var roll := _ship_roll(ship, at)
 	var lean := sin(roll)
+	var skin := _ship_skin(ship)  # (A skin pack's art on the player's own ships: see Cosmetics.)
 	if rect7.size.y * scale >= SHADOW_MIN_PX:
 		_canvas.draw_set_transform(at + _shadow_dir * rect7.size.y * scale * SHIP_SHADOW_WIDTHS + Vector2.from_angle(angle + PI / 2.0) * lean * rect7.size.y * scale * 0.3, angle, Vector2.ONE * scale)
 		var hull_art: Dictionary = look[6]
-		if not hull_art.is_empty():
+		if skin != null:
+			_canvas.draw_texture_rect(skin, rect7, false, Color(0, 0, 0, SHIP_SHADOW_ALPHA * fade.a))  # (The skin's shape.)
+		elif not hull_art.is_empty():
 			# The hull's own outline, dark (it matches the ship close up).
 			_canvas.draw_texture_rect(hull_art.hull, rect7, false, Color(0, 0, 0, SHIP_SHADOW_ALPHA * fade.a))
 		else:
@@ -8694,8 +8696,11 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 	var sideways := Vector2.from_angle(angle + PI / 2.0) * lean * rect7.size.y * scale * ROLL_SHIFT
 	_canvas.draw_set_transform(at + sideways, angle, Vector2(scale, scale * (1.0 - ROLL_NARROW * absf(lean))))
 	var art: Dictionary = look[6]
-	if not art.is_empty():
-		_draw_ship_art(ship, art, look[7], color, fade, lean)
+	if skin != null or not art.is_empty():
+		if skin != null:
+			_draw_ship_skin(skin, look[7], fade, lean)
+		else:
+			_draw_ship_art(ship, art, look[7], color, fade, lean)
 		if fade.a < 1.0:
 			var rect: Rect2 = look[7]
 			_canvas.draw_circle(Vector2(rect.position.x + rect.size.y * 0.5, 0.0), rect.size.y * 0.42, GameState.company_color_value(GameState.owner_of(ship).color))
@@ -8930,7 +8935,7 @@ func _draw_fishing_gear(ship: Ship, at: Vector2, angle: float, long: float, fade
 ## cell across; a stride (legs swinging from one forward to the other) is this
 ## many shoulder widths; a person's shadow falls this many widths from them.
 const DECK_ATLAS_PATH := "res://art/people/deck_people.svg"
-const DECK_ATLAS_CELLS := Vector2(8, 4)
+const DECK_ATLAS_CELLS := Vector2(8, 5)
 const DECK_SHOULDER_SHARE := 0.75
 const DECK_STRIDE := 1.3
 const DECK_SHADOW_WIDTHS := 0.4
@@ -9232,6 +9237,19 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 	# <art>_details_fishing.svg); otherwise it's stowed.
 	var rigged: bool = art.has("fishing_details") and ship != null and ship.is_working_ground()
 	_canvas.draw_texture_rect(art.fishing_details if rigged else art.details, rect, false, fade)
+
+## The skin the player's ships of a model wear (the equipped skin pack's: see
+## Cosmetics.ship_skin()), or null: other players' and the rivals' ships are
+## drawn as they are.
+func _ship_skin(ship: Ship) -> Texture2D:
+	if Cosmetics.equipped.is_empty() or GameState.owner_of(ship) != GameState.company:
+		return null
+	return Cosmetics.ship_skin(ship.model_id)
+
+## A skin in place of a ship's art: the one picture, in its own colours (no
+## hull tint, cargo or details), leaning a little with the roll like a superstructure.
+func _draw_ship_skin(skin: Texture2D, rect: Rect2, fade: Color, lean: float) -> void:
+	_canvas.draw_texture_rect(skin, Rect2(rect.position + Vector2(0.0, lean * rect.size.y * ROLL_TOWER * 0.5), rect.size), false, fade)
 
 ## How far open a bulk carrier's hatches are (0 shut to 1 open): moored for
 ## its stop, they fold open over its first HATCH_S and shut over its last

@@ -59,7 +59,10 @@ static func choices(part: String) -> Array:
 			if entry[0] == "headwear":
 				return entry[2]
 		return []
-	return (data()[("shirts" if part == "shirt" else "trousers")] as Array).map(func(pair: Array) -> String: return pair[0])
+	var names: Array = (data()[("shirts" if part == "shirt" else "trousers")] as Array).map(func(pair: Array) -> String: return pair[0])
+	for pair: Array in Cosmetics.pack_colors("shirts" if part == "shirt" else "trousers"):
+		names.append(str(pair[0]))  # (The owned skin packs' colours.)
+	return names
 
 
 ## A line's default outfit for a role ("captain" or "crew"): {hat, shirt, trousers}.
@@ -96,17 +99,34 @@ static func hat_index(hat_name: String) -> int:
 
 static func shirt_color(color_name: String) -> Color:
 	data()
-	return _colors.shirts.get(color_name, Color("#8a8f96"))
+	return _colors.shirts.get(color_name, _pack_color("shirts", color_name, Color("#8a8f96")))
 
 
 static func trouser_color(color_name: String) -> Color:
 	data()
-	return _colors.trousers.get(color_name, Color("#3c4046"))
+	return _colors.trousers.get(color_name, _pack_color("trousers", color_name, Color("#3c4046")))
+
+
+## A skin pack's colour (any pack's: another player's choice is drawn as they see it).
+static func _pack_color(part: String, color_name: String, fallback: Color) -> Color:
+	for pair: Array in Cosmetics.pack_colors(part, false):
+		if str(pair[0]) == color_name:
+			return Color(str(pair[1]))
+	return fallback
 
 
 ## Whether a choice is one a part can take (GameState.set_uniform() checks with this).
 static func is_choice(part: String, value: String) -> bool:
-	return part in PARTS and choices(part).has(value)
+	if not part in PARTS:
+		return false
+	if choices(part).has(value):
+		return true
+	if part == "hat":
+		return false
+	for pair: Array in Cosmetics.pack_colors("shirts" if part == "shirt" else "trousers", false):
+		if str(pair[0]) == value:
+			return true  # (A pack's colour: the player choosing it owns the pack.)
+	return false
 
 
 ## An officer (Characters {name, look}) as they look aboard a ship: wearing

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI rivals - Maritime Empire Wiki</title>
+<meta name="description" content="AI rivals, on the Maritime Empire wiki.">
+<link rel="icon" href="../assets/icon_32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="../assets/icon_180.png">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="AI rivals - Maritime Empire Wiki">
+<meta property="og:description" content="AI rivals, on the Maritime Empire wiki.">
+<meta property="og:image" content="https://maritimeempiregame.com/assets/shots/harbour.webp">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body class="wiki">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+<a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-aside">
+<div class="search"><input id="search" type="search" placeholder="Search the wiki" autocomplete="off" aria-label="Search the wiki"><div id="results" class="results" hidden></div></div>
+<button class="side-toggle" id="side-toggle" aria-controls="sidebar" aria-expanded="false">All topics</button>
+<nav class="sidebar" id="sidebar">
+<a class="side-home" href="index.html">Wiki home</a>
+<ul class="tree">
+<li class="t"><a href="playing.html">Playing the game</a></li>
+<li class="t"><a href="business.html">Business and trading</a></li>
+<li class="t"><a href="ships.html">Ships and crews</a></li>
+<li class="t"><a href="world.html">The world</a></li>
+<li class="t"><a href="sea-and-sky.html">Sea and sky</a></li>
+<li class="t open"><a href="rivals.html">Rivals and multiplayer</a>
+<ul>
+<li><a class="current" aria-current="page" href="ai-rivals.html">AI rivals</a></li>
+<li><a href="multiplayer.html">Multiplayer</a></li>
+</ul>
+</li>
+<li class="t"><a href="about.html">About the game</a></li>
+</ul>
+</nav>
+</aside>
+<main class="wiki-main" id="main">
+<article class="wiki-page">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Wiki</a> <span>/</span> <a href="rivals.html">Rivals and multiplayer</a></nav>
+<h1>AI rivals</h1>
+<ul>
+<li>Computer-run shipping companies, chosen when founding a game: New Company's &quot;AI rivals&quot; row (under Storms) has a drop-down for how many (None, the default, to 5) and Easy, Normal or Hard for them all (greyed with None; Normal to start with; each explained in its tooltip). They're ordinary companies in the game's list, saved with it like any other (the save keeps each one's difficulty), and carry on from where they were when it's loaded.
+</li>
+<li>Each gets a name no company has, a company color no company has (not black, white or gray), a CEO made up at random, the starting money, an HQ at its home port and that port's market region. Home ports come from the recommended starts by difficulty: Easy at fair or hard starts, Normal at great or fair, Hard at excellent or great; never a port a company has, and in a market region no company is in when there is one.
+</li>
+<li>The host runs them (or single player), each thinking every few seconds of play (Easy about 15 s, Normal 7 s, Hard 3 s, spread out so they don't think at once). Each think, a rival:
+<ul>
+<li>Keeps afloat: in debt, it borrows a loan step if the bank will lend, else sells its least useful docked ship (never its last cargo ship); it never goes bankrupt or leaves the game. With money to spare it pays its loans back a step at a time.
+</li>
+<li>Opens a market region when its level allows (the one with a port nearest its hubs), and founds a hub when its level allows (of the 30 biggest unlocked ports, the one its dearest cargo model would earn most from; weighed up 4 ports a think so the game never stalls on it).
+</li>
+<li>Buys ships: of the cargo models it can buy (unlocked, a slot free), the one that would pay for itself soonest on the best loop it can find from one of its hubs, within its difficulty's payback time (Easy 15 min, Normal 25, Hard 40, up to 4x that when it has plenty of money for the price; any ship that makes money while it has fewer than 3), keeping back half a load's money for each of its cargo ships (and Easy 30%, Normal 10% of the rest). A Hard rival buys up to 3 a think, and borrows for a ship that pays back in half its time (up to a loan step for every 5 company levels, and one to start). Each new ship sets off at once on its loop, with auto-recover on. A loop is 2 ports (and 3 for Normal and Hard), every leg one the model can sail between ports it has unlocked, judged by $ a second: each leg's best cargo at its own prices (sale bonuses, less the port fee away from its hubs and canal tolls), less fuel, repairs and crew wages, over sailing, port, lock and convoy time. A loop its other ships already sail counts 20% less for each, so its fleet spreads out. Easy picks one of its best 5 loops at random, Normal one of its best 2, Hard the best.
+</li>
+<li>Gives any cargo ship without a route the best loop from where it is; Normal (every 5 minutes) and Hard (every 2) look at one of their ships and move it to a loop at least 25% better.
+</li>
+<li>Spends (Easy every 4th think, Normal and Hard every 2nd): ships' upgrade points (Upgrade all), hub upgrade points (Sale prices, then Port stops, Fuel &amp; repairs, Ship XP), mega upgrades it qualifies for, and industry buildings on its hubs' open plots (the commodity its ships trade most there). A hub upgrade, industry building or mega upgrade must cost no more than 10% (Easy), 15% (Normal) or 25% (Hard) of its money.
+</li>
+<li>Buys service ships (every 3rd think): tugs once it has 4 cargo ships (up to 2, and one more for every 4 cargo ships), a recovery boat once it has 5 (the cheapest), and with seasonal closures an icebreaker (the cheapest that can work it) for each icebreaker area its routes' ports are in.
+</li>
+<li>Saves up: when the ship it wants costs more than it has, its bank reserve keeps half its money back for it; otherwise its reserve is nothing.
+</li></ul>
+</li>
+<li>Speed: what it works out is kept (its loops for 20-40 s of play, the ports a model can sail to from a port for 5 minutes, its fleet's counts for the think), at most 2 sets of loops are worked out afresh a think (the rest wait for a later one), and it looks at service ships every 3rd think: 3 Hard rivals take about 12% of the simulation's time over the first 40 minutes (about 5 s of 38). A rival's very first think in a session takes about 0.7 s while the sea lanes it looks at are first read in.
+</li>
+<li>What the player sees: rivals' ships sail the map (fainter than the player's, like other players' in multiplayer; their popups are read-only, &quot;— Northstar Freight's ship&quot;), their HQ and hubs have rings in their color, and they're in Finances → Compare companies marked &quot;(AI · Hard)&quot;. Their big moves go in the activity log in their color: &quot;Northstar Freight launched its first Feeder 100.&quot;, opened up a region, founded a hub, built an industry building, mega-upgraded a model, bought its first recovery boat, stationed an icebreaker, and every 10 company levels.
+</li>
+<li>The world's own features (storms, seasonal closures, ports shrinking late on) start by the highest level of the people playing: rivals' levels don't count.
+</li>
+<li>Multiplayer: the host picks rivals when founding the game (the same New Company screen) and the host's game runs them; joined players see them like any company, and can't take one over (they're shown as taken and refused).
+</li></ul>
+<nav class="prev-next"><a class="prev" href="rivals.html"><span>Previous</span>Rivals and multiplayer</a><a class="next" href="multiplayer.html"><span>Next</span>Multiplayer</a></nav>
+</article>
+</main>
+</div>
+<footer class="site-footer">
+<p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+</footer>
+<script src="search_index.js" defer></script>
+<script src="../assets/wiki.js" defer></script>
+</body>
+</html>

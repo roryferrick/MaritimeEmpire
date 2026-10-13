@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M8,3 L146,3 Q170,6 178,26 Q170,46 146,49 L8,49 Q2,49 2,43 L2,9 Q2,3 8,3 Z" fill="#1f4a2a" stroke="#1a1410" stroke-width="1.8"/>
+<rect x="8" y="8" width="150" height="36" rx="2" fill="#101418" stroke="#4a7a52" stroke-width="1.2"/>
+<g fill="#f2c233"><rect x="12" y="12" width="26" height="6" rx="1" opacity="0.9"/><rect x="12" y="30" width="26" height="6" rx="1" opacity="0.9"/></g>
+<g fill="#f2c233" opacity="0.85">
+<rect x="44" y="11" width="6" height="8" rx="1"/><rect x="54" y="11" width="6" height="8" rx="1"/><rect x="64" y="11" width="6" height="8" rx="1"/><rect x="74" y="11" width="6" height="8" rx="1"/><rect x="84" y="11" width="6" height="8" rx="1"/><rect x="94" y="11" width="6" height="8" rx="1"/><rect x="104" y="11" width="6" height="8" rx="1"/><rect x="114" y="11" width="6" height="8" rx="1"/><rect x="124" y="11" width="6" height="8" rx="1"/>
+<rect x="44" y="29" width="6" height="8" rx="1"/><rect x="54" y="29" width="6" height="8" rx="1"/><rect x="64" y="29" width="6" height="8" rx="1"/><rect x="74" y="29" width="6" height="8" rx="1"/><rect x="84" y="29" width="6" height="8" rx="1"/><rect x="94" y="29" width="6" height="8" rx="1"/><rect x="104" y="29" width="6" height="8" rx="1"/><rect x="114" y="29" width="6" height="8" rx="1"/><rect x="124" y="29" width="6" height="8" rx="1"/>
+</g>
+<g fill="#101418"><rect x="45" y="13" width="2" height="4"/><rect x="55" y="12" width="4" height="2"/><rect x="65" y="12" width="4" height="6"/><rect x="75" y="14" width="2" height="3"/><rect x="85" y="12" width="4" height="2"/><rect x="95" y="15" width="4" height="2"/><rect x="105" y="12" width="4" height="6"/><rect x="115" y="13" width="2" height="4"/><rect x="125" y="12" width="4" height="2"/><rect x="47" y="30" width="2" height="6"/><rect x="55" y="33" width="4" height="2"/><rect x="65" y="30" width="4" height="2"/><rect x="75" y="30" width="4" height="6"/><rect x="85" y="33" width="4" height="2"/><rect x="97" y="30" width="2" height="6"/><rect x="105" y="30" width="4" height="2"/><rect x="115" y="33" width="4" height="2"/><rect x="127" y="30" width="2" height="6"/></g>
+<rect x="136" y="11" width="16" height="26" rx="2" fill="#c8343a"/>
+<rect x="139" y="14" width="10" height="8" rx="1" fill="#f2c233" opacity="0.9"/><rect x="139" y="26" width="10" height="8" rx="1" fill="#f2c233" opacity="0.9"/>
+<g fill="#5aa0ff"><circle cx="16" cy="24" r="1.6"/><circle cx="24" cy="24" r="1.6"/><circle cx="32" cy="24" r="1.6"/></g>
+<g fill="#ffffff" opacity="0.8"><circle cx="160" cy="16" r="1.6"/><circle cx="166" cy="26" r="1.6"/><circle cx="160" cy="36" r="1.6"/></g>
+<path d="M2,26 L8,26 M170,26 L178,26" stroke="#f6f1e6" stroke-width="1.2"/>
+</svg>

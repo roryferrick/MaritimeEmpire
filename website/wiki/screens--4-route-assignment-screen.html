@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4. Route Assignment screen - Maritime Empire Wiki</title>
+<meta name="description" content="4. Route Assignment screen, on the Maritime Empire wiki.">
+<link rel="icon" href="../assets/icon_32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="../assets/icon_180.png">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="4. Route Assignment screen - Maritime Empire Wiki">
+<meta property="og:description" content="4. Route Assignment screen, on the Maritime Empire wiki.">
+<meta property="og:image" content="https://maritimeempiregame.com/assets/shots/harbour.webp">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body class="wiki">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+<a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-aside">
+<div class="search"><input id="search" type="search" placeholder="Search the wiki" autocomplete="off" aria-label="Search the wiki"><div id="results" class="results" hidden></div></div>
+<button class="side-toggle" id="side-toggle" aria-controls="sidebar" aria-expanded="false">All topics</button>
+<nav class="sidebar" id="sidebar">
+<a class="side-home" href="index.html">Wiki home</a>
+<ul class="tree">
+<li class="t open"><a href="playing.html">Playing the game</a>
+<ul>
+<li><a href="screens.html">Screens</a><ul><li><a href="screens--main-menu.html">Main menu</a></li><li><a href="screens--top-bar-on-world-ships-finances-shop-screens.html">Top bar (on World, Ships, Finances, Shop screens)</a></li><li><a href="screens--bottom-navigation-bar.html">Bottom navigation bar</a></li><li><a href="screens--1-world-map-screen.html">1. World (map) screen</a></li><li><a href="screens--2-ships-screen.html">2. Ships screen</a></li><li><a href="screens--hubs-screen.html">Hubs screen</a></li><li><a href="screens--finances-screen.html">Finances screen</a></li><li><a href="screens--3-shop-screen.html">3. Shop screen</a></li><li><a class="current" aria-current="page" href="screens--4-route-assignment-screen.html">4. Route Assignment screen</a></li></ul></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="popups.html">Popups</a></li>
+<li><a href="activity-log.html">Activity log</a></li>
+<li><a href="look.html">Look</a></li>
+<li><a href="settings-page-sliders.html">Settings page sliders</a></li>
+</ul>
+</li>
+<li class="t"><a href="business.html">Business and trading</a></li>
+<li class="t"><a href="ships.html">Ships and crews</a></li>
+<li class="t"><a href="world.html">The world</a></li>
+<li class="t"><a href="sea-and-sky.html">Sea and sky</a></li>
+<li class="t"><a href="rivals.html">Rivals and multiplayer</a></li>
+<li class="t"><a href="about.html">About the game</a></li>
+</ul>
+</nav>
+</aside>
+<main class="wiki-main" id="main">
+<article class="wiki-page">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Wiki</a> <span>/</span> <a href="playing.html">Playing the game</a> <span>/</span> <a href="screens.html">Screens</a></nav>
+<h1>4. Route Assignment screen</h1>
+<ul>
+<li>Full-screen gray version of the map; no top bar or nav bar. The side panel shows the ship's current route, its range, and the port it starts from.
+</li>
+<li>Click ports in order to add waypoints; a side list shows ports in order plus estimated travel time and distance for each leg and the full loop. Legs through a canal add the lock time (6 chambers × 3 s through Panama, not counting any wait) and show the toll and XP bonus: &quot;to Balboa · 44 nm · 30 s · Panama Canal: toll $4,200, +50% XP&quot;.
+</li>
+<li>Rules: consecutive waypoints must differ; since routes loop, the last waypoint must also differ from the first. Every leg, including the one back to the start, must be within the ship's range.
+</li>
+<li>Ports the ship can't reach from the last waypoint (or, before any are added, from the port it's docked at or heading to) are greyed out; clicking one explains why. Out-of-range legs show in red in the side list.
+</li>
+<li>Buttons: Cancel (always available), Undo last waypoint, Accept (enabled once 2+ waypoints and the route is valid). Each stop in the list has an X on the right that takes it out of the route (and one of a pair of the same port left side by side).
+</li>
+<li>Assigning a new route to a ship at sea: it finishes its current leg, then follows the new route.
+</li>
+<li>Assigning a route also un-pauses the ship.
+</li>
+<li>A ship docked at a port that isn't on its new route first sails to the route's first port (a normal, paid leg).
+</li>
+<li>Running ships leave a port when their port stop ends (and they have fuel for the next leg); paused or route-less ships stay docked.
+</li></ul>
+<nav class="prev-next"><a class="prev" href="screens--3-shop-screen.html"><span>Previous</span>3. Shop screen</a><a class="next" href="tutorial.html"><span>Next</span>Tutorial</a></nav>
+</article>
+</main>
+</div>
+<footer class="site-footer">
+<p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+</footer>
+<script src="search_index.js" defer></script>
+<script src="../assets/wiki.js" defer></script>
+</body>
+</html>

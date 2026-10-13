@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M14,8 L120,6 Q150,8 162,26 Q150,44 120,46 L14,44 Q6,42 6,26 Q6,10 14,8 Z" fill="#8a5a30" stroke="#1a1410" stroke-width="1.8"/>
+<path d="M20,12 L118,10 Q144,12 154,26 Q144,40 118,42 L20,40 Q12,38 12,26 Q12,14 20,12 Z" fill="#b07a44" stroke="#5a3414" stroke-width="1.0"/>
+<g stroke="#8a5a30" stroke-width="0.8" opacity="0.8"><line x1="14" y1="17" x2="150" y2="17"/><line x1="14" y1="22" x2="152" y2="22"/><line x1="14" y1="30" x2="152" y2="30"/><line x1="14" y1="35" x2="150" y2="35"/></g>
+<rect x="8" y="13" width="28" height="26" rx="2" fill="#7a4a24" stroke="#1a1410" stroke-width="1.3"/>
+<rect x="12" y="17" width="20" height="18" rx="1" fill="#9a6434" stroke="#5a3414" stroke-width="0.8"/>
+<path d="M160,26 L178,26" stroke="#5a3414" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M160,22 L172,26 L160,30" fill="#efe4c8" stroke="#1a1410" stroke-width="1.0"/>
+<g fill="#f1e8d2" stroke="#1a1410" stroke-width="1.2">
+<rect x="40" y="4" width="10" height="44" rx="2"/><rect x="80" y="2" width="12" height="48" rx="2"/><rect x="122" y="6" width="9" height="40" rx="2"/>
+</g>
+<g stroke="#c9b98e" stroke-width="0.8"><line x1="42" y1="12" x2="48" y2="12"/><line x1="42" y1="26" x2="48" y2="26"/><line x1="42" y1="40" x2="48" y2="40"/><line x1="82" y1="12" x2="90" y2="12"/><line x1="82" y1="26" x2="90" y2="26"/><line x1="82" y1="40" x2="90" y2="40"/><line x1="124" y1="14" x2="129" y2="14"/><line x1="124" y1="26" x2="129" y2="26"/><line x1="124" y1="38" x2="129" y2="38"/></g>
+<g fill="#4a2e14"><circle cx="45" cy="26" r="2.4"/><circle cx="86" cy="26" r="2.8"/><circle cx="126" cy="26" r="2.2"/></g>
+<g stroke="#2a1a0a" stroke-width="0.6" opacity="0.7"><line x1="45" y1="26" x2="86" y2="26"/><line x1="86" y1="26" x2="126" y2="26"/><line x1="126" y1="26" x2="170" y2="26"/><line x1="45" y1="26" x2="10" y2="14"/><line x1="45" y1="26" x2="10" y2="38"/></g>
+<path d="M86,6 L86,0 L96,2 L86,4" fill="#c8343a" stroke="#1a1410" stroke-width="0.8"/>
+<rect x="150" y="22" width="8" height="8" rx="1" fill="#7a4a24" stroke="#1a1410" stroke-width="0.9"/>
+</svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M100,10 Q60,6 30,14 Q4,22 10,36 Q14,44 24,40 Q18,34 26,28 Q50,20 100,42 Q118,46 118,26 Q118,8 100,10 Z" fill="#c99a4a" stroke="#1a1410" stroke-width="1.8"/>
+<g stroke="#8a6224" stroke-width="1.0" fill="none" opacity="0.9"><path d="M36,13 Q40,24 48,36"/><path d="M48,11 Q54,24 62,38"/><path d="M60,10 Q68,24 76,40"/><path d="M72,10 Q82,24 90,41"/><path d="M84,10 Q96,24 104,42"/><path d="M96,10 Q108,24 112,40"/><path d="M28,16 Q30,28 36,36"/></g>
+<g stroke="#e0b870" stroke-width="0.8" fill="none" opacity="0.8"><path d="M40,15 Q44,26 50,38"/><path d="M64,11 Q72,26 80,40"/><path d="M90,10 Q102,26 108,42"/></g>
+<ellipse cx="112" cy="26" rx="10" ry="19" fill="#5a3a12" stroke="#1a1410" stroke-width="1.4"/>
+<ellipse cx="112" cy="26" rx="6" ry="13" fill="#3a2408"/>
+<circle cx="138" cy="30" r="12" fill="#e8822a" stroke="#1a1410" stroke-width="1.5"/>
+<path d="M132,22 Q138,30 132,38 M138,19 Q138,30 138,41 M144,22 Q138,30 144,38" fill="none" stroke="#b85e14" stroke-width="1.0"/>
+<rect x="136" y="15" width="4" height="5" rx="1" fill="#5a7a2a" stroke="#1a1410" stroke-width="0.8"/>
+<circle cx="160" cy="18" r="7" fill="#c83030" stroke="#1a1410" stroke-width="1.3"/><circle cx="158" cy="16" r="2" fill="#f07070" opacity="0.7"/>
+<circle cx="164" cy="36" r="7" fill="#8fbb44" stroke="#1a1410" stroke-width="1.3"/>
+<g fill="#6a3a9a" stroke="#1a1410" stroke-width="0.7"><circle cx="124" cy="10" r="3"/><circle cx="130" cy="8" r="3"/><circle cx="127" cy="14" r="3"/><circle cx="134" cy="13" r="3"/><circle cx="136" cy="7" r="2.6"/></g>
+<rect x="146" y="40" width="26" height="8" rx="4" fill="#f2c233" stroke="#1a1410" stroke-width="1.0"/>
+<g stroke="#c9961c" stroke-width="0.8"><line x1="152" y1="41" x2="152" y2="47"/><line x1="158" y1="41" x2="158" y2="47"/><line x1="164" y1="41" x2="164" y2="47"/></g>
+<path d="M118,44 Q126,50 134,46" fill="none" stroke="#4a7a2a" stroke-width="1.6"/>
+<circle cx="150" cy="8" r="5" fill="#d2a84a" stroke="#1a1410" stroke-width="1.0"/>
+</svg>

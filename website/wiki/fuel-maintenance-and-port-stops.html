@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fuel, maintenance and port stops - Maritime Empire Wiki</title>
+<meta name="description" content="Fuel, maintenance and port stops, on the Maritime Empire wiki.">
+<link rel="icon" href="../assets/icon_32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="../assets/icon_180.png">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Fuel, maintenance and port stops - Maritime Empire Wiki">
+<meta property="og:description" content="Fuel, maintenance and port stops, on the Maritime Empire wiki.">
+<meta property="og:image" content="https://maritimeempiregame.com/assets/shots/harbour.webp">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body class="wiki">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+<a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-aside">
+<div class="search"><input id="search" type="search" placeholder="Search the wiki" autocomplete="off" aria-label="Search the wiki"><div id="results" class="results" hidden></div></div>
+<button class="side-toggle" id="side-toggle" aria-controls="sidebar" aria-expanded="false">All topics</button>
+<nav class="sidebar" id="sidebar">
+<a class="side-home" href="index.html">Wiki home</a>
+<ul class="tree">
+<li class="t"><a href="playing.html">Playing the game</a></li>
+<li class="t"><a href="business.html">Business and trading</a></li>
+<li class="t open"><a href="ships.html">Ships and crews</a>
+<ul>
+<li><a href="ship-models.html">Ship models</a></li>
+<li><a class="current" aria-current="page" href="fuel-maintenance-and-port-stops.html">Fuel, maintenance and port stops</a></li>
+<li><a href="lost-ships-and-recovery-boats.html">Lost ships and recovery boats</a></li>
+<li><a href="tugs.html">Tugs</a></li>
+<li><a href="tugs-working-a-ship-in.html">Tugs working a ship in</a></li>
+<li><a href="icebreakers.html">Icebreakers</a></li>
+<li><a href="long-term-moorings.html">Long-term moorings</a></li>
+<li><a href="people-on-deck.html">People on deck</a></li>
+<li><a href="wakes.html">Wakes</a></li>
+<li><a href="fishing-and-crabbing.html">Fishing and crabbing</a></li>
+<li><a href="choosing-a-fishing-base.html">Choosing a fishing base</a></li>
+</ul>
+</li>
+<li class="t"><a href="world.html">The world</a></li>
+<li class="t"><a href="sea-and-sky.html">Sea and sky</a></li>
+<li class="t"><a href="rivals.html">Rivals and multiplayer</a></li>
+<li class="t"><a href="about.html">About the game</a></li>
+</ul>
+</nav>
+</aside>
+<main class="wiki-main" id="main">
+<article class="wiki-page">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Wiki</a> <span>/</span> <a href="ships.html">Ships and crews</a></nav>
+<h1>Fuel, maintenance and port stops</h1>
+<ul>
+<li>Every ship has a fuel tank and a maintenance level (0–100%). Both start full when the ship is bought.
+</li>
+<li>Fuel burns at a fixed rate per second at sea, whatever the ship's speed.
+</li>
+<li>Maintenance drops 1% per minute while a running ship is at sea (the Dominator and Mammoth: 0.5% per minute). It doesn't drop while docked or while paused.
+</li>
+<li>Speed = top speed × maintenance, so a ship at 0% stops dead.
+</li>
+<li>Ships keep their speed at sea right up to the harbour mouth and away from it. They get going and slow down inside their marina instead (see Marinas). Near a port a ship sails a curve between its lane and the harbour: leaving, from just outside the harbour mouth (or its spot at the anchorage) round onto its lane; arriving, off its lane and round to the mouth heading in, swinging out to meet the entrance head on, then on into the marina without stopping. The curve takes 3 times the harbour's distance from the port of lane (at least 2 nm; more if the curve is longer, so a ship is never faster than at sea; the two ends share a short leg), gone along evenly, worked out once a leg.
+</li>
+<li>A slower, worn ship takes longer and so burns more fuel per leg. Tanks are sized so a ship leaving at 100% can just finish a leg of its full range (plus 1 s of spare fuel) while wearing on the way.
+</li>
+<li>Random breakdowns start at company level 6. Every 5 s, each ship at sea (never a recovery boat, and never inside a canal) rolls its own chance of losing 50 points of maintenance: 0.105% a roll at 100% maintenance, rising to 1.05% at 0% (worn ships break far more often). That's times the model's sturdiness, times its age (+10% for every hour it has spent at sea, up to double), less its durability skill. A new Scooter at 100% breaks down about once every 80 minutes at sea. At 0% it's lost at sea. A ship that's slowed down can also run out of fuel before it arrives.
+</li>
+<li>Port stop: after arriving, a ship docks for a set time: Scooter 20 5 s, Feeder 100 10 s, Feedermax 200 15 s, Trans Atlantic 30 s, Dominator 1 min.
+<ul>
+<li>Cargo unloads over the first half of the stop (the cargo bar drains), and the ship is paid when unloading finishes. Cargo loads over the second half (the bar refills).
+</li>
+<li>With auto-repair on, maintenance refills to 100% over the first 5 s, paid as it goes. With auto-refuel on, the tank refills over the next 5 s. The Scooter 20 does each in 2.5 s to fit its 5 s stop.
+</li>
+<li>The ship can leave when the stop ends.
+</li></ul>
+</li>
+<li>Docks and berths: a cargo ship's stop needs a berth. Every port has berths by its size band, 6 at a Small port, 8 at a Medium, 10 at a Large, 14 at a Giant, and 14 at a port with any company's HQ or hub, one fewer piers than berths each side (the first berth each side lies along the first pier's seaward face, open to the outer harbour; the last along the land end); every pier is as long as the longest ship the port takes, so any ship the port takes fits any of its berths (kind &quot;L&quot; in the config; a Small port's &quot;s&quot; berths take only the smaller ships, tiers 1-3, as before). Ships queue first come first served (&quot;2nd in line&quot; counts the ships waiting ahead). Berths are shared by every company's ships (in multiplayer too).
+<ul>
+<li>Coming in it sails steadily from where it is (its spot at the anchorage, or the mouth, arriving from sea) in through the entrance on its right-hand side, through the outer harbour and down the channel on the side across from its pier (a quarter of the channel's width off its middle, room to come round), round into its slot's mouth bow first, 0.7 of a length before it, and straight on in along the slot's middle line, slowing over its last length; pulling out, it backs straight out of its slot stern first at half its speed until its bow is clear of the pier tips, turns round there in the channel on its thrusters, then steadily out through the entrance on its right-hand side to sea (or to its spot at the anchorage, slowing to anchor there), curving onto its lane and always heading the way it moves. Turning is smooth throughout: its heading eases round every bend rather than stepping, and it slows for any bend tighter than its own length across (never below 15% of its speed; the time it takes counts this too). Weighing anchor (or a tug leaving its moorings) a ship sets off the way it faces, as a boat does, and where that isn't the way it's going comes round on a turning circle 0.8 of its length across, through poses round the circle a quarter turn apart at most; coming to anchor it does the same in reverse, arriving heading into the wind. The only sideways movement in port is the last slide onto the pier, and backing out of a slot. A lane that comes in to a port from behind or beside its jetty (along the coast) rounds the jetty's end, 1.5 of its radius out, to the mouth, so nothing sails through the marina: from behind the marina (level with the jetty's end or nearer) it first runs along past the marina's wall; from further along the coast it makes straight for the jetty's end (turning out by the wall would loop it out to sea and back, as Shanghai's lanes from the north did); and where a plain curve to the mouth clears the jetty anyway it isn't rounded at all. Without a map the old fixed times stand.
+</li>
+<li>Marinas: zoomed in, each port's dot grows into its marina once that's bigger on screen than the dot. It's a rectangular basin dug into the land behind the coast facing the sea, open to the sea, with piers reaching in from its two side walls like a rib cage (half its berths each side, rounded down, the odd berth on the +y side; each as long as the longest ship the port takes, 0.6 dock units wide; the slot between one pier and the next is two ships' widths and 2.1 to spare, room for two ships side by side, each coming straight in), a channel between their tips 1.2 ship lengths wide (at least 4 widths) from the entrance to the land end, the first slot each side open to the outer harbour (one ship: a width and 1.4 to spare before the first pier), and behind the basin a stone quay 0.9 of a length deep (at least 8 units) for the HQ and industry. A ship moors alongside its pier, bow to the wall, tied to the bollards along it: the first each side along the first pier's seaward face, then two to each slot, one along the pier on its land side and one along the pier on its sea side (the last slot's land side its own pier, with turning water past it, 0.6 ship lengths, before the basin's end wall), each backing straight out along its own lane to leave. The jetty is a breakwater curving out round the sea side from where the walls meet the coast, with the entrance in its middle, lit red and green; inside it, the outer harbour where ships come round. Outside the jetty's arms, off to either side (where that's water; clear of the lanes rounding the jetty and of the approach funnel), lie the rocks the birds perch on, each a ship's width or more across, foam round it. Behind the industry's half of the quay a pad of quay reaches 3 units further inland for the port's lighthouse, a round white tower with a red band seen from above. Sizes in dock units (1/75 of a degree): a Small port's basin 14 wide and 8 deep (jetty radius 8), a Medium's 20 by 16 (11), a Large's 26 by 19 (14), a Giant's or hub's 26 by 26 (14), their quays 8 deep. Ports a canal runs through have the canal coming in through a cut in the land end, straight on from the channel. An HQ's or hub's ring shows round its port only while its marina is too small to draw. On the quay behind the basin, on the side with its name (-y), stands its HQ building, seen from above, a rectangular block (no longer curved round the basin) which grows through 10 levels, one every 10 company levels (level 1 to start, 10 from company level 90), from the inland corner towards the basin: a little wooden hut with the company's flag, a wooden house with its color on the eaves, a stone lodge with an annex, a brick office with its sign and roof gear, concrete offices with planters and then a deck with sunshades in its color, glass offices adding a lawn, solar panels and a pool, and at level 10 a tech campus filling its half of the quay, with a roof terrace and a helicopter pad. Taller buildings cast longer shadows.
+</li>
+<li>Seen from above: walls with the roof inset, pitched roofs with a ridge (the sunny side lighter), flat roofs with a parapet and roof gear, East Asian roofs in tiers; a few tall buildings with long shadows (most in the Americas and East Asia); and a landmark on the waterfront in the local manner (a church tower, a minaret and dome, a pagoda, a skyscraper, onion domes, a stupa or a dome). The look is the port's market region's, or its country's where that tells. Laid out once per port by a seed of its id and drawn into its marina's item, once the map's land is sorted. Roads tie it together: a quay road behind the quay with a spine across the quay strip to the basin, a spur to the HQ and a cross road past the industry plots; an avenue inland through the middle of the town with a dashed line down it; a road along each wide street and each cross street, pale walkways along the narrow streets; and a shore road along each side of the basin. At night (and under storms) its windows light up in the style's warmth over a glow across the town, with street lamps along the quay road and the avenue (drawn as one run of dashes per town under the marina's transform, so a night costs about 2 ms at a hub, not 20; see Night and day). Neighbouring towns share the land between them: the bigger port's (by rank) is laid out first and the smaller one keeps off its ground, so no block stands on another town's. No tree or mountain stands on a town either: any land drawing whose picture would reach onto a town's ground is hidden once the town is laid out.
+</li>
+<li>Arriving, a ship queues for a berth, first come first served (&quot;Waiting at anchor for a berth at Rome (2nd in line)&quot;), lying at the anchorage while it waits; with one free it comes in (&quot;Coming alongside at Rome&quot;): in through the entrance, down the channel, round into its slot and the last slide onto the pier on its thrusters, and is tied to the bollards (bow and stern lines and two springs). Only then does its stop (unloading, repairs, refuelling, loading). When it's done it pulls out (&quot;Pulling out of Rome for Tunis&quot;): backing out of its slot, turning in the channel and out to sea. A ship that can't go yet (held, paused, no route, waiting for a full load, money for fuel, a storm, ice) stays at its pier while the port has at least 2 other berths free, else pulls out to the anchorage, freeing the berth, and waits there (topping up its fuel as it can); every 2 s of play a cargo ship lying at the anchorage with nothing to do (waiting, idle, or new) comes in to a pier if the port has more than 3 free, so the anchorage is the overflow, not the rule. Tugs, icebreakers and recovery boats take no berth: tugs moor along the piers, the rest lie at the anchorage.
+</li>
+<li>Points too near the port's marina as it is now are skipped. A ship dropping anchor takes the first free point out of the shipping lanes: one no lane the map draws (every company's routes, just as laid), nor any ship's way between a harbour mouth near it and such a lane (the curves in and out drawn with the lanes, worked out on the ground wherever the view is), passes within its swing of, with 3 nm to spare; only if every point is in a lane does it take the first free one. So ships at anchor wait between the lanes where they can (the anchorage is the overflow: a ship lying in port takes a slip at its moorings first, see Long-term moorings). Which points are in the lanes is worked out again whenever the routes sailed change; ships already lying there stay put. A ship at anchor lies with its bow at its anchor, swung round to face into the wind (see Weather); in a storm it swings and pitches about the anchor.
+</li>
+<li>Berths, queues and the ships coming alongside or pulling out are saved; a ship from an older save that was mid-stop queues to finish it. In multiplayer the host's berths and the docking times are sent to joined games (protocol 3).
+</li></ul>
+</li>
+<li>Auto-repair, auto-refuel and auto-recovery are per-ship toggles in the ship popup, all on for new ships.
+</li>
+<li>Ships buy cargo only with money beyond the fleet's fuel reserve: what it would cost to top up every ship's tank where it is (or, for a cargo ship at sea, where it's going, counting the fuel it will burn getting there, at its speed now). It's worked out again every 3 s of play, since with a big fleet it's costly. A ship already full in port reserves nothing, so big idle tanks (a Buffalo's 645,000 units) don't lock up the money.
+</li>
+<li>Full loads (the ship popup's Full toggle, on for new and saved cargo ships): a ship only buys a full hold (less anything a canal makes it leave behind), never a part load, and with an empty hold it waits in port until it can afford one (&quot;Docked at Rome — waiting for money for a full load to Malta&quot;). A leg where no cargo makes a profit is sailed empty straight away. Waiting isn't treated as a problem (no red dot or log message). With it off, a ship buys as much as the money allows and sails.
+</li>
+<li>A ship only leaves if it has enough fuel for the whole next leg (plus 1 s spare), allowing for the wear it will pick up on the way. So only a breakdown can leave it stranded at sea. Otherwise it is held in port (red dot, a toast, and the reason in its status): refuel is off, it's waiting for money, it's too worn to make the leg on a full tank (turn on repair), or the leg is beyond its range (for routes set before ranges shrank; assign a new one).
+</li>
+<li>Calling in: a cargo ship lying at the anchorage (waiting, idle, or new) loads, refuels and repairs only in port. Given a route (or able to sail again), it comes in for a stop (queuing for a berth, coming alongside, a full stop: repairs, fuel, loading) when there's a cargo to pick up for its first leg (with full loads on, once it can afford a full hold; until then it waits at anchor, saying so), or when it needs fuel for the leg or is under 95% maintenance and there's money for them. Otherwise (nothing to load, the fuel for the leg and 95% or better) it sails straight from the anchorage. A cargo already aboard stays aboard through such a stop.
+</li>
+<li>Money never goes below $0 but through crew wages (see Economy &amp; time: Debt). Refills buy what the player can afford, and held ships keep buying as money comes in, until they have enough fuel (with auto-refuel on, until the tank is full or the money runs out).
+</li></ul>
+<nav class="prev-next"><a class="prev" href="ship-models.html"><span>Previous</span>Ship models</a><a class="next" href="lost-ships-and-recovery-boats.html"><span>Next</span>Lost ships and recovery boats</a></nav>
+</article>
+</main>
+</div>
+<footer class="site-footer">
+<p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+</footer>
+<script src="search_index.js" defer></script>
+<script src="../assets/wiki.js" defer></script>
+</body>
+</html>

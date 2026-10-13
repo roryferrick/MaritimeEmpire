@@ -21,6 +21,7 @@ GameState="*res://scripts/autoload/game_state.gd"
 Net="*res://scripts/autoload/net.gd"
 ActivityLog="*res://scripts/autoload/activity_log.gd"
 Settings="*res://scripts/autoload/settings.gd"
+Cosmetics="*res://scripts/autoload/cosmetics.gd"
 
 [display]
 

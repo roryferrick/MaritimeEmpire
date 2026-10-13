@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name EscapeMenu
 extends Control
-## Esc during a game: Continue, Save, Settings (see SettingsPage), Exit to
-## Menu and Exit to Desktop (and
+## Esc during a game: Continue, Save, Settings (see SettingsPage), Shop (the
+## skin packs and Sand Dollars: see SkinShop), Exit to Menu and Exit to Desktop (and
 ## the game's Licences: see Licences), over the dimmed game. In single player
 ## the game pauses while it's open (and carries on at its speed after
 ## Continue); in multiplayer it keeps going for everyone. A joined player
@@ -45,6 +45,7 @@ func _ready() -> void:
 		save.disabled = true
 		save.tooltip_text = "The host's game saves every company."
 	_button(box, "Settings", func() -> void: add_child(SettingsPage.new()))
+	_button(box, "Shop", func() -> void: add_child(SkinShop.new()))
 	_button(box, "Exit to Menu", _exit_to_menu)
 	_button(box, "Exit to Desktop", _exit_to_desktop)
 	_status.theme_type_variation = &"DimLabel"

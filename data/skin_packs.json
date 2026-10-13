@@ -1,0 +1,60 @@
+{
+	"_comment": "The skin packs sold in the Shop (Esc menu; scripts/ui/skin_shop.gd) for Sand Dollars, the in-game currency bought with Steam money (scripts/autoload/cosmetics.gd): one Sand Dollar is one cent. A pack: its ships' skins (model id -> art/skins/<folder>/<name>.svg, drawn in place of the model's art, untinted), the CEO and captain outfit options it unlocks (names in Characters.PARTS: tops, bottoms, shoes, headwear; drawn by Portrait), the crew hats (headwear names, in the deck atlas) and uniform colours it adds (CrewLooks). Bundles: the Sand Dollar bundles on the Sand Dollars page, each a Steam Inventory item definition (steam_itemdef: set up on the Steamworks partner site with its price; usd here is what's shown).",
+	"currency": {"name": "Sand Dollars", "singular": "Sand Dollar", "cents_each": 1},
+	"bundles": [
+		{"id": "sd_500", "sand_dollars": 500, "usd": 5.00, "steam_itemdef": 1001},
+		{"id": "sd_1000", "sand_dollars": 1000, "usd": 10.00, "steam_itemdef": 1002},
+		{"id": "sd_2500", "sand_dollars": 2500, "usd": 25.00, "steam_itemdef": 1003},
+		{"id": "sd_5000", "sand_dollars": 5000, "usd": 50.00, "steam_itemdef": 1004}
+	],
+	"packs": [
+		{
+			"id": "thanksgiving_2026", "title": "2026 Thanksgiving Pack", "price": 799, "on_sale": true, "folder": "thanksgiving",
+			"blurb": "The whole table, afloat: a roast turkey, corn on the cob, candied yams, green bean casserole, cranberry sauce, stuffing, a gravy boat, drumsticks, dinner rolls, pumpkin pie, mashed potatoes, a cornucopia and the Mayflower. Pilgrim, colonial and 1620 deckhand outfits for your CEO and captains, and the crew in capotains, coifs, Monmouth caps or a turkey hat.",
+			"ships": {
+				"model_11": "turkey", "model_12": "turkey", "model_13": "turkey",
+				"model_8": "corn", "model_9": "corn", "model_10": "corn",
+				"model_14": "yams", "model_15": "yams", "model_16": "yams",
+				"model_17": "beans", "model_18": "beans", "model_19": "beans",
+				"model_1": "cranberry", "model_2": "cranberry", "model_3": "cranberry", "model_4": "cranberry", "model_5": "cranberry",
+				"model_20": "stuffing", "model_21": "stuffing", "model_22": "stuffing",
+				"model_25": "gravy",
+				"model_26": "drumstick_small", "model_27": "drumstick_mid", "model_28": "drumstick_big",
+				"model_29": "roll_small", "model_30": "roll_mid", "model_31": "roll_big",
+				"model_32": "pie", "model_33": "pie",
+				"model_6": "mayflower", "model_7": "cornucopia",
+				"model_23": "mash", "model_24": "mash"
+			},
+			"top": ["Pilgrim doublet", "Goodwife's gown", "Colonial coat", "Linen shirt and jerkin", "Farmhand's tunic"],
+			"bottoms": ["Black breeches", "Buff breeches", "Sailor's slops", "Grey hose"],
+			"shoes": ["Buckle shoes", "Cloth wraps"],
+			"headwear": ["Capotain", "Coif", "Monmouth cap", "Turkey hat"],
+			"shirts": [["Pilgrim black", "#1f1d1f"], ["Homespun brown", "#8a6a46"], ["Linen cream", "#ece2c8"], ["Gown grey-blue", "#6b7489"]],
+			"trousers": [["Breeches brown", "#5a3c22"], ["Hose grey", "#8a8a86"]]
+		},
+		{
+			"id": "baseball_2026", "title": "2026 Baseball Pack", "price": 799, "on_sale": true, "folder": "baseball",
+			"blurb": "Ballpark fare for the fleet: five hot dogs from the mini dog to the foot-long with everything, bats in ash, black and royal blue, peanuts, popcorn, a soda cup, a softball, two baseballs, a pretzel, a catcher's mitt, a batting helmet, home plate, a baseball, a giant foam finger, a scoreboard and cotton candy. Home pinstripes, road greys, catcher's gear, an umpire, a hot dog vendor and 1920s flannels for your CEO and captains; ball caps, helmets and masks for the crew.",
+			"ships": {
+				"model_1": "hotdog_mini", "model_2": "hotdog_ketchup", "model_3": "hotdog_chicago", "model_4": "hotdog_chili", "model_5": "hotdog_everything",
+				"model_8": "bat_wood", "model_9": "bat_wood", "model_10": "bat_wood",
+				"model_11": "bat_black", "model_12": "bat_black", "model_13": "bat_black",
+				"model_14": "bat_blue", "model_15": "bat_blue", "model_16": "bat_blue",
+				"model_17": "peanuts", "model_18": "peanuts", "model_19": "peanuts",
+				"model_20": "popcorn", "model_21": "popcorn", "model_22": "popcorn",
+				"model_32": "soda", "model_33": "soda",
+				"model_26": "softball", "model_27": "two_balls", "model_28": "pretzel",
+				"model_29": "glove", "model_30": "helmet", "model_31": "home_plate",
+				"model_25": "baseball",
+				"model_6": "foam_finger", "model_7": "scoreboard",
+				"model_23": "cotton_candy", "model_24": "cotton_candy"
+			},
+			"top": ["Home pinstripes", "Road greys", "Catcher's gear", "Umpire's polo", "Vendor's stripes", "1920s flannels"],
+			"bottoms": ["Pinstripe pants", "Grey baseball pants", "Catcher's shin guards", "Umpire slacks", "Knickers and stirrups"],
+			"shoes": ["Cleats"],
+			"headwear": ["Navy ball cap", "Red ball cap", "Batting helmet", "Catcher's mask", "Vendor's paper hat", "Umpire's cap", "Old-time ball cap"],
+			"shirts": [["Pinstripe white", "#f6f6f6"], ["Road grey", "#a9adb3"], ["Vendor stripes", "#c8343a"]],
+			"trousers": [["Baseball pants white", "#f2f2f2"], ["Baseball pants grey", "#a9adb3"]]
+		}
+	]
+}

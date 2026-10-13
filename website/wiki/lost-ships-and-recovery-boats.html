@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lost ships and recovery boats - Maritime Empire Wiki</title>
+<meta name="description" content="Lost ships and recovery boats, on the Maritime Empire wiki.">
+<link rel="icon" href="../assets/icon_32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="../assets/icon_180.png">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Lost ships and recovery boats - Maritime Empire Wiki">
+<meta property="og:description" content="Lost ships and recovery boats, on the Maritime Empire wiki.">
+<meta property="og:image" content="https://maritimeempiregame.com/assets/shots/harbour.webp">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body class="wiki">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+<a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-aside">
+<div class="search"><input id="search" type="search" placeholder="Search the wiki" autocomplete="off" aria-label="Search the wiki"><div id="results" class="results" hidden></div></div>
+<button class="side-toggle" id="side-toggle" aria-controls="sidebar" aria-expanded="false">All topics</button>
+<nav class="sidebar" id="sidebar">
+<a class="side-home" href="index.html">Wiki home</a>
+<ul class="tree">
+<li class="t"><a href="playing.html">Playing the game</a></li>
+<li class="t"><a href="business.html">Business and trading</a></li>
+<li class="t open"><a href="ships.html">Ships and crews</a>
+<ul>
+<li><a href="ship-models.html">Ship models</a></li>
+<li><a href="fuel-maintenance-and-port-stops.html">Fuel, maintenance and port stops</a></li>
+<li><a class="current" aria-current="page" href="lost-ships-and-recovery-boats.html">Lost ships and recovery boats</a></li>
+<li><a href="tugs.html">Tugs</a></li>
+<li><a href="tugs-working-a-ship-in.html">Tugs working a ship in</a></li>
+<li><a href="icebreakers.html">Icebreakers</a></li>
+<li><a href="long-term-moorings.html">Long-term moorings</a></li>
+<li><a href="people-on-deck.html">People on deck</a></li>
+<li><a href="wakes.html">Wakes</a></li>
+<li><a href="fishing-and-crabbing.html">Fishing and crabbing</a></li>
+<li><a href="choosing-a-fishing-base.html">Choosing a fishing base</a></li>
+</ul>
+</li>
+<li class="t"><a href="world.html">The world</a></li>
+<li class="t"><a href="sea-and-sky.html">Sea and sky</a></li>
+<li class="t"><a href="rivals.html">Rivals and multiplayer</a></li>
+<li class="t"><a href="about.html">About the game</a></li>
+</ul>
+</nav>
+</aside>
+<main class="wiki-main" id="main">
+<article class="wiki-page">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Wiki</a> <span>/</span> <a href="ships.html">Ships and crews</a></nav>
+<h1>Lost ships and recovery boats</h1>
+<ul>
+<li>A ship lost within reach of free tugs based at either end of its leg is towed in by them instead (see Tugs); otherwise a recovery boat goes, as below.
+</li>
+<li>A ship at sea that runs out of fuel or hits 0% maintenance is lost. It stops where it is, gets a red &quot;!&quot; above it on the map and a red dot on the Ships screen, and a toast says so.
+</li>
+<li>The Mammoth is a recovery boat ($10,000,000, at most 8). It's the biggest ship, as fast as a Trans Atlantic (6.35 nm/s), and the most expensive to run: 4,500 fuel units/s ($10,800/s) and $300,000 per 1% of repair.
+</li>
+<li>The Buffalo is a smaller recovery boat ($1,250,000, but only $150,000 for the company's first ever Buffalo; at most 8), the size of a Trans Atlantic and as fast. It can only carry Scooter 20s, Feeder 100s, Feedermax 200s and Coastal tankers, costs about a tenth as much to run (450 fuel units/s, $1,080/s, and $30,000 per 1% of repair), wears 1% per minute, and does jobs up to 8,000 nm.
+</li>
+<li>A lost ship's popup has a Send Recovery button. It shows the estimated cost (the recovery boat's fuel and repairs, including its trip home), which boat would go, where it would take the ship, and about how long. You choose whether it's worth it.
+</li>
+<li>The nearest free boat that can carry the ship goes (the cheaper one if two are as near): one that's docked, not refueling, and not on a job. Boats sailing to their base count as busy. A boat only sets off if it has the fuel and maintenance to finish the job.
+</li>
+<li>Auto-recovery (&quot;Rescue&quot; toggle in the ship popup, on for new ships): when the ship is lost, the cheapest capable free boat is sent automatically. If none is free, lost ships wait in a queue (longest-lost first) and the next free boat takes them.
+</li>
+<li>A ship at sea that no longer has the fuel or maintenance to reach port (usually after a breakdown) gets an amber &quot;!&quot; on the map, &quot;won't make it!&quot; in its status, and a toast.
+</li>
+<li>The Mammoth sails the sea lanes to the lost ship's position, through whichever end of the ship's leg is closer. It keeps the heading it came in on, driving on past the ship in line and slowing to a stop clear in front of it, its stern a little past the ship's end (3 s; &quot;Pulling up ahead of Sea Otter&quot;), and takes it aboard like a real semi-submersible heavy-lift ship (4.5 s): it ballasts down until its work deck is under water (the sea and ripples drawn over the deck, the wheelhouse still above), reverses under the ship, which floats in over its open stern, then deballasts and rises with the ship centered on deck. It picks ships up facing either way: one it came up behind floats in bow first and rides facing forward, one it met head on floats in stern first and rides facing aft (&quot;Ballasting down to take Sea Otter aboard&quot;, &quot;Floating Sea Otter onto its deck&quot;, &quot;Rising with Sea Otter aboard&quot;). Only if the port it's carrying the ship to is back the way it came does the pair spin round on the spot, about its middle (2 s; &quot;Spinning round with Sea Otter aboard&quot;); then it heads off along the lane. At the port it floats the ship off the same way (4.5 s: ballasts down, the ship slides off over the stern, it rises) before handing it over (&quot;Floating Sea Otter off at Rome&quot;). These times count in the job's estimate.
+</li>
+<li>It carries the ship to the nearer end of its leg. If the company has tugs based there, it only carries it to 90% of their longest reach out, floats it off at sea (&quot;Golden Pipit brought Arctic Parakeet within reach of Suape's tugs&quot;) and sails on into port itself; the ship is lost again there on its leg, and the tugs fetch it in (at once if free, else when auto-recovery next finds them free). The popup's estimate says so (&quot;Golden Pipit → 135 nm off Suape for its tugs&quot;). The carried ship is drawn on the boat's open work deck, behind its middle, so the wheelhouse near the bow stays in view. Recovery boats are drawn longer than the ships they carry.
+<ul>
+<li>At the ship's destination, it unloads and is paid as usual.
+</li>
+<li>Back at its origin, it gets no pay. It docks (repair and refuel as its toggles say) and tries the leg again.
+</li></ul>
+</li>
+<li>The Mammoth then docks there (repair and refuel like any ship), sails home, and waits for the next job. Its bars show maintenance, fuel, and &quot;Tow&quot; (the ship it's carrying).
+</li>
+<li>Each recovery boat is based at the HQ or a hub, and returns there after a job. Boats are spread evenly across the HQ and hubs, model by model (each location gets its share; locations that already have the most keep any extra one). It rebalances when a hub is founded or a recovery boat is bought or sold: boats already at a location within its share stay, and the rest are re-based to the nearest location still short that a full tank can reach. A re-based boat sails there (paying its own fuel and repairs) once it's free. The Hubs screen lists the boats based at each location.
+</li>
+<li>Recovery boats have no route and no Assign Route or Pause buttons, and never break down at random. They pay their own fuel and repairs: those show on the recovery boat's own line in the Finances tab.
+</li></ul>
+<nav class="prev-next"><a class="prev" href="fuel-maintenance-and-port-stops.html"><span>Previous</span>Fuel, maintenance and port stops</a><a class="next" href="tugs.html"><span>Next</span>Tugs</a></nav>
+</article>
+</main>
+</div>
+<footer class="site-footer">
+<p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+</footer>
+<script src="search_index.js" defer></script>
+<script src="../assets/wiki.js" defer></script>
+</body>
+</html>

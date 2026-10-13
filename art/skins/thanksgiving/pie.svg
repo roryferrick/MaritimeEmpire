@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="63" viewBox="0 0 180 63">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M6,6 Q14,2 22,6 Q30,2 38,6 L176,31 L38,57 Q30,61 22,57 Q14,61 6,57 Z" fill="#d9a35a" stroke="#1a1410" stroke-width="1.8"/>
+<path d="M16,10 L170,31 L16,53 Z" fill="#d0702a" stroke="#1a1410" stroke-width="1.4"/>
+<path d="M20,13 L160,31" fill="none" stroke="#e58a44" stroke-width="2.4" opacity="0.7"/>
+<path d="M22,49 L150,32" fill="none" stroke="#a8501a" stroke-width="2" opacity="0.6"/>
+<path d="M6,9 L6,54" stroke="#b07a34" stroke-width="3"/>
+<circle cx="66" cy="31" r="12" fill="#fbf7ee" stroke="#1a1410" stroke-width="1.3"/>
+<circle cx="63" cy="28" r="5" fill="#ffffff" opacity="0.9"/>
+<path d="M60,36 Q66,40 72,36" fill="none" stroke="#dcd4c4" stroke-width="1.2"/>
+<g fill="#8a4a1a"><circle cx="100" cy="24" r="1"/><circle cx="118" cy="33" r="1"/><circle cx="92" cy="39" r="1"/><circle cx="134" cy="29" r="1"/><circle cx="46" cy="18" r="1"/><circle cx="40" cy="44" r="1"/><circle cx="110" cy="40" r="1"/></g>
+<path d="M12,8 Q18,14 12,20 Q18,26 12,32 Q18,38 12,44 Q18,50 12,55" fill="none" stroke="#b07a34" stroke-width="1.2" opacity="0.8"/>
+</svg>

@@ -1,6 +1,6 @@
 # Maritime Empire — Privacy Policy
 
-Last updated: 12 October 2026
+Last updated: 13 October 2026
 
 Maritime Empire is made and sold by Rory Ferrick ("I", "me"). This policy explains what the game does with information about you. The short version: **I don't collect any personal information.** The game has no accounts, analytics, tracking, ads or servers of my own, and it never sends anything to me.
 
@@ -22,6 +22,9 @@ Multiplayer runs directly between the players' computers. There is no server of 
 - **Over a local network (LAN) or by address:** your computer's network address is visible to the other players' computers, as it is with any direct connection. Games hosted on a LAN announce themselves to other computers on that same network so they can be found.
 - **What goes to other players:** the name you play under, your company and your moves in the game, and any chat messages you type. All of this goes only to the other players in that game. Chat is kept only for the length of the game and in the saved games of the players in it. A game's host can switch on a word filter that blanks out inappropriate words in ship names and chat.
 - **Game passwords** are sent to the host to let you join. Don't use a password you use anywhere else.
+
+## Purchases in the game
+Skin packs are bought with Sand Dollars, an in-game currency sold in bundles through Steam. The payment itself is taken by Steam, under Valve's terms and the Steam Privacy Policy: the game never sees your payment details. What the game keeps is on your own computer, in its user data folder: your Sand Dollar balance, the packs you own and a record of each bundle and pack bought (what was bought and when, without any payment or account details). Nothing about your purchases is sent to me.
 
 ## Children
 

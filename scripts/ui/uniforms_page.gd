@@ -127,7 +127,7 @@ func _column(role: String) -> Control:
 	preview.custom_minimum_size = Vector2(0, 120)
 	box.add_child(preview)
 	# The hat: < its name >.
-	var hats := CrewLooks.choices("hat")
+	var hats := CrewLooks.choices("hat").filter(func(hat_name: String) -> bool: return Cosmetics.hat_allowed(hat_name))  # (A skin pack's hats once it's owned.)
 	var hat_row := HBoxContainer.new()
 	hat_row.add_theme_constant_override(&"separation", 6)
 	var hat_label := Label.new()

@@ -39,18 +39,25 @@ const TOPS := [
 	["officer", Color("#f6f6f6"), "short"], ["tropical", Color("#2a9d9f"), "short"], ["pirate", Color("#7a1f26"), "long"],
 	["tee", Color("#f2f2f2"), "short"], ["tee", Color("#c8343a"), "short"], ["hoodie", Color("#8a8f96"), "long"],
 	["suit", Color("#23252b"), "long"], ["flannel", Color("#a8322e"), "long"], ["hivis", Color("#7b8088"), "long"],
+	# The skin packs' (see Cosmetics): Thanksgiving, then Baseball.
+	["pilgrim_m", Color("#1f1d1f"), "long"], ["pilgrim_f", Color("#5e6a86"), "long"], ["colonial", Color("#2d4a8a"), "long"], ["deckhand", Color("#ece2c8"), "long"], ["farmhand", Color("#8a7a62"), "long"],
+	["pinstripes", Color("#f6f6f6"), "short"], ["road_grey", Color("#a9adb3"), "short"], ["catcher", Color("#1f2b4d"), "short"], ["umpire", Color("#1c1c1e"), "short"], ["vendor", Color("#f6f1e6"), "short"], ["flannel_1920", Color("#efe6cc"), "short"],
 ]
 ## Bottoms: [style, colour]; trousers, bells, oilskin, shorts, wetsuit, cargo or skirt.
 const BOTTOMS := [
 	["trousers", Color("#22325c")], ["bells", Color("#f2f2f2")], ["oilskin", Color("#f2c230")], ["shorts", Color("#c9b27e")],
 	["wetsuit", Color("#1a1a22")], ["jeans", Color("#3f5f8f")], ["trousers", Color("#c2a878")], ["trousers", Color("#262626")],
 	["cargo", Color("#6b6f4a")], ["skirt", Color("#b8323a")], ["skirt", Color("#2c3a5c")], ["shorts", Color("#5577a8")],
+	# The skin packs' (see Cosmetics).
+	["breeches", Color("#1f1d1f")], ["breeches", Color("#d8c48c")], ["slops", Color("#6b4a2e")], ["hose", Color("#8a8a86")],
+	["pants_pin", Color("#f6f6f6")], ["pants_grey", Color("#a9adb3")], ["pants_catcher", Color("#a9adb3")], ["slacks", Color("#6a6e74")], ["knickers", Color("#1f2b4d")],
 ]
 ## Shoes: [style, colour]; deck, wellies, barefoot, boots, trainers, dress or sandals.
 const SHOES := [
 	["deck", Color("#6e4526")], ["wellies", Color("#222222")], ["wellies", Color("#f2c230")], ["barefoot", Color.TRANSPARENT],
 	["boots", Color("#222222")], ["boots", Color("#6e4526")], ["trainers", Color("#f2f2f2")], ["dress", Color("#151515")],
 	["sandals", Color("#7a4e2a")], ["trainers", Color("#c8343a")],
+	["buckle", Color("#151515")], ["wraps", Color("#b9a27c")], ["cleats", Color("#151515")],  # (The skin packs': see Cosmetics.)
 ]
 
 ## {name, look} (see Characters).
@@ -305,6 +312,8 @@ func _draw_bottoms() -> void:
 	var bottoms: Array = BOTTOMS[_part("bottoms")]
 	var style: String = bottoms[0]
 	var color: Color = bottoms[1]
+	if _draw_pack_bottoms(style, color):
+		return
 	var hem := _ankle_y - 1.5
 	var r := _leg_r + 1.6
 	match style:
@@ -354,6 +363,70 @@ func _draw_bottoms() -> void:
 	_shade_bottoms(hem)
 
 
+## The skin packs' bottoms (breeches over stockings, slops, hose, ball
+## pants, shin guards, slacks, knickers with stirrups): true if `style` is one.
+func _draw_pack_bottoms(style: String, color: Color) -> bool:
+	var r := _leg_r + 1.6
+	var hem := _ankle_y - 1.5
+	match style:
+		"breeches":
+			_stockings()
+			_legs(color, _hip_y + 36.0 * _hf, r + 1.2)
+			for side: float in [-1.0, 1.0]:
+				var x := 50.0 + side * _leg_x
+				_line(_p([x - r - 1.0, _hip_y + 34.0 * _hf, x + r + 1.0, _hip_y + 34.0 * _hf]), color.darkened(0.4), 1.6)
+			_shade_bottoms(_hip_y + 36.0 * _hf)
+		"slops":
+			_legs(Color("#6b4a2e"), _hip_y + 42.0 * _hf, r + 2.8)
+			_shade_bottoms(_hip_y + 42.0 * _hf)
+		"hose":
+			_legs(Color("#8a8a86"), hem, r - 0.6, false)
+			_shade_bottoms(hem)
+		"pants_pin":
+			_legs(WHITE, hem, r, false)
+			for side: float in [-1.0, 1.0]:
+				var x := 50.0 + side * _leg_x
+				for dx: float in [-3.0, 0.0, 3.0]:
+					_line(_p([x + dx, _hip_y + 8.0, x + dx, hem - 1.0]), NAVY, 0.6)
+			for dx: float in [-12.0, -8.0, -4.0, 0.0, 4.0, 8.0, 12.0]:  # (The seat too.)
+				if absf(dx) < _hip - 1.0:
+					_line(_p([50.0 + dx, _hip_y - 4.0, 50.0 + dx * 0.9, _hip_y + 8.0]), NAVY, 0.6)
+			_line(_p([50.0 - _hip, _hip_y - 2.5, 50.0 + _hip, _hip_y - 2.5]), NAVY, 2.2)
+			_shade_bottoms(hem)
+		"pants_grey":
+			_legs(GREY, hem, r, false)
+			_line(_p([50.0 - _hip, _hip_y - 2.5, 50.0 + _hip, _hip_y - 2.5]), RED, 2.2)
+			_shade_bottoms(hem)
+		"pants_catcher":
+			_legs(GREY, hem, r, false)
+			for side: float in [-1.0, 1.0]:
+				var x := 50.0 + side * _leg_x
+				_capsule(Vector2(x, _hip_y + 36.0 * _hf), Vector2(x, _ankle_y - 2.0), _leg_r + 2.8, Color("#8a8f96"))
+				for k in 4:
+					var y := _hip_y + 40.0 * _hf + k * 6.0
+					_line(_p([x - _leg_r - 1.5, y, x + _leg_r + 1.5, y]), Color("#b8bcc2"), 1.0)
+			_line(_p([50.0 - _hip, _hip_y - 2.5, 50.0 + _hip, _hip_y - 2.5]), NAVY, 2.2)
+			_shade_bottoms(hem)
+		"slacks":
+			_legs(Color("#6a6e74"), hem, r, false)
+			_line(_p([50.0 - _hip, _hip_y - 2.5, 50.0 + _hip, _hip_y - 2.5]), Color("#1c1c1e"), 2.2)
+			_shade_bottoms(hem)
+		"khakis":
+			_legs(Color("#c2a878"), hem, r, false)
+			_line(_p([50.0 - _hip, _hip_y - 2.5, 50.0 + _hip, _hip_y - 2.5]), Color("#6b4a2e"), 1.6)
+			_shade_bottoms(hem)
+		"knickers":
+			_stockings()
+			for side: float in [-1.0, 1.0]:
+				var x := 50.0 + side * _leg_x
+				_capsule(Vector2(x, _hip_y + 40.0 * _hf), Vector2(x, _ankle_y - 1.5), _leg_r + 1.0, NAVY)
+				_line(_p([x - _leg_r, _hip_y + 50.0 * _hf, x + _leg_r, _hip_y + 50.0 * _hf]), WHITE, 1.4)
+			_legs(NAVY, _hip_y + 42.0 * _hf, r + 1.6)
+			_shade_bottoms(_hip_y + 42.0 * _hf)
+		_:
+			return false
+	return true
+
 ## The shade down the right of the bottoms.
 func _shade_bottoms(hem: float) -> void:
 	var x := 50.0 + _leg_x + _leg_r * 0.4
@@ -364,6 +437,8 @@ func _draw_shoes(skin: Color) -> void:
 	var shoes: Array = SHOES[_part("shoes")]
 	var style: String = shoes[0]
 	var color: Color = shoes[1]
+	if _draw_pack_shoes(style, color):
+		return
 	for side: float in [-1.0, 1.0]:
 		var x := 50.0 + side * _leg_x
 		var r := _leg_r
@@ -407,6 +482,31 @@ func _draw_shoes(skin: Color) -> void:
 				for k in 3:
 					_line(_p([x - 1.5, top + 4.5 + k * 2.2, x + 1.5, top + 4.5 + k * 2.2]), color.lightened(0.35), 0.7)
 		_fill(_p([x + side * 1.0, top + 1.0, x + side * (r + 0.8), top + 1.0, toe + side * 1.5, FLOOR - 1.0, x + side * 1.0, FLOOR - 1.0]), SHADE if side > 0.0 else Color.TRANSPARENT)
+
+
+## The skin packs' shoes (buckle shoes, cloth wraps, cleats): true if `style` is one.
+func _draw_pack_shoes(style: String, color: Color) -> bool:
+	if not style in ["buckle", "wraps", "cleats"]:
+		return false
+	for side: float in [-1.0, 1.0]:
+		var x := 50.0 + side * _leg_x
+		var r := _leg_r
+		var toe := x + side * (r + 7.5)
+		var heel := x - side * (r + 2.4)
+		var top := _ankle_y - 3.0
+		_shape(_p([heel, top, x + side * (r + 2.4), top, x + side * (r + 2.4), _ankle_y + 1.0, toe + side * 1.5, _ankle_y + 2.5, toe + side * 2.0, FLOOR, heel, FLOOR]), color)
+		match style:
+			"buckle":
+				_line(_p([heel + side * 1.0, FLOOR - 1.5, toe + side * 1.0, FLOOR - 1.5]), color.lightened(0.35), 0.7)
+				var bx := x + side * (r + 1.5)
+				_shape(_p([bx - 2.0, _ankle_y - 2.0, bx + 2.0, _ankle_y - 2.0, bx + 2.0, _ankle_y + 1.5, bx - 2.0, _ankle_y + 1.5]), GOLD, true, 0.7)
+			"wraps":
+				_line(_p([x - 3.0, _ankle_y - 2.0, x + 4.0, _ankle_y + 1.0]), color.darkened(0.35), 0.9)
+				_line(_p([x - 3.0, _ankle_y + 1.0, x + 4.0, _ankle_y - 2.0]), color.darkened(0.35), 0.9)
+			"cleats":
+				_line(_p([x - r + 1.0, FLOOR - 2.0, x + side * (r + 6.0), FLOOR - 2.0]), WHITE, 1.0)
+		_fill(_p([x + side * 1.0, top + 1.0, x + side * (r + 0.8), top + 1.0, toe + side * 1.5, FLOOR - 1.0, x + side * 1.0, FLOOR - 1.0]), SHADE if side > 0.0 else Color.TRANSPARENT)
+	return true
 
 
 # --- Clothes -------------------------------------------------------------------
@@ -626,6 +726,91 @@ func _draw_top(skin: Color) -> void:
 			_shape(points, vest)
 			for y: float in [_hip_y - 18.0, _hip_y - 9.0]:
 				_line(_p([50.0 - _torso_half(y) + 1.5, y, 50.0 + _torso_half(y) - 1.5, y]), Color("#d8dde2"), 2.8)
+		"pilgrim_m":
+			_garment(BLACK, "long", -1.0, WHITE)
+			_collar_falling()
+			_buttons(Color("#8a8a8a"), _shoulder_y + 17.0, _hip_y - 4.0, 5)
+			_line(_p([50.0 - _torso_half(_waist_y) + 0.5, _waist_y + 1.0, 50.0 + _torso_half(_waist_y) - 0.5, _waist_y + 1.0]), Color("#3a2414"), 3.0)
+			_shape(_p([47.5, _waist_y - 1.5, 52.5, _waist_y - 1.5, 52.5, _waist_y + 3.5, 47.5, _waist_y + 3.5]), GOLD, true, 0.8)
+		"pilgrim_f":
+			var gown := Color("#5e6a86")
+			_shape(_p([50.0 - _hip - 1.0, _hip_y - 6.0, 50.0 + _hip + 1.0, _hip_y - 6.0, 50.0 + _hip + 13.0, _ankle_y - 2.0, 50.0 - _hip - 13.0, _ankle_y - 2.0]), gown)
+			_garment(gown, "long", _hip_y + 4.0, WHITE)
+			_shape(_p([50.0 - _waist * 0.7, _waist_y + 2.0, 50.0 + _waist * 0.7, _waist_y + 2.0, 50.0 + _hip + 8.0, _ankle_y - 7.0, 50.0 - _hip - 8.0, _ankle_y - 7.0]), Color("#f8f6f0"))
+			_line(_p([50.0 - _waist * 0.7, _waist_y + 2.0, 50.0 + _waist * 0.7, _waist_y + 2.0]), Color("#d8d2c4"), 1.6)
+			_collar_falling()
+		"colonial":
+			var coat := Color("#2d4a8a")
+			_garment(coat, "long", _hip_y + 22.0 * _hf, Color("#c9a24a"))
+			_shape(_p([41.0, _shoulder_y + 4.0, 59.0, _shoulder_y + 4.0, 58.0, _hip_y + 10.0, 42.0, _hip_y + 10.0]), Color("#e8d9a6"))
+			_buttons(GOLD, _shoulder_y + 12.0, _hip_y + 6.0, 6)
+			for side: float in [-1.0, 1.0]:
+				_line(_p([50.0 + side * 10.0, _shoulder_y + 2.0, 50.0 + side * 9.0, _hip_y + 20.0 * _hf]), GOLD, 1.1)
+				_shape(_p([50.0 + side * 10.0, _shoulder_y + 1.0, 50.0 + side * (_sh * 0.9), _shoulder_y + 2.0, 50.0 + side * 6.0, _shoulder_y + 26.0]), coat.darkened(0.25))
+			_ellipse(Vector2(50.0, _shoulder_y + 3.0), Vector2(6.5, 5.0), Color("#f8f6f0"))
+			_shape(_p([47.0, _shoulder_y + 6.0, 53.0, _shoulder_y + 6.0, 52.0, _shoulder_y + 16.0, 48.0, _shoulder_y + 16.0]), Color("#f8f6f0"))
+		"deckhand":
+			_garment(LINEN, "long")
+			_shape(_torso(_hip_y + 6.0 * _hf), LEATHER)
+			_vneck(LINEN, 14.0, 6.0)
+			for k in 3:
+				var y := _shoulder_y + 2.0 + k * 4.0
+				_line(_p([46.0 + k * 1.0, y, 54.0 - k * 1.0, y + 3.0]), Color("#5a3a1a"), 0.8)
+				_line(_p([54.0 - k * 1.0, y, 46.0 + k * 1.0, y + 3.0]), Color("#5a3a1a"), 0.8)
+			_rope_belt()
+		"farmhand":
+			var wool := Color("#8a7a62")
+			_garment(wool, "long", _hip_y + 10.0 * _hf)
+			_shape(_p([40.0, _shoulder_y + 22.0, 47.0, _shoulder_y + 22.0, 47.0, _shoulder_y + 30.0, 40.0, _shoulder_y + 30.0]), wool.darkened(0.3), true, 0.9)
+			_shape(_p([54.0, _hip_y - 10.0, 60.0, _hip_y - 10.0, 60.0, _hip_y - 3.0, 54.0, _hip_y - 3.0]), Color("#6b5a42"), true, 0.9)
+			_line(_p([44.0, _shoulder_y - 1.0, 50.0, _shoulder_y + 9.0, 56.0, _shoulder_y - 1.0]), wool.darkened(0.35), 1.0)
+			_rope_belt()
+		"pinstripes":
+			_garment(WHITE, "short")
+			_torso_stripes(NAVY, 4.2, 0.7)
+			_shape(_p([47.0, _shoulder_y + 1.0, 53.0, _shoulder_y + 1.0, 53.0, _hip_y - 1.0, 47.0, _hip_y - 1.0]), WHITE, false)
+			_buttons(NAVY, _shoulder_y + 8.0, _hip_y - 4.0, 5)
+			_line(_ellipse_points(Vector2(50.0, _shoulder_y - 1.0), Vector2(7.0, 3.5), 0.0, PI, 10), NAVY, 1.4)
+			_sleeve_trim(NAVY, 0.36)
+		"road_grey":
+			_garment(GREY, "short")
+			_line(_p([46.5, _shoulder_y + 2.0, 46.5, _hip_y - 2.0]), RED, 1.2)
+			_line(_p([53.5, _shoulder_y + 2.0, 53.5, _hip_y - 2.0]), RED, 1.2)
+			_buttons(RED, _shoulder_y + 8.0, _hip_y - 4.0, 5)
+			_line(_ellipse_points(Vector2(50.0, _shoulder_y - 1.0), Vector2(7.0, 3.5), 0.0, PI, 10), RED, 1.6)
+			_sleeve_trim(RED, 0.36, 1.8)
+			_shape(_p([56.0, _shoulder_y + 10.0, 60.0, _shoulder_y + 10.0, 60.0, _shoulder_y + 18.0, 56.0, _shoulder_y + 18.0]), RED, true, 0.8)
+		"catcher":
+			_garment(NAVY, "short")
+			var pad := Color("#2a3a62")
+			_shape(_p([50.0 - _sh * 0.8, _shoulder_y + 4.0, 50.0 + _sh * 0.8, _shoulder_y + 4.0, 50.0 + _hip * 0.95, _hip_y + 8.0 * _hf, 50.0 - _hip * 0.95, _hip_y + 8.0 * _hf]), pad)
+			var y := _shoulder_y + 10.0
+			while y < _hip_y + 4.0:
+				_line(_p([50.0 - _torso_half(minf(y, _hip_y)) * 0.85, y, 50.0 + _torso_half(minf(y, _hip_y)) * 0.85, y]), pad.lightened(0.25), 1.1)
+				y += 6.0
+			_line(_p([50.0 - _sh * 0.8, _shoulder_y + 4.0, 50.0 - _hip * 0.95, _hip_y + 8.0 * _hf]), RED, 1.4)
+			_line(_p([50.0 + _sh * 0.8, _shoulder_y + 4.0, 50.0 + _hip * 0.95, _hip_y + 8.0 * _hf]), RED, 1.4)
+		"umpire":
+			var black := Color("#1c1c1e")
+			_garment(black, "short")
+			_shape(_p([50.0 - _sh * 0.75, _shoulder_y + 6.0, 50.0 + _sh * 0.75, _shoulder_y + 6.0, 50.0 + _waist * 0.9, _waist_y + 6.0, 50.0 - _waist * 0.9, _waist_y + 6.0]), Color("#2c2c30"), false)
+			_shape(_p([43.0, _shoulder_y - 1.0, 50.0, _shoulder_y + 7.0, 57.0, _shoulder_y - 1.0, 55.0, _shoulder_y + 4.0, 50.0, _shoulder_y + 10.0, 45.0, _shoulder_y + 4.0]), Color("#3a3a3e"))
+			_buttons(Color("#4a4a4e"), _shoulder_y + 10.0, _shoulder_y + 22.0, 2)
+			_sleeve_trim(Color("#3a3a3e"), 0.36, 1.2)
+		"vendor":
+			_garment(Color("#f6f1e6"), "short")
+			_torso_stripes(RED, 6.0, 2.4)
+			_shape(_p([42.0, _shoulder_y + 9.0, 58.0, _shoulder_y + 9.0, 50.0 + _hip + 3.0, _hip_y + 12.0 * _hf, 50.0 - _hip - 3.0, _hip_y + 12.0 * _hf]), Color("#f8f6f0"))
+			_line(_p([42.0, _shoulder_y + 9.0, 50.0, _shoulder_y - 1.0, 58.0, _shoulder_y + 9.0]), Color("#d8d2c4"), 1.2)
+			_line(_p([50.0 - _torso_half(_waist_y) + 0.5, _waist_y + 3.0, 50.0 + _torso_half(_waist_y) - 0.5, _waist_y + 3.0]), Color("#2a2a2a"), 2.4)
+			_shape(_p([54.0, _waist_y + 1.0, 62.0, _waist_y + 1.0, 62.0, _waist_y + 9.0, 54.0, _waist_y + 9.0]), Color("#8a8f96"), true, 0.9)
+		"flannel_1920":
+			_garment(NAVY, "long")
+			_garment(Color("#efe6cc"), "short")
+			_shape(_p([47.0, _shoulder_y + 1.0, 53.0, _shoulder_y + 1.0, 53.0, _hip_y - 1.0, 47.0, _hip_y - 1.0]), NAVY, false)
+			_buttons(Color("#efe6cc"), _shoulder_y + 8.0, _hip_y - 4.0, 4)
+			_line(_ellipse_points(Vector2(50.0, _shoulder_y - 1.0), Vector2(7.5, 4.0), 0.0, PI, 10), NAVY, 2.2)
+			_line(_p([50.0 - _torso_half(_hip_y - 2.0) + 0.5, _hip_y - 2.0, 50.0 + _torso_half(_hip_y - 2.0) - 0.5, _hip_y - 2.0]), NAVY, 3.0)
 
 
 func _draw_neck_and_head(skin: Color) -> void:
@@ -1053,3 +1238,143 @@ func _draw_headwear(hair: Color) -> void:
 				var f := k / 4.0
 				_line(_p([lerpf(h.x, h.x - half - 16.0, f), lerpf(top - 18.0, brim_y + 3.0, f), lerpf(h.x, h.x + half + 16.0, f), lerpf(top - 18.0, brim_y + 3.0, f)]), Color("#b89c5e"), 0.8)
 			_line(_p([h.x - half + 2.0, brim_y + 5.0, h.x - 6.0, h.y + 20.0, h.x + 6.0, h.y + 20.0, h.x + half - 2.0, brim_y + 5.0]), Color("#8a6a3a"), 0.7)
+		21:  # capotain (a skin pack's: see Cosmetics).
+			_shape(_p([h.x - half + 4.0, brim_y + 2.0, h.x - half + 7.0, top - 24.0, h.x + half - 7.0, top - 24.0, h.x + half - 4.0, brim_y + 2.0]), Color("#1c1a1c"))
+			_shape(_p([h.x - half - 9.0, brim_y + 1.0, h.x + half + 9.0, brim_y + 1.0, h.x + half + 7.0, brim_y + 6.0, h.x - half - 7.0, brim_y + 6.0]), Color("#111111"))
+			_line(_p([h.x - half + 4.5, brim_y - 3.0, h.x + half - 4.5, brim_y - 3.0]), Color("#6b5a2e"), 2.8)
+			_shape(_p([h.x - 3.0, brim_y - 6.0, h.x + 3.0, brim_y - 6.0, h.x + 3.0, brim_y, h.x - 3.0, brim_y]), GOLD, true, 0.8)
+		22:  # coif (a skin pack's: see Cosmetics).
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 4.0), Vector2(half + 1.0, 17.0), PI, TAU, 16), Color("#f8f6f0"))
+			for side: float in [-1.0, 1.0]:
+				_shape(_p([h.x + side * (half - 1.0), brim_y + 1.0, h.x + side * (half + 2.0), brim_y + 1.0, h.x + side * (half + 1.0), h.y + 13.0, h.x + side * (half - 3.0), h.y + 13.0]), Color("#f8f6f0"))
+			_line(_p([h.x - half + 2.0, brim_y, h.x + half - 2.0, brim_y]), Color("#d8d2c4"), 1.2)
+			_line(_p([h.x - half + 2.0, h.y + 13.0, h.x - 4.0, h.y + 22.0, h.x + 4.0, h.y + 22.0, h.x + half - 2.0, h.y + 13.0]), Color("#d8d2c4"), 0.9)
+		23:  # monmouth (a skin pack's: see Cosmetics).
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 4.0), Vector2(half, 16.0), PI, TAU, 16), Color("#6b4a2e"))
+			_shape(_p([h.x - half, brim_y - 1.0, h.x + half, brim_y - 1.0, h.x + half, brim_y + 5.0, h.x - half, brim_y + 5.0]), Color("#5a3c22"))
+			for x in range(-14, 15, 4):
+				_line(_p([h.x + x, brim_y - 1.0, h.x + x, brim_y + 4.0]), Color("#8a6240"), 0.8)
+			_dot(Vector2(h.x, top - 11.0), 2.2, Color("#4a3018"))
+		24:  # turkey (a skin pack's: see Cosmetics).
+			var c := Vector2(h.x, top - 6.0)
+			var feathers := [[-0.95, Color("#c47a2a")], [-0.5, Color("#e8a040")], [0.0, Color("#f2c233")], [0.5, Color("#e8a040")], [0.95, Color("#c47a2a")]]
+			for feather: Array in feathers:
+				var a: float = feather[0] - PI / 2.0
+				var points := PackedVector2Array()
+				for k in 16:
+					var t := TAU * k / 16.0
+					var local := Vector2(cos(t) * 4.5, sin(t) * 17.0 - 14.0)
+					points.append(c + local.rotated(a + PI / 2.0))
+				_shape(points, feather[1])
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 4.0), Vector2(half, 16.0), PI, TAU, 16), Color("#8a5a30"))
+			_shape(_p([h.x - 5.0, brim_y - 1.0, h.x + 5.0, brim_y - 1.0, h.x, brim_y + 7.0]), Color("#f2c233"))
+			_shape(_p([h.x - 1.0, brim_y + 3.0, h.x + 3.0, brim_y + 3.0, h.x + 4.0, brim_y + 12.0, h.x, brim_y + 12.0]), RED)
+		25:  # cap_navy (a skin pack's: see Cosmetics).
+			_cap(NAVY, RED)
+		26:  # cap_red (a skin pack's: see Cosmetics).
+			_cap(RED, WHITE)
+		30:  # cap_black (a skin pack's: see Cosmetics).
+			_cap(Color("#1c1c1e"), Color("#1c1c1e"))
+		31:  # cap_1920 (a skin pack's: see Cosmetics).
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 3.0), Vector2(half, 14.0), PI, TAU, 16), Color("#efe6cc"))
+			for x in range(-12, 13, 6):
+				_line(_p([h.x + x, brim_y - 2.0, h.x + x * 0.4, top - 10.0]), NAVY, 0.7)
+			_shape(_p([h.x - half + 3.0, brim_y + 1.0, h.x + half - 2.0, brim_y + 1.0, h.x + half + 6.0, brim_y + 4.0, h.x + half - 2.0, brim_y + 6.0, h.x - half + 3.0, brim_y + 5.0]), NAVY)
+			_dot(h + Vector2(0, brim_y - h.y - 11.0), 1.6, NAVY)
+		27:  # batting_helmet (a skin pack's: see Cosmetics).
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 3.0), Vector2(half + 1.5, 17.0), PI, TAU, 16), NAVY)
+			_shape(_p([h.x - half + 1.0, brim_y + 1.0, h.x + half, brim_y + 1.0, h.x + half + 10.0, brim_y + 5.0, h.x + half, brim_y + 7.0, h.x - half + 1.0, brim_y + 5.0]), NAVY.darkened(0.2))
+			_shape(_p([h.x - half - 1.0, brim_y + 1.0, h.x - half + 7.0, brim_y + 1.0, h.x - half + 7.0, h.y + 12.0, h.x - half + 1.0, h.y + 13.0, h.x - half - 1.0, h.y + 8.0]), NAVY)
+			_line(_p([h.x - half + 2.0, brim_y - 4.0, h.x + half - 2.0, brim_y - 4.0]), WHITE, 1.4)
+			_line(_p([h.x - 10.0, top - 9.0, h.x + 2.0, top - 12.0]), Color(1, 1, 1, 0.35), 1.6)
+		28:  # catchers_mask (a skin pack's: see Cosmetics).
+			_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 2.0), Vector2(half, 13.0), PI, TAU, 16), NAVY)
+			var frame := _ellipse_points(h + Vector2(0, 1.0), Vector2(half + 1.0, 21.0), 0.0, TAU, 28)
+			_line(frame, Color("#8a8f96"), 2.6)
+			_line(frame, OUTLINE, 0.7)
+			for y: float in [h.y - 8.0, h.y + 1.0, h.y + 10.0]:
+				_line(_p([h.x - half, y, h.x + half, y]), Color("#8a8f96"), 1.4)
+			_line(_p([h.x, h.y - 17.0, h.x, h.y + 19.0]), Color("#8a8f96"), 1.4)
+			_line(_p([h.x - half - 1.0, h.y - 4.0, h.x - half - 6.0, h.y - 6.0]), Color("#2a2a2a"), 1.6)
+			_line(_p([h.x + half + 1.0, h.y - 4.0, h.x + half + 6.0, h.y - 6.0]), Color("#2a2a2a"), 1.6)
+		29:  # paper_hat (a skin pack's: see Cosmetics).
+			_shape(_p([h.x - half + 1.0, brim_y + 1.0, h.x - half + 6.0, top - 7.0, h.x + half - 6.0, top - 7.0, h.x + half - 1.0, brim_y + 1.0]), Color("#f8f6f0"))
+			_line(_p([h.x - half + 3.0, brim_y - 2.0, h.x + half - 3.0, brim_y - 2.0]), RED, 2.0)
+			_line(_p([h.x - half + 5.0, top - 7.0, h.x + half - 5.0, top - 7.0]), Color("#d8d2c4"), 1.0)
+
+
+# --- The skin packs' outfits' helpers (see Cosmetics) --------------------------
+
+const GREY := Color("#a9adb3")
+const RED := Color("#c8343a")
+const LINEN := Color("#ece2c8")
+const LEATHER := Color("#7a5230")
+const BLACK := Color("#1f1d1f")
+
+## The seat and two legs in a colour down to a hem (as Portrait's trousers).
+func _legs(color: Color, hem: float, r: float, flat := true) -> void:
+	var seat := _p([50.0 - _hip - 0.5, _hip_y - 5.0, 50.0 + _hip + 0.5, _hip_y - 5.0, 50.0 + _leg_x + r, _hip_y + 10.0, 50.0 - _leg_x - r, _hip_y + 10.0])
+	_shape(seat, color)
+	for side: float in [-1.0, 1.0]:
+		var x := 50.0 + side * _leg_x
+		_capsule(Vector2(x, _hip_y - 2.0), Vector2(x, hem), r, color, true, flat)
+	_shape(seat, color, false)
+	_line(_p([50.0, _hip_y + 10.0, 50.0, _hip_y + 18.0]), color.darkened(0.35), 1.0)
+
+
+## White stockings on the lower legs (under breeches).
+func _stockings(color := WHITE) -> void:
+	for side: float in [-1.0, 1.0]:
+		var x := 50.0 + side * _leg_x
+		_capsule(Vector2(x, _hip_y + 24.0 * _hf), Vector2(x, _ankle_y - 1.5), _leg_r + 0.9, color)
+
+
+## Vertical stripes following the torso's taper (jersey pinstripes, a vendor's shirt).
+func _torso_stripes(color: Color, step: float, width: float) -> void:
+	# Each stripe follows the torso's edge at every height (in at the waist,
+	# out at the hips), so none crosses the air beside it.
+	var x := 50.0 - _sh + 3.0
+	while x < 50.0 + _sh - 2.0:
+		var share := (x - 50.0) / _sh
+		var points := PackedVector2Array()
+		var y := _shoulder_y + 3.0
+		while y < _hip_y - 1.0:
+			points.append(Vector2(50.0 + share * (_torso_half(y) - 1.4), y))
+			y += 3.0
+		points.append(Vector2(50.0 + share * (_torso_half(_hip_y - 1.0) - 1.4), _hip_y - 1.0))
+		_line(points, color, width)
+		x += step
+
+
+func _collar_falling(color := WHITE) -> void:
+	_shape(_p([50.0 - _sh * 0.95, _shoulder_y + 1.0, 50.0 + _sh * 0.95, _shoulder_y + 1.0, 50.0 + 9.0, _shoulder_y + 15.0, 50.0 - 9.0, _shoulder_y + 15.0]), color)
+	_line(_p([50.0, _shoulder_y + 2.0, 50.0, _shoulder_y + 14.0]), color.darkened(0.2), 0.9)
+
+
+func _rope_belt() -> void:
+	var y := _waist_y + 2.0
+	_line(_p([50.0 - _torso_half(y) + 0.5, y, 50.0 + _torso_half(y) - 0.5, y]), Color("#c9ad7a"), 2.6)
+	var x := 50.0 - _torso_half(y) + 2.0
+	while x < 50.0 + _torso_half(y) - 2.0:
+		_line(_p([x, y - 1.2, x + 2.0, y + 1.2]), Color("#9a7e4c"), 0.8)
+		x += 3.5
+	_dot(Vector2(50.0 + 3.0, y), 2.0, Color("#c9ad7a"))
+	_line(_p([51.0, y + 1.0, 53.0, y + 9.0]), Color("#c9ad7a"), 1.8)
+	_line(_p([54.0, y + 1.0, 57.0, y + 7.0]), Color("#c9ad7a"), 1.8)
+
+
+func _sleeve_trim(color: Color, reach: float, width := 1.6) -> void:
+	for side: float in [-1.0, 1.0]:
+		var at := _arm_top(side).lerp(_hand(side), reach)
+		_line(_p([at.x - _arm_r - 1.4, at.y, at.x + _arm_r + 1.4, at.y]), color, width)
+
+
+
+func _cap(color: Color, button: Color) -> void:
+	var h := _head
+	var brim_y := h.y - 10.0
+	var half := HEAD_RADII.x + 2.0
+	_shape(_ellipse_points(h + Vector2(0, brim_y - h.y + 3.0), Vector2(half - 1.0, 15.0), PI, TAU, 16), color)
+	_shape(_p([h.x - half + 2.0, brim_y + 1.0, h.x + half - 1.0, brim_y + 1.0, h.x + half + 11.0, brim_y + 5.0, h.x + half - 1.0, brim_y + 7.0, h.x - half + 2.0, brim_y + 5.0]), color.darkened(0.2))
+	_line(_p([h.x, brim_y - 12.0, h.x, brim_y + 1.0]), color.darkened(0.25), 0.8)
+	_dot(h + Vector2(0, brim_y - h.y - 12.0), 1.6, button)
