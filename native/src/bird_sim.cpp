@@ -1494,13 +1494,13 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 				continue;
 			}
 			_draw_one(b, s, at, span, now, basis);
-			hits.push_back({ at, (float)std::max(span * 0.6, 6.0), (int)ci });
+			hits.push_back({ at, (float)std::max(span * 0.6, 6.0), (int)ci, b });
 			drew = true;
 		}
 	}
 	for (const Flyer &f : flyers) {
 		_draw_one(f.b, f.s, f.at, f.span, now, f.basis);
-		hits.push_back({ f.at, (float)std::max(f.span * 0.6, 6.0), f.colony });
+		hits.push_back({ f.at, (float)std::max(f.span * 0.6, 6.0), f.colony, f.b });
 		drew = true;
 	}
 	_stats[6] += Time::get_singleton()->get_ticks_usec() - t_loop;
@@ -1525,14 +1525,20 @@ bool BirdSim::draw(const RID &canvas, bool still, const Dictionary &params) {
 // The colony of the bird drawn under a screen point (moving ones over still
 // ones), or -1; `reach` times its usual reach.
 int BirdSim::hit_at(Vector2 screen, double reach) const {
+	return bird_hit_at(screen, reach).x;
+}
+
+// The colony and the bird itself drawn under a screen point (moving ones over
+// still ones): (colony, bird), or (-1, -1); `reach` times its usual reach.
+Vector2i BirdSim::bird_hit_at(Vector2 screen, double reach) const {
 	for (const std::vector<Hit> *list : { &_hits, &_still_hits }) {
 		for (auto it = list->rbegin(); it != list->rend(); ++it) {
 			if (it->at.distance_to(screen) <= it->reach * reach) {
-				return it->colony;
+				return Vector2i(it->colony, it->bird);
 			}
 		}
 	}
-	return -1;
+	return Vector2i(-1, -1);
 }
 
 void BirdSim::_bind_methods() {
@@ -1548,6 +1554,7 @@ void BirdSim::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("forget_spots"), &BirdSim::forget_spots);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "still", "params"), &BirdSim::draw);
 	ClassDB::bind_method(D_METHOD("hit_at", "screen", "reach"), &BirdSim::hit_at);
+	ClassDB::bind_method(D_METHOD("bird_hit_at", "screen", "reach"), &BirdSim::bird_hit_at);
 	ClassDB::bind_method(D_METHOD("still_redraw_at"), &BirdSim::still_redraw_at);
 	ClassDB::bind_method(D_METHOD("still_epoch"), &BirdSim::still_epoch);
 	ClassDB::bind_method(D_METHOD("stats"), &BirdSim::stats);

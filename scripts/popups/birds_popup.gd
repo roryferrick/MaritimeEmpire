@@ -23,7 +23,8 @@ const DOING_WIDTH := 260.0
 ## The classes of birds that live round ports, in the order they're listed.
 const CLASSES := ["gulls", "raptors", "cormorants", "waders", "sea_ducks"]
 
-## Set before adding to the tree: {port}, {ship} or {colony} (see MapView.birds_clicked).
+## Set before adding to the tree: {port}, {ship} or {colony} (with bird: the
+## one clicked, which its Follow follows) (see MapView.birds_clicked).
 var about: Dictionary
 ## The map, for following a bird (set by the world screen).
 var map: MapView
@@ -208,13 +209,16 @@ func _row_followed(id: String, colony: int) -> bool:
 	return of == colony if colony >= 0 else str(Wildlife.shared().colonies[of].species) == id
 
 
-## One of a species' birds to follow (see BirdLife.bird_to_follow()): of
-## its colony, or (following a ship: colony -1) one of those following it; -1 if none.
+## One of a species' birds to follow (see BirdLife.bird_to_follow()): the
+## one clicked, if it's of this colony; else one of its colony, or (following
+## a ship: colony -1) one of those following it; -1 if none.
 func _bird_to_follow(id: String, colony: int) -> int:
 	var life := BirdLife.shared()
 	var wildlife := Wildlife.shared()
 	var now := wildlife.bird_time
 	var cal := float(GameState.calendar_time())
+	if colony >= 0 and about.has("bird") and int(about.get("colony", -1)) == colony and int(about.bird) < life.bird_count():
+		return int(about.bird)
 	if colony >= 0:
 		return life.bird_to_follow(colony, now, cal)
 	if not about.has("ship"):

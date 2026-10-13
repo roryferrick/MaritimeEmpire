@@ -10,6 +10,9 @@ extends VBoxContainer
 ## company's seafood carriers).
 
 var ship: Ship
+## Each model's ports with what months its boats could fish from each (see
+## _port_months()), kept for every popup after the first: port id -> {species: months}.
+static var _months_by_model := {}
 var _base := OptionButton.new()
 var _target := OptionButton.new()
 var _landing := OptionButton.new()
@@ -31,6 +34,19 @@ func _ready() -> void:
 		_base.set_item_metadata(_base.item_count - 1, str(port.id))
 		if port.id == ship.base_port:
 			_base.select(_base.item_count - 1)
+	# Beside each port: how many months of the year this boat could fish from
+	# there (any species in season) and how many species, with each species'
+	# months in the tooltip, so a base can be chosen for the most fishing.
+	# Worked out for every port off the main thread the first time a boat of
+	# the model asks (a few seconds for a long-range boat), and kept.
+	if _months_by_model.has(ship.model_id):
+		_apply_months()
+	else:
+		var ids := PackedStringArray()
+		for port: Dictionary in ports:
+			ids.append(str(port.id))
+		_months_task = WorkerThreadPool.add_task(_compute_months.bind(ship.model(), ids), false, "Fishing months")
+		set_process(true)
 	_base.item_selected.connect(func(index: int) -> void:
 		GameState.set_fishing_base(ship, str(_base.get_item_metadata(index)))
 		_fill_targets.call_deferred())
@@ -44,6 +60,71 @@ func _ready() -> void:
 		var pick: Array = _target.get_item_metadata(index)
 		GameState.set_fishing_target(ship, pick[0], pick[1]))
 	_fill_targets()
+
+
+var _months_task := -1
+var _computed := {}  # Port id -> {species: months}, as the task fills it.
+
+## What a model's boats could fish from every port over the year
+## (Fisheries.months_from()), each port's species longest season first: on a
+## worker thread (reads only).
+func _compute_months(model: Dictionary, ids: PackedStringArray) -> void:
+	var fish := Fisheries.shared()
+	var out := {}
+	for port_id: String in ids:
+		var months := fish.months_from(model, port_id)
+		var ordered := {}
+		var species: Array = months.keys()
+		species.sort_custom(func(a: String, b: String) -> bool: return (months[a] as Array).size() > (months[b] as Array).size())
+		for id: String in species:
+			ordered[id] = months[id]
+		out[port_id] = ordered
+	_computed = out
+
+
+func _process(_delta: float) -> void:
+	if _months_task < 0:
+		set_process(false)
+		return
+	if not WorkerThreadPool.is_task_completed(_months_task):
+		return
+	WorkerThreadPool.wait_for_task_completion(_months_task)
+	_months_task = -1
+	_months_by_model[ship.model_id] = _computed
+	_apply_months()
+	set_process(false)
+
+
+func _exit_tree() -> void:
+	if _months_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_months_task)
+		_months_by_model[ship.model_id] = _computed
+		_months_task = -1
+
+
+## The months beside each port's name, and each species' in its tooltip.
+func _apply_months() -> void:
+	var fish := Fisheries.shared()
+	var by_port: Dictionary = _months_by_model.get(ship.model_id, {})
+	for i in _base.item_count:
+		var port_id := str(_base.get_item_metadata(i))
+		var port_name := GameData.port_name(port_id)
+		var months: Dictionary = by_port.get(port_id, {})
+		var all_months := []
+		var lines := []
+		for species_id: String in months:
+			var when: Array = months[species_id]
+			for m: int in when:
+				if not all_months.has(m):
+					all_months.append(m)
+			lines.append("%s: %d months (%s)" % [fish.species_name(species_id), when.size(), Fisheries.months_text(when)])
+		if months.is_empty():
+			_base.set_item_text(i, "%s — nothing within reach" % port_name)
+			_base.set_item_tooltip(i, "Nothing its gear can catch within reach of %s." % port_name)
+		else:
+			_base.set_item_text(i, "%s — %d of 12 months, %d species" % [port_name, all_months.size(), months.size()])
+			_base.set_item_tooltip(i, "
+".join(lines))
 
 
 func _row(title: String, picker: OptionButton, tip: String) -> void:

@@ -20,6 +20,9 @@ using namespace godot;
 
 namespace {
 constexpr double PI_D = 3.141592653589793;
+// Two lane points closer than this (squared, on the unit globe: about 6 m)
+// are one, for build_mesh() (a stretch of no length has no way to run).
+constexpr real_t SAME_POINT_2 = (real_t)1.0e-12;
 }
 
 // constants: chunk (MapView.LANE_CHUNK), min_px (LINE_MIN_PX), hidden (HIDDEN).
@@ -417,12 +420,16 @@ int64_t LanePainter::draw(const RID &canvas, const Array &lanes, const Dictionar
 
 // The lanes as one mesh for the globe shader (scripts/ui/lanes.gdshader):
 // each lane point as two vertices, their position its longitude and latitude
-// (radians) and their UV the next point's (the last point's: the one before,
-// which puts its even vertex on the other side, so the last quad's corners
-// are swapped), coloured as the lane; a stretch longer than step_nm is cut
-// into pieces along the way the ships sail (_between()), so the line bends
-// with the globe as they do. Gives {points, uvs, colors, indices, complete
-// (false if a lane the map hasn't bent yet was left out: ask again)}.
+// (radians) and their UV the way the ribbon runs there, mitred like
+// _emit_run()'s: x the bearing of the bisector of the stretches in and out
+// (radians from east towards north), y how far the corner reaches out for it
+// (1 on a straight, up to 2 at a sharp turn); coloured as the lane. (Each
+// point's sides worked out from the bisector, never a quad's corners swapped
+// at a turn: no triangle of the line goes missing there.) Points on top of
+// the last are dropped; a stretch longer than step_nm is cut into pieces
+// along the way the ships sail (_between()), so the line bends with the globe
+// as they do. Gives {points, uvs, colors, indices, complete (false if a lane
+// the map hasn't bent yet was left out: ask again)}.
 Dictionary LanePainter::build_mesh(const Array &lanes, double step_nm) {
 	if (_forget) {
 		_forget = false;
@@ -463,7 +470,9 @@ Dictionary LanePainter::build_mesh(const Array &lanes, double step_nm) {
 					}
 				}
 			}
-			line.push_back(lane.units[k]);
+			if (line.empty() || (lane.units[k] - line.back()).length_squared() > SAME_POINT_2) {
+				line.push_back(lane.units[k]);
+			}
 		}
 		const int64_t n = (int64_t)line.size();
 		if (n < 2) {
@@ -471,25 +480,38 @@ Dictionary LanePainter::build_mesh(const Array &lanes, double step_nm) {
 		}
 		const int32_t base = (int32_t)points.size();
 		for (int64_t k = 0; k < n; k++) {
-			Vector2 p = lon_lat(line[(size_t)k]);
-			Vector2 q = lon_lat(line[(size_t)(k + 1 < n ? k + 1 : k - 1)]);
+			const Vector3 &u = line[(size_t)k];
+			// The way in and out along the globe at this point (tangent to it).
+			auto along = [&u](const Vector3 &d) {
+				Vector3 t = d - u * u.dot(d);
+				return t.length_squared() > 0.0f ? t.normalized() : Vector3();
+			};
+			Vector3 dir_in = k > 0 ? along(u - line[(size_t)k - 1]) : Vector3();
+			Vector3 dir_out = k + 1 < n ? along(line[(size_t)k + 1] - u) : Vector3();
+			Vector3 t = dir_in + dir_out;
+			if (t.length_squared() < 1.0e-12f) {
+				t = dir_out.length_squared() > 0.0f ? dir_out : dir_in;
+			}
+			t.normalize();
+			real_t reach = 1.0f;
+			if (k > 0 && k + 1 < n) {
+				reach = 1.0f / std::max(t.dot(dir_out), (real_t)0.5f);
+			}
+			Vector2 p = lon_lat(u);
+			Vector3 east((real_t)-std::sin(p.x), (real_t)std::cos(p.x), 0.0f);
+			Vector3 north = u.cross(east);
+			Vector2 way((real_t)std::atan2((double)t.dot(north), (double)t.dot(east)), reach);
 			for (int side = 0; side < 2; side++) {
 				points.push_back(p);
-				uvs.push_back(q);
+				uvs.push_back(way);
 				colors.push_back(color);
 			}
 		}
 		for (int64_t k = 0; k + 1 < n; k++) {
 			int32_t a = base + (int32_t)(2 * k); // (The - side at k, then the + side.)
 			int32_t b = a + 1;
-			int32_t c, d; // The - and + sides at k + 1.
-			if (k + 1 == n - 1) {
-				c = base + (int32_t)(2 * (k + 1)) + 1;
-				d = base + (int32_t)(2 * (k + 1));
-			} else {
-				c = base + (int32_t)(2 * (k + 1));
-				d = c + 1;
-			}
+			int32_t c = a + 2; // The - and + sides at k + 1.
+			int32_t d = c + 1;
 			indices.push_back(a);
 			indices.push_back(b);
 			indices.push_back(d);
@@ -579,5 +601,6 @@ void LanePainter::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("forget_lanes"), &LanePainter::forget_lanes);
 	ClassDB::bind_method(D_METHOD("draw", "canvas", "lanes", "params"), &LanePainter::draw);
 	ClassDB::bind_method(D_METHOD("build_mesh", "lanes", "step_nm"), &LanePainter::build_mesh);
+	ClassDB::bind_method(D_METHOD("build_mitred_mesh", "lanes", "step_nm"), &LanePainter::build_mesh); // (The name the map asks for: a library from before the mitred mesh lacks it, and the map draws the lanes each frame instead.)
 	ClassDB::bind_method(D_METHOD("anchors_in_lines", "points", "lines", "port_x", "near", "swing"), &LanePainter::anchors_in_lines);
 }

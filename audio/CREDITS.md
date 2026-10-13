@@ -8,24 +8,24 @@ Every sound in this folder comes from Wikimedia Commons under a free licence; th
 | tern.mp3 | Chlidonias niger - Black Tern XC428429.mp3 | Jonathon Jongsma | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Chlidonias_niger_-_Black_Tern_XC428429.mp3 |
 | pelican.ogg | Great White Pelican (Pelecanus onocrotalus) sounds.ogg | Marco Dragonetti | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Great_White_Pelican_(Pelecanus_onocrotalus)_sounds.ogg |
 | shearwater.ogg | Puffin de Scopoli - Calonectris diomedea.ogg | Cedric Mroczko | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Puffin_de_Scopoli_-_Calonectris_diomedea.ogg |
-| eider.ogg | Common Eider (Somateria mollissima) (W1CDR0001491 BD11).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Common_Eider_(Somateria_mollissima)_(W1CDR0001491_BD11).ogg |
+| eider.ogg | Common Eider (Somateria mollissima) (W1CDR0001491 BD11).ogg | Aubrey John Williams (recordist), The British Library | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Common_Eider_(Somateria_mollissima)_(W1CDR0001491_BD11).ogg |
 | scoter.mp3 | Melanitta nigra - Common Scoter XC542372.mp3 | Luis Alvarez Menendez | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Melanitta_nigra_-_Common_Scoter_XC542372.mp3 |
 | heron.mp3 | Ardea cinerea - Grey Heron XC550579.mp3 | Benoît Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ardea_cinerea_-_Grey_Heron_XC550579.mp3 |
 | egret.wav | Greater egret call recorded in December 1998 at Sangli.wav | Sharadapte | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Greater_egret_call_recorded_in_December_1998_at_Sangli.wav |
-| bittern.ogg | Eurasian Bittern (Botaurus stellaris) (W BOTAURUS STELLARIS R1 C1).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Eurasian_Bittern_(Botaurus_stellaris)_(W_BOTAURUS_STELLARIS_R1_C1).ogg |
+| bittern.ogg | Eurasian Bittern (Botaurus stellaris) (W BOTAURUS STELLARIS R1 C1).ogg | Lawrence Shove (recordist), The British Library | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Eurasian_Bittern_(Botaurus_stellaris)_(W_BOTAURUS_STELLARIS_R1_C1).ogg |
 | crane.mp3 | Grus grus - Common Crane XC596509.mp3 | Benoît Van Hecke | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Grus_grus_-_Common_Crane_XC596509.mp3 |
 | night_heron.mp3 | Nycticorax nycticorax - Black-crowned Night Heron XC543137.mp3 | Luis Alvarez Menendez | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Nycticorax_nycticorax_-_Black-crowned_Night_Heron_XC543137.mp3 |
 | eagle.mp3 | Haliaeetus leucogaster - White-bellied Sea Eagle XC492979.mp3 | Manoj Karingamadathil | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Haliaeetus_leucogaster_-_White-bellied_Sea_Eagle_XC492979.mp3 |
 | hawk.ogg | Buteo lineatus.ogg | Tony Phillips | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Buteo_lineatus.ogg |
 | falcon.wav | Peregrine falcon call recorded in February 2010 at Yana, Karnataka.wav | Sharadapte | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Peregrine_falcon_call_recorded_in_February_2010_at_Yana,_Karnataka.wav |
-| osprey.ogg | Osprey (Pandion haliaetus) (W1CDR0001434 BD8).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Osprey_(Pandion_haliaetus)_(W1CDR0001434_BD8).ogg |
+| osprey.ogg | Osprey (Pandion haliaetus) (W1CDR0001434 BD8).ogg | Lawrence Shove (recordist), The British Library | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Osprey_(Pandion_haliaetus)_(W1CDR0001434_BD8).ogg |
 | condor.ogg | Andean Condor call (Vultur gryphus).ogg | Fernando Castro | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Andean_Condor_call_(Vultur_gryphus).ogg |
 | kiwi.ogg | Kiwi Male North Island brown kiwi song.ogg | Department of Conservation | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Kiwi_Male_North_Island_brown_kiwi_song.ogg |
 | quetzal.mp3 | Pharomachrus antisianus - Crested Quetzal XC251334.mp3 | Niels Krabbe | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Pharomachrus_antisianus_-_Crested_Quetzal_XC251334.mp3 |
 | toucan.mp3 | Andigena nigrirostris - Black-billed Mountain Toucan XC250478.mp3 | Niels Krabbe | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Andigena_nigrirostris_-_Black-billed_Mountain_Toucan_XC250478.mp3 |
 | penguin.ogg | 20091121 Little Penguin calls at St Kilda Breakwater.ogg | Mikeybear | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:20091121_Little_Penguin_calls_at_St_Kilda_Breakwater.ogg |
 | whale.ogg | Humpback-Whale-Song-and-Foraging-Behavior-on-an-Antarctic-Feeding-Ground-pone.0051214.s001.oga | Stimpert A, Peavey L, Friedlaender A, Nowacek D | CC BY 2.5 | https://commons.wikimedia.org/wiki/File:Humpback-Whale-Song-and-Foraging-Behavior-on-an-Antarctic-Feeding-Ground-pone.0051214.s001.oga |
-| orca.ogg | Killer whale.ogg | (see source page) | Public domain | https://commons.wikimedia.org/wiki/File:Killer_whale.ogg |
+| orca.ogg | Killer whale.ogg | U.S. National Park Service, Glacier Bay National Park | Public domain | https://commons.wikimedia.org/wiki/File:Killer_whale.ogg |
 | seal.ogg | AudioElleSeals.oga | Hullwarren | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:AudioElleSeals.oga |
 | bison.ogg | Two.european.bison.grunting.ogg | LokYYs | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Two.european.bison.grunting.ogg |
 | brown_bear.mp3 | Yellowstone sound library - Grizzly Bears Roar - 001.mp3 | NPS &amp; MSU Acoustic Atlas / Jennifer Jerrett | Public domain | https://commons.wikimedia.org/wiki/File:Yellowstone_sound_library_-_Grizzly_Bears_Roar_-_001.mp3 |
@@ -57,17 +57,17 @@ One recording per species (audio/birds/<species>.*), the same way: Wikimedia Com
 | birds/western.ogg | Western Gull Golden Gate National Recreation Area.ogg | National Park Service | Public domain | https://commons.wikimedia.org/wiki/File:Western_Gull_Golden_Gate_National_Recreation_Area.ogg |
 | birds/andean_condor.ogg | Andean Condor call (Vultur gryphus).ogg | Fernando Castro | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Andean_Condor_call_(Vultur_gryphus).ogg |
 | birds/arctic_tern.mp3 | Sterna paradisaea - Arctic Tern XC564600.mp3 | Doug Hynes | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Sterna_paradisaea_-_Arctic_Tern_XC564600.mp3 |
-| birds/common_tern.ogg | Sterna-hirundo-002.ogg | No machine-readable author provided. Mdf assumed (based on copyright claims). | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Sterna-hirundo-002.ogg |
+| birds/common_tern.ogg | Sterna-hirundo-002.ogg | Mdf (Wikimedia Commons user) | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Sterna-hirundo-002.ogg |
 | birds/caspian_tern.mp3 | Hydroprogne caspia - Caspian Tern XC432679.mp3 | Joost van Bruggen | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Hydroprogne_caspia_-_Caspian_Tern_XC432679.mp3 |
 | birds/great_white_pelican.ogg | Great White Pelican (Pelecanus onocrotalus) sounds.ogg | Marco Dragonetti | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Great_White_Pelican_(Pelecanus_onocrotalus)_sounds.ogg |
-| birds/manx_shearwater.ogg | Manx Shearwater (Puffinus puffinus) (W1CDR0001420 BD4).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Manx_Shearwater_(Puffinus_puffinus)_(W1CDR0001420_BD4).ogg |
+| birds/manx_shearwater.ogg | Manx Shearwater (Puffinus puffinus) (W1CDR0001420 BD4).ogg | Lawrence Shove (recordist), The British Library | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Manx_Shearwater_(Puffinus_puffinus)_(W1CDR0001420_BD4).ogg |
 | birds/great_cormorant.mp3 | Cormor\u00e1n grande (Phalacrocorax carbo).mp3 | Sonothèque ADVL | CC0 | https://commons.wikimedia.org/wiki/File:Cormorán_grande_(Phalacrocorax_carbo).mp3 |
 | birds/double_crested_cormorant.ogg | Phalacrocorax auritus - Double-crested Cormorant - XC108658.ogg | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Phalacrocorax_auritus_-_Double-crested_Cormorant_-_XC108658.ogg |
 | birds/neotropic_cormorant.mp3 | Phalacrocorax brasilianus - Neotropic Cormorant XC463751.mp3 | Oliver Komar | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Phalacrocorax_brasilianus_-_Neotropic_Cormorant_XC463751.mp3 |
-| birds/common_eider.ogg | Common Eider (Somateria mollissima) (W1CDR0001491 BD11).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Common_Eider_(Somateria_mollissima)_(W1CDR0001491_BD11).ogg |
+| birds/common_eider.ogg | Common Eider (Somateria mollissima) (W1CDR0001491 BD11).ogg | Aubrey John Williams (recordist), The British Library | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Common_Eider_(Somateria_mollissima)_(W1CDR0001491_BD11).ogg |
 | birds/common_scoter.mp3 | Melanitta nigra - Common Scoter XC542372.mp3 | Luis Alvarez Menendez | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Melanitta_nigra_-_Common_Scoter_XC542372.mp3 |
 | birds/grey_heron.mp3 | Ardea cinerea - Grey Heron XC432231.mp3 | Joost van Bruggen | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ardea_cinerea_-_Grey_Heron_XC432231.mp3 |
-| birds/great_blue_heron.ogg | Great Blue Heron.ogg | Unknown authorUnknown author | Public domain | https://commons.wikimedia.org/wiki/File:Great_Blue_Heron.ogg |
+| birds/great_blue_heron.ogg | Great Blue Heron.ogg | U.S. National Park Service, Wind Cave National Park | Public domain | https://commons.wikimedia.org/wiki/File:Great_Blue_Heron.ogg |
 | birds/purple_heron.ogg | Ardea purpurea - Purple Heron XC135429.ogg | Sudipto Roy | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Ardea_purpurea_-_Purple_Heron_XC135429.ogg |
 | birds/black_crowned_night_heron.mp3 | Nycticorax nycticorax - Black-crowned Night Heron XC383999.mp3 | Jan Cibulka | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Nycticorax_nycticorax_-_Black-crowned_Night_Heron_XC383999.mp3 |
 | birds/striated_heron.mp3 | XC346389 - Striated Heron - Butorides striata.mp3 | Yeo SB | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:XC346389_-_Striated_Heron_-_Butorides_striata.mp3 |
@@ -83,7 +83,7 @@ One recording per species (audio/birds/<species>.*), the same way: Wikimedia Com
 | birds/gyrfalcon.ogg | Falco rusticolus.ogg | Bubulcus | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Falco_rusticolus.ogg |
 | birds/bald_eagle.ogg | Bald Eagle Yellowstone National Park.ogg | National Park Service | Public domain | https://commons.wikimedia.org/wiki/File:Bald_Eagle_Yellowstone_National_Park.ogg |
 | birds/white_bellied_sea_eagle.mp3 | Haliaeetus leucogaster - White-bellied Sea Eagle XC492979.mp3 | Manoj Karingamadathil | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Haliaeetus_leucogaster_-_White-bellied_Sea_Eagle_XC492979.mp3 |
-| birds/golden_eagle.ogg | Golden Eagle (Aquila chrysaetos) (W1CDR0001387 BD6).ogg | (see source page) | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Golden_Eagle_(Aquila_chrysaetos)_(W1CDR0001387_BD6).ogg |
+| birds/golden_eagle.ogg | Golden Eagle (Aquila chrysaetos) (W1CDR0001387 BD6).ogg | Lawrence Shove (recordist), The British Library | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Golden_Eagle_(Aquila_chrysaetos)_(W1CDR0001387_BD6).ogg |
 | birds/red_tailed_hawk.ogg | Buteo jamaicensis - Red-tailed Hawk - XC71575.ogg | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Buteo_jamaicensis_-_Red-tailed_Hawk_-_XC71575.ogg |
 | birds/swainsons_hawk.mp3 | Buteo swainsoni - Swainson's Hawk XC493363.mp3 | Diana Doyle | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Buteo_swainsoni_-_Swainson's_Hawk_XC493363.mp3 |
 | birds/harris_hawk.mp3 | Parabuteo unicinctus - Harris's Hawk XC202066.mp3 | Gabriele Magurno | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Parabuteo_unicinctus_-_Harris's_Hawk_XC202066.mp3 |

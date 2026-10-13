@@ -35,6 +35,7 @@ var family_order: Array[String] = []
 var species := {}  # id -> {name, latin, family, gear, grade, trophy}
 var grounds := {}  # id -> {id, name, lon, lat, radius_nm, depth, rough_months, stock_t, species: {id: {months, density}}, ports: the ports its lanes run from}
 var ground_order: Array[String] = []
+var _family_art := {}  # Family id -> its picture (or null): see family_art().
 
 
 static func shared() -> Fisheries:
@@ -71,6 +72,34 @@ static func is_ground(port_id: String) -> bool:
 ## True if a commodity is a seafood family.
 func is_seafood(commodity_id: String) -> bool:
 	return families.has(commodity_id)
+
+
+## A species' picture: its crab art (art/catch) or its fish art (art/sea,
+## twice as wide as tall or more); null if it has none.
+func species_art(species_id: String) -> Texture2D:
+	var info: Dictionary = species.get(species_id, {})
+	var kind := str((families.get(str(info.get("family", "")), {}) as Dictionary).get("kind", ""))
+	var path := ("res://art/catch/%s.svg" if kind == "crab" else MapView.SEA_ART_DIR + "%s.svg") % species_id
+	return load(path) as Texture2D if ResourceLoader.exists(path) else null
+
+
+## A seafood family's picture, where it's listed (the price menu): its icon
+## species' (fisheries.json), else its first species' that has one; null if
+## it isn't seafood or has none.
+func family_art(family_id: String) -> Texture2D:
+	if _family_art.has(family_id):
+		return _family_art[family_id]
+	var art: Texture2D = null
+	if families.has(family_id):
+		var wanted := str(families[family_id].get("icon", ""))
+		art = species_art(wanted) if not wanted.is_empty() else null
+		for species_id: String in species:
+			if art != null:
+				break
+			if str(species[species_id].family) == family_id:
+				art = species_art(species_id)
+	_family_art[family_id] = art
+	return art
 
 
 ## A species' name ("Red king crab"), or its id.
@@ -244,6 +273,72 @@ func options(ship: Ship, base: String, month: int, stocks: Dictionary, price_at:
 				per_day = per_day, season = season_text(ground_id, species_id), stock = stock})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.per_day > b.per_day if a.per_day != b.per_day else a.miles < b.miles)
 	return out
+
+
+## What a boat of a model could go after from a base over the year: species
+## id -> the months (1-12) it's in season on some ground its gear and size can
+## work within reach of the base (every such ground's season together), for
+## choosing a base (see FishingPanel). Sorted by the species with the most months first.
+func months_from(model: Dictionary, base: String) -> Dictionary:
+	var gear := gear_of(model)
+	var out := {}
+	if gear.is_empty() or base.is_empty():
+		return out
+	var reach := float(model.get("range_nm", 0.0))
+	var port := GameData.get_port(base)
+	var at := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+	for ground_id: String in ground_order:
+		var ground: Dictionary = grounds[ground_id]
+		if (ground.ports as Array).is_empty():
+			continue
+		# As the crow flies first (the sea miles are never less, and seldom
+		# more than DIRECT_SLACK times): only a ground near the edge of its
+		# reach is measured along the lanes, which costs (every port's list asks for all 329).
+		var crow := Geo.distance_nm(at, Vector2(float(ground.get("lon", 0.0)), float(ground.get("lat", 0.0))))
+		if crow > reach:
+			continue
+		if crow * DIRECT_SLACK > reach:
+			var miles := miles_to(base, ground_id)
+			if miles == INF or miles > reach:
+				continue
+		for species_id: String in ground.species:
+			if not can_work(model, ground_id, species_id):
+				continue
+			var months: Array = out.get_or_add(species_id, [])
+			for m in season(ground_id, species_id):
+				if not months.has(int(m)):
+					months.append(int(m))
+	for species_id: String in out:
+		(out[species_id] as Array).sort()
+	return out
+
+
+## Months (1-12) in words, short: "all year", "Mar to Oct", "Jan, Mar to May, Dec".
+static func months_text(months: Array) -> String:
+	if months.size() >= 12:
+		return "all year"
+	if months.is_empty():
+		return "never"
+	var names := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+	var runs := []
+	var start := -1
+	var last := -1
+	for m: int in months:
+		if start < 0:
+			start = m
+		elif m != last + 1:
+			runs.append([start, last])
+			start = m
+		last = m
+	runs.append([start, last])
+	# December running on into January: one run round the year.
+	if runs.size() > 1 and runs[0][0] == 1 and runs[-1][1] == 12:
+		runs[0][0] = runs[-1][0]
+		runs.pop_back()
+	var parts := []
+	for run: Array in runs:
+		parts.append(names[run[0] - 1] if run[0] == run[1] else "%s to %s" % [names[run[0] - 1], names[run[1] - 1]])
+	return ", ".join(parts)
 
 
 ## A boat's gear in words: "Trolls lines", "Nets and trolls lines", "30 crab pots".

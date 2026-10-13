@@ -155,6 +155,7 @@ private:
 		Vector2 at;
 		float reach = 0.0f;
 		int colony = 0;
+		int bird = 0;
 	};
 
 	std::vector<Species> _species;
@@ -268,6 +269,7 @@ public:
 	void forget_spots();
 	bool draw(const RID &canvas, bool still, const Dictionary &params);
 	int hit_at(Vector2 screen, double reach) const;
+	Vector2i bird_hit_at(Vector2 screen, double reach) const;
 	double still_redraw_at() const { return _still_redraw_at; }
 	int64_t still_epoch() const { return _still_epoch; }
 	static String mode_name(int mode);

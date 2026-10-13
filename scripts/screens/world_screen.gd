@@ -15,6 +15,12 @@ const LINE_MIN_LUMINANCE := 0.5
 ## The price picker's ship lines: [name, ship_models.json category].
 const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Seafood carriers", "seafood"]]
+## The box (px) a seafood family's picture is fitted in, in the price picker
+## (see _catch_icon()); and the family whose picture marks the seafood line.
+const CATCH_ICON_SIZE := Vector2i(30, 18)
+const SEAFOOD_LINE_ICON := "tuna"
+
+static var _catch_icons := {}  # Commodity id -> its picture (or null): see _catch_icon().
 
 @onready var _map: MapView = $MapView
 var _price_button := Button.new()
@@ -252,7 +258,7 @@ func open_ship_popup(ship: Ship) -> void:
 ## that port (see MapView.price_line); or, picked from its second column,
 ## colors the ports by one commodity's price, green where cheap to red where
 ## dear (MapView.price_commodity); or "Prices: off". Its menu has a swatch
-## of each line's color, and the chosen line's (or commodity's) name is shown in that color.
+## of each line's color (a fish or crab for the seafood), and the chosen line's (or commodity's) name is shown in that color.
 func _add_price_picker() -> void:
 	_price_button.tooltip_text = "Show a ship line's prices over the ports: blue where its cargo is cheap, orange where it's dear.\nClick a port to see instead what each would make carried from there.\nOr color the ports by one commodity's price: green where it's cheap, red where it's dear."
 	_price_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -296,7 +302,7 @@ func _price_item(category: String) -> Button:
 	item.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	item.text = _price_text(category)
 	if not category.is_empty():
-		item.icon = _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
+		item.icon = _line_icon(category)
 		var names := PackedStringArray()
 		for commodity: Dictionary in GameData.commodities:
 			for model: Dictionary in GameData.ship_models:
@@ -316,13 +322,14 @@ func _price_heading(text: String) -> Label:
 	return label
 
 
-## One entry in the price menu's port colors: a commodity, with its line's swatch.
-func _color_item(commodity_id: String, category: String) -> Button:
+## One entry in the price menu's port colors: a commodity, with its line's
+## swatch, or its picture if it's seafood (see _commodity_icon()).
+func _color_item(commodity_id: String, _category: String) -> Button:
 	var item := Button.new()
 	item.flat = true
 	item.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	item.text = str(GameData.commodity(commodity_id).get("name", commodity_id))
-	item.icon = _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
+	item.icon = _commodity_icon(commodity_id)
 	item.tooltip_text = "Color the ports by its price: green where it's cheap, white about its world average, red where it's dear (full color at 1.4 times cheaper or dearer)."
 	item.pressed.connect(_choose_commodity.bind(commodity_id))
 	return item
@@ -342,7 +349,7 @@ func _choose_commodity(commodity_id: String) -> void:
 	_map.price_commodity = commodity_id
 	var color := GameData.category_color(_line_of(commodity_id), LINE_MIN_LUMINANCE)
 	_price_button.text = "Prices: %s  ▾" % GameData.commodity(commodity_id).get("name", commodity_id)
-	_price_button.icon = _swatch(color)
+	_price_button.icon = _commodity_icon(commodity_id)
 	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color"]:
 		_price_button.add_theme_color_override(color_name, color)
 
@@ -366,7 +373,7 @@ func _choose_price(category: String) -> void:
 	_map.price_line = category
 	_map.price_commodity = ""
 	_price_button.text = _price_text(category) + "  ▾"
-	_price_button.icon = null if category.is_empty() else _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
+	_price_button.icon = null if category.is_empty() else _line_icon(category)
 	for color_name: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color"]:
 		if category.is_empty():
 			_price_button.remove_theme_color_override(color_name)
@@ -379,6 +386,43 @@ static func _swatch(color: Color) -> ImageTexture:
 	var image := Image.create(12, 12, false, Image.FORMAT_RGBA8)
 	image.fill(color)
 	return ImageTexture.create_from_image(image)
+
+
+
+## A ship line's mark in the price picker: its swatch, or the seafood line's
+## picture (SEAFOOD_LINE_ICON).
+static func _line_icon(category: String) -> Texture2D:
+	var icon := _catch_icon(SEAFOOD_LINE_ICON) if category == "seafood" else null
+	return icon if icon != null else _swatch(GameData.category_color(category, LINE_MIN_LUMINANCE))
+
+## A commodity's mark in the price picker: a seafood family's picture (see
+## _catch_icon()), else its line's swatch.
+static func _commodity_icon(commodity_id: String) -> Texture2D:
+	var icon := _catch_icon(commodity_id)
+	return icon if icon != null else _swatch(GameData.category_color(_line_of(commodity_id), LINE_MIN_LUMINANCE))
+
+
+## A seafood family's picture (Fisheries.family_art()) fitted in the middle of
+## CATCH_ICON_SIZE, all the same size so the names beside them line up; null
+## if it isn't seafood. Made once each.
+static func _catch_icon(commodity_id: String) -> Texture2D:
+	if _catch_icons.has(commodity_id):
+		return _catch_icons[commodity_id]
+	var icon: ImageTexture = null
+	var art := Fisheries.shared().family_art(commodity_id)
+	if art != null:
+		var picture := art.get_image()
+		picture.decompress()
+		picture.convert(Image.FORMAT_RGBA8)
+		var box := Vector2(CATCH_ICON_SIZE)
+		var fit := minf(box.x / picture.get_width(), box.y / picture.get_height())
+		var side := Vector2i((Vector2(picture.get_size()) * fit).round())
+		picture.resize(maxi(side.x, 1), maxi(side.y, 1), Image.INTERPOLATE_LANCZOS)
+		var image := Image.create(CATCH_ICON_SIZE.x, CATCH_ICON_SIZE.y, false, Image.FORMAT_RGBA8)
+		image.blit_rect(picture, Rect2i(Vector2i.ZERO, picture.get_size()), (CATCH_ICON_SIZE - picture.get_size()) / 2)
+		icon = ImageTexture.create_from_image(image)
+	_catch_icons[commodity_id] = icon
+	return icon
 
 
 ## + and - buttons at the map's bottom right, for zooming without a wheel or

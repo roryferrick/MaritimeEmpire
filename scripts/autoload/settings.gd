@@ -13,8 +13,14 @@ extends Node
 ## used to be: never smaller than SHIP_GROW_MIN_SCALE, see MapView._ship_draw_scale()).
 const SHIP_LOOKS := ["dot", "big_dot", "grow"]
 const SHIP_LOOK_NAMES := {dot = "Small dots (default)", big_dot = "Bigger dots", grow = "Ships grow as you zoom out"}
-## The volumes (0 to 1), by bus: [bus, name on the page].
+## The volumes (0 to 1; Master to MASTER_MOST, louder than everything's own
+## level), by bus: [bus, name on the page].
 const VOLUMES := [["Master", "Master"], ["Sea", "Sea and weather"], ["Wildlife", "Wildlife"], ["Ships", "Ship horns"]]
+const MASTER_MOST := 2.0
+
+## The most a bus's volume goes to (1, or MASTER_MOST for Master).
+static func volume_most(bus: String) -> float:
+	return MASTER_MOST if bus == "Master" else 1.0
 const PATH := "user://settings.cfg"
 
 ## A setting changed (the map and the page follow).
@@ -76,7 +82,7 @@ func _ready() -> void:
 		birds = bool(config.get_value("general", "birds", true))
 		own_routes_only = bool(config.get_value("general", "own_routes_only", false))
 		for entry: Array in VOLUMES:
-			_volumes[entry[0]] = clampf(float(config.get_value("audio", str(entry[0]), 1.0)), 0.0, 1.0)
+			_volumes[entry[0]] = clampf(float(config.get_value("audio", str(entry[0]), 1.0)), 0.0, volume_most(str(entry[0])))
 	for entry: Array in VOLUMES:
 		_apply_volume(str(entry[0]))
 
@@ -87,7 +93,7 @@ func volume(bus: String) -> float:
 
 
 func set_volume(bus: String, share: float) -> void:
-	_volumes[bus] = clampf(share, 0.0, 1.0)
+	_volumes[bus] = clampf(share, 0.0, volume_most(bus))
 	_apply_volume(bus)
 	_save()
 	changed.emit()

@@ -174,8 +174,56 @@ Array LandTest::shore_spots(const Dictionary &port, const Array &marinas, int sa
 	return out;
 }
 
+// The stretches of a polyline (projected, its x running on past the world's
+// edge if it must) that lie over the land: sampled every `step` along each
+// piece, each sample's x brought back into the world (world_width across).
+// Gives [piece (the index of its end point), t of the first sample on land,
+// t of the last, ...] for every run of samples on land (a piece over two
+// islands gives two).
+PackedFloat64Array LandTest::land_runs(const PackedVector2Array &points, double step, double world_width) const {
+	PackedFloat64Array out;
+	const Vector2 *p = points.ptr();
+	const double half = world_width / 2.0;
+	for (int64_t i = 1; i < points.size(); i++) {
+		const Vector2 a = p[i - 1];
+		const Vector2 b = p[i];
+		const double length = (double)a.distance_to(b);
+		const int64_t samples = std::max((int64_t)1, (int64_t)std::ceil(length / std::max(step, 1e-6)));
+		// Each run of samples on land its own stretch.
+		double first = -1.0, last = -1.0;
+		for (int64_t s = 0; s <= samples + 1; s++) {
+			bool land = false;
+			const double t = (double)s / (double)samples;
+			if (s <= samples) {
+				Vector2 q = a.lerp(b, (real_t)t);
+				while (q.x > half) {
+					q.x -= (real_t)world_width;
+				}
+				while (q.x < -half) {
+					q.x += (real_t)world_width;
+				}
+				land = contains(q);
+			}
+			if (land) {
+				if (first < 0.0) {
+					first = t;
+				}
+				last = t;
+			} else if (first >= 0.0) {
+				out.push_back((double)i);
+				out.push_back(first);
+				out.push_back(last);
+				first = -1.0;
+				last = -1.0;
+			}
+		}
+	}
+	return out;
+}
+
 void LandTest::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("build", "triangles", "cell"), &LandTest::build);
 	ClassDB::bind_method(D_METHOD("contains", "projected"), &LandTest::contains);
+	ClassDB::bind_method(D_METHOD("land_runs", "points", "step", "world_width"), &LandTest::land_runs);
 	ClassDB::bind_method(D_METHOD("shore_spots", "port", "marinas", "samples", "reach", "seaward", "inland"), &LandTest::shore_spots);
 }

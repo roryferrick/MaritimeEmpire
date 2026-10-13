@@ -309,6 +309,7 @@ const TUG_BACK_SHARE := 0.35
 const TUG_HULL_GAP := 0.3
 const TUG_PUSH_STATION := 0.3
 const TUG_TWO_PUSHES_TUGS := 2.5
+const TUG_BACK_OFF_TUGS := 1.2  # How far (tug lengths) a tug backs off the hull once the ship's alongside.
 ## A lone tug pushing a ship in comes in on a slant (see _plan_tug_work()):
 ## how far ahead of the other its end comes in through a push (a share of the
 ## way in), and how far ahead its end is left after a first push of two.
@@ -1954,38 +1955,43 @@ func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, lay
 	var times := _path_times(path, tow_speed, length, length, false, true)
 	var pulled := times[-1]
 	var ship_segments: Array = [{kind = "path", t0 = 0.0, t1 = pulled, points = path, times = times, start = float(mouth[1]), end = float(let_go[1])}]
-	# On its own from there, at a crawl: round into its slot and in, then the last slide onto the pier.
-	var crawl := maxf(ship.speed(), MIN_HARBOUR_SPEED) * units_per_nm * TUG_LET_GO_SHARE
+	# From there the tugs put their bows on it and push it round into its slot
+	# and in (at the team's pace, not the ship's own crawl), then hold it up
+	# against the pier through the last slide, and back off.
+	var assisted := maxf(tow_speed, maxf(ship.speed(), MIN_HARBOUR_SPEED) * units_per_nm * TUG_LET_GO_SHARE)
 	var own_path := _pose_path(_loosen([let_go] + approach.slice(approach.size() - 2), false, false), SLOT_PATH_HANDLE)
-	var own_times := _path_times(own_path, crawl, length, length, true, true)
+	var own_times := _path_times(own_path, assisted, length, length, true, true)
 	var glide := own_times[-1]
 	ship_segments.append({kind = "path", t0 = pulled, t1 = pulled + glide, points = own_path, times = own_times, start = float(let_go[1]), end = float(approach[-1][1])})
 	var slide_s := float(Docks.settings().get("slide_s", 1.5))
 	ship_segments.append({kind = "slide", t0 = pulled + glide, t1 = pulled + glide + slide_s, from_pose = approach[-1], to_pose = moored, length = length, ends_from = [0.0, 0.0], ends_to = [1.0, 1.0], lead = 0.0})
-	var total := pulled + glide + slide_s
+	var pushed := pulled + glide + slide_s
+	var back_s := tug_length * TUG_BACK_OFF_TUGS / maxf(GameState._tow_speed(lead) * units_per_nm * TUG_BACK_SHARE, 0.01)
+	var total := pushed + back_s
 	var work := {total = total, team = team, ship = ship_segments, tugs = [], finish = []}
-	# The tugs: ahead of it on its line while they pull, easing to a stop out
-	# to the side away from its slot as it comes up to where they let go, and
-	# lying there while it goes on in.
+	# The tugs: ahead of it on its line while they pull, swinging out to the
+	# side away from its slot as it comes up to where they let go...
 	var forward := Vector2.from_angle(float(let_go[1]))
 	var open := signf((-(berth[1] as Vector2)).dot(forward.rotated(PI / 2.0)))
-	# Side by side with it, clear of its hull; where the channel's too narrow for
-	# the second tug beside the first, it stops behind it instead.
-	var stand := width / 2.0 + tug_width / 2.0 + TUG_HULL_GAP
-	var room := float(layout.channel) / 2.0 - tug_width / 2.0 - 0.1
+	var stand := width / 2.0 + tug_length / 2.0 + TUG_HULL_GAP  # (Bow on the hull.)
+	var beside := width / 2.0 + tug_width / 2.0 + TUG_HULL_GAP
+	var outward := Vector2.from_angle(float(let_go[1]) + open * PI / 2.0)
 	for i in team.size():
 		var side := 0.0 if team.size() == 1 else (1.0 if i == 0 else -1.0) * tug_width * TOW_Y_WIDTHS
-		var beside := stand + i * (tug_width + TUG_MOOR_GAP)
-		var past := tug_length
-		if beside > room:
-			beside = maxf(minf(stand, room), tug_width)
-			past = tug_length + i * (tug_length + TUG_MOOR_GAP)
-		var segments := [{kind = "follow", t0 = 0.0, t1 = pulled, ahead = ahead, side = side, side_to = open * beside, past = past, swing = tug_length}]
+		var segments := [{kind = "follow", t0 = 0.0, t1 = pulled, ahead = ahead, side = side, side_to = open * beside, past = tug_length, swing = tug_length}]
+		# ...then on the hull at its station (the bow quarter and the stern
+		# quarter; a lone tug amidships), pushing it round and in and up to the
+		# pier, going with it however it turns...
+		var station := 0.0 if team.size() == 1 else (1.0 if i == 0 else -1.0) * length * TUG_PUSH_STATION
+		segments.append({kind = "attached", t0 = pulled, t1 = pushed, out = outward, angle = float(let_go[1]), x = station, stand = stand})
+		# ...and backs off square from the hull once it's alongside, to lie there till the team's work is done.
+		var on_hull := _work_pose(work, segments, pushed)
+		var away := Vector2.from_angle(float(on_hull[1]) + PI)  # (Astern of the tug: straight back off the hull.)
+		var backed := [(on_hull[0] as Vector2) + away * tug_length * TUG_BACK_OFF_TUGS, float(on_hull[1])]
+		segments.append({kind = "reverse", t0 = pushed, t1 = total, from = on_hull[0], to = backed[0], angle = float(on_hull[1])})
 		work.tugs.append(segments)
-		var stopped := _work_pose(work, segments, pulled)
-		segments.append({kind = "hold", t0 = pulled, t1 = total, pose = stopped})
 		# Then out along the channel's middle to its moorings (see _lying_pose()).
-		work.finish.append([stopped, [Vector2((stopped[0] as Vector2).x + tug_length * 1.5, 0.0), 0.0]])
+		work.finish.append([backed, [Vector2((backed[0] as Vector2).x + tug_length * 1.5, 0.0), 0.0]])
 	return work
 
 ## A tug's point pulling a ship in (see "follow" in _work_pose()), `d` along
@@ -3407,6 +3413,7 @@ const HARBOUR_CORRIDOR_NM := 90.0
 ## this many times the harbour's distance from the port in lane (see
 ## _harbour_pose()).
 const HARBOUR_REACH := 3.0
+const HARBOUR_APPROACH_OUT := 2.2  # The approach pose, in line with the mouth, this many mouths out (see _lane_curve()).
 ## The shortest stretch of lane (nm) a ship curves in or out of port over.
 const HARBOUR_MIN_NM := 2.0
 ## How many times its reach a curve's stretch of lane may grow to match a
@@ -5704,14 +5711,15 @@ func _harbour_corridors(port_id: String, lanes: Array = []) -> Array[PackedVecto
 				var sample: Array = _bent_sample(sea_lane, from, to, clampf(mile, 0.0, length))
 				var edge: Vector2 = to_local.call(Geo.unproject(sample[0]))
 				var heading := Vector2((sample[1] as Vector2).x, -(sample[1] as Vector2).y).angle()
-				var poses := [[edge, heading], harbour] if arriving else [harbour, [edge, heading]]
+				var approach: Array = keep_right.call(entrance.call(arriving, HARBOUR_APPROACH_OUT))  # (As _lane_curve() has it.)
+				var poses := [[edge, heading], approach, harbour] if arriving else [harbour, approach, [edge, heading]]
 				# From behind the jetty: round its end first (see _round_jetty()).
 				var in_dock: Vector2 = edge.rotated(-sea_angle) / dock_nm
 				in_dock.y *= flip
 				var round_poses := _round_jetty(port_id, [in_dock, (heading - sea_angle) * flip], arriving)
 				for r in round_poses.size():
 					var pose: Array = round_poses[r]
-					poses.insert(1 + r, [dock_point.call(pose[0]), dock_angle.call(float(pose[1]))])
+					poses.insert((1 if arriving else 2) + r, [dock_point.call(pose[0]), dock_angle.call(float(pose[1]))])
 				curve = _pose_path(poses, HARBOUR_CURVE_HANDLE)
 				var curve_nm := _path_length(curve)
 				if curve_nm <= reach or reach >= length or reach >= most:
@@ -5880,7 +5888,11 @@ func _lane_curve(lane, from_port: String, to_port: String, length: float, arrivi
 	for pose: Array in _round_jetty(port, _screen_to_local(port, on_lane), arriving):
 		round_poses.append(_local_to_screen(port, pose))
 	via = round_poses + via if arriving else via + round_poses
-	var poses := [on_lane] + via + [harbour] if arriving else [harbour] + via + [on_lane]
+	# Lined up with the mouth from HARBOUR_APPROACH_OUT mouths out before the
+	# last stretch in (and out to there before turning for the lane): a lane
+	# coming in from the side made the curve hook round at the mouth.
+	var approach := _keep_right(port, _entrance_pose(port, false, arriving, HARBOUR_APPROACH_OUT))
+	var poses := [on_lane] + via + [approach, harbour] if arriving else [harbour, approach] + via + [on_lane]
 	var shaped := _loosen(poses, turn > 0.0, false, turn)
 	return [_pose_path(shaped, HARBOUR_CURVE_HANDLE), poses, shaped]
 
@@ -5961,14 +5973,22 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 		# give it as much lane as it's long (up to HARBOUR_REACH_GROW times: round
 		# the jetty from behind, a curve from further out is longer again).
 		var most := reach * HARBOUR_REACH_GROW
+		var curve := []
 		for k in 3:
-			var curve := _lane_curve(lane, from_port, to_port, length, arriving, minf(reach, length), harbour, 0.0 if arriving else turn, [] if arriving else via)
+			curve = _lane_curve(lane, from_port, to_port, length, arriving, minf(reach, length), harbour, 0.0 if arriving else turn, [] if arriving else via)
 			if curve.is_empty():
 				break
 			var curve_nm := _path_length(curve[0]) / px_per_nm
 			if curve_nm <= reach or reach >= most:
 				break
 			reach = minf(curve_nm * 1.05, most)
+		# A curve over the land (cutting a corner of the coast): shortened,
+		# so it keeps to its lane (which is off the land) longer.
+		for k in 4:
+			if curve.is_empty() or reach <= HARBOUR_MIN_NM or not _curve_on_land(curve[0], port):
+				break
+			reach = maxf(reach * 0.6, HARBOUR_MIN_NM)
+			curve = _lane_curve(lane, from_port, to_port, length, arriving, minf(reach, length), harbour, 0.0 if arriving else turn, [] if arriving else via)
 		reaches[i] = reach
 	# A short leg: the two ends share it.
 	if reaches[0] + reaches[1] > length and reaches[0] + reaches[1] > 0.0:
@@ -5976,6 +5996,23 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 		reaches[0] *= fit
 		reaches[1] *= fit
 	return [reaches, shown]
+
+## True if a harbour curve (screen points) runs over the land as drawn, outside
+## its port's marina (whose basin and harbour are painted over whatever's there).
+const CURVE_LAND_STEP_PX := 12.0
+func _curve_on_land(path: PackedVector2Array, port: String) -> bool:
+	var layout := _port_layout(port)
+	for i in range(1, path.size()):
+		var a := path[i - 1]
+		var b := path[i]
+		var pieces := maxi(ceili(a.distance_to(b) / CURVE_LAND_STEP_PX), 1)
+		for k in pieces + 1:
+			var at := a.lerp(b, float(k) / pieces)
+			if _marina_ground(layout, (_screen_to_local(port, [at, 0.0]) as Array)[0]):
+				continue
+			if _on_land(_screen_lon_lat(at)):
+				return true
+	return false
 
 func _draw_overlay() -> void:
 	_canvas = _overlay
@@ -6610,7 +6647,7 @@ func _draw_active_lanes() -> void:
 		_lane_painter.set_providers(_lane_chunks, _lane_ends)
 	if _lane_painter != null:
 		var epoch := _active_lanes_epoch * 2 + (1 if own_only else 0)
-		if lane_mesh and _lane_painter.has_method(&"build_mesh"):
+		if lane_mesh and _lane_painter.has_method(&"build_mitred_mesh"):  # (Not in an older library: its mesh doesn't suit scripts/ui/lanes.gdshader.)
 			# The lanes with neither port's marina showing (no harbour curves, which
 			# are worked out on screen) as the mesh on the globe; the rest, few, by
 			# the native pass each frame. Which show depends on the zoom alone, so
@@ -6674,7 +6711,7 @@ func _show_lane_mesh(lanes: Array, epoch: Array) -> void:
 	var frame := Engine.get_process_frames()
 	if _lane_mesh == null or epoch != _lane_mesh_epoch or (_lane_mesh_retry >= 0 and frame >= _lane_mesh_retry):
 		var t0 := Time.get_ticks_usec()
-		var built: Dictionary = _lane_painter.build_mesh(lanes, LANE_MESH_STEP_NM)
+		var built: Dictionary = _lane_painter.build_mitred_mesh(lanes, LANE_MESH_STEP_NM)
 		var mesh := ArrayMesh.new()
 		if not (built.indices as PackedInt32Array).is_empty():
 			var arrays := []
@@ -7339,6 +7376,7 @@ const FISH_APPROACH_NM := 12.0
 const FISH_SPOT_SHARE := 0.4
 const FISH_LOOP_NM := 1.2
 const FISH_LOOP_S := 80.0
+const FISH_TROLL_TURN_NM := 0.25  # A troller's turn at the end of its run (radius).
 var _fish_spots := {}  # [ground, slot] -> its spot (projected), found once.
 var _fish_poses := {}  # ship -> [frame, [position, heading]].
 
@@ -7400,7 +7438,37 @@ func _fish_lane_point(ship: Ship, here: Array, from_start: float, to_end: float)
 func _fish_work_pose(ship: Ship, at_time: float) -> Array:
 	var spot := _fish_spot(ship.fish_ground, ship.fish_slot)
 	var gear := _fishing_gear_kind(ship)
-	if gear == "troll" or gear == "trawl":
+	if gear == "troll":
+		# A troller runs its lines up and back along a line through its spot:
+		# one leg out, a tight turn, the other leg home a turn's width over, and
+		# round again (a stadium), its heading along the leg or round the turn.
+		var per_nm := _units_per_nm(spot)
+		var leg := FISH_LOOP_NM * 2.0 * per_nm
+		var r := FISH_TROLL_TURN_NM * per_nm
+		var round := 2.0 * leg + TAU * r
+		var s := fposmod((at_time / FISH_LOOP_S + float(ship.id % 17) / 17.0) * round, round)
+		var heading := float(ship.fish_slot) * TAU / GameState.GROUND_BOATS + float(ship.id % 7) * 0.4
+		var ahead := Vector2.from_angle(heading)
+		var side := ahead.orthogonal()
+		var local: Vector2
+		var facing: Vector2
+		if s < leg:  # Out, on the right-hand leg.
+			local = ahead * (s - leg / 2.0) + side * r
+			facing = ahead
+		elif s < leg + PI * r:  # Round the far turn.
+			var a := (s - leg) / r
+			local = ahead * (leg / 2.0) + side * r * cos(a) + ahead * r * sin(a)
+			facing = (ahead * cos(a) - side * sin(a))
+		elif s < 2.0 * leg + PI * r:  # Back, on the left-hand leg.
+			var back := s - leg - PI * r
+			local = ahead * (leg / 2.0 - back) - side * r
+			facing = -ahead
+		else:  # Round the near turn.
+			var a := (s - 2.0 * leg - PI * r) / r
+			local = -ahead * (leg / 2.0) - side * r * cos(a) - ahead * r * sin(a)
+			facing = (-ahead * cos(a) + side * sin(a))
+		return [spot + local, facing.normalized()]
+	if gear == "trawl":
 		var turn := TAU * fposmod(at_time / FISH_LOOP_S + float(ship.id % 17) / 17.0, 1.0)
 		var loop := Vector2(cos(turn), sin(turn)) * FISH_LOOP_NM * _units_per_nm(spot)
 		return [spot + loop, Vector2(-sin(turn), cos(turn))]
@@ -8200,8 +8268,9 @@ func _wake_trail(ship: Ship, at: Vector2, angle: float, length_units: float, sca
 	var trail: PackedVector2Array = _wake_trails.get(ship, PackedVector2Array())
 	if not trail.is_empty():
 		var gap := trail[-1].distance_to(stern)
-		if gap > step * 2.0 / WAKE_TRAIL_STEP * 1.5:
-			trail = PackedVector2Array()  # (Jumped: a fresh wake.)
+		var ahead_world := screen_to_world(at) - stern  # (Which way the ship points, on the map.)
+		if gap > step * 2.0 / WAKE_TRAIL_STEP * 1.5 or (gap >= step and (stern - trail[-1]).dot(ahead_world) < 0.0):
+			trail = PackedVector2Array([stern])  # (Jumped, or put onto a new course facing another way: a fresh wake.)
 		elif gap < step:
 			pass  # (Not far enough on for a new point.)
 		else:
@@ -8227,6 +8296,8 @@ func _wake_share(ship: Ship) -> float:
 	if ship.is_lost() or ship.is_carried() or ship.is_towed():
 		return 0.0
 	if ship.is_docked():
+		if ship.is_tug():
+			return 0.0  # (Working a ship in, it goes sideways with it, bow on the hull: no wake of its own.)
 		if ship.berth_phase == Ship.BERTH_IN or ship.berth_phase == Ship.BERTH_OUT:
 			return WAKE_HARBOUR_SHARE
 		var seen: Array = _dock_seen.get(ship, [])
@@ -8271,11 +8342,17 @@ static func draw_wake(canvas: CanvasItem, at: Vector2, angle: float, length: flo
 	# point ahead of the stern), going straight on where the track runs out.
 	var line := PackedVector2Array([stern])
 	var run := 0.0
+	var last_way := back
 	for p: Vector2 in trail:
-		if (p - line[-1]).dot(back) <= 0.0:
-			continue
-		run += line[-1].distance_to(p)
+		var step := p - line[-1]
+		var far := step.length()
+		if far < width * 0.3:
+			continue  # (Too close to the last to say which way.)
+		if step.dot(last_way) < far * 0.5:
+			break  # (The track turns back on itself, or runs ahead: a swing onto a new course. The wake ends here.)
+		run += far
 		line.append(p)
+		last_way = step / far
 		if run >= reach:
 			break
 	if run < reach:
@@ -10300,13 +10377,13 @@ func _draw_bird_pass(still: bool, now: float, cal: float) -> void:
 			if about.is_empty():
 				about = [{colony = index}, {count = int(colony.count), species = [colony.species]}]
 			if not still and FLYING_MODES.has(state.mode):
-				flyers.append([life.birds[b], colony, info, state, at, span, basis, about])
+				flyers.append([life.birds[b], colony, info, state, at, span, basis, about, b])
 				continue
 			_draw_one_bird(life.birds[b], colony, info, state, at, span, now, basis)
-			hits.append([at, maxf(span * 0.6, BIRD_HIT_MIN_PX), about[0], about[1]])
+			hits.append([at, maxf(span * 0.6, BIRD_HIT_MIN_PX), about[0], about[1], b])
 	for flyer: Array in flyers:
 		_draw_one_bird(flyer[0], flyer[1], flyer[2], flyer[3], flyer[4], flyer[5], now, flyer[6])
-		hits.append([flyer[4], maxf(float(flyer[5]) * 0.6, BIRD_HIT_MIN_PX), flyer[7][0], flyer[7][1]])
+		hits.append([flyer[4], maxf(float(flyer[5]) * 0.6, BIRD_HIT_MIN_PX), flyer[7][0], flyer[7][1], flyer[8]])
 	_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -11115,7 +11192,7 @@ static func _mirror_y(points: PackedVector2Array) -> PackedVector2Array:
 	return out
 
 ## The bird drawn under a screen point, if any (moving ones over still ones):
-## [what it's round ({colony}), its colony ({count, species})], or []; `reach`
+## [what it's round ({colony, bird: the one clicked}), its colony ({count, species})], or []; `reach`
 ## times its usual reach (smaller: only right on a bird).
 func _birds_at(screen_pos: Vector2, reach := 1.0) -> Array:
 	if not Settings.birds:
@@ -11123,16 +11200,22 @@ func _birds_at(screen_pos: Vector2, reach := 1.0) -> Array:
 	reach *= BIRD_HIT_REACH
 	var native: Object = BirdLife.shared().native
 	if native != null:
-		var index: int = native.hit_at(screen_pos, reach)
-		if index < 0:
+		# (bird_hit_at: the bird itself too; hit_at, its colony only, in an older library.)
+		var hit: Vector2i = native.bird_hit_at(screen_pos, reach) if native.has_method(&"bird_hit_at") else Vector2i(native.hit_at(screen_pos, reach), -1)
+		if hit.x < 0:
 			return []
-		var colony: Dictionary = Wildlife.shared().colonies[index]
-		return [{colony = index}, {count = int(colony.count), species = [colony.species]}]
+		var colony: Dictionary = Wildlife.shared().colonies[hit.x]
+		var about := {colony = hit.x}
+		if hit.y >= 0:
+			about.bird = hit.y
+		return [about, {count = int(colony.count), species = [colony.species]}]
 	for hits: Array in [_bird_hits, _still_hits]:
 		for i in range(hits.size() - 1, -1, -1):
 			var hit: Array = hits[i]
 			if (hit[0] as Vector2).distance_to(screen_pos) <= float(hit[1]) * reach:
-				return [hit[2], hit[3]]
+				var about: Dictionary = (hit[2] as Dictionary).duplicate()
+				about.bird = hit[4]  # (The one clicked: its Follow follows it.)
+				return [about, hit[3]]
 	return []
 
 # --- Wonders of the world ------------------------------------------------------

@@ -111,7 +111,7 @@ func _audio_tab() -> Control:
 		grid.add_child(label)
 		var slider := HSlider.new()
 		slider.min_value = 0.0
-		slider.max_value = 100.0
+		slider.max_value = Settings.volume_most(bus) * 100.0  # (Master to 200%: 100% is everything at its own level.)
 		slider.step = 1.0
 		slider.custom_minimum_size = Vector2(280, 0)
 		slider.size_flags_horizontal = SIZE_EXPAND_FILL
@@ -129,7 +129,7 @@ func _audio_tab() -> Control:
 	var note := Label.new()
 	note.theme_type_variation = &"DimLabel"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Sea and weather: the waves, wind and rain. Wildlife: the birds' and animals' calls. Ship horns: ships setting off and the fog signal. All of it gets quieter the further out you zoom."
+	note.text = "Master goes up to 200%: 100% is everything at its own level. Sea and weather: the waves, wind and rain. Wildlife: the birds' and animals' calls. Ship horns: ships setting off and the fog signal. All of it gets quieter the further out you zoom."
 	box.add_child(note)
 	return box
 

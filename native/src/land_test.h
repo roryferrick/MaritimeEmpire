@@ -3,6 +3,7 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
+#include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/rect2.hpp>
@@ -32,6 +33,7 @@ protected:
 public:
 	void build(const PackedVector2Array &triangles, double cell);
 	bool contains(const Vector2 &projected) const;
+	PackedFloat64Array land_runs(const PackedVector2Array &points, double step, double world_width) const;
 	Array shore_spots(const Dictionary &port, const Array &marinas, int samples, double reach, double seaward, double inland_share);
 };
 
