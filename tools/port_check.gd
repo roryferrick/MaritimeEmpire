@@ -13,7 +13,7 @@ extends Node
 ##   Godot --headless --path . tools/port_check.tscn -- [--fix] [--ports A,B] [--lanes-off]
 
 const FACING := "res://data/port_facing.json"
-const SHIP_WORLD_ZOOM := 75.0
+const SHIP_WORLD_ZOOM := 88.235  # (MapView.SHIP_WORLD_ZOOM.)
 ## How far out the lanes are looked at (nm), and how often along them.
 const LANE_NM := 60.0
 const STEP_NM := 0.5

@@ -172,7 +172,7 @@ static func _jobs(ship: Ship, plan: Dictionary, now: float) -> Array:
 			var at := Vector2(bow[0][0] - 4.0, (bow[0][1] + bow[bow.size() - 1][1]) / 2.0)
 			jobs.append([at, 0.0, -1.0, TOOL_NONE])
 		return jobs
-	if not ship.is_fishing() or ship.fish_phase != "work":
+	if not ship.is_working_ground():
 		return jobs
 	var gear: Array = ship.model().get("fishing", {}).get("gear", [])
 	var kind := str(Fisheries.shared().species.get(ship.fish_species, {}).get("gear", "troll"))

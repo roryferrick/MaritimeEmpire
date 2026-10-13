@@ -375,6 +375,13 @@ func is_fishing() -> bool:
 	return _kind() == KIND_FISHING
 
 
+## True while a fishing boat is at work on its ground (on its trip, not in
+## port): the only time its gear is out (lines, pots, nets; rods rigged, the
+## crew at them).
+func is_working_ground() -> bool:
+	return is_fishing() and job_phase == JOB_FISH and fish_phase == "work" and docked_at.is_empty()
+
+
 ## Fishing boat only: "crabbing" or "fishing", by its gear.
 func fishing_line() -> String:
 	return "crabbing" if str(model().get("category", "")) == "crabbing" else "fishing"
@@ -1469,6 +1476,8 @@ static func from_dict(data: Dictionary) -> Ship:
 		ship.delivery_canals.append(data.delivery_canal)
 	ship.lost_reason = data.get("lost_reason", "")
 	ship.job_phase = data.get("job_phase", JOB_NONE)
+	if ship.job_phase != JOB_FISH:
+		ship.fish_phase = ""  # (Only on a trip is it out, at work or coming home: its gear's out only then.)
 	ship.segment_end = float(data.get("segment_end", 0.0))
 	ship.job_segments = data.get("job_segments", [])
 	ship.align_time = float(data.get("align_time", 0.0))
@@ -1505,7 +1514,11 @@ static func link_rescues(all: Array[Ship]) -> void:
 				mammoth.rescuing = ship
 				if not mammoth.is_tug() or mammoth.tug_lead:  # A pair of tugs: the lead one.
 					ship.rescuer = mammoth
-		if mammoth.rescuing == null:
+		if mammoth.rescuing == null and mammoth.job_phase != JOB_FISH:
+			# (A rescue or tow with no one left to bring in is over. Not a fishing
+			# trip: that job needs no other ship, and clearing it left a boat at
+			# work on its ground "arriving" there as if at a port, then sailing
+			# home as a plain leg with its lines still out.)
 			mammoth.job_phase = JOB_NONE
 
 

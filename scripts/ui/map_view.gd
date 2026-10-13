@@ -270,7 +270,7 @@ const EMPTY_HOLD := Color("#3a332c")
 ## pixels at SHIP_WORLD_ZOOM px a degree, so they grow and shrink with the map
 ## like the coast does (tiny zoomed right out). Sea animals are sized in the
 ## world too, their length_px at ANIMAL_WORLD_ZOOM px a degree.
-const SHIP_WORLD_ZOOM := 75.0
+const SHIP_WORLD_ZOOM := 88.235  # (75 / 0.85: ships, marinas and all in dock units 15% smaller than before 2026-10-13.)
 const ANIMAL_WORLD_ZOOM := 220.0
 ## Where a ship being carried sits on its recovery boat: the middle of the
 ## open work deck aft (x from the stern, in art units), clear of the wheelhouse.
@@ -296,25 +296,8 @@ const TOW_LINE_TUGS := 1.2
 const TOW_Y_WIDTHS := 0.7
 const TOW_LINE_COLOR := Color(0.92, 0.9, 0.82)
 const TOW_SWING_NM := 3.0
-## Tugs working a ship in at port (see _tug_work()): how tight they turn (a
-## radius, in their own lengths), how fast they go round the harbour, push and
-## back off (shares of their own speed), how far their bows stay off the hull
-## (dock units), where along the ship they push (a share of its length either
-## side of its middle), and how long (in tug lengths) a ship must be for a
-## lone tug to push it in twice, stern half then bow half.
-const TUG_TURN_TUGS := 0.7
-const TUG_HARBOUR_SHARE := 0.6
-const TUG_PUSH_SHARE := 0.2
-const TUG_BACK_SHARE := 0.35
+## How far (dock units) a tug moored along its marina's breakwater lies off its face.
 const TUG_HULL_GAP := 0.3
-const TUG_PUSH_STATION := 0.3
-const TUG_TWO_PUSHES_TUGS := 2.5
-const TUG_BACK_OFF_TUGS := 1.2  # How far (tug lengths) a tug backs off the hull once the ship's alongside.
-## A lone tug pushing a ship in comes in on a slant (see _plan_tug_work()):
-## how far ahead of the other its end comes in through a push (a share of the
-## way in), and how far ahead its end is left after a first push of two.
-const LONE_PUSH_LEAD := 0.35
-const LONE_PUSH_SLANT := 0.55
 ## Tugs moor along the inside of their marina's breakwater (see _jetty_pose()):
 ## the first this far (radians) round from where it meets the quay, each the
 ## next this far (dock units) on from the last.
@@ -404,21 +387,11 @@ const LABEL_CELL_DEG := 10.0
 const LANE_CHUNK := 32
 ## Solid lines on screen leave out points closer together than this (px): see _draw_line_runs().
 const LINE_MIN_PX := 1.5
-## Lanes bend round the harbours of ports they pass but aren't sailing to (see
-## _bent_lane()): each port's keep-out zone reaches this many times its mouth's
-## distance from it (round its marina and approach curves), filled in every
-## ZONE_STEP_DEG where a lane bends; zones checked again every ZONE_CHECK_S; a
-## ship's heading there taken over ZONE_HEADING_NM either side of it.
-const ZONE_MOUTHS := 1.8
-const ZONE_STEP_DEG := 0.04
-const ZONE_CHECK_S := 5.0
-## The fleet's lanes are bent ahead of time for up to this long a frame (ms): see _warm_lanes().
+## The fleet's lanes are laid out for the passes ahead of time for up to this
+## long a frame (ms): see _warm_lanes().
 const LANE_WARM_MS := 3.0
-const ZONE_HEADING_NM := 2.0
-## How far along a lane (points) how far it may bend is smoothed (see _bent_lane()).
-const ZONE_SMOOTH_POINTS := 8
-## A push this small (degrees) is let be even onto the land (see _bent_lane()).
-const ZONE_FREE_DEG := 0.08
+## How often (s) the ports' marina sizes are looked at, for what depends on them (see _check_port_sizes()).
+const PORT_SIZE_CHECK_S := 5.0
 ## The land's triangles are sorted into cells this big (projected degrees) to
 ## tell if a point's on the land (see _on_land()).
 const LAND_CELL_DEG := 1.0
@@ -723,8 +696,6 @@ var _tile_reach := PI
 var _art_tiled := false
 var _art_toward := Vector3.ZERO
 var _art_reach := PI
-## Canals' boxes (lon, lat), where lanes don't bend (see _in_canal()).
-var _canal_boxes: Array[Rect2] = []
 ## The land's triangles by cell (see _on_land()), and the task sorting them.
 static var _land_cells := {}
 ## The same land test natively (LandTest), when the library's there (see _on_land()).
@@ -1311,7 +1282,7 @@ func _ready() -> void:
 	_wonder_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_load_decor()
 	_load_wildlife_art()
-	_start_land_cells()  # (For bending lanes round harbours: see _bent_lane().)
+	_start_land_cells()  # (For the moorings and the harbour curves: see _on_land().)
 	_weather_layer.draw.connect(_draw_weather_layer)
 	_canal_layer.draw.connect(func() -> void:
 		var t0 := Time.get_ticks_usec()
@@ -1866,28 +1837,21 @@ func _local_to_screen(port_id: String, pose: Array) -> Array:
 	return [_dock_point(port_id, pose[0]), _dock_angle(port_id, float(pose[1]))]
 
 ## How a team of tugs works the ship they towed in at port, in their marina's
-## dock units, worked out once (and again if the ship's berth or spot changes).
-## Every tug goes the way it faces (round smooth turns, TUG_TURN_TUGS of its
-## length; backing straight off at most), never sideways:
-## - Pulling: they tow it in on their lines, ahead of its bow (two in a tight
-##   Y), through the mouth, the outer harbour and down the channel to where
-##   it comes round for its slot. With no berth free they cast off at the
-##   mouth instead and go; it glides on to its spot at the anchorage to wait,
-##   as any ship coming in to wait does.
-## - Letting go: as it comes up to there, each eases out to the side away
-##   from its slot and to a stop, and lies there while it goes on in by
-##   itself at a crawl (TUG_LET_GO_SHARE), round into its slot and the last
-##   slide onto its pier; then, docked, they turn away and go to their
-##   moorings on the first piers (see _lying_pose()).
-## {total (s), team, ship: its segments, tugs: each tug's segments, finish:
-## each tug's way off when it lets go}, or {} if there's nothing to work out.
-## Each segment is {kind, t0, t1, ...}: "path" (along points, as timed),
-## "hold" (a pose), "slide" (the last slide onto the pier, bow and stern each
-## from one share of the way to another), "follow" (pulling,
-## `ahead` along the ship's path, `side` out from it, peeling off to `side_to`,
-## `past` along from where it stops); "attached" (pushing, at `x` along the
-## ship and `out` from it, facing in) and "reverse" (backing from one point
-## to another) are kept for old plans.
+## dock units, worked out once (and again if the ship's berth or spot changes):
+## brought in to its berth by a series of tug manoeuvres (see
+## _plan_berth_work()); with no berth free they cast off at the mouth and it
+## glides on to its spot at the anchorage to wait. Docked, they go to their
+## moorings (see _lying_pose()). {total (s), team, ship: its segments, tugs:
+## each tug's segments, finish: each tug's way off when it's done}, or {} if
+## there's nothing to work out. Each segment is {kind, t0, t1, ...}: the
+## ship's "path" (towed in, along points, as timed), "pivot" (turned about
+## `at`, its middle `reach` from it, from one heading to another) and "inch"
+## (pushed straight in, a push at a time); a tug's "follow" (pulling, `ahead`
+## along the ship's path, `side` out from it, easing to `side_to`, `past` along
+## from where it stops), "trail" (made fast astern: see _trail_d()), "drive"
+## (ahead or astern the way it faces, from one point to another), "spin"
+## (turning on the spot) and "pinned" (its fender on the hull, pushing); and
+## "hold" (a pose), for either.
 func _tug_work(tug: Ship) -> Dictionary:
 	var team := _team_of(tug)
 	if team.is_empty() or team[0].rescuing == null:
@@ -1913,21 +1877,15 @@ func _tug_work(tug: Ship) -> Dictionary:
 ## Plans a team of tugs working a ship in at port (dock units; see
 ## _tug_work()): {total (s of play), team, ship ([segments] of the ship's
 ## way), tugs ([[segments] each), finish ([where each tug ends up, as poses]
-## each)}. Pulling it in: in through the mouth as far as the tugs are ahead
-## (just as they were coming in from sea: see _tow_track()), through the
-## outer harbour and down the channel to where it comes round for its slot;
-## there they let go, easing to a stop beside it (inside the channel, clear of
-## the pier tips), and it goes on in by itself at a crawl, round into its slot
-## and the last slide onto its pier, while they lie there; then they go out
-## along the channel's middle and by their arm's land end to their moorings
-## (_tug_home_way()). With no berth free
-## they cast off at the mouth, where their tow ends, and it glides on to its
-## spot at the anchorage, as any ship coming in to wait does.
+## each)}. Its berth chosen as any ship's is, the tugs bring it in by a
+## series of real tug manoeuvres, worked out for its own pier (see
+## _plan_berth_work()). With no berth free they cast off at the mouth, where
+## their tow ends, and it glides on to its spot at the anchorage, as any ship
+## coming in to wait does.
 func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, layout: Dictionary, anchoring: bool) -> Dictionary:
 	var look: Rect2 = _model_look(ship.model_id)[7]
 	var tug_look: Rect2 = _model_look(lead.model_id)[7]
 	var length := look.size.x
-	var width := look.size.y
 	var tug_length := tug_look.size.x
 	var tug_width := tug_look.size.y
 	var units_per_nm := SHIP_WORLD_ZOOM / 60.0
@@ -1936,9 +1894,9 @@ func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, lay
 		tow_speed += GameState._tow_speed(each)
 	tow_speed = maxf(tow_speed, MIN_HARBOUR_SPEED) * units_per_nm
 	var mouth := _screen_to_local(port, _keep_right(port, _entrance_pose(port, false, true)))
-	var ahead := length / 2.0 + tug_length * (TOW_LINE_TUGS + 0.5)
-	var lead_in := [(mouth[0] as Vector2) + Vector2.from_angle(float(mouth[1])) * ahead, mouth[1]]
 	if anchoring:
+		var ahead := length / 2.0 + tug_length * (TOW_LINE_TUGS + 0.5)
+		var lead_in := [(mouth[0] as Vector2) + Vector2.from_angle(float(mouth[1])) * ahead, mouth[1]]
 		var at_mouth := {kind = "path", t0 = 0.0, t1 = 0.0, points = PackedVector2Array([mouth[0], lead_in[0]]), times = PackedFloat32Array([0.0, 0.0]), start = float(mouth[1]), end = float(mouth[1])}
 		var cast_off := {total = 0.0, team = team, ship = [at_mouth], tugs = [], finish = []}
 		for i in team.size():
@@ -1946,68 +1904,608 @@ func _plan_tug_work(lead: Ship, team: Array[Ship], ship: Ship, port: String, lay
 			cast_off.tugs.append([{kind = "follow", t0 = 0.0, t1 = 0.0, ahead = ahead, side = side, side_to = side, past = 1.0e9, swing = tug_length}])
 			cast_off.finish.append([_work_pose(cast_off, cast_off.tugs[i], 0.0)])
 		return cast_off
-	var berth: Array = layout.berths[ship.berth]
-	var moored: Array = _berth_pose(berth, ship)
-	var approach := _slot_approach(port, berth, ship)  # [inside, abreast, entry, off] (or, for the slot by the entrance, [inside, entry, off]).
-	var let_go: Array = approach[approach.size() - 3]  # (Abreast of its slot; for the slot by the entrance, just inside.)
-	# Towed in to where it comes round for its slot.
-	var path := _pose_path(_loosen([mouth, lead_in] + approach.slice(0, approach.size() - 2), false, false), SLOT_PATH_HANDLE)
-	var times := _path_times(path, tow_speed, length, length, false, true)
-	var pulled := times[-1]
-	var ship_segments: Array = [{kind = "path", t0 = 0.0, t1 = pulled, points = path, times = times, start = float(mouth[1]), end = float(let_go[1])}]
-	# From there the tugs put their bows on it and push it round into its slot
-	# and in (at the team's pace, not the ship's own crawl), then hold it up
-	# against the pier through the last slide, and back off.
-	var assisted := maxf(tow_speed, maxf(ship.speed(), MIN_HARBOUR_SPEED) * units_per_nm * TUG_LET_GO_SHARE)
-	var own_path := _pose_path(_loosen([let_go] + approach.slice(approach.size() - 2), false, false), SLOT_PATH_HANDLE)
-	var own_times := _path_times(own_path, assisted, length, length, true, true)
-	var glide := own_times[-1]
-	ship_segments.append({kind = "path", t0 = pulled, t1 = pulled + glide, points = own_path, times = own_times, start = float(let_go[1]), end = float(approach[-1][1])})
-	var slide_s := float(Docks.settings().get("slide_s", 1.5))
-	ship_segments.append({kind = "slide", t0 = pulled + glide, t1 = pulled + glide + slide_s, from_pose = approach[-1], to_pose = moored, length = length, ends_from = [0.0, 0.0], ends_to = [1.0, 1.0], lead = 0.0})
-	var pushed := pulled + glide + slide_s
-	var back_s := tug_length * TUG_BACK_OFF_TUGS / maxf(GameState._tow_speed(lead) * units_per_nm * TUG_BACK_SHARE, 0.01)
-	var total := pushed + back_s
-	var work := {total = total, team = team, ship = ship_segments, tugs = [], finish = []}
-	# The tugs: ahead of it on its line while they pull, swinging out to the
-	# side away from its slot as it comes up to where they let go...
-	var forward := Vector2.from_angle(float(let_go[1]))
-	var open := signf((-(berth[1] as Vector2)).dot(forward.rotated(PI / 2.0)))
-	var stand := width / 2.0 + tug_length / 2.0 + TUG_HULL_GAP  # (Bow on the hull.)
-	var beside := width / 2.0 + tug_width / 2.0 + TUG_HULL_GAP
-	var outward := Vector2.from_angle(float(let_go[1]) + open * PI / 2.0)
-	for i in team.size():
-		var side := 0.0 if team.size() == 1 else (1.0 if i == 0 else -1.0) * tug_width * TOW_Y_WIDTHS
-		var segments := [{kind = "follow", t0 = 0.0, t1 = pulled, ahead = ahead, side = side, side_to = open * beside, past = tug_length, swing = tug_length}]
-		# ...then on the hull at its station (the bow quarter and the stern
-		# quarter; a lone tug amidships), pushing it round and in and up to the
-		# pier, going with it however it turns...
-		var station := 0.0 if team.size() == 1 else (1.0 if i == 0 else -1.0) * length * TUG_PUSH_STATION
-		segments.append({kind = "attached", t0 = pulled, t1 = pushed, out = outward, angle = float(let_go[1]), x = station, stand = stand})
-		# ...and backs off square from the hull once it's alongside, to lie there till the team's work is done.
-		var on_hull := _work_pose(work, segments, pushed)
-		var away := Vector2.from_angle(float(on_hull[1]) + PI)  # (Astern of the tug: straight back off the hull.)
-		var backed := [(on_hull[0] as Vector2) + away * tug_length * TUG_BACK_OFF_TUGS, float(on_hull[1])]
-		segments.append({kind = "reverse", t0 = pushed, t1 = total, from = on_hull[0], to = backed[0], angle = float(on_hull[1])})
-		work.tugs.append(segments)
-		# Then out along the channel's middle to its moorings (see _lying_pose()).
-		work.finish.append([backed, [Vector2((backed[0] as Vector2).x + tug_length * 1.5, 0.0), 0.0]])
+	var tug_speed := maxf(GameState._tow_speed(lead), MIN_HARBOUR_SPEED) * units_per_nm * TUG_MOVE_SHARE
+	var inside := _right_side(port, layout.inside, true)
+	var work := _plan_berth_work(layout, ship.berth, _berth_pose(layout.berths[ship.berth], ship), look.size, tug_look.size, team.size(), mouth, inside, tow_speed, tug_speed)
+	work.team = team
 	return work
+
+## Tugs bringing a ship in to its berth (see _plan_berth_work()), in dock
+## units: the gap between a pushing tug's bow and the hull; how fast a tug
+## manoeuvres (a share of its tow speed) and turns on the spot (s a quarter
+## turn: harbour tugs turn on their own length); how long the ship takes to be
+## turned round to face its slot (s a quarter turn, for a ship 4 units long);
+## how fast it's pushed in (a share of the team's tow speed), in how many
+## pushes with how long a pause between; and the pause between one stage and
+## the next.
+const TUG_FENDER := 0.08
+const TUG_MOVE_SHARE := 0.6
+const TUG_SPIN_S := 1.1
+const TUG_PIVOT_S := 4.0
+const TUG_INCH_SHARE := 0.35
+const TUG_INCH_PULSES := 3
+const TUG_INCH_PAUSE_S := 0.7
+const TUG_STAGE_PAUSE_S := 0.5
+## How tight (a radius, in its own lengths) a tug steers round.
+const TUG_TURN_LENGTHS := 0.7
+## How many ways (see _plan_berth_work()) are tried in play for a pier the
+## table hasn't got.
+const TUG_PLAY_TRIES := 48
+## How far (dock units) a tug keeps off the pier tips across the channel when it comes round astern of a ship.
+const TUG_ROOM := 0.3
+## Where a ship's turned round to face its slot, tried in this order for each
+## pier until the turn and everything after it is clear: [how far (ship
+## lengths) towards its stern from its middle it turns about, how far (ship
+## lengths) towards its pier the turn's middle is from the channel's]; and
+## where along the hull (ship lengths from its middle) the tugs push to turn it.
+const TUG_PIVOT_SHIFTS := [[0.1, 0.0], [0.07, 0.03], [0.05, 0.05], [0.12, 0.0], [0.05, 0.0], [0.0, 0.05], [0.0, 0.0], [0.15, 0.0], [0.1, 0.05], [0.0, 0.1]]
+const TUG_STATIONS := [0.38, 0.3, 0.22, 0.14]
+## Towed round a curve on the hip instead (see _berth_plan_try()): [the
+## curve's radius, how far towards its pier it starts (ship lengths)].
+const TUG_CURVES := [[0.6, 0.0], [0.8, 0.0], [0.6, -0.08], [1.0, 0.0], [0.45, 0.0], [0.8, -0.08], [0.6, 0.08], [1.25, 0.0], [0.45, -0.08], [1.0, -0.08]]
+## The manoeuvres chosen for each pier (see _plan_berth_work()), by marina,
+## berth, ship and tug sizes and how many tugs: [p, shift, bow station,
+## stern station, hip side, how it's turned, how the tugs turn, clashes left
+## (0 when it's all clear)]: see _berth_plan_try().
+static var _berth_plans := {}
+
+## A team of tugs bringing a ship in to its berth at a marina (dock units:
+## the berth's index, the pose it moors at, the ship's and a tug's size, how
+## many tugs; the harbour mouth and just inside it on the right-hand side, as
+## it comes in; the team's tow speed and a tug's manoeuvring speed, units a
+## s), as a work plan (see _tug_work()). Every tug only ever goes the way it
+## faces, backs straight, or turns on the spot, and the ship only turns about
+## a point or goes straight along its length, so nothing slips sideways:
+## 1. Towed in: the lead tug pulls on its line ahead; the other lets go,
+##    waits beside the way in while the ship passes, then makes fast astern
+##    on a line of its own to steady it. The ship comes to a stop in the
+##    channel abreast of its slot.
+## 2. To their stations: each lets go its line and goes round to push, the
+##    lead on the bow and the other on the stern, from opposite sides: out
+##    to the side, along, turned square to the hull and in until its fender's on it.
+## 3. Turned: pushing bow and stern opposite ways they turn it about a point
+##    near its middle until it faces straight into its slot.
+## 4. Pushed in: one tug backs off, comes round astern and puts its bow on the
+##    stern; then it pushes the ship straight in, a few lengths at a time,
+##    easing off between pushes, until it lies at its berth. The other stands
+##    off in the channel.
+## 5. Clear: it backs straight out of the slot the way it came, and both come
+##    round on the channel's middle facing the way out, for home.
+## Which point it turns about and where the tugs push are chosen for its own
+## pier (see TUG_PIVOT_SHIFTS, TUG_STATIONS) so the ship and the tugs keep
+## clear of the piers, the basin's walls, the breakwater and the ships at the
+## other berths (each taken to have the biggest ship it can) all the way
+## (_berth_plan_clashes()): worked out once for each.
+static func _plan_berth_work(layout: Dictionary, berth_index: int, moored: Array, size: Vector2, tug: Vector2, team_n: int, mouth: Array, inside: Array, tow_speed: float, tug_speed: float, thorough := false) -> Dictionary:
+	var key := _berth_key(layout, berth_index, moored, size, tug, team_n)
+	var chosen: Array = _berth_plans.get(key, [])
+	if chosen.is_empty():
+		chosen = _berth_table().get(key, [])
+	if not chosen.is_empty():
+		var kept := _berth_plan_try(layout, berth_index, moored, size, tug, team_n, mouth, inside, tow_speed, tug_speed, chosen)
+		kept.clashes = int(chosen[7])
+		return kept
+	var obstacles := _berth_obstacles(layout, berth_index)
+	var best := {}
+	var best_bad := 1 << 30
+	var best_params := []
+	# Turned about a point first (but not where the ship can't lie along the
+	# channel abreast of its slot: its bow at the basin's end), then round a curve.
+	var candidates := []
+	for shift: Array in TUG_PIVOT_SHIFTS:
+		if (moored[0] as Vector2).x - float(shift[0]) * size.x - size.x / 2.0 < -float(layout.depth) + TUG_ROOM:
+			continue
+		for bow: float in TUG_STATIONS:
+			for stern: float in (TUG_STATIONS if team_n > 1 else [0.0]):
+				for hip_side: float in [1.0, -1.0]:
+					candidates.append([float(shift[0]), float(shift[1]), bow, stern, hip_side, 0, 0])
+	for curve: Array in TUG_CURVES:
+		for hip_side: float in [1.0, -1.0]:
+			candidates.append([float(curve[0]), float(curve[1]), 0.0, 0.0, hip_side, 1, 0])
+	# (Tugs turning on the spot first, then all those again steering round.)
+	for k in candidates.size():
+		var steered: Array = candidates[k].duplicate()
+		candidates[k][6] = 1
+		steered[6] = 0
+		candidates.append(steered)
+	# (Thorough, as the check that writes the table does: every way, at many
+	# moments. In play, for a pier the table hasn't got: the first few ways, more coarsely.)
+	if not thorough:
+		candidates = candidates.slice(0, TUG_PLAY_TRIES)
+	for params: Array in candidates:
+		var plan := _berth_plan_try(layout, berth_index, moored, size, tug, team_n, mouth, inside, tow_speed, tug_speed, params)
+		var bad := _berth_plan_clashes(plan, layout, obstacles, size, tug, 200 if thorough else 60, best_bad)
+		if bad < best_bad:
+			best = plan
+			best_bad = bad
+			best_params = params
+		if bad == 0:
+			break
+	_berth_plans[key] = best_params + [best_bad]
+	best.clashes = best_bad
+	return best
+
+## The manoeuvres worked out ahead for every pier of every marina size, ship
+## size and team (data/tug_berthing.json, written by the check that tries them
+## all: _berth_key() -> as _berth_plans), so none has to be searched for in play.
+## A pier's plan's key (see _berth_plans, _berth_table()): the marina, the
+## berth, where the ship moors, its size, a tug's and how many, rounded so the
+## same pier always gives the same key.
+static func _berth_key(layout: Dictionary, berth_index: int, moored: Array, size: Vector2, tug: Vector2, team_n: int) -> String:
+	var at: Vector2 = moored[0]
+	return "%.2f/%.2f/%d/%d/%.3f,%.3f,%.2f/%.3f,%.3f/%.3f,%.3f/%d" % [float(layout.radius), float(layout.depth), (layout.berths as Array).size(), berth_index,
+		at.x, at.y, float(moored[1]), size.x, size.y, tug.x, tug.y, team_n]
+
+static func _berth_table() -> Dictionary:
+	if _berth_table_cache == null:
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(BERTH_TABLE_PATH)) if FileAccess.file_exists(BERTH_TABLE_PATH) else null
+		_berth_table_cache = parsed if parsed is Dictionary else {}
+	return _berth_table_cache
+
+const BERTH_TABLE_PATH := "res://data/tug_berthing.json"
+static var _berth_table_cache: Variant = null
+
+## One way of bringing a ship in (see _plan_berth_work()), params [a, b, the
+## bow tug's station (ship lengths ahead of its middle), the stern tug's
+## (astern of it), which side of the stern a tug made fast on the hip lies (1
+## its pier's side, -1 the other), how it's turned (0 about a point, 1 round a
+## curve), how the tugs turn (0 steering round, 1 on the spot)]: turned about a point, a its turning point (ship lengths astern of
+## its middle) and b the turn's shift towards its pier (ship lengths); round a
+## curve (towed on the hip, for a berth by the basin's end, where there's no
+## room for it to lie along the channel abreast of its slot), a the curve's
+## radius and b how far towards its pier it starts (ship lengths).
+static func _berth_plan_try(layout: Dictionary, berth_index: int, moored: Array, size: Vector2, tug: Vector2, team_n: int, mouth: Array, inside: Array, tow_speed: float, tug_speed: float, params: Array) -> Dictionary:
+	var berth: Array = layout.berths[berth_index]
+	var s := signf((berth[1] as Vector2).y)
+	var length := size.x
+	var width := size.y
+	var tug_length := tug.x
+	var tug_width := tug.y
+	var home: Vector2 = moored[0]
+	var final_angle := float(moored[1])
+	var axis := Vector2.from_angle(final_angle)
+	var tips := float(layout.channel) / 2.0
+	var round_curve := params.size() > 5 and int(params[5]) == 1
+	var steer := params.size() <= 6 or int(params[6]) == 0  # (Tugs steering round, or turning on the spot.)
+	var turn := tug.x * TUG_TURN_LENGTHS
+	var reach := float(params[0]) * length
+	var pivot := Vector2(home.x, s * float(params[1]) * length)
+	var start := [pivot + Vector2(-reach, 0.0), PI]  # (Heading in, its middle `reach` ahead of where it turns about.)
+	var turned := [pivot + Vector2(0.0, s * reach), final_angle]
+	var turn_sign := signf(angle_difference(PI, final_angle))
+	var centre := Vector2.ZERO
+	if round_curve:
+		# Round a quarter circle `reach` across, from heading in along the channel
+		# to facing its slot, ending in line with it.
+		start = [Vector2(home.x + reach, s * float(params[1]) * length), PI]
+		centre = (start[0] as Vector2) + Vector2.from_angle(PI + turn_sign * PI / 2.0) * reach
+		turned = [centre - Vector2.from_angle(final_angle + turn_sign * PI / 2.0) * reach, final_angle]
+	var stand := width / 2.0 + tug_length / 2.0 + TUG_FENDER  # (A tug pushing square on the hull: its middle off the ship's side.)
+	var beside := width / 2.0 + tug_width / 2.0 + TUG_FENDER  # (A tug alongside.)
+	var spin := Vector2(tug_length, tug_width).length() / 2.0  # (Its corners turning on the spot.)
+	var end_on := spin - tug_length / 2.0 + TUG_FENDER + 0.05  # (How far off a hull it turns square to it.)
+	var alongside := tug_length / 2.0 + spin + TUG_ROOM  # (How far astern of where it'll lie alongside it turns to come up parallel.)
+	var pause := TUG_STAGE_PAUSE_S
+	var push_speed := maxf(tow_speed * TUG_INCH_SHARE, 0.01)
+	# With no room astern of it once it's turned (a long ship in a narrow
+	# channel: a tug there would be in the slot across the way), the ship's
+	# first pushed in by a tug made fast alongside its stern quarter (on the
+	# hip), there before it's turned, while there's room along the channel to
+	# come up alongside: `need` how far in, till there's room astern.
+	var stern_along := (turned[0] as Vector2).dot(axis) - length / 2.0  # (Along the slot's line from the channel's middle.)
+	var need := maxf(0.0, -tips + TUG_ROOM + spin - (stern_along - TUG_FENDER - tug_length / 2.0 - end_on))
+	need = minf(need, (turned[0] as Vector2).distance_to(home))
+	var on_hip := need > 0.01
+	var hip_side := float(params[4]) if params.size() > 4 else 1.0
+	# (Heading in, the ship's left is -y: a tug on its pier's side, +s, lies at lat -s.)
+	var hip := {kind = "pinned", fwd = -length / 2.0 + tug_length / 2.0, lat = -s * hip_side * beside, rel = 0.0}
+	var pusher := 1 if team_n > 1 else 0
+	# 1. Towed in to a stop in the channel abreast of its slot.
+	var ahead := length / 2.0 + tug_length * (TOW_LINE_TUGS + 0.5)
+	var lead_in := [(mouth[0] as Vector2) + Vector2.from_angle(float(mouth[1])) * ahead, mouth[1]]
+	var path := _pose_path(_loosen([mouth, lead_in, inside, start], false, false), SLOT_PATH_HANDLE)
+	var times := _path_times(path, tow_speed, length, length, false, true)
+	var stopped := times[-1]
+	var ship_segs: Array = [{kind = "path", t0 = 0.0, t1 = stopped, points = path, times = times, start = float(mouth[1]), end = PI}]
+	var work := {total = 0.0, team = [], ship = ship_segs, tugs = [], finish = [], clashes = 0}
+	var path_length := _path_length(path)
+	# The lead eases out to the side (the side it'll push from) and to a stop
+	# beside the bow, short of the basin's end. (Out is to the ship's left, -y heading
+	# in: s times out is away from the slot.)
+	var room_ahead := (start[0] as Vector2).x + float(layout.depth) - tug_length / 2.0 - TUG_ROOM
+	var past := minf(room_ahead, ahead)  # (Beside the bow, if there's no room ahead of it.)
+	# Where the other waits beside the way in while the ship passes it: inside the breakwater.
+	var inside_d := path_length
+	var ring := float(layout.radius) - JETTY_WIDTH - spin
+	var gone := 0.0
+	for k in range(1, path.size()):
+		gone += path[k - 1].distance_to(path[k])
+		if path[k].length() < ring and path[k].x < (inside[0] as Vector2).x + tug_length:
+			inside_d = gone
+			break
+	var hold := clampf(inside_d + 2.0 * tug_length, ahead, maxf(path_length - length / 2.0 - tug_length * (TOW_LINE_TUGS + 0.5), ahead))
+	for i in team_n:
+		var side := 0.0 if team_n == 1 else (1.0 if i == 0 else -1.0) * tug_width * TOW_Y_WIDTHS
+		var wide := (signf(side) if side != 0.0 else 1.0) * (width / 2.0 + spin + TUG_ROOM)
+		if i == 0 and not (round_curve and team_n > 1):
+			work.tugs.append([{kind = "follow", t0 = 0.0, t1 = stopped, ahead = ahead, side = side, side_to = s * (width / 2.0 + spin + TUG_ROOM), past = past, swing = tug_length}])
+		elif i == 0:
+			# Round a curve, the lead's not wanted once it's in: it lets go inside
+			# the breakwater and stands by beside the way in, clear, while it passes.
+			work.tugs.append([{kind = "trail", t0 = 0.0, t1 = stopped, ahead = ahead, behind = 1.0e9, hold = hold, side = side, wide = wide, swing = tug_length}])
+		else:
+			var behind := length / 2.0 + tug_length * (TOW_LINE_TUGS + 0.5)
+			work.tugs.append([{kind = "trail", t0 = 0.0, t1 = stopped, ahead = ahead, behind = behind, hold = hold, side = side, wide = wide, swing = tug_length}])
+	# 2. To their stations: the lead square on the bow, from the side away from
+	# the slot (pushing it round towards it); the other square on the stern from
+	# the slot's side, or (no room astern) alongside its stern quarter, made
+	# fast on the hip. A lone tug: on the bow, or on the hip.
+	# Round a curve, the one pushing it in tows it round on the hip and the
+	# lead stands by where it let go.
+	var pins := []
+	var lashed := []  # (Which is made fast on the hip.)
+	for i in team_n:
+		lashed.append(i == pusher and (on_hip or round_curve))
+		if lashed[i]:
+			pins.append(hip)
+		elif round_curve:
+			pins.append({})
+		elif i == 0:
+			pins.append({kind = "pinned", fwd = float(params[2]) * length, lat = s * stand, rel = -s * PI / 2.0})
+		else:
+			pins.append({kind = "pinned", fwd = -float(params[3]) * length, lat = -s * stand, rel = s * PI / 2.0})
+	var ready := stopped
+	var arrive := []
+	var waiting := []  # (Where each lies once at its station, or standing by.)
+	for i in team_n:
+		var segs: Array = work.tugs[i]
+		var from := _work_pose(work, segs, stopped)
+		if (pins[i] as Dictionary).is_empty():
+			arrive.append(stopped)
+			waiting.append(from)
+			continue
+		var station := _pinned_pose(start, pins[i])
+		var t := _tug_route(segs, stopped + pause, from, station, tug_speed, alongside if lashed[i] else end_on, steer, turn)
+		arrive.append(t)
+		waiting.append(station)
+		ready = maxf(ready, t)
+	# 3. Turned to face its slot (the tug on the hip working with it): about a
+	# point by the tugs pushing bow and stern, or towed round its curve on the hip.
+	var turn_at := ready + pause
+	var pivot_s := TUG_PIVOT_S * clampf(length / 4.0, 0.7, 1.8)
+	if round_curve:
+		pivot_s = maxf(reach * PI / 2.0 / push_speed * 1.3, pivot_s)
+	var turned_at := turn_at + pivot_s
+	ship_segs.append({kind = "hold", t0 = stopped, t1 = turn_at, pose = start})
+	if round_curve:
+		ship_segs.append({kind = "arc", t0 = turn_at, t1 = turned_at, centre = centre, radius = reach, from = PI, to = final_angle, sign = turn_sign})
+	else:
+		ship_segs.append({kind = "pivot", t0 = turn_at, t1 = turned_at, at = pivot, reach = reach, from = PI, to = final_angle})
+	for i in team_n:
+		var segs: Array = work.tugs[i]
+		segs.append({kind = "hold", t0 = arrive[i], t1 = turn_at, pose = waiting[i]})
+		if (pins[i] as Dictionary).is_empty():
+			continue
+		var pin: Dictionary = pins[i].duplicate()
+		pin.t0 = turn_at
+		pin.t1 = turned_at
+		segs.append(pin)
+	# 4. Pushed in: on the hip first if it must be, then from astern, its bow on
+	# the stern, a push at a time. The lead (with two) backs off and stands by.
+	var astern := {kind = "pinned", fwd = -(length / 2.0 + tug_length / 2.0 + TUG_FENDER), lat = 0.0, rel = 0.0}
+	var ship_at := turned  # (Where the ship lies when it's pushed from astern.)
+	var hip_from := -1.0
+	var hip_to := -1.0
+	var push_ready := turned_at
+	var clear_t := []
+	for i in team_n:
+		var segs: Array = work.tugs[i]
+		var on_hull: Array = waiting[i] if (pins[i] as Dictionary).is_empty() else _pinned_pose(turned, pins[i])
+		var t := turned_at + pause
+		segs.append({kind = "hold", t0 = turned_at, t1 = t, pose = on_hull})
+		var from := on_hull
+		if i == pusher and on_hip:
+			hip_from = t
+			hip_to = hip_from + need / push_speed * 1.5
+			var made_fast: Dictionary = hip.duplicate()
+			made_fast.t0 = hip_from
+			made_fast.t1 = hip_to
+			segs.append(made_fast)
+			ship_at = [(turned[0] as Vector2) + axis * need, final_angle]
+			from = _pinned_pose(ship_at, hip)
+			t = hip_to + pause
+			segs.append({kind = "hold", t0 = hip_to, t1 = t, pose = from})
+		elif not lashed[i] and not (pins[i] as Dictionary).is_empty():
+			# Backs straight off the hull, square to it.
+			var off := [(on_hull[0] as Vector2) - Vector2.from_angle(float(on_hull[1])) * (end_on + 0.1), on_hull[1]]
+			var back_s := (end_on + 0.1) / tug_speed + 0.4
+			segs.append({kind = "drive", t0 = t, t1 = t + back_s, from = on_hull[0], to = off[0], angle = float(on_hull[1])})
+			t += back_s
+			from = off
+		if i == pusher:
+			t = _tug_route(segs, t, from, _pinned_pose(ship_at, astern), tug_speed, end_on, steer, turn)
+			push_ready = t
+		clear_t.append(t)
+	var push_at := push_ready + pause
+	var distance := (ship_at[0] as Vector2).distance_to(home)
+	var pulses := TUG_INCH_PULSES if distance > length * 0.3 else 1
+	var push_s := distance / push_speed * 1.5 + TUG_INCH_PAUSE_S * (pulses - 1)
+	if on_hip:
+		ship_segs.append({kind = "hold", t0 = turned_at, t1 = hip_from, pose = turned})
+		ship_segs.append({kind = "inch", t0 = hip_from, t1 = hip_to, from = turned[0], to = ship_at[0], angle = final_angle, pulses = 1, pause = 0.0})
+		ship_segs.append({kind = "hold", t0 = hip_to, t1 = push_at, pose = ship_at})
+	else:
+		ship_segs.append({kind = "hold", t0 = turned_at, t1 = push_at, pose = turned})
+	ship_segs.append({kind = "inch", t0 = push_at, t1 = push_at + push_s, from = ship_at[0], to = home, angle = final_angle, pulses = pulses, pause = TUG_INCH_PAUSE_S})
+	var pushed := push_at + push_s
+	var pusher_segs: Array = work.tugs[pusher]
+	pusher_segs.append({kind = "hold", t0 = push_ready, t1 = push_at, pose = _pinned_pose(ship_at, astern)})
+	var pushing: Dictionary = astern.duplicate()
+	pushing.t0 = push_at
+	pushing.t1 = pushed
+	pusher_segs.append(pushing)
+	# 5. Clear: the pusher backs straight out of the slot to just past the
+	# channel's middle and steers round there for the way out; the lead stays
+	# where it stood by (both then go home: see _lying_pose()).
+	var ends := []
+	for i in team_n:
+		var segs: Array = work.tugs[i]
+		var t := pushed + pause if i == pusher else maxf(float(clear_t[i]), pushed)
+		var from := _pinned_pose([home, final_angle], astern) if i == pusher else _work_pose(work, segs, float(clear_t[i]))
+		if i == pusher:
+			segs.append({kind = "hold", t0 = pushed, t1 = t, pose = from})
+			var backed := Vector2(home.x, -s * turn / 2.0)
+			var out_s := (from[0] as Vector2).distance_to(backed) / tug_speed + 0.4
+			segs.append({kind = "drive", t0 = t, t1 = t + out_s, from = from[0], to = backed, angle = float(from[1])})
+			t += out_s
+			var round_out := _pose_path([[backed, float(from[1])], [Vector2(home.x + turn, 0.0), 0.0]], 0.4)
+			var round_s := _path_length(round_out) / tug_speed + 0.6
+			segs.append({kind = "course", t0 = t, t1 = t + round_s, points = round_out, start = float(from[1]), end = 0.0})
+			t += round_s
+		else:
+			if t > float(clear_t[i]):
+				segs.append({kind = "hold", t0 = clear_t[i], t1 = t, pose = from})
+		ends.append(t)
+	var total := pushed
+	for t: float in ends:
+		total = maxf(total, t)
+	total += 0.2
+	ship_segs.append({kind = "hold", t0 = pushed, t1 = total, pose = [home, final_angle]})
+	work.total = total
+	for i in team_n:
+		var segs: Array = work.tugs[i]
+		var last := _work_pose(work, segs, float(segs[-1].t1))
+		segs.append({kind = "hold", t0 = float(segs[-1].t1), t1 = total, pose = last})
+		work.finish.append([last, [Vector2((last[0] as Vector2).x + tug_length * 1.5, (last[0] as Vector2).y), 0.0]])
+	return work
+
+## A tug's pose pushing on a ship (a "pinned" segment: `fwd` along the ship
+## from its middle, `lat` out to its left, facing `rel` off its heading) when
+## the ship's at a pose.
+static func _pinned_pose(ship: Array, pin: Dictionary) -> Array:
+	var angle := float(ship[1])
+	var at: Vector2 = (ship[0] as Vector2) + Vector2.from_angle(angle) * float(pin.fwd) + Vector2.from_angle(angle + PI / 2.0) * float(pin.lat)
+	return [at, angle + float(pin.rel)]
+
+## A tug's way from a pose to its station (a pose, its bow on a hull or where
+## it's to lie), appended to its segments from time t: out to the side to the
+## line its station's on, along that line to `room` short of it, round square
+## to the hull there and in until it's on it. Steering (`steer`): a course
+## through those turns on its turning circle (`turn` across), the way a boat
+## comes round, heading the way it goes all along; else each leg in turn,
+## turned on the spot first (harbour tugs can) and going the way it faces, or
+## backing when its way's just astern and short. The time it gets there.
+static func _tug_route(segs: Array, t: float, from: Array, to: Array, speed: float, room: float, steer := true, turn := 1.6) -> float:
+	var goal: Vector2 = to[0]
+	var facing := float(to[1])
+	var short := goal - Vector2.from_angle(facing) * room
+	var at: Vector2 = from[0]
+	var angle := float(from[1])
+	# Out to the side first (onto the line through `short` square to the station's facing), then along it.
+	var across := Vector2.from_angle(facing)
+	var offset := (short - at).dot(across)
+	var waypoints := []
+	if absf(offset) > 0.05:
+		waypoints.append(at + across * offset)
+	waypoints.append(short)
+	if steer:
+		var poses := [from]
+		for point: Vector2 in waypoints:
+			var last: Vector2 = poses[-1][0]
+			if last.distance_to(point) > 0.3:
+				poses.append([point, facing if point == short else (short - point).angle()])
+		if poses.size() > 1:
+			poses[-1] = [poses[-1][0], facing]
+			var path := _pose_path(_loosen(poses, true, false, turn / 2.0), 0.4)
+			var span := _path_length(path) / speed + 0.6
+			segs.append({kind = "course", t0 = t, t1 = t + span, points = path, start = angle, end = facing})
+			t += span
+			at = poses[-1][0]
+			angle = facing
+	else:
+		for point: Vector2 in waypoints:
+			if at.distance_to(point) < 0.02:
+				continue
+			var way := (point - at).angle()
+			var backing := absf(angle_difference(angle, way)) > PI * 0.6 and at.distance_to(point) < 3.0
+			var heading := way + PI if backing else way
+			t = _tug_spin(segs, t, at, angle, heading)
+			angle = heading
+			var span := at.distance_to(point) / speed + 0.4
+			segs.append({kind = "drive", t0 = t, t1 = t + span, from = at, to = point, angle = angle})
+			t += span
+			at = point
+	t = _tug_spin(segs, t, at, angle, facing)
+	if room > 0.0:
+		var span := at.distance_to(goal) / speed + 0.3
+		segs.append({kind = "drive", t0 = t, t1 = t + span, from = at, to = goal, angle = facing})
+		t += span
+	return t
+
+## Turning a tug on the spot from one heading to another (the shorter way),
+## appended from time t: the time it's done.
+static func _tug_spin(segs: Array, t: float, at: Vector2, from: float, to: float) -> float:
+	var turn := angle_difference(from, to)
+	if absf(turn) < 0.02:
+		return t
+	var span := maxf(TUG_SPIN_S * absf(turn) / (PI / 2.0), 0.3)
+	segs.append({kind = "spin", t0 = t, t1 = t + span, at = at, from = from, turn = turn})
+	return t + span
+
+## What a berth's ship and tugs must keep clear of coming in (dock units): the
+## piers (out from their walls to their tips at the channel's edge), the basin's
+## walls, and the ship at each other berth (the biggest it takes).
+static func _berth_obstacles(layout: Dictionary, berth_index: int) -> Array:
+	var half := float(layout.inner)
+	var depth := float(layout.depth)
+	var tips := float(layout.channel) / 2.0
+	var out := []
+	for pier: Array in layout.piers:
+		var x0 := minf(float(pier[1]), float(pier[2]))
+		var x1 := maxf(float(pier[1]), float(pier[2]))
+		out.append(Rect2(x0, tips, x1 - x0, half + 2.0 - tips) if float(pier[0]) > 0.0 else Rect2(x0, -half - 2.0, x1 - x0, half + 2.0 - tips))
+	out.append(Rect2(-depth - 4.0, half, depth + 4.0, 4.0))
+	out.append(Rect2(-depth - 4.0, -half - 4.0, depth + 4.0, 4.0))
+	out.append(Rect2(-depth - 4.0, -half - 4.0, 4.0, 2.0 * half + 8.0))
+	var berths: Array = layout.berths
+	var size := Vector2(float(layout.width), float(layout.length))
+	for j in berths.size():
+		if j == berth_index:
+			continue
+		var middle := Vector2(float(berths[j][6]), (berths[j][0] as Vector2).y)
+		out.append(Rect2(middle - size / 2.0, size))
+	return out
+
+## How many times (at `samples` moments through the work, from the start of
+## the tow) the ship or a tug runs into something (see _berth_obstacles(); or
+## the breakwater, but for its entrance), a tug into the ship (bar its
+## fender) or the other tug, or a tug slips sideways (moving across the way
+## it faces, but for pushing round a ship that's turning): 0 when all's clear.
+## Stops counting at `cap`.
+static func _berth_plan_clashes(work: Dictionary, layout: Dictionary, obstacles: Array, size: Vector2, tug: Vector2, samples: int, cap: int) -> int:
+	var total := float(work.total)
+	var bad := 0
+	var last := []
+	for k in samples + 1:
+		var t := total * float(k) / samples
+		var ship := _work_pose(work, work.ship, t)
+		var ship_box := _box_corners(ship[0], float(ship[1]), size / 2.0 - Vector2(0.02, 0.02))
+		bad += _box_clashes(ship_box, obstacles, layout)
+		var boxes := []
+		var poses := []
+		for i in (work.tugs as Array).size():
+			var segs: Array = work.tugs[i]
+			var pose := _work_pose(work, segs, t)
+			poses.append(pose)
+			var box := _box_corners(pose[0], float(pose[1]), tug / 2.0)
+			bad += _box_clashes(box, obstacles, layout)
+			if _boxes_meet(box, ship_box):
+				bad += 1
+			for other: PackedVector2Array in boxes:
+				if _boxes_meet(box, other):
+					bad += 1
+			boxes.append(box)
+			if not last.is_empty():
+				var moved: Vector2 = (pose[0] as Vector2) - (last[i][0] as Vector2)
+				var seg := _work_segment(segs, t)
+				var was_seg := _work_segment(segs, total * float(k - 1) / samples)
+				if moved.length() > 0.02 and str(seg.kind) != "pinned" and str(was_seg.kind) != "pinned":
+					# (Across its heading halfway, as a course round a curve goes along its chord.)
+					var slip := absf(moved.dot(Vector2.from_angle(lerp_angle(float(last[i][1]), float(pose[1]), 0.5) + PI / 2.0)))
+					if slip > moved.length() * 0.25:
+						bad += 1
+				if moved.length() > maxf(1.0, total / samples * 12.0) or absf(angle_difference(float(last[i][1]), float(pose[1]))) > maxf(0.6, total / samples * 3.0):
+					bad += 1  # (A jump, or swinging round faster than a boat turns.)
+		last = poses
+		if bad >= cap:
+			return bad
+	return bad
+
+## A box's corners (dock units): its middle, which way it faces, half its length and width.
+static func _box_corners(middle: Vector2, angle: float, half: Vector2) -> PackedVector2Array:
+	var along := Vector2.from_angle(angle) * half.x
+	var across := Vector2.from_angle(angle + PI / 2.0) * half.y
+	return PackedVector2Array([middle + along + across, middle + along - across, middle - along - across, middle - along + across])
+
+## How many of a marina's obstacles (Rect2s) a box runs into, and 1 more if it
+## crosses the breakwater (its arms round the sea side, but for the entrance).
+static func _box_clashes(box: PackedVector2Array, obstacles: Array, layout: Dictionary) -> int:
+	var count := 0
+	for rect: Rect2 in obstacles:
+		if _boxes_meet(box, PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])):
+			count += 1
+	var ring := float(layout.radius)
+	for k in 4:
+		for share: float in [0.0, 0.5]:
+			var p := box[k].lerp(box[(k + 1) % 4], share)
+			var r := p.length()
+			if p.x > 0.0 and r > ring - JETTY_WIDTH and r < ring + 0.1 and absf(p.angle()) > float(layout.gap):
+				return count + 1
+	return count
+
+## True if two convex quads (corners in order) overlap (separating axes).
+static func _boxes_meet(a: PackedVector2Array, b: PackedVector2Array) -> bool:
+	for shape: PackedVector2Array in [a, b]:
+		for k in 4:
+			var edge := shape[(k + 1) % 4] - shape[k]
+			var axis := Vector2(-edge.y, edge.x)
+			var a_min := INF
+			var a_max := -INF
+			var b_min := INF
+			var b_max := -INF
+			for p: Vector2 in a:
+				var d := p.dot(axis)
+				a_min = minf(a_min, d)
+				a_max = maxf(a_max, d)
+			for p: Vector2 in b:
+				var d := p.dot(axis)
+				b_min = minf(b_min, d)
+				b_max = maxf(b_max, d)
+			if a_max <= b_min or b_max <= a_min:
+				return false
+	return true
 
 ## A tug's point pulling a ship in (see "follow" in _work_pose()), `d` along
 ## the ship's way in (a path of `length`, straight on past its end), out to its
 ## side as far as it's peeling off by then.
 static func _follow_point(points: PackedVector2Array, length: float, pulled: Dictionary, segment: Dictionary, d: float) -> Vector2:
-	var pose: Array
-	if d <= length and length > 0.0:
-		pose = _along_path(points, d / length, float(pulled.start), float(pulled.end))
-	else:
-		var last := _along_path(points, 1.0, float(pulled.start), float(pulled.end))
-		pose = [(last[0] as Vector2) + Vector2.from_angle(float(last[1])) * (d - length), last[1]]
+	var pose := _tow_path_pose(points, length, pulled, d)
 	var cap := length + float(segment.past)
 	var begin := maxf(cap - float(segment.swing) * 3.0, float(segment.ahead))
 	var peel := smoothstep(begin, maxf(cap - float(segment.swing) * 0.5, begin + float(segment.swing)), d)
 	var side := lerpf(float(segment.side), float(segment.side_to), peel)
+	return (pose[0] as Vector2) + Vector2.from_angle(float(pose[1]) + PI / 2.0) * side
+
+## A point `d` along the ship's way in (a path of `length`), straight on past
+## either end: [point, angle].
+static func _tow_path_pose(points: PackedVector2Array, length: float, pulled: Dictionary, d: float) -> Array:
+	if d >= 0.0 and d <= length and length > 0.0:
+		return _along_path(points, d / length, float(pulled.start), float(pulled.end))
+	var end := _along_path(points, 1.0 if d > 0.0 else 0.0, float(pulled.start), float(pulled.end))
+	var past := d - length if d > 0.0 else d
+	return [(end[0] as Vector2) + Vector2.from_angle(float(end[1])) * past, end[1]]
+
+## How far along the way in the tug astern is (see "trail" in _work_pose())
+## when the ship's `gone` along it: ahead of it to start with (its line to the
+## bow, beside the lead), to where it waits beside the way (`hold`) while the
+## ship passes, then `behind` it on its line astern. Never going back.
+static func _trail_d(segment: Dictionary, gone: float) -> float:
+	var lead := gone + float(segment.ahead)
+	if lead < float(segment.hold):
+		return lead
+	return maxf(gone - float(segment.behind), float(segment.hold))
+
+## The tug astern's point `d` along the way in (see _trail_d()): out to the
+## side as it comes up to where it waits, back in behind the ship after.
+static func _trail_point(points: PackedVector2Array, length: float, pulled: Dictionary, segment: Dictionary, d: float) -> Vector2:
+	var pose := _tow_path_pose(points, length, pulled, d)
+	var hold := float(segment.hold)
+	var swing := float(segment.swing)
+	var side: float
+	if d <= hold:
+		side = lerpf(float(segment.side), float(segment.wide), smoothstep(hold - 2.0 * swing, hold, d))
+	else:
+		side = lerpf(float(segment.wide), 0.0, smoothstep(hold, hold + 2.0 * swing, d))
 	return (pose[0] as Vector2) + Vector2.from_angle(float(pose[1]) + PI / 2.0) * side
 
 ## The segment of a tug's (or the ship's) work going on at a time (the last
@@ -2018,9 +2516,28 @@ static func _work_segment(segments: Array, t: float) -> Dictionary:
 			return segment
 	return segments[-1]
 
+## Which line a tug has on its ship at a time in its work: "bow" (pulling
+## ahead, from its stern to the ship's bow), "stern" (astern of it, from its
+## bow to the ship's stern) or "" (none).
+static func _work_line(work: Dictionary, segments: Array, t: float) -> String:
+	var segment := _work_segment(segments, t)
+	match str(segment.kind):
+		"follow":
+			return "bow"
+		"trail":
+			var pulled: Dictionary = work.ship[0]
+			var points: PackedVector2Array = pulled.points
+			var ship_u := clampf((t - float(pulled.t0)) / maxf(float(pulled.t1) - float(pulled.t0), 0.001), 0.0, 1.0)
+			var d := _trail_d(segment, _timed_share(points, pulled.times, ship_u) * _path_length(points))
+			if d < float(segment.hold) - float(segment.swing):
+				return "bow"
+			if d > float(segment.hold) + float(segment.swing) * 0.5:
+				return "stern"
+	return ""
+
 ## Where the ship or a tug (its segments) is at a time in its team's work,
 ## in dock units: [point, angle].
-func _work_pose(work: Dictionary, segments: Array, t: float) -> Array:
+static func _work_pose(work: Dictionary, segments: Array, t: float) -> Array:
 	var segment := _work_segment(segments, t)
 	var span := float(segment.t1) - float(segment.t0)
 	var u := clampf((t - float(segment.t0)) / span, 0.0, 1.0) if span > 0.0 else 1.0
@@ -2030,28 +2547,42 @@ func _work_pose(work: Dictionary, segments: Array, t: float) -> Array:
 			return _along_path(points, _timed_share(points, segment.times, u), float(segment.start), float(segment.end))
 		"hold":
 			return segment.pose
-		"slide":
-			# Pushed in: its bow and stern each from how far in they were to how far
-			# in they'll be (shares of the way from from_pose to to_pose), the end
-			# that `lead`s (1 the bow, -1 the stern) coming first, so it slants.
-			var timing := func(end: float) -> float:
-				var first := float(segment.lead) * end > 0.0
-				var last := float(segment.lead) * end < 0.0
-				return smoothstep(LONE_PUSH_LEAD if last else 0.0, 1.0 - LONE_PUSH_LEAD if first else 1.0, u)
-			var from_pose: Array = segment.from_pose
-			var way: Vector2 = (segment.to_pose[0] as Vector2) - (from_pose[0] as Vector2)
-			var half := Vector2.from_angle(float(from_pose[1])) * float(segment.length) / 2.0
-			var bow: Vector2 = (from_pose[0] as Vector2) + half + way * lerpf(segment.ends_from[0], segment.ends_to[0], timing.call(1.0))
-			var stern: Vector2 = (from_pose[0] as Vector2) - half + way * lerpf(segment.ends_from[1], segment.ends_to[1], timing.call(-1.0))
-			return [(bow + stern) / 2.0, (bow - stern).angle()]
-		"reverse":
+		"pivot":
+			# Turned about a point near its middle by its tugs.
+			var angle := lerp_angle(float(segment.from), float(segment.to), smoothstep(0.0, 1.0, u))
+			return [(segment.at as Vector2) + Vector2.from_angle(angle) * float(segment.reach), angle]
+		"arc":
+			# Towed round a quarter circle on the hip, its heading along it.
+			var angle := lerp_angle(float(segment.from), float(segment.to), smoothstep(0.0, 1.0, u))
+			return [(segment.centre as Vector2) - Vector2.from_angle(angle + float(segment.sign) * PI / 2.0) * float(segment.radius), angle]
+		"inch":
+			# Pushed straight in, a push at a time, easing off between.
+			var pulses := int(segment.pulses)
+			var pause := float(segment.pause)
+			var each := maxf((span - pause * (pulses - 1)) / pulses, 0.001)
+			var into := clampf(t - float(segment.t0), 0.0, span)
+			var k := mini(int(into / (each + pause)), pulses - 1)
+			var within := clampf((into - k * (each + pause)) / each, 0.0, 1.0)
+			var share := (float(k) + smoothstep(0.0, 1.0, within)) / pulses
+			return [(segment.from as Vector2).lerp(segment.to, share), float(segment.angle)]
+		"course":
+			# Steering round a course, heading the way it goes.
+			var points: PackedVector2Array = segment.points
+			return _along_path(points, smoothstep(0.0, 1.0, u), float(segment.start), float(segment.end))
+		"drive":
+			# Ahead or astern, the way it faces, getting going and easing to a stop.
 			return [(segment.from as Vector2).lerp(segment.to, smoothstep(0.0, 1.0, u)), float(segment.angle)]
+		"spin":
+			return [segment.at, float(segment.from) + float(segment.turn) * smoothstep(0.0, 1.0, u)]
+		"pinned":
+			# Its fender on the hull, pushing: going with the ship.
+			return _pinned_pose(_work_pose(work, work.ship, t), segment)
 		"follow":
 			# On its line ahead of the ship, along the way the ship's being pulled
 			# (and straight on past its end); as it comes up to where it's going,
-			# easing to a stop out to its side (`past` along from where the ship
-			# stops, `side_to` out), so the ship glides on past it. It faces the way
-			# its own track goes, so it swerves out the way a boat does.
+			# easing to a stop (`past` along from where the ship stops, `side_to`
+			# out), so the ship comes to a stop behind it. It faces the way its own
+			# track goes, so it swerves out the way a boat does.
 			var pulled: Dictionary = work.ship[0]
 			var points: PackedVector2Array = pulled.points
 			var length := _path_length(points)
@@ -2064,12 +2595,16 @@ func _work_pose(work: Dictionary, segments: Array, t: float) -> Array:
 			var at := _follow_point(points, length, pulled, segment, d)
 			var next := _follow_point(points, length, pulled, segment, d + 0.05)
 			return [at, (next - at).angle()]
-		"attached":
-			# Its bow on the hull at its station, pushing: going with the ship.
-			# (Square to the hull however it's slanting.)
-			var at := _work_pose(work, work.ship, t)
-			var outward: Vector2 = (segment.out as Vector2).rotated(angle_difference(float(segment.angle), float(at[1])))
-			return [(at[0] as Vector2) + Vector2.from_angle(float(at[1])) * float(segment.x) + outward * float(segment.stand), (-outward).angle()]
+		"trail":
+			# The tug astern (see _trail_d()), facing the way its track goes.
+			var pulled: Dictionary = work.ship[0]
+			var points: PackedVector2Array = pulled.points
+			var length := _path_length(points)
+			var ship_u := clampf((t - float(pulled.t0)) / maxf(float(pulled.t1) - float(pulled.t0), 0.001), 0.0, 1.0)
+			var d := _trail_d(segment, _timed_share(points, pulled.times, ship_u) * length)
+			var at := _trail_point(points, length, pulled, segment, d)
+			var next := _trail_point(points, length, pulled, segment, d + 0.05)
+			return [at, (next - at).angle()]
 	return [Vector2.ZERO, 0.0]
 
 ## Where a tug working its ship in at port is drawn, [screen point, angle]
@@ -3455,19 +3990,20 @@ const ROCK_SPOTS := [[1.18, 60.0, 0.12], [1.22, -66.0, 0.1], [1.32, 72.0, 0.09],
 const PIER_WIDTH := 0.6
 const CHANNEL_LENGTHS := 1.2
 const CHANNEL_WIDTHS := 4.0
+## Open water past a marina's last pier (lengths of the longest ship it takes),
+## for its tugs and ships to turn in coming in to the berths at that end.
+const TURN_WATER_LENGTHS := 0.6
 const QUAY_STRIP_LENGTHS := 0.9
 const QUAY_STRIP_MIN := 8.0
 ## Coming into its slot: how far (dock units) inside the channel a ship's bow
 ## is as it enters the slot's mouth, how far along the channel (ship lengths)
 ## before its slot it starts to come round, which side of the channel (a
 ## share of its width) it keeps to on the way (across from its pier), how
-## hard its curves lean (see _pose_path()), and a ship let go by its tugs
-## goes on in at this share of its speed.
+## hard its curves lean (see _pose_path()).
 const SLOT_ENTRY_CLEAR := 0.5
 const SLOT_TURN_LENGTHS := 0.7
 const CHANNEL_SIDE := 0.25
 const SLOT_PATH_HANDLE := 0.35
-const TUG_LET_GO_SHARE := 0.5
 ## A lane that comes in to a port from behind or beside its jetty (nearer the
 ## port along the sea than JETTY_ROUND_FROM of the jetty's radius) rounds the
 ## jetty's end first, out past it by JETTY_ROUND of its radius each way (see _round_jetty()).
@@ -3824,6 +4360,13 @@ static func _longest_ship() -> float:
 		longest = maxf(longest, _model_length(model))
 	return longest
 
+## The widest ship of any kind (dock units): what a mooring slip is pitched for (see _lay_moorings()).
+static func _widest_any_ship() -> float:
+	var widest := 0.0
+	for model: Dictionary in GameData.ship_models:
+		widest = maxf(widest, float(model.get("map_size", [14, 6])[1]) * SHIP_SIZE)
+	return widest
+
 ## A marina's layout in dock units, the port at (0, 0) and the sea along +x:
 ## a basin dug into the land behind the coast, open to the sea, with piers
 ## reaching in from its two side walls like a rib cage, a channel between
@@ -3871,8 +4414,10 @@ static func _marina_layout(kinds: String, hub: bool, canal := false) -> Dictiona
 	var half := length + channel / 2.0
 	var radius := half + QUAY_WIDTH
 	@warning_ignore("integer_division")
-	var deep := maxi(per_side[0], per_side[1]) / 2  # Double slots a side (the last one's land side is the basin's end wall).
-	var depth := top + deep * pitch
+	var deep := maxi(per_side[0], per_side[1]) / 2  # Double slots a side (the last one's land side its own pier, turning water beyond).
+	# Past the last slot, its own pier and then open water for turning (TURN_WATER_LENGTHS):
+	# no berth lies against the basin's end wall, where nothing could be turned in to it.
+	var depth := top + deep * pitch + PIER_WIDTH + length * TURN_WATER_LENGTHS
 	var strip := maxf(length * QUAY_STRIP_LENGTHS, QUAY_STRIP_MIN)
 	var berth_list := []
 	var piers := []
@@ -3886,7 +4431,7 @@ static func _marina_layout(kinds: String, hub: bool, canal := false) -> Dictiona
 		# off it, its length, its middle again, its kind, and the x of the lane it
 		# comes straight in along (and backs out along)]. The top berth lies along
 		# pier 0's seaward face; then each double slot j (between pier j-1's
-		# landward face and pier j's seaward face, or the end wall) takes two:
+		# landward face and pier j's seaward face) takes two:
 		# one along its land side, one along its sea side, side by side.
 		var k := 0
 		berth_list.append([Vector2(-top, y), Vector2(0.0, side), Vector2.RIGHT, length, Vector2(-top, y), kinds[s * per_side[0] + k], -top + BERTH_GAP + width / 2.0])
@@ -4042,14 +4587,19 @@ func _update_marinas() -> void:
 		var near := view.grow(MARINA_MAX_REACH * _ship_scale())
 		# (Natively narrowed to the ports whose marinas may show, once the dots' looks are known.)
 		var ports := marinas_in_view(near)
+		var kept := _kept_marina_ports()  # (Drawn however far off screen they are.)
+		for i in kept:
+			if not ports.has(i):
+				ports.append(i)
 		for i in ports:
 			var port_id: String = GameData.ports[i].id
 			var root := port_screen_position(port_id)
-			if not near.has_point(root) or not _marina_shown(port_id):
+			var keep := kept.has(i)
+			if not keep and not near.has_point(root) or not _marina_shown(port_id):
 				continue  # (Cheapest first: most ports are well off screen.)
 			var layout := _port_layout(port_id)
 			var reach := MARINA_MAX_REACH * _ship_scale()  # (The quay's square corners and the town behind.)
-			if not view.grow(reach).has_point(root):
+			if not keep and not view.grow(reach).has_point(root):
 				continue
 			shown[port_id] = true
 			var item := _marina_item(port_id, i)
@@ -4086,6 +4636,63 @@ func _update_marinas() -> void:
 	for port_id: String in _marina_items:
 		if not shown.has(port_id):
 			_show_marina_item(_marina_items[port_id], false)
+
+## The marinas kept drawn however far off screen they are (see
+## _update_marinas()): those of the ports nearest the middle of the view with
+## their marinas on screen (up to KEPT_MARINA_CENTRES; the port nearest the
+## middle if none is), and of the KEPT_MARINA_NEIGHBOURS ports nearest each
+## of them, so zoomed right in on a port, the marinas beside it never vanish
+## for being off screen (the MARINA_MAX_REACH cull). Their places in GameData.ports.
+const KEPT_MARINA_CENTRES := 2
+const KEPT_MARINA_NEIGHBOURS := 2
+var _port_neighbours := {}
+func _kept_marina_ports() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	var view := Rect2(Vector2.ZERO, size)
+	var middle := size / 2.0
+	var scale := _ship_scale()
+	var centres := []  # [distance from the middle (px), place in GameData.ports]
+	var nearest := [INF, -1]
+	for i in _ports_near_view():
+		var port_id: String = GameData.ports[i].id
+		var at := port_screen_position(port_id)
+		if _is_hidden(at):
+			continue
+		var d := at.distance_to(middle)
+		if d < float(nearest[0]):
+			nearest = [d, i]
+		if view.grow(float(_port_layout(port_id).radius) * scale).has_point(at):
+			centres.append([d, i])
+	if centres.is_empty() and int(nearest[1]) >= 0:
+		centres.append(nearest)
+	centres.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+	for k in mini(centres.size(), KEPT_MARINA_CENTRES):
+		var i: int = centres[k][1]
+		if not out.has(i):
+			out.append(i)
+		for j in _port_neighbours_of(i):
+			if not out.has(j):
+				out.append(j)
+	return out
+
+## The KEPT_MARINA_NEIGHBOURS ports nearest a port (their places in
+## GameData.ports, nearest first), worked out once.
+func _port_neighbours_of(index: int) -> PackedInt32Array:
+	if not _port_neighbours.has(index):
+		var port: Dictionary = GameData.ports[index]
+		var here := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
+		var others := []  # [nm, place]
+		for j in GameData.ports.size():
+			if j == index:
+				continue
+			var other: Dictionary = GameData.ports[j]
+			others.append([Geo.distance_nm(here, Vector2(float(other.get("lon", 0.0)), float(other.get("lat", 0.0)))), j])
+		others.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+		var near := PackedInt32Array()
+		for k in mini(others.size(), KEPT_MARINA_NEIGHBOURS):
+			near.append(int(others[k][1]))
+		_port_neighbours[index] = near
+	return _port_neighbours[index]
 
 ## Shows or hides a marina's canvas item as the view moves. (Through the
 ## rendering server: hiding a Control and showing it again draws it again,
@@ -5017,7 +5624,8 @@ func _lying_pose(ship: Ship, at_time: float) -> Array:
 	var poses := [_keep_right(ship.docked_at, _entrance_pose(ship.docked_at, false, true))] + home + [rest]
 	var off: Array = _glide_from.get(ship, [])
 	if not off.is_empty() and float(off[0]) == since:
-		# A tug that's just let go of the ship it brought in: from there.
+		# A tug that's just let go of the ship it brought in, or a ship moving
+		# from its anchor to a slip at the moorings (see _retry_moorings()): from there.
 		poses = (off[1] as Array).map(func(pose: Array) -> Array: return _local_to_screen(ship.docked_at, pose)) + home + [rest]
 	# Turning off for its spot on a turning circle (it came in heading into the
 	# harbour, and its spot may be back out past the jetty: never a snap round),
@@ -5497,7 +6105,8 @@ static func _piece_angle(points: PackedVector2Array, i: int) -> float:
 ## port, for its glide in from the mouth.
 func _update_spots() -> void:
 	var frame := Engine.get_process_frames()
-	if frame == _spots_frame or not _spots_dirty and _spots_frame >= 0:
+	var retry := GameState.play_time - _moor_retry_at >= MOOR_RETRY_S or GameState.play_time < _moor_retry_at
+	if frame == _spots_frame or not _spots_dirty and not retry and _spots_frame >= 0:
 		return
 	var first := _spots_frame < 0
 	_spots_frame = frame
@@ -5552,6 +6161,44 @@ func _update_spots() -> void:
 	for ship: Ship in _dock_seen.keys():
 		if not alive.has(ship):
 			_dock_seen.erase(ship)
+	if retry:
+		_moor_retry_at = GameState.play_time
+		_retry_moorings()
+
+## How often (s of play) ships lying at the anchorages are looked at for a
+## free slip at their port's moorings (see _retry_moorings()).
+const MOOR_RETRY_S := 2.0
+var _moor_retry_at := -INF
+
+## A ship lying at anchor moves to its port's moorings once a slip it fits is
+## free and the way to it known (its moorings weren't laid, or their ways not
+## yet worked out, when it came in: see _free_mooring()): it sails there from
+## its anchor, round the jetty and in to its slip (see _lying_pose()), so
+## ships park in port and the anchorage is only the overflow.
+func _retry_moorings() -> void:
+	for ship: Ship in _spot_slots.keys():
+		var key: Array = _spot_keys.get(ship, [])
+		if key.size() < 2 or str(key[1]) == "moor" or str(key[1]) == "jetty" or ship.is_tug() or not ship.is_docked():
+			continue
+		var seen: Array = _dock_seen.get(ship, [])
+		if seen.size() > 2 and GameState.play_time < float(seen[2]):
+			continue  # (Still on its way to its anchor: let it get there.)
+		var port := ship.docked_at
+		var slot := _free_mooring(port, ship)
+		if slot < 0:
+			continue
+		var from := _anchor_local(ship)
+		_free_spot(ship)
+		var taken: Dictionary = _spot_tables.get_or_add([port, "moor"], {})
+		taken[slot] = ship
+		_spot_slots[ship] = slot
+		_spot_keys[ship] = [port, "moor"]
+		if is_finite(from.x):
+			var way := _mooring_way(port, _moorings(port)[slot])
+			var heading := ((way[0][0] as Vector2) - from).angle() if not way.is_empty() else 0.0
+			_dock_seen[ship] = [port, GameState.play_time]
+			_glide_from[ship] = [GameState.play_time, [[from, heading]]]  # (From its anchor: see _lying_pose().)
+		_spots_dirty = true
 
 ## The anchor a ship dropping anchor at a port takes (a slot in its
 ## anchorage, see _anchor_spots(); `taken`: those lain at now): the first
@@ -5569,7 +6216,7 @@ func _free_anchor(port_id: String, pool: String, taken: Dictionary) -> int:
 
 ## Which of a port's anchor points (_anchor_spots()) are in the shipping
 ## lanes: 1 for each one a lane the map draws (_active_lanes(): every
-## company's routes, bent round other ports' harbours as drawn), or a ship's
+## company's routes, just as laid), or a ship's
 ## way between this port's harbour mouth and its lanes (_harbour_corridors()),
 ## passes within its ship's swing of, and ANCHOR_LANE_MARGIN_NM more. Worked out again when
 ## the drawn lanes change; ships already lying there stay put.
@@ -5893,7 +6540,7 @@ func _harbour_curve(ship: Ship, lane, length: float, arriving: bool, reach: floa
 ## _loosen()); `via`: poses on the way between the harbour end and the lane.
 func _lane_curve(lane, from_port: String, to_port: String, length: float, arriving: bool, reach: float, harbour: Array, turn := 0.0, via := []) -> Array:
 	var mile := length - reach if arriving else reach
-	var sample: Array = _bent_sample(lane, from_port, to_port, clampf(mile, 0.0, length))  # (Bent round other harbours.)
+	var sample: Array = _bent_sample(lane, from_port, to_port, clampf(mile, 0.0, length))
 	var edge := world_to_screen(sample[0])
 	if _is_hidden(edge) or _is_hidden(harbour[0]):
 		return []
@@ -6942,7 +7589,7 @@ func _lane_ends(from_port: String, to_port: String) -> Array:
 ## harbour, the lane between, and the curve into its last port's (the curves
 ## empty where a port's marina doesn't show, the lane then running on to it).
 func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedVector2Array]:
-	# Its points (bent round other ports' harbours: see _bent_lane()) on the
+	# Its points (as laid: see _bent_lane()) on the
 	# sphere are worked out once.
 	var bent := _bent_lane(sea_lane, from_port, to_port)
 	var lane_miles: PackedFloat64Array = bent.miles
@@ -6992,57 +7639,50 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 		middle.append(world_to_screen(_bent_sample(sea_lane, from_port, to_port, stop)[0]))
 	return [curves[1], middle, curves[0]]
 
-# --- Lanes bent round other ports' harbours --------------------------------------
+# --- The fleet's lanes as the passes take them ----------------------------------
 
-## Each port's keep-out zone (see _port_zones()) and the bent lanes made with
-## them (see _bent_lane()); and when the zones were last checked (ms).
-var _zones: Array = []
-var _zone_cells := {}
+## Each lane the fleet sails as the native passes and the anchorage test take
+## it (see _bent_lane()), and the ports' marina sizes as last seen (see
+## _check_port_sizes()).
+var _port_sizes_seen: Array = []
 var _bent_lanes := {}
-## Up each time the bent lanes are thrown away (see _port_zones()): what was
+## Up each time the laid lanes are thrown away (see _check_port_sizes()): what was
 ## worked out from them is worked out again (_harbour_corridors(), _anchors_in_lanes()).
 var _bent_epoch := 0
-## Lanes a frame that drew wanted bent (sea lane -> [from, to]): bent by the next frames (see _warm_lanes()).
+## Lanes a frame that drew wanted laid out (sea lane -> [from, to]): done by the next frames (see _warm_lanes()).
 var _lanes_wanted := {}
 
-## A lane bent round the harbours (see _bent_lane()) if it has been already,
-## else {} (and it's bent over the next frames: bending one is a few ms, not
-## for a frame that draws; the ships on it sail the lane as laid meanwhile).
+## A lane as laid out for the passes (see _bent_lane()) if it has been already,
+## else {} (and it's done over the next frames, not in a frame that draws; the
+## ships on it sail the lane's own sample() meanwhile, the same line).
 func _bent_lane_if_ready(sea_lane, from_port: String, to_port: String) -> Dictionary:
-	_port_zones()  # (Clears the bent lanes when the ports' zones have changed.)
+	_check_port_sizes()  # (Throws the laid lanes away when the ports' sizes have changed.)
 	if _bent_lanes.has(sea_lane):
 		return _bent_lanes[sea_lane]
 	if not _lanes_wanted.has(sea_lane):
 		_lanes_wanted[sea_lane] = [from_port, to_port]
 	return {}
-var _zones_checked := -1
+var _port_sizes_checked := -1
 
-## Every port's keep-out zone, round its marina and its approach curves: [(lon,
-## lat), radius (degrees), port id], those of ports on a canal left out (a
-## canal's lanes stay in it). Marinas are a fixed size in the world, so the
-## zones are too; checked again every ZONE_CHECK_S, as ports grow and hubs
-## come and go, and the bent lanes made again if they've changed.
-func _port_zones() -> Array:
+## Looks every PORT_SIZE_CHECK_S at every port's marina size (its mouth's
+## distance from it), as ports grow and hubs come and go: the harbour curves
+## and what's worked out from the laid lanes (the lanes in view, their caps
+## and units, the corridors and the anchor spots in lanes) are made again
+## when any has changed. Lanes used to be bent out round the harbours of the
+## ports they passed (a keep-out zone round each, to leave quiet water for
+## ships at anchor); since 2026-10-13 they're drawn and sailed just as laid,
+## and ships lie in port instead (see _lay_moorings()).
+func _check_port_sizes() -> void:
 	var now := Time.get_ticks_msec()
-	if _zones_checked >= 0 and now - _zones_checked < ZONE_CHECK_S * 1000.0:
-		return _zones
-	_zones_checked = now
-	var zones := []
+	if _port_sizes_checked >= 0 and now - _port_sizes_checked < PORT_SIZE_CHECK_S * 1000.0:
+		return
+	_port_sizes_checked = now
+	var sizes := []
 	for port: Dictionary in GameData.ports:
 		var port_id: String = port.id
-		if _is_canal_port(port_id):
-			continue
-		var layout := _port_layout(port_id)
-		var reach := (layout.mouth as Vector2).x * ZONE_MOUTHS / SHIP_WORLD_ZOOM
-		zones.append([Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))), reach, port_id])
-	if zones != _zones:
-		_zones = zones
-		_zone_cells.clear()
-		for i in zones.size():
-			var cell := _label_cell(zones[i][0])
-			if not _zone_cells.has(cell):
-				_zone_cells[cell] = PackedInt32Array()
-			_zone_cells[cell].append(i)
+		sizes.append([port_id, (_port_layout(port_id).mouth as Vector2).x])
+	if sizes != _port_sizes_seen:
+		_port_sizes_seen = sizes
 		_bent_lanes.clear()
 		_bent_epoch += 1
 		_lanes_warm = false
@@ -7053,89 +7693,21 @@ func _port_zones() -> Array:
 			_ship_culler.forget_lanes()
 		if _lane_painter != null:
 			_lane_painter.forget_lanes()
-			_lane_mesh_epoch = []  # (The mesh is built again from the lanes bent afresh.)
+			_lane_mesh_epoch = []  # (The mesh is built again with the harbour curves afresh.)
 		_lane_reach_memo.clear()
-	return _zones
 
-## The zones near a (lon, lat) point (within a cell of it).
-func _zones_near(lon_lat: Vector2) -> PackedInt32Array:
-	var out := PackedInt32Array()
-	var cell := _label_cell(lon_lat)
-	var columns := ceili(360.0 / LABEL_CELL_DEG)
-	for dx in range(-1, 2):
-		for dy in range(-1, 2):
-			out.append_array(_zone_cells.get(Vector2i(posmod(cell.x + dx, columns), cell.y + dy), PackedInt32Array()))
-	return out
-
-## A lane as it's drawn and sailed on the map: bent out round the harbours of
-## ports it passes but isn't sailing to, so it doesn't cut through their
-## marinas, jetties or approach curves (the ships' way in and out), pushed out
-## smoothly to the edge of each one's zone (ZONE_MOUTHS times its mouth's
-## distance from the port). Not near its own ports, nor in a canal, nor onto
-## the land (where the sea's too narrow, it doesn't bend). Its points are the
-## lane's, with more where it bends, each at the same mile along it as before,
-## so ships take just as long: {points (projected), miles, bent (1 where a
-## point was moved)}. Made once.
-func _bent_lane(sea_lane, from_port: String, to_port: String) -> Dictionary:
-	_port_zones()
+## A lane as the passes and the anchorage test take it: its points
+## (projected) and miles just as laid, and its box (projected), for skipping
+## it where it can't reach (see _anchors_in_lanes()). Made once. (`bent` is
+## what the passes expect: all 0, no point is moved.)
+func _bent_lane(sea_lane, _from_port: String, _to_port: String) -> Dictionary:
+	_check_port_sizes()
 	if _bent_lanes.has(sea_lane):
 		return _bent_lanes[sea_lane]
-	var ends := []
-	for port_id: String in [from_port, to_port]:
-		var port := GameData.get_port(port_id)
-		var reach := _zone_reach(port_id)
-		ends.append([Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))), reach])
-	var points := PackedVector2Array()
-	var miles := PackedFloat64Array()
+	var points: PackedVector2Array = sea_lane.points
+	var miles: PackedFloat64Array = sea_lane.miles
 	var bent := PackedByteArray()
-	var from_points := PackedVector2Array()  # (lon, lat): as the lane goes, and pushed out.
-	var to_points := PackedVector2Array()
-	var lane_points: PackedVector2Array = sea_lane.points
-	var lane_miles: PackedFloat64Array = sea_lane.miles
-	for i in lane_points.size():
-		# More points along a stretch passing near a zone, so it bends smoothly.
-		var steps := 1
-		if i > 0:
-			var a := Geo.unproject(lane_points[i - 1])
-			var b := Geo.unproject(lane_points[i])
-			if _near_zone(a, b, from_port, to_port):
-				steps = maxi(ceili(a.distance_to(b) / ZONE_STEP_DEG), 1)
-		for s in range(1 if i > 0 else 0, steps + 1):
-			var share := float(s) / steps
-			var at := lane_points[i] if i == 0 or s == steps else lane_points[i - 1].lerp(lane_points[i], share)
-			var mile := lane_miles[i] if i == 0 or s == steps else lerpf(lane_miles[i - 1], lane_miles[i], share)
-			var lon_lat := Geo.unproject(at)
-			from_points.append(lon_lat)
-			to_points.append(_bend(lon_lat, from_port, to_port, ends))
-			points.append(at)
-			miles.append(mile)
-	# How far each point may go before it reaches the land (the map's own land,
-	# islands and all: see _on_land()), smoothed along the lane so it bends
-	# smoothly and stays off the land: where the sea's too narrow (a strait),
-	# hardly at all. A small push is let be.
-	_land_ready()
-	var room := PackedFloat32Array()
-	for k in points.size():
-		var share := 1.0
-		if from_points[k].distance_to(to_points[k]) > ZONE_FREE_DEG and _on_land(to_points[k]):
-			var low := 0.0
-			var high := 1.0
-			for step in 5:
-				var mid := (low + high) / 2.0
-				if _on_land(from_points[k].lerp(to_points[k], mid)):
-					high = mid
-				else:
-					low = mid
-			share = low
-		room.append(share)
-	room = _smoothed(_least_near(room, ZONE_SMOOTH_POINTS / 2), ZONE_SMOOTH_POINTS)
-	for k in points.size():
-		if from_points[k] != to_points[k] and room[k] > 0.0:
-			points[k] = Geo.project(from_points[k].lerp(to_points[k], room[k]))
-			bent.append(1)
-		else:
-			bent.append(0)
-	# Its box (projected), for skipping it where it can't reach (see _anchors_in_lanes()).
+	bent.resize(points.size())
 	var box := Rect2(points[0], Vector2.ZERO) if not points.is_empty() else Rect2()
 	for p in points:
 		box = box.expand(p)
@@ -7186,37 +7758,9 @@ static func _land_ready() -> void:
 		WorkerThreadPool.wait_for_task_completion(_land_task)
 		_land_task = -1
 
-## Each value as the least within `reach` places either side of it.
-static func _least_near(values: PackedFloat32Array, reach: int) -> PackedFloat32Array:
-	var out := PackedFloat32Array()
-	out.resize(values.size())
-	for i in values.size():
-		var least := values[i]
-		for j in range(maxi(i - reach, 0), mini(i + reach + 1, values.size())):
-			least = minf(least, values[j])
-		out[i] = least
-	return out
-
-## Each value as the average of those within `reach` places either side of it.
-static func _smoothed(values: PackedFloat32Array, reach: int) -> PackedFloat32Array:
-	var out := PackedFloat32Array()
-	out.resize(values.size())
-	for i in values.size():
-		var total := 0.0
-		var count := 0
-		for j in range(maxi(i - reach, 0), mini(i + reach + 1, values.size())):
-			total += values[j]
-			count += 1
-		out[i] = total / count
-	return out
-
-## Bends (_bent_lane()) the fleet's lanes both ways ahead of their being
-## drawn, LANE_WARM_MS' worth a frame: a lane takes a few ms, and the way back
-## of each is only drawn once a marina shows, so the first zoom in found them
-## all to do in one frame.
+## Lays out (_bent_lane()) the fleet's lanes both ways for the passes ahead
+## of their being drawn, LANE_WARM_MS' worth a frame.
 func _warm_lanes() -> void:
-	if _land_cells.is_empty():
-		return  # (Bending waits for the land's cells: not here, while they're still being made.)
 	var start := Time.get_ticks_usec()
 	# The lanes a frame that drew asked for first (see _bent_lane_if_ready()).
 	while not _lanes_wanted.is_empty():
@@ -7240,116 +7784,15 @@ func _warm_lanes() -> void:
 				return
 	_lanes_warm = true  # (Till the active lanes are looked at again.)
 
-## A port's keep-out zone's radius (degrees), or 0 for one without (on a canal).
-func _zone_reach(port_id: String) -> float:
-	for zone: Array in _port_zones():
-		if zone[2] == port_id:
-			return zone[1]
-	return 0.0
-
-## True if a stretch of lane from a to b (lon, lat) comes within reach of a
-## zone it bends round.
-func _near_zone(a: Vector2, b: Vector2, from_port: String, to_port: String) -> bool:
-	var indices := _zones_near(a)
-	indices.append_array(_zones_near(b))
-	for i in indices:
-		var zone: Array = _zones[i]
-		if zone[2] == from_port or zone[2] == to_port:
-			continue
-		var center: Vector2 = zone[0]
-		var squash := cos(deg_to_rad(center.y))
-		var pa := Vector2(wrapf(a.x - center.x, -180.0, 180.0) * squash, a.y - center.y)
-		var pb := Vector2(wrapf(b.x - center.x, -180.0, 180.0) * squash, b.y - center.y)
-		if Geometry2D.get_closest_point_to_segment(Vector2.ZERO, pa, pb).length() < float(zone[1]) * 2.0 + ZONE_STEP_DEG:
-			return true
-	return false
-
-## A lane's (lon, lat) point bent out of the zones of the ports near it it
-## isn't sailing to (`ends`: its own two ports' [(lon, lat), zone radius]):
-## inside twice a zone's radius, pushed out from its port, by the radius right
-## at the port and less and less further out, reaching nothing at twice the
-## radius (smoothly, so the lane curves round it). The push fades out near its
-## own ports (it comes in to them as it was) and in canals.
-func _bend(lon_lat: Vector2, from_port: String, to_port: String, ends: Array) -> Vector2:
-	var out := lon_lat
-	for i in _zones_near(lon_lat):
-		var zone: Array = _zones[i]
-		if zone[2] == from_port or zone[2] == to_port:
-			continue
-		var center: Vector2 = zone[0]
-		var reach: float = zone[1]
-		var squash := maxf(cos(deg_to_rad(center.y)), 0.05)
-		var off := Vector2(wrapf(out.x - center.x, -180.0, 180.0) * squash, out.y - center.y)
-		var d := off.length()
-		if d >= reach * 2.0:
-			continue
-		var push := (reach * 2.0 - d) * (reach * 2.0 - d) / (4.0 * reach)
-		var way := off / d if d > 0.000001 else Vector2.RIGHT
-		out += Vector2(way.x * push / squash, way.y * push)
-	if out == lon_lat:
-		return lon_lat
-	# Fading out near its own ports and in canals.
-	var weight := 1.0
-	for end: Array in ends:
-		var center: Vector2 = end[0]
-		var squash := cos(deg_to_rad(center.y))
-		var d := Vector2(wrapf(lon_lat.x - center.x, -180.0, 180.0) * squash, lon_lat.y - center.y).length()
-		var own := maxf(float(end[1]), 0.05)
-		weight = minf(weight, smoothstep(own * 0.25, own * 0.6, d))
-	if weight <= 0.0 or _in_canal(lon_lat):
-		return lon_lat
-	# (Pushed away from a port on the coast, a lane goes out to sea: no check
-	# against the land, which on the coarse sea map would leave it jagged.)
-	return lon_lat.lerp(out, weight)
-
-## True if a (lon, lat) point is in or by a canal (its path's box, a little grown).
-func _in_canal(lon_lat: Vector2) -> bool:
-	if _canal_boxes.is_empty():
-		for canal: Dictionary in GameData.canals:
-			var path: Array = canal.get("path", [])
-			if path.is_empty():
-				continue
-			var box := Rect2(Vector2(path[0][0], path[0][1]), Vector2.ZERO)
-			for point: Array in path:
-				box = box.expand(Vector2(point[0], point[1]))
-			_canal_boxes.append(box.grow(0.5))
-	for box: Rect2 in _canal_boxes:
-		if box.has_point(lon_lat):
-			return true
-	return false
-
-## Where along a bent lane (_bent_lane()) a ship `mile` along it is, and which
-## way it's heading: [projected position, direction], as the lane's own
-## sample() where it isn't bent.
+## Where along a lane a ship `mile` along it is, and which way it's heading:
+## [projected position, direction], the lane's own sample() (lanes are drawn
+## and sailed just as laid: see _check_port_sizes()).
 func _bent_sample(sea_lane, from_port: String, to_port: String, mile: float) -> Array:
-	var made := _bent_lane_if_ready(sea_lane, from_port, to_port)
-	if made.is_empty():
-		return sea_lane.sample(mile)  # (On the lane as laid, till it's bent: see _warm_lanes().)
-	var miles: PackedFloat64Array = made.miles
-	var points: PackedVector2Array = made.points
-	var bent: PackedByteArray = made.bent
-	mile = clampf(mile, 0.0, sea_lane.length())
-	var i := clampi(miles.bsearch(mile), 1, points.size() - 1)
-	if bent[i] == 0 and bent[i - 1] == 0:
-		return sea_lane.sample(mile)
-	var span := miles[i] - miles[i - 1]
-	var t := (mile - miles[i - 1]) / span if span > 0.0 else 1.0
-	var at := points[i - 1].lerp(points[i], t)
-	# Its heading: the way the bent lane goes a little either side of it.
-	var ahead := _bent_point(made, minf(mile + ZONE_HEADING_NM, sea_lane.length()))
-	var behind := _bent_point(made, maxf(mile - ZONE_HEADING_NM, 0.0))
-	var way := ahead - behind
-	return [at, way.normalized() if way.length() > 0.000001 else sea_lane.sample(mile)[1]]
+	_bent_lane_if_ready(sea_lane, from_port, to_port)  # (Laid out for the passes over the next frames, if it isn't yet.)
+	return sea_lane.sample(mile)
 
-static func _bent_point(made: Dictionary, mile: float) -> Vector2:
-	var miles: PackedFloat64Array = made.miles
-	var points: PackedVector2Array = made.points
-	var i := clampi(miles.bsearch(mile), 1, points.size() - 1)
-	var span := miles[i] - miles[i - 1]
-	return points[i - 1].lerp(points[i], (mile - miles[i - 1]) / span if span > 0.0 else 1.0)
-
-## Where a ship is on the map (projected), as drawn: on its lane bent round
-## other ports' harbours (see _bent_lane()); a carried or towed one with its
+## Where a ship is on the map (projected), as drawn: on its lane as laid
+## (see _bent_lane()); a carried or towed one with its
 ## rescuer; docked, at its port.
 func _ship_world(ship: Ship) -> Vector2:
 	if ship.is_carried() or ship.is_towed():
@@ -7409,7 +7852,7 @@ func _fishing_pose(ship: Ship) -> Array:
 
 func _fishing_pose_now(ship: Ship) -> Array:
 	var ground := ship.fish_ground
-	if ship.fish_phase == "work" and not ground.is_empty():
+	if ship.is_working_ground() and not ground.is_empty():
 		return _fish_work_pose(ship, GameState.play_time)
 	var here := _ship_bent(ship)
 	if here.is_empty():
@@ -8071,34 +8514,37 @@ func _lane_chunks(from_port: String, to_port: String) -> Array:
 ## port), so the fleet pass can skip it by its own point (see _fleet_pass()).
 const HARBOUR_END_ZONE_NM := 220.0
 
-## The tow lines from each tug pulling a ship (at sea, or in to its berth) to
-## the ship's bow: two in a Y. `tugs`: the places in `order` of the tugs with a
-## ship on their line.
+## The tow lines from each tug with a ship on its line (at sea, or in to its
+## berth): pulling ahead, from its stern to the ship's bow (two in a Y at
+## sea); made fast astern, from its bow to the ship's stern. `tugs`: the
+## places in `order` of the tugs with a ship on their line.
 func _draw_tow_lines(order: Array[Ship], tugs: PackedInt32Array) -> void:
 	for i: int in tugs:
 		var tug: Ship = order[i]
-		if not _tug_pulling(tug):
+		var line := _tug_line(tug)
+		if line.is_empty():
 			continue
 		var ship := tug.rescuing
 		var tug_rect: Rect2 = _model_look(tug.model_id)[7]
 		var ship_rect: Rect2 = _model_look(ship.model_id)[7]
-		var stern := ship_screen_position(tug) - Vector2.from_angle(_screen_angle(tug)) * tug_rect.size.x / 2.0 * _ship_scale()
-		var bow := ship_screen_position(ship) + Vector2.from_angle(_screen_angle(ship)) * ship_rect.size.x / 2.0 * _ship_scale()
-		_canvas.draw_line(stern, bow, TOW_LINE_COLOR, maxf(0.25 * _ship_scale(), 1.0), true)
+		var ends := -1.0 if line == "bow" else 1.0  # (Its stern to the ship's bow, or its bow to the ship's stern.)
+		var on_tug := ship_screen_position(tug) + Vector2.from_angle(_screen_angle(tug)) * ends * tug_rect.size.x / 2.0 * _ship_scale()
+		var on_ship := ship_screen_position(ship) - Vector2.from_angle(_screen_angle(ship)) * ends * ship_rect.size.x / 2.0 * _ship_scale()
+		_canvas.draw_line(on_tug, on_ship, TOW_LINE_COLOR, maxf(0.25 * _ship_scale(), 1.0), true)
 
-## True if a tug has its ship on its tow line now: towing it at sea, or
-## pulling it in through its harbour (see _tug_work()).
-func _tug_pulling(tug: Ship) -> bool:
+## The line a tug has on its ship now (see _work_line()): "bow" towing it at
+## sea or pulling it in through its harbour, "stern" made fast astern of it
+## coming in, else "".
+func _tug_line(tug: Ship) -> String:
 	if tug.job_phase == Ship.JOB_TOW:
-		return true
+		return "bow"
 	if tug.job_phase != Ship.JOB_BERTH or not docks_shown():
-		return false
+		return ""
 	var work := _tug_work(tug)
 	if work.is_empty():
-		return false
+		return ""
 	var index: int = (work.team as Array).find(tug)
-	var seg := _work_segment(work.tugs[index], _work_time(tug))
-	return seg.kind == "follow"
+	return _work_line(work, work.tugs[index], _work_time(tug))
 
 ## Ships top-drawn first, so a click on overlapping ships picks the one on top.
 func _ships_topmost_first() -> Array[Ship]:
@@ -8256,7 +8702,7 @@ func _draw_ship(ship: Ship, outline: Color, plain := false) -> void:
 		_draw_deck_crew(ship, look, fade, lean, at, angle)
 		if ship.is_recovery():
 			_draw_ballast(ship, look[7])
-		if ship.is_fishing() and ship.fish_phase == "work":
+		if ship.is_working_ground():
 			_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 			_draw_fishing_gear(ship, at, angle, rect7.size.x * scale, fade)
 		return
@@ -8784,7 +9230,7 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 		return
 	# A fishing boat at work has its gear rigged (rods out, outriggers spread:
 	# <art>_details_fishing.svg); otherwise it's stowed.
-	var rigged: bool = art.has("fishing_details") and ship != null and ship.is_fishing() and ship.fish_phase == "work"
+	var rigged: bool = art.has("fishing_details") and ship != null and ship.is_working_ground()
 	_canvas.draw_texture_rect(art.fishing_details if rigged else art.details, rect, false, fade)
 
 ## How far open a bulk carrier's hatches are (0 shut to 1 open): moored for
@@ -12595,8 +13041,10 @@ static func _marina_ground(layout: Dictionary, p: Vector2) -> bool:
 ## down to their runs on land. Returns {roads, pontoons: [[a, b, fingers:
 ## [[root, tip]...]]...], moorings: [[middle, facing, length]...]} in dock units.
 func _lay_moorings(port_id: String, layout: Dictionary, roads: Array) -> Dictionary:
-	var length := float(layout.length)
-	var width := float(layout.width)
+	# Every slip takes the longest and widest ship of any kind (the Mammoth):
+	# the moorings are every ship's long-term parking, the recovery boats' too.
+	var length := _longest_ship()
+	var width := _widest_any_ship()
 	var finger := length + MOOR_FINGER_EXTRA
 	var pitch := width + MOOR_SLIP_GAP + MOOR_FINGER_WIDTH
 	var kept_roads := []

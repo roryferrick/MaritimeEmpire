@@ -32,7 +32,7 @@ const SEARCH_NM := 420.0
 ## Extra room (nm) round a swinging ship, and between neighbouring ships.
 const MARGIN_NM := 1.0
 ## Map units (MapView): a dock unit is 1 / SHIP_WORLD_ZOOM degrees of the globe.
-const SHIP_WORLD_ZOOM := 75.0
+const SHIP_WORLD_ZOOM := 88.235  # (MapView.SHIP_WORLD_ZOOM.)
 const SHIP_SIZE := 0.245
 const BOW_LENGTH_FACTOR := 0.6
 ## Water no ship anchors in (lon west, lat south, lon east, lat north): the

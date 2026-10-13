@@ -73,7 +73,7 @@ struct Marina {
 	double quay_inland = 0.0;
 };
 
-constexpr double SHIP_WORLD_ZOOM = 75.0;
+constexpr double SHIP_WORLD_ZOOM = 88.235; // MapView.SHIP_WORLD_ZOOM (75 / 0.85).
 constexpr double MAX_LAT = 85.0;
 constexpr double PI_D = 3.1415926535897932384626433833;
 
