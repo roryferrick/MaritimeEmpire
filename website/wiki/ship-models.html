@@ -57,7 +57,7 @@
 <h1>Ship models</h1>
 <figure class="shot"><img src="../assets/shots/shop.webp" alt="The Shop: every model with its speed, hold, range and crew" loading="lazy"><figcaption>The Shop: every model with its speed, hold, range and crew</figcaption></figure>
 <ul>
-<li>Six lines: container ships (Scooter 20, Feeder 100, Feedermax 200, Trans Atlantic, Dominator), tankers (Coastal, Aframax, Supertanker), and new ore carriers (Laker L2, Panamax Bulker L20, Capesize L45), grain carriers (Grain Laker L8, Kamsarmax L28, Post-Panamax Bulker L52), livestock carriers (Cattle Coaster L12, Livestock Carrier L30, Ocean Shearer L55) and vehicle carriers (Car Hopper L18, Car Carrier L38, Giant Car Carrier L58), plus the recovery boats. The Scooter 20 now carries 20 containers (up from 15, with no change to its fuel use). Seaway-sized models (by length): Scooter, Feeder, Feedermax, Coastal, Laker, Grain Laker, Cattle Coaster, Livestock Carrier, Car Hopper and the Buffalo (which can now also carry the small new models).
+<li>Six lines: container ships (Scooter 20, Feeder 100, Feedermax 200, Trans Atlantic, Dominator), tankers (Bunker Tanker L4, Lake Tanker L9, Coastal, Aframax, Supertanker), and new ore carriers (Laker L2, Panamax Bulker L20, Capesize L45), grain carriers (Grain Laker L8, Kamsarmax L28, Post-Panamax Bulker L52), livestock carriers (Cattle Coaster L12, Livestock Carrier L30, Ocean Shearer L55) and vehicle carriers (Car Hopper L18, Car Carrier L38, Giant Car Carrier L58), plus the recovery boats. The Scooter 20 now carries 20 containers (up from 15, with no change to its fuel use). Seaway-sized models (by length): Scooter, Feeder, Feedermax, Bunker Tanker, Lake Tanker, Coastal, Laker, Grain Laker, Cattle Coaster, Livestock Carrier, Car Hopper and the Buffalo (which can now also carry the small new models).
 </li></ul>
 <div class="table-wrap"><table>
 <tr><th>Model</th><th>Price</th><th>Speed (nm/s)</th><th>Capacity</th><th>Range per leg</th><th>Max owned</th></tr>
@@ -66,7 +66,9 @@
 <tr><td>Feedermax 200</td><td>$500,000</td><td>3.27</td><td>200</td><td>1,175 nm (≈6 min)</td><td>8</td></tr>
 <tr><td>Trans Atlantic</td><td>$5,000,000</td><td>6.35</td><td>1,250</td><td>4,080 nm (Rome→New York is 4,073 nm)</td><td>8</td></tr>
 <tr><td>Dominator</td><td>$50,000,000</td><td>3.99</td><td>10,000</td><td>9,000 nm</td><td>8</td></tr>
-<tr><td>Buffalo</td><td>$1,250,000</td><td>6.35</td><td>carries 1 lost Scooter 20, Feeder 100, Feedermax 200 or Coastal</td><td>recovery jobs up to 8,000 nm</td><td>8</td></tr>
+<tr><td>Buffalo</td><td>$1,250,000</td><td>6.35</td><td>carries 1 lost Scooter 20, Feeder 100, Feedermax 200, Bunker Tanker, Lake Tanker or Coastal</td><td>recovery jobs up to 8,000 nm</td><td>8</td></tr>
+<tr><td>Bunker Tanker (gas tanker, L4)</td><td>$40,000</td><td>5.60</td><td>250 tons of fuel</td><td>490 nm</td><td>8</td></tr>
+<tr><td>Lake Tanker (gas tanker, L9)</td><td>$250,000</td><td>5.20</td><td>1,500 tons of fuel</td><td>760 nm</td><td>8</td></tr>
 <tr><td>Coastal (gas tanker)</td><td>$1,500,000</td><td>6.35</td><td>5,000 tons of fuel</td><td>1,175 nm</td><td>8</td></tr>
 <tr><td>Aframax (gas tanker)</td><td>$15,000,000</td><td>5.40</td><td>50,000 tons of fuel</td><td>4,080 nm</td><td>8</td></tr>
 <tr><td>Supertanker (gas tanker)</td><td>$150,000,000</td><td>4.59</td><td>500,000 tons of fuel</td><td>9,000 nm</td><td>8</td></tr>
@@ -80,6 +82,8 @@
 <tr><td>Trans Atlantic</td><td>555,000</td><td>810</td><td>1</td><td>$29,200</td><td>30 s</td></tr>
 <tr><td>Dominator</td><td>10,300,000</td><td>4,070</td><td>0.5</td><td>$293,000</td><td>1 min</td></tr>
 <tr><td>Buffalo</td><td>645,000</td><td>450</td><td>1</td><td>$30,000</td><td>10 s</td></tr>
+<tr><td>Bunker Tanker</td><td>640</td><td>7</td><td>1</td><td>$280</td><td>6 s</td></tr>
+<tr><td>Lake Tanker</td><td>6,800</td><td>45</td><td>1</td><td>$1,900</td><td>10 s</td></tr>
 <tr><td>Coastal</td><td>50,500</td><td>265</td><td>1</td><td>$9,500</td><td>15 s</td></tr>
 <tr><td>Aframax</td><td>1,830,000</td><td>2,250</td><td>1</td><td>$81,000</td><td>30 s</td></tr>
 <tr><td>Supertanker</td><td>41,300,000</td><td>19,125</td><td>0.5</td><td>$1,375,000</td><td>1 min</td></tr>
@@ -88,11 +92,11 @@
 <ul>
 <li>Speeds keep a 30: 20: 18: 35: 22 ratio (except the Feeder 100, since sped up from 3.63 to 4.82 nm/s), scaled so a Scooter 20 sails Rome→Tunis (324.9 nm) in about 60 s. A Dominator's longest leg (9,000 nm) takes about 42 minutes with wear.
 </li>
-<li>Range is the longest single leg a ship can sail at 100% maintenance. It's enforced when assigning routes; fuel is checked again at every departure.
+<li>Range is the longest single leg a ship can sail on one tank at 100% maintenance. Farther ports are reached by way of refuel stops (see Refuel stops); fuel is checked again at every departure.
 </li>
-<li>Container ships, car carriers and livestock carriers show their cargo: empty they have a bare deck; loaded, container stacks, rows of cars or animals in the pens fill from the stern forward in quarters (any cargo shows at least a quarter), so part loads show. Smaller ships are drawn on top of bigger ones where they overlap (and a click there picks the smaller one). Colors by family, smallest to biggest: container ships yellow to red (Scooter 20, Feeder 100, Feedermax 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Buffalo, Mammoth). Zoomed in, ports show their marinas, sized like the ships (see Docks and berths); a ship sailing near a port eases out from where it lay (its anchorage spot or the harbour mouth) and in towards the harbour mouth, facing the way it's really moving, over three times the mouth's distance from the port (the same stretch of sea at every zoom); tugs towing, or turning round by, a lost ship stay alongside it where it's drawn, so they ease into the harbour with it.
+<li>Container ships, car carriers and livestock carriers show their cargo: empty they have a bare deck; loaded, container stacks, rows of cars or animals in the pens fill from the stern forward in quarters (any cargo shows at least a quarter), so part loads show. Smaller ships are drawn on top of bigger ones where they overlap (and a click there picks the smaller one). Colors by family, smallest to biggest: container ships yellow to red (Scooter 20, Feeder 100, Feedermax 200, Trans Atlantic, Dominator), gas tankers light green to dark blue (Bunker Tanker, Lake Tanker, Coastal, Aframax, Supertanker), recovery boats brown, darker = bigger (Buffalo, Mammoth). Zoomed in, ports show their marinas, sized like the ships (see Docks and berths); a ship sailing near a port eases out from where it lay (its anchorage spot or the harbour mouth) and in towards the harbour mouth, facing the way it's really moving, over three times the mouth's distance from the port (the same stretch of sea at every zoom); tugs towing, or turning round by, a lost ship stay alongside it where it's drawn, so they ease into the harbour with it.
 </li>
-<li>The player can own at most 10 of each container ship and gas tanker, and 5 of each recovery boat, once the company level has opened all their slots.
+<li>The player can own at most 8 of each cargo ship and recovery boat (4 Diesel and 2 Nuclear Icebreakers), once the company level has opened all their slots.
 </li>
 <li>Ship names must be unique (case-insensitive). No renaming in beta.
 </li>
