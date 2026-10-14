@@ -92,3 +92,20 @@ One recording per species (audio/birds/<species>.*), the same way: Wikimedia Com
 | birds/coopers_hawk.ogg | Accipiter cooperii - Cooper's Hawk - XC74741.ogg | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Accipiter_cooperii_-_Cooper's_Hawk_-_XC74741.ogg |
 | birds/silver.ogg | Red Billed Gull (Chroicocephalus novaehollandiae scopulinus) voice during food fight.ogg | Michal Klajban | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Red_Billed_Gull_(Chroicocephalus_novaehollandiae_scopulinus)_voice_during_food_fight.ogg |
 | birds/silver_2.ogg | Red-billed gulls calling, Otago Peninsula, NZ.ogg | Benchill | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Red-billed_gulls_calling,_Otago_Peninsula,_NZ.ogg |
+
+## Owls
+
+The owls heard at night (audio/owls/<owl>.*: Ambience.OWLS, by the part of the world in view), the same way: Wikimedia Commons, free licences, renamed, unedited.
+
+| Game file | Original | Author | Licence | Source |
+|---|---|---|---|---|
+| owls/tawny_owl.mp3 | Strix aluco - Tawny Owl XC534183.mp3 | Antonio | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Strix_aluco_-_Tawny_Owl_XC534183.mp3 |
+| owls/barn_owl.mp3 | Tyto alba - Western Barn Owl XC436946.mp3 | Joost van Bruggen | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Tyto_alba_-_Western_Barn_Owl_XC436946.mp3 |
+| owls/great_horned_owl.mp3 | Bubo virginianus - Great Horned Owl XC450919.mp3 | Michael & Katie LaTour | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bubo_virginianus_-_Great_Horned_Owl_XC450919.mp3 |
+| owls/barred_owl.mp3 | Strix varia - Barred Owl XC457078.mp3 | Rob Porter | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Strix_varia_-_Barred_Owl_XC457078.mp3 |
+| owls/eastern_screech_owl.mp3 | Megascops asio - Eastern Screech Owl XC75829.mp3 | Jonathon Jongsma | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Megascops_asio_-_Eastern_Screech_Owl_XC75829.mp3 |
+| owls/eurasian_scops_owl.mp3 | Otus scops - Eurasian Scops Owl XC554663.mp3 | GESHORS Yann | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Otus_scops_-_Eurasian_Scops_Owl_XC554663.mp3 |
+| owls/eagle_owl.mp3 | Bubo bubo - Eurasian Eagle-Owl XC604112.mp3 | Robert Petersen | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bubo_bubo_-_Eurasian_Eagle-Owl_XC604112.mp3 |
+| owls/brown_hawk_owl.mp3 | Ninox scutulata - Brown Hawk-Owl XC382468.mp3 | Manoj Karingamadathil | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ninox_scutulata_-_Brown_Hawk-Owl_XC382468.mp3 |
+| owls/southern_boobook.mp3 | Ninox boobook - Southern Boobook XC442607.mp3 | James Ray | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ninox_boobook_-_Southern_Boobook_XC442607.mp3 |
+| owls/african_scops_owl.ogg | African Scops Owl (Otus senegalensis) (022A-WA03044X0041-0006M0).ogg | A.R. Gregory (recordist), The British Library | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:African_Scops_Owl_(Otus_senegalensis)_(022A-WA03044X0041-0006M0).ogg |

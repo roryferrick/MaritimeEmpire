@@ -30,6 +30,9 @@ const EYE_COLORS: Array[Color] = [Color("#6b4423"), Color("#3e2615"), Color("#8a
 const GOLD := Color("#e2b43c")
 const WHITE := Color("#f6f6f6")
 const NAVY := Color("#1f2b4d")
+## The hats that cover all the hair (the Halloween pack's skull mask, mummy wrap
+## and monster's flat top): none is drawn under them.
+const HATS_HIDING_HAIR := [38, 39, 41]
 
 ## Tops: [style, colour, sleeves ("short", "long", "none")].
 const TOPS := [
@@ -1344,6 +1347,8 @@ func _draw_moustache(hair: Color) -> void:
 # --- Hair, glasses and hats ----------------------------------------------------
 
 func _draw_back_hair(hair: Color) -> void:
+	if _part("headwear") in HATS_HIDING_HAIR:
+		return
 	var h := _head
 	match _part("hair"):
 		5:  # Long.
@@ -1372,6 +1377,8 @@ func _draw_back_hair(hair: Color) -> void:
 
 
 func _draw_front_hair(hair: Color) -> void:
+	if _part("headwear") in HATS_HIDING_HAIR:
+		return
 	var h := _head
 	var cap := _ellipse_points(h + Vector2(0, -1.0), HEAD_RADII + Vector2(1.3, 1.3), PI * 1.02, TAU * 0.99, 18)
 	var brow_y := h.y - 9.0

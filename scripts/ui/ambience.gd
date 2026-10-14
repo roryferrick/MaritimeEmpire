@@ -5,8 +5,10 @@ extends Node
 ## harbour's bustle when a marina is on screen, wind and rain under a storm,
 ## ships' horns as they set off and a fog signal in foul weather, and the
 ## calls of the animals in view (the birds at the ports on screen, the whales,
-## seals and otters, the lions, bears and elephants on the land), picked at
-## random every few seconds. Everything is scaled by the zoom, as Crusader
+## seals and otters, the lions, bears and elephants on the land, and owls by
+## night), picked at random every few seconds. By night (at the middle of the
+## screen) the birds call less and more quietly, all but the night birds; by
+## day the gulls call the most. Everything is scaled by the zoom, as Crusader
 ## Kings does it: near silent with the whole world in view, full close in
 ## (ZOOM_SILENT_DB to 0 dB over the zoom's range, on a log scale). The sounds
 ## are in audio/ (see audio/CREDITS.md), named by the key they play for.
@@ -56,6 +58,32 @@ const SEA_CALLS := {whale = "whale", orca = "orca", seal = "seal", otter = "otte
 ## A land drawing's kind (WorldMapData decor: the animals) to its call.
 const LAND_CALLS := {bison = "bison", brown_bear = "brown_bear", elephant = "elephant", giraffe = "giraffe", lemur = "lemur",
 	lion = "lion", orangutan = "orangutan", tiger = "tiger", penguin = "penguin", kiwi = "kiwi", quetzal = "quetzal", toucan = "toucan"}
+## The owls heard at night where a port or the land is in view, by where the
+## middle of the screen is: [owl (audio/owls/<owl>.*), west, east, south, north
+## (degrees)]; every owl whose box holds it may call.
+const OWLS := [
+	["barn_owl", -180.0, 180.0, -50.0, 60.0],
+	["great_horned_owl", -170.0, -30.0, -55.0, 70.0],
+	["barred_owl", -130.0, -60.0, 15.0, 55.0],
+	["eastern_screech_owl", -105.0, -60.0, 20.0, 50.0],
+	["tawny_owl", -15.0, 60.0, 28.0, 65.0],
+	["eurasian_scops_owl", -15.0, 90.0, 25.0, 55.0],
+	["eagle_owl", -15.0, 140.0, 25.0, 70.0],
+	["african_scops_owl", -20.0, 55.0, -35.0, 25.0],
+	["brown_hawk_owl", 65.0, 150.0, -10.0, 45.0],
+	["southern_boobook", 110.0, 180.0, -50.0, -5.0],
+]
+## By night (0 by day to 1 in the dead of night, at the middle of the screen):
+## the owls' weight among the calls (all of them together, at full night; they
+## call from this much night up), the other birds' weight and loudness (dB) at
+## full night (not the night birds: Birds species with behavior "night"), and
+## the gulls' weight by day.
+const OWL_WEIGHT := 10.0
+const OWLS_FROM_NIGHT := 0.3
+const OWL_GAIN := -6.0
+const NIGHT_BIRD_WEIGHT := 0.3
+const NIGHT_BIRD_DB := -9.0
+const GULL_DAY_WEIGHT := 3.0
 const AUDIO_DIR := "res://audio/"
 const BIRD_DIR := "res://audio/birds/"
 
@@ -77,6 +105,10 @@ var _rng := RandomNumberGenerator.new()
 var _land_animals := []  # [kind key, projected point] of the land's animal drawings with a call.
 var _land_scanned := false
 var _last_colony := -1  # The colony the last pick came from (a bird call), or -1.
+var _at_sea := false  # Whether the middle of the screen is at sea, and where it is (lon, lat).
+var _center := Vector2.ZERO
+var _night := 0.0  # How dark it is at the middle of the screen (see OWLS).
+var _last_db := 0.0  # The last pick's own change of loudness (a day bird by night: quieter).
 
 
 func _init(map: Control) -> void:
@@ -163,7 +195,7 @@ func _stream_path(key: String) -> String:
 ## Asks for every recording in the background at the start (the kinds' and the
 ## birds' species'), so none is read on the main thread when its animal first calls.
 func _preload_sounds() -> void:
-	for dir_path: String in [AUDIO_DIR, AUDIO_DIR + "birds/"]:
+	for dir_path: String in [AUDIO_DIR, AUDIO_DIR + "birds/", AUDIO_DIR + "owls/"]:
 		for file: String in DirAccess.get_files_at(dir_path):
 			var name := file
 			if name.get_extension() in ["import", "remap"]:  # (Exported, a file may be listed as .ogg.import.)
@@ -172,7 +204,7 @@ func _preload_sounds() -> void:
 				continue
 			var key := name.get_basename()
 			if dir_path != AUDIO_DIR:
-				key = "birds/" + key
+				key = dir_path.trim_suffix("/").get_file() + "/" + key
 			var path := dir_path + name
 			_paths[key] = path
 			if not _streams.has(key) and ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
@@ -214,6 +246,9 @@ func _process_timed(delta: float) -> void:
 	var base := base_db()
 	var center_lon_lat: Vector2 = Geo.unproject(_map.screen_to_world(_map.size / 2.0))
 	var at_sea: bool = SeaLife.shared().is_sea(center_lon_lat)
+	_night = Divine.night_at(center_lon_lat) if Settings.day_night else 0.0
+	_at_sea = at_sea
+	_center = center_lon_lat
 	var storm := 0.0
 	if not GameState.weather.storms.is_empty():
 		storm = float(GameState.weather.strongest_at(center_lon_lat)[1])
@@ -235,7 +270,7 @@ func _process_timed(delta: float) -> void:
 		var key := _pick_call()
 		MapView._prof("amb.pick", t_p)
 		if not key.is_empty():
-			var gain := float(GAINS.get(key, SPECIES_GAINS.get(key.get_file(), GAINS.get(key.get_file(), -6.0))))
+			var gain := float(GAINS.get(key, SPECIES_GAINS.get(key.get_file(), GAINS.get(key.get_file(), OWL_GAIN if key.begins_with("owls/") else -6.0)))) + _last_db
 			t_p = Time.get_ticks_usec()
 			var played := _play_call(key, base + gain + _rng.randf_range(-3.0, 0.0))
 			MapView._prof("amb.play", t_p)
@@ -283,6 +318,7 @@ func _pick_call() -> String:
 	MapView._prof("pick.setup", _t_pick)
 	var t_m := Time.get_ticks_usec()
 	var marinas: PackedInt32Array = _map.marinas_in_view(area)
+	var birds_near := false
 	MapView._prof("pick.marinas", t_m)
 	for index: int in marinas:
 		var id: String = GameData.ports[index].id
@@ -304,7 +340,14 @@ func _pick_call() -> String:
 				if randf() < 0.5 and not _stream_path(key + "_2").is_empty():  # (A second take of it, some of the time.)
 					key += "_2"
 				if not key.is_empty() and not _stream_path(key).is_empty():
-					picks.append([key, sqrt(float(entry.count)) * float(CALL_WEIGHTS.get(species, 1.0)), int(entry.colony)])
+					var weight := sqrt(float(entry.count)) * float(CALL_WEIGHTS.get(species, 1.0))
+					var night_bird := str(birds.species(species).get("behavior", "")) == "night"
+					if not night_bird:
+						weight *= lerpf(1.0, NIGHT_BIRD_WEIGHT, _night)
+					if cls == "gulls":
+						weight *= lerpf(GULL_DAY_WEIGHT, 1.0, _night)
+					picks.append([key, weight, int(entry.colony), 0.0 if night_bird else NIGHT_BIRD_DB * _night])
+					birds_near = true
 			MapView._prof("pick.inner", t_in)
 	MapView._prof("pick.ports", _t_pick)
 	_t_pick = Time.get_ticks_usec()
@@ -324,6 +367,14 @@ func _pick_call() -> String:
 	for animal: Array in _land_animals:
 		if area.has_point(_map.world_to_screen(animal[1])):
 			picks.append([animal[0], 3.0])
+	# The owls, by night, where there's a port or land to call from.
+	if _night >= OWLS_FROM_NIGHT and (birds_near or not _at_sea):
+		var owls := []
+		for owl: Array in OWLS:
+			if _center.x >= float(owl[1]) and _center.x <= float(owl[2]) and _center.y >= float(owl[3]) and _center.y <= float(owl[4]) and not _stream_path("owls/" + str(owl[0])).is_empty():
+				owls.append("owls/" + str(owl[0]))
+		for key: String in owls:
+			picks.append([key, OWL_WEIGHT * _night / owls.size(), -1])
 	if picks.is_empty():
 		return ""
 	var total := 0.0
@@ -337,6 +388,7 @@ func _pick_call() -> String:
 			chosen = pick
 			break
 	_last_colony = int(chosen[2]) if chosen.size() > 2 else -1
+	_last_db = float(chosen[3]) if chosen.size() > 3 else 0.0
 	return str(chosen[0])
 
 
