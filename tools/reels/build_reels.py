@@ -1,0 +1,97 @@
+# Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
+"""Puts the reels together from the footage tools/reels/reel_director.gd recorded.
+
+    python tools/reels/build_reels.py A [B 1 2 ...]
+
+For each reel in tools/reels/reels.json: the beats' shots cut in order (each
+shot's frames from its "from" second, every "speed"th frame, for "len"
+seconds), each beat's caption popping in near the top, the end card over the
+last beat, and a silent audio track (Instagram is happier with one). Writes
+marketing/reels/<file>.mp4 (1080x1920, 30 fps, H.264).
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BUILD = os.path.join(ROOT, "marketing", "reels", "build")
+OUT = os.path.join(ROOT, "marketing", "reels")
+FPS = 30
+CAPTION_Y = 250  # Top of the caption card's 360 px box (clear of Instagram's top bar).
+POP = 0.18  # Seconds a caption takes to pop in.
+
+
+def ffmpeg() -> str:
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    base = os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Packages")
+    for name in os.listdir(base):
+        if name.startswith("Gyan.FFmpeg"):
+            for sub in os.listdir(os.path.join(base, name)):
+                exe = os.path.join(base, name, sub, "bin", "ffmpeg.exe")
+                if os.path.exists(exe):
+                    return exe
+    sys.exit("ffmpeg not found")
+
+
+def build(reel_id: str, reel: dict) -> None:
+    frames_dir = os.path.join(BUILD, reel_id, "frames")
+    shutil.rmtree(frames_dir, ignore_errors=True)
+    os.makedirs(frames_dir)
+    n = 0
+    for beat in reel["beats"]:
+        for shot in beat["shots"]:
+            src = os.path.join(BUILD, "shots", shot["shot"])
+            have = sorted(f for f in os.listdir(src) if f.endswith(".jpg"))
+            if not have:
+                sys.exit("no frames for " + shot["shot"])
+            speed = float(shot.get("speed", 1.0))
+            start = round(float(shot.get("from", 0.0)) * FPS)
+            for i in range(round(float(shot["len"]) * FPS)):
+                pick = min(start + round(i * speed), len(have) - 1)
+                os.link(os.path.join(src, have[pick]), os.path.join(frames_dir, "%05d.jpg" % n))
+                n += 1
+    length = n / FPS
+    cards = os.path.join(BUILD, reel_id, "cards")
+    args = [ffmpeg(), "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(frames_dir, "%05d.jpg")]
+    filters = []
+    last = "0:v"
+    inputs = 1
+    for i, beat in enumerate(reel["beats"]):
+        t0, t1 = float(beat["t"][0]), float(beat["t"][1])
+        if beat.get("caption"):
+            args += ["-loop", "1", "-framerate", str(FPS), "-i", os.path.join(cards, "caption_%02d.png" % i)]
+            # Fades in and rises 40 px as it pops, fades out just before the beat ends.
+            filters.append(
+                f"[{inputs}:v]format=rgba,fade=t=in:st={t0}:d={POP}:alpha=1,fade=t=out:st={t1 - 0.12}:d=0.12:alpha=1[c{i}]")
+            filters.append(
+                f"[{last}][c{i}]overlay=x=0:y='{CAPTION_Y}+40*max(0\\,1-(t-{t0})/{POP})':enable='between(t,{t0},{t1})'[v{i}]")
+            last = f"v{i}"
+            inputs += 1
+        if beat.get("endcard"):
+            args += ["-loop", "1", "-framerate", str(FPS), "-i", os.path.join(cards, "endcard.png")]
+            filters.append(f"[{inputs}:v]format=rgba,fade=t=in:st={t0}:d=0.4:alpha=1[e{i}]")
+            filters.append(f"[{last}][e{i}]overlay=0:0:enable='gte(t,{t0})'[v{i}]")
+            last = f"v{i}"
+            inputs += 1
+    filters.append(f"[{last}]format=yuv420p[out]")
+    args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+    args += ["-filter_complex", ";".join(filters), "-map", "[out]", "-map", f"{inputs}:a",
+             "-t", f"{length:.3f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "slow", "-crf", "17",
+             "-profile:v", "high", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+             os.path.join(OUT, reel["file"] + ".mp4")]
+    subprocess.run(args, check=True)
+    print("wrote", reel["file"] + ".mp4", f"({length:.1f} s)")
+
+
+def main() -> None:
+    plan = json.load(open(os.path.join(ROOT, "tools", "reels", "reels.json"), encoding="utf-8"))
+    for reel_id in sys.argv[1:] or [k for k in plan if k != "P"]:
+        build(reel_id, plan[reel_id])
+
+
+if __name__ == "__main__":
+    main()

@@ -18,3 +18,5 @@
 /addons/maritime_native/bin/*.pdb
 /addons/maritime_native/bin/*.exp
 /addons/maritime_native/bin/*.lib
+
+marketing/reels/build/

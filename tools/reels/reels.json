@@ -1,0 +1,1415 @@
+{
+	"A": {
+		"file": "intro_30s",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "300+ REAL PORTS",
+				"shots": [
+					{
+						"shot": "globe_spin",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "$2.5M · ONE SHIP",
+				"shots": [
+					{
+						"shot": "scooter_leaves",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					11
+				],
+				"caption": "BUY LOW. SAIL. SELL.",
+				"shots": [
+					{
+						"shot": "market_popup",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					11,
+					15
+				],
+				"caption": "FUEL · REPAIRS · WAGES · FEES",
+				"shots": [
+					{
+						"shot": "finances_table",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					15,
+					20
+				],
+				"caption": "THINGS GO WRONG",
+				"shots": [
+					{
+						"shot": "lost_ship",
+						"len": 1.5
+					},
+					{
+						"shot": "recovery_lift",
+						"len": 3.5,
+						"speed": 2.0
+					}
+				]
+			},
+			{
+				"t": [
+					20,
+					23
+				],
+				"caption": "THE SEA DOESN'T CARE",
+				"shots": [
+					{
+						"shot": "storm",
+						"len": 1.5
+					},
+					{
+						"shot": "panama_locks",
+						"len": 1.5
+					}
+				]
+			},
+			{
+				"t": [
+					23,
+					27
+				],
+				"caption": "ONE SHIP → A FLEET",
+				"shots": [
+					{
+						"shot": "network_zoomout",
+						"len": 2.2
+					},
+					{
+						"shot": "compare_companies",
+						"len": 1.8
+					}
+				]
+			},
+			{
+				"t": [
+					27,
+					30
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"B": {
+		"file": "intro_15s",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "A SHIPPING COMPANY. A REAL PLANET.",
+				"shots": [
+					{
+						"shot": "globe_dive",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "BUY LOW. SAIL. SELL.",
+				"shots": [
+					{
+						"shot": "market_popup",
+						"len": 1.4
+					},
+					{
+						"shot": "ship_at_sea",
+						"len": 1.3
+					},
+					{
+						"shot": "sale_log",
+						"len": 1.3
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "IT'S A BUSINESS",
+				"shots": [
+					{
+						"shot": "finances_table",
+						"len": 2
+					},
+					{
+						"shot": "lost_ship",
+						"len": 1.5
+					},
+					{
+						"shot": "storm",
+						"len": 1.5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"1": {
+		"file": "01_trading",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "EVERY PORT TRADES EVERYTHING",
+				"shots": [
+					{
+						"shot": "market_popup",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "GREEN = CHEAP · RED = EXPENSIVE",
+				"shots": [
+					{
+						"shot": "market_scroll",
+						"len": 2.5
+					},
+					{
+						"shot": "ship_loading",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "NO PROFIT? SAILS EMPTY.",
+				"shots": [
+					{
+						"shot": "sale_log",
+						"len": 2
+					},
+					{
+						"shot": "empty_ship_popup",
+						"len": 2
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"2": {
+		"file": "02_first_ship",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "YOUR FIRST SHIP",
+				"shots": [
+					{
+						"shot": "shop_scooter",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "SMALL SHIP. SMALL MONEY.",
+				"shots": [
+					{
+						"shot": "scooter_leaves",
+						"len": 2.5
+					},
+					{
+						"shot": "scooter_coast",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "BIGGER SHIPS UNLOCK BY LEVEL",
+				"shots": [
+					{
+						"shot": "shop_dominator",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"3": {
+		"file": "03_routes",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "CLICK PORTS IN ORDER",
+				"shots": [
+					{
+						"shot": "route_clicking",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "IT LOOPS. RANGE MATTERS.",
+				"shots": [
+					{
+						"shot": "route_list",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "GREYED OUT = CAN'T REACH",
+				"shots": [
+					{
+						"shot": "route_greyed",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"4": {
+		"file": "04_fuel_and_wear",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "SHIPS WEAR OUT",
+				"shots": [
+					{
+						"shot": "ship_popup_bars",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "WORN = SLOW = MORE FUEL",
+				"shots": [
+					{
+						"shot": "worn_ship_popup",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "0% = LOST",
+				"shots": [
+					{
+						"shot": "lost_ship",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"5": {
+		"file": "05_breakdowns_and_recovery",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "RANDOM BREAKDOWNS",
+				"shots": [
+					{
+						"shot": "breakdown_log",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "RESCUE ISN'T FREE",
+				"shots": [
+					{
+						"shot": "recovery_estimate",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "THE MAMMOTH",
+				"shots": [
+					{
+						"shot": "mammoth_lift",
+						"len": 4,
+						"speed": 2.0
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"6": {
+		"file": "06_wages_and_debt",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "PAYDAY EVERY 2 WEEKS",
+				"shots": [
+					{
+						"shot": "crew_view",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "WAGES DON'T WAIT",
+				"shots": [
+					{
+						"shot": "money_red",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "IN DEBT? NO SHOPPING.",
+				"shots": [
+					{
+						"shot": "shop_in_debt",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"7": {
+		"file": "07_loans",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "BORROW UP TO $10M",
+				"shots": [
+					{
+						"shot": "loan_row",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "8% A YEAR",
+				"shots": [
+					{
+						"shot": "loan_interest",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "KEEP IN THE BANK",
+				"shots": [
+					{
+						"shot": "bank_reserve",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"8": {
+		"file": "08_hubs_and_port_fees",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "10% PORT FEE",
+				"shots": [
+					{
+						"shot": "port_fee_log",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "A HUB EVERY 15 LEVELS",
+				"shots": [
+					{
+						"shot": "build_hub",
+						"len": 2.5
+					},
+					{
+						"shot": "hub_ring",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "UPGRADES AREN'T CHEAP",
+				"shots": [
+					{
+						"shot": "hubs_screen",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"9": {
+		"file": "09_market_regions",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "ONE REGION TO START",
+				"shots": [
+					{
+						"shot": "regions_locked",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "ONE MORE EVERY 5 LEVELS",
+				"shots": [
+					{
+						"shot": "region_unlock",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "SAIL THROUGH. CAN'T TRADE.",
+				"shots": [
+					{
+						"shot": "ship_through_locked",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"10": {
+		"file": "10_panama",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "REAL LOCKS",
+				"shots": [
+					{
+						"shot": "panama_zoom",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "ONE SHIP PER CHAMBER",
+				"shots": [
+					{
+						"shot": "panama_locks",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "TOLL: 20% OF THE PAY",
+				"shots": [
+					{
+						"shot": "toll_log",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"11": {
+		"file": "11_suez",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "SUEZ RUNS CONVOYS",
+				"shots": [
+					{
+						"shot": "suez_anchorage",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "MISS IT? WAIT.",
+				"shots": [
+					{
+						"shot": "suez_convoy",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "25% TOLL · OR GO AROUND",
+				"shots": [
+					{
+						"shot": "suez_route",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"12": {
+		"file": "12_great_lakes",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "THE GREAT LAKES",
+				"shots": [
+					{
+						"shot": "stlawrence_zoom",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "SEAWAY-SIZED ONLY",
+				"shots": [
+					{
+						"shot": "lakes_route_big",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "THE LOCKS SHUT IN WINTER",
+				"shots": [
+					{
+						"shot": "lakes_ice",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"13": {
+		"file": "13_storms",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "REAL STORM SEASONS",
+				"shots": [
+					{
+						"shot": "storm",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "SLOWER · MORE WEAR",
+				"shots": [
+					{
+						"shot": "ship_in_storm",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "IT CAN CLOSE YOUR PORT",
+				"shots": [
+					{
+						"shot": "storm_warning",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"14": {
+		"file": "14_docks",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "BERTHS ARE SHARED",
+				"shots": [
+					{
+						"shot": "marina_full",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "NO BERTH? WAIT AT ANCHOR.",
+				"shots": [
+					{
+						"shot": "anchor_wait",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "NOTHING TELEPORTS",
+				"shots": [
+					{
+						"shot": "coming_alongside",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"15": {
+		"file": "15_tugs",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "TUGS EARN NOTHING",
+				"shots": [
+					{
+						"shot": "tugs_moored",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "THEY BRING YOU HOME",
+				"shots": [
+					{
+						"shot": "tug_tow",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "IF IT'S CLOSE ENOUGH",
+				"shots": [
+					{
+						"shot": "tug_berthing",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"16": {
+		"file": "16_fishing",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "SOME SHIPS FISH",
+				"shots": [
+					{
+						"shot": "fishing_leaves",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "REAL SEASONS",
+				"shots": [
+					{
+						"shot": "fishing_base_list",
+						"len": 2.5
+					},
+					{
+						"shot": "fishing_ground",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "CATCH → SELL",
+				"shots": [
+					{
+						"shot": "catch_log",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"17": {
+		"file": "17_ship_levels",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "XP FROM DELIVERIES",
+				"shots": [
+					{
+						"shot": "ships_tiles",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "SPEED · DURABILITY · EFFICIENCY",
+				"shots": [
+					{
+						"shot": "skills_view",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "~5× THE SHIP'S PRICE",
+				"shots": [
+					{
+						"shot": "skills_prices",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"18": {
+		"file": "18_ai_rivals",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "UP TO 5 AI RIVALS",
+				"shots": [
+					{
+						"shot": "new_company_rivals",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "SAME RULES. NO CHEATS.",
+				"shots": [
+					{
+						"shot": "rival_ships",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "RANKED BY PROFIT",
+				"shots": [
+					{
+						"shot": "compare_companies",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"19": {
+		"file": "19_multiplayer",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "2–8 PLAYERS",
+				"shots": [
+					{
+						"shot": "host_dialog",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "ONE ECONOMY",
+				"shots": [
+					{
+						"shot": "mp_port",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "SAME SEA",
+				"shots": [
+					{
+						"shot": "mp_storm",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"20": {
+		"file": "20_divine_actions",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "YOU CAN BUY STORMS",
+				"shots": [
+					{
+						"shot": "divine_panel",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "WRATH: $1B, ONCE A YEAR",
+				"shots": [
+					{
+						"shot": "divine_storm",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "IT'S UNFAIR ON PURPOSE",
+				"shots": [
+					{
+						"shot": "divine_hits",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"21": {
+		"file": "21_not_idle",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"caption": "NOT AN IDLE GAME",
+				"shots": [
+					{
+						"shot": "main_menu",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					8
+				],
+				"caption": "CLOSED = FROZEN",
+				"shots": [
+					{
+						"shot": "frozen_ship",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					8,
+					12
+				],
+				"caption": "YOU PLAY, IT MOVES",
+				"shots": [
+					{
+						"shot": "fast_forward",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					15
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe",
+						"len": 3
+					}
+				]
+			}
+		]
+	}
+}
