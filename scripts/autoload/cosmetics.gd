@@ -105,13 +105,23 @@ func currency_name(count := 2) -> String:
 	return str(currency.get("singular", "Sand Dollar")) if count == 1 else str(currency.get("name", "Sand Dollars"))
 
 
-## The packs on sale now (and any with a skin owned, on sale or not).
+## The packs in the Shop: on sale now, or with a skin owned, then those coming
+## soon (shown, not yet sold).
 func packs_for_sale() -> Array:
 	var out := []
+	var soon := []
 	for it: Dictionary in catalog.get("packs", []):
-		if bool(it.get("on_sale", true)) or owned_count(str(it.id)) > 0:
+		if coming_soon(str(it.id)):
+			soon.append(it)
+		elif bool(it.get("on_sale", true)) or owned_count(str(it.id)) > 0:
 			out.append(it)
-	return out
+	return out + soon
+
+
+## True if a pack is shown in the Shop as coming soon: its skins can't be
+## bought yet.
+func coming_soon(pack_id: String) -> bool:
+	return bool(pack(pack_id).get("coming_soon", false))
 
 
 func pack(id: String) -> Dictionary:
@@ -237,6 +247,8 @@ func buy_skin(pack_id: String, skin_id: String) -> String:
 		return "There's no such skin."
 	if owns_skin(pack_id, skin_id):
 		return "You already own it."
+	if coming_soon(pack_id):
+		return "That pack is coming soon: it can't be bought yet."
 	return _buy([skin_id], pack_id, price("skin"), skin_name(pack_id, skin_id))
 
 
@@ -246,6 +258,8 @@ func buy_bundle_of(pack_id: String, which: String) -> String:
 	var ids := missing(pack_id, which)
 	if ids.is_empty():
 		return "You already own all of those."
+	if coming_soon(pack_id):
+		return "That pack is coming soon: it can't be bought yet."
 	var what: String = {all = "the whole %s", ships = "every ship skin of the %s", humans = "every outfit of the %s"}[which] % str(pack(pack_id).get("title", pack_id))
 	return _buy(ids, pack_id, bundle_cost(pack_id, which), what)
 
@@ -257,8 +271,6 @@ func _buy(ids: Array, pack_id: String, cost: int, what: String) -> String:
 	for skin_id: String in ids:
 		_own(skin_key(pack_id, skin_id))
 	ledger.append({at = int(Time.get_unix_time_from_system()), kind = "skins", amount = -cost, note = pack_id + ": " + ", ".join(ids)})
-	if equipped.is_empty() and wearable(pack_id):
-		equipped = pack_id
 	_skins.erase(pack_id)
 	_save_profile()
 	message.emit("Bought %s for %s." % [what, amount(cost)])

@@ -2,14 +2,14 @@
 class_name SkinShop
 extends Control
 ## The Shop (from the title screen), in two tabs. Skin packs: every pack on sale
-## (Cosmetics.packs_for_sale()), each with its ship skins and its outfits
-## sold one at a time (a Sand Dollar price each), or all its ship skins, all
-## its outfits, or the whole pack at once (a bundle never charges for skins
-## already owned); a pack with an owned ship skin can be worn (one pack at a
-## time), and an owned outfit's options are in Found Company and on the
-## Uniforms page. Sand Dollars: the balance and the bundles bought with Steam
-## money (Cosmetics.buy_bundle()). Over whatever opened it, dimming it; Esc, X
-## or a click outside closes it.
+## or coming soon (shown, with nothing to buy yet: Cosmetics.packs_for_sale()),
+## each with its ship skins and its outfits sold one at a time (a Sand Dollar
+## price each), or all its ship skins, all its outfits, or the whole pack at
+## once (a bundle never charges for skins already owned); what the ships wear
+## is chosen in the Inventory, and an owned outfit's options are in Found
+## Company and on the Uniforms page. Sand Dollars: the balance and the bundles
+## bought with Steam money (Cosmetics.buy_bundle()). Over whatever opened it,
+## dimming it; Esc, X or a click outside closes it.
 
 const PANEL_SIZE := Vector2(1120, 0)
 ## Each skin's panel in a pack's grid, and its picture.
@@ -151,7 +151,7 @@ func _show() -> void:
 		_packs_box.add_child(_pack_card(pack))
 
 
-## A pack's card: its title and blurb, Wear / Take off, the whole-pack button,
+## A pack's card: its title and blurb, the whole-pack button (or Coming soon),
 ## then its ship skins and its outfits, each with its own button and an
 ## all-of-them button.
 func _pack_card(pack: Dictionary) -> Control:
@@ -174,14 +174,14 @@ func _pack_card(pack: Dictionary) -> Control:
 	count.text = "All owned" if Cosmetics.owns(id) else "%d of %d owned" % [Cosmetics.owned_count(id), Cosmetics.skin_ids(id).size()]
 	count.size_flags_vertical = SIZE_SHRINK_CENTER
 	top.add_child(count)
-	if Cosmetics.wearable(id):
-		var wearing := Cosmetics.equipped == id
-		var wear := Button.new()
-		wear.text = "Take off" if wearing else "Wear on my ships"
-		wear.tooltip_text = "Your ships wear this pack's skins you own (one pack at a time). Outfits are in Found Company; their hats and colours on the Uniforms page."
-		wear.pressed.connect(func() -> void: Cosmetics.equip("" if wearing else id))
-		top.add_child(wear)
-	if not Cosmetics.owns(id):
+	if Cosmetics.coming_soon(id):
+		var soon := Label.new()
+		soon.theme_type_variation = &"HeaderLabel"
+		soon.text = "Coming soon"
+		soon.tooltip_text = "This pack isn't on sale yet."
+		soon.size_flags_vertical = SIZE_SHRINK_CENTER
+		top.add_child(soon)
+	elif not Cosmetics.owns(id):
 		top.add_child(_bundle_button(id, "all", "Whole pack"))
 	box.add_child(top)
 	var blurb := Label.new()
@@ -208,7 +208,7 @@ func _group(pack_id: String, heading_text: String, which: String, skins: Array) 
 	heading.text = heading_text
 	heading.size_flags_horizontal = SIZE_EXPAND_FILL
 	row.add_child(heading)
-	if not Cosmetics.missing(pack_id, which).is_empty():
+	if not Cosmetics.coming_soon(pack_id) and not Cosmetics.missing(pack_id, which).is_empty():
 		row.add_child(_bundle_button(pack_id, which, "All of these"))
 	box.add_child(row)
 	var grid := GridContainer.new()
@@ -223,7 +223,7 @@ func _group(pack_id: String, heading_text: String, which: String, skins: Array) 
 
 ## A skin's own panel: its picture, its name, what it is (who wears it, or
 ## what it unlocks: the whole of it in the tooltip) and Buy with its price,
-## or Owned.
+## Owned or Coming soon.
 func _skin_panel(pack_id: String, skin: Array) -> Control:
 	var skin_id: String = skin[0]
 	var panel := PanelContainer.new()
@@ -257,6 +257,10 @@ func _skin_panel(pack_id: String, skin: Array) -> Control:
 	if Cosmetics.owns_skin(pack_id, skin_id):
 		button.text = "✓ Owned"
 		button.disabled = true
+	elif Cosmetics.coming_soon(pack_id):
+		button.text = "Coming soon"
+		button.disabled = true
+		button.tooltip_text = "This pack isn't on sale yet."
 	else:
 		var cost := Cosmetics.price("skin")
 		button.text = "Buy · %s" % Cosmetics.amount_money(cost)

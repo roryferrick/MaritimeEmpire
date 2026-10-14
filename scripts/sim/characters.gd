@@ -43,14 +43,17 @@ const PARTS := [
 		"White tee", "Red tee", "Grey hoodie", "Black suit", "Plaid flannel", "Hi-vis vest",
 		"Pilgrim doublet", "Goodwife's gown", "Colonial coat", "Linen shirt and jerkin", "Farmhand's tunic",
 		"Home pinstripes", "Road greys", "Catcher's gear", "Umpire's polo", "Vendor's stripes", "1920s flannels",
-		"Santa suit", "Mrs Claus's gown", "Elf tunic", "Reindeer onesie", "Ugly Christmas sweater", "Nutcracker tunic", "Carol singer's coat"]],  # (From "Pilgrim doublet": the skin packs', see Cosmetics.)
+		"Santa suit", "Mrs Claus's gown", "Elf tunic", "Reindeer onesie", "Ugly Christmas sweater", "Nutcracker tunic", "Carol singer's coat",
+		"Witch's gown", "Vampire's cape", "Skeleton suit", "Mummy wraps", "Scarecrow's shirt", "Monster's jacket"]],  # (From "Pilgrim doublet": the skin packs', see Cosmetics.)
 	["bottoms", "Bottoms", ["Navy trousers", "Sailor bell-bottoms", "Oilskin trousers", "Deck shorts", "Wetsuit legs", "Jeans", "Khakis", "Black trousers", "Cargo trousers", "Red skirt", "Navy skirt", "Denim shorts",
-		"Black breeches", "Buff breeches", "Sailor's slops", "Grey hose", "Pinstripe pants", "Grey baseball pants", "Catcher's shin guards", "Umpire slacks", "Knickers and stirrups", "Santa trousers", "Elf tights", "Reindeer legs", "Nutcracker trousers"]],
-	["shoes", "Shoes", ["Deck shoes", "Sea boots", "Yellow wellies", "Barefoot", "Black boots", "Brown boots", "White trainers", "Dress shoes", "Sandals", "Red trainers", "Buckle shoes", "Cloth wraps", "Cleats", "Elf shoes"]],
+		"Black breeches", "Buff breeches", "Sailor's slops", "Grey hose", "Pinstripe pants", "Grey baseball pants", "Catcher's shin guards", "Umpire slacks", "Knickers and stirrups", "Santa trousers", "Elf tights", "Reindeer legs", "Nutcracker trousers",
+		"Tuxedo trousers", "Skeleton leggings", "Mummy legs", "Patched jeans", "Ragged trousers"]],
+	["shoes", "Shoes", ["Deck shoes", "Sea boots", "Yellow wellies", "Barefoot", "Black boots", "Brown boots", "White trainers", "Dress shoes", "Sandals", "Red trainers", "Buckle shoes", "Cloth wraps", "Cleats", "Elf shoes", "Witch's boots", "Platform boots"]],
 	["eyewear", "Glasses", ["None", "Round", "Square", "Sunglasses", "Aviators", "Monocle", "Half-rims", "Cat-eye", "Goggles", "Eye patch"]],
 	["headwear", "Hat", ["None", "Captain's cap", "Sailor cap", "Sou'wester", "Tricorne", "Bandana", "Watch cap", "Straw hat", "Bucket hat", "Baseball cap", "Top hat", "Hard hat", "Cowboy hat",
 		"Fisherman's cap", "Flat cap", "Beret", "Bicorne", "Pompom beanie", "Fedora", "Pith helmet", "Conical hat",
-		"Capotain", "Coif", "Monmouth cap", "Turkey hat", "Navy ball cap", "Red ball cap", "Batting helmet", "Catcher's mask", "Vendor's paper hat", "Umpire's cap", "Old-time ball cap", "Santa hat", "Elf hat", "Antlers", "Earmuffs", "Holly top hat"]],
+		"Capotain", "Coif", "Monmouth cap", "Turkey hat", "Navy ball cap", "Red ball cap", "Batting helmet", "Catcher's mask", "Vendor's paper hat", "Umpire's cap", "Old-time ball cap", "Santa hat", "Elf hat", "Antlers", "Earmuffs", "Holly top hat",
+		"Witch hat", "Skull mask", "Mummy wrap", "Scarecrow hat", "Monster's flat top", "Jack-o'-lantern"]],
 ]
 ## The sliders of a look (0 to 100, 50 the middle): [key, title, low word, high word].
 const SLIDERS := [

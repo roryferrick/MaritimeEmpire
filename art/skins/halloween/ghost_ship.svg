@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M10,8 L130,6 Q162,8 178,26 Q162,44 130,46 L10,44 Q4,44 4,38 L4,14 Q4,8 10,8 Z" fill="#5a7a6a" stroke="#1a1410" stroke-width="1.8" opacity="0.95"/>
+<path d="M14,12 L130,10 Q156,12 168,26 Q156,40 130,42 L14,40 Z" fill="#7a9a88" stroke="#3a5a4a" stroke-width="1"/>
+<g stroke="#5a7a6a" stroke-width="0.9"><path d="M14,18 L150,18 M14,26 L168,26 M14,34 L150,34"/></g>
+<path d="M30,24 L28,12 L36,9 L40,14 L44,8 L50,13 L52,24 Z M30,28 L28,40 L36,43 L40,38 L44,44 L50,39 L52,28 Z" fill="#c8d8cc" stroke="#3a5a4a" stroke-width="0.9" opacity="0.9"/>
+<path d="M74,26 L72,6 L80,4 L84,10 L90,3 L96,9 L98,26 Z M74,26 L72,46 L80,48 L84,42 L90,49 L96,43 L98,26 Z" fill="#c8d8cc" stroke="#3a5a4a" stroke-width="0.9" opacity="0.9"/>
+<path d="M120,24 L118,12 L126,9 L130,14 L136,10 L138,24 Z M120,28 L118,40 L126,43 L130,38 L136,42 L138,28 Z" fill="#c8d8cc" stroke="#3a5a4a" stroke-width="0.9" opacity="0.9"/>
+<g stroke="#2a3a30" stroke-width="2.2"><path d="M40,6 L40,46 M86,2 L86,50 M128,8 L128,44"/></g>
+<g fill="#2a3a30"><circle cx="40" cy="26" r="3"/><circle cx="86" cy="26" r="3.4"/><circle cx="128" cy="26" r="3"/></g>
+<path d="M168,26 L180,26" stroke="#2a3a30" stroke-width="2"/>
+<g fill="#9aff7a" stroke="#1a1410" stroke-width="0.6"><circle cx="8" cy="14" r="3"/><circle cx="8" cy="38" r="3"/><circle cx="150" cy="14" r="2.6"/><circle cx="150" cy="38" r="2.6"/></g>
+<g fill="#9aff7a" opacity="0.25"><circle cx="8" cy="14" r="7"/><circle cx="8" cy="38" r="7"/><circle cx="150" cy="14" r="6"/><circle cx="150" cy="38" r="6"/></g>
+<rect x="6" y="20" width="14" height="12" fill="#1a1418" stroke="#1a1410" stroke-width="0.6"/><circle cx="13" cy="25" r="2.6" fill="#f2ecdc"/><path d="M9,30 L17,27 M9,27 L17,30" stroke="#f2ecdc" stroke-width="1"/>
+</svg>

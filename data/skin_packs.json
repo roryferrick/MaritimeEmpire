@@ -1,5 +1,5 @@
 {
-	"_comment": "The skin packs sold in the Shop (Esc menu; scripts/ui/skin_shop.gd) for Sand Dollars, the in-game currency bought with Steam money (scripts/autoload/cosmetics.gd): one Sand Dollar is one cent. prices: any one skin, every ship skin of a pack, every outfit of a pack, or a whole pack (Sand Dollars; a bundle never charges for skins already owned). A pack: its ship skins (ships: model id -> art/skins/<folder>/<name>.svg, drawn in place of the model's art, untinted; names with a _small/_mid/_big fit are one skin; ship_names: the skin's name in the Shop) and its outfits (each a human skin: the CEO and captain options it unlocks by name in Characters.PARTS (top, bottoms, shoes, headwear, facial_hair, drawn by Portrait), the crew hats it adds (headwear names, in the deck atlas) and the uniform colours (CrewLooks)). Bundles: the Sand Dollar bundles on the Sand Dollars page, each a Steam Inventory item definition (steam_itemdef: set up on the Steamworks partner site with its price; usd here is what's shown).",
+	"_comment": "The skin packs sold in the Shop (title screen; on_sale: sold now; coming_soon: shown in the Shop but not sold yet; scripts/ui/skin_shop.gd) for Sand Dollars, the in-game currency bought with Steam money (scripts/autoload/cosmetics.gd): one Sand Dollar is one cent. prices: any one skin, every ship skin of a pack, every outfit of a pack, or a whole pack (Sand Dollars; a bundle never charges for skins already owned). A pack: its ship skins (ships: model id -> art/skins/<folder>/<name>.svg, drawn in place of the model's art, untinted; names with a _small/_mid/_big fit are one skin; ship_names: the skin's name in the Shop) and its outfits (each a human skin: the CEO and captain options it unlocks by name in Characters.PARTS (top, bottoms, shoes, headwear, facial_hair, drawn by Portrait), the crew hats it adds (headwear names, in the deck atlas) and the uniform colours (CrewLooks)). Bundles: the Sand Dollar bundles on the Sand Dollars page, each a Steam Inventory item definition (steam_itemdef: set up on the Steamworks partner site with its price; usd here is what's shown).",
 	"currency": {"name": "Sand Dollars", "singular": "Sand Dollar", "cents_each": 1},
 	"prices": {"skin": 100, "all_ships": 500, "all_humans": 500, "pack": 1000},
 	"bundles": [
@@ -10,7 +10,7 @@
 	],
 	"packs": [
 		{
-			"id": "thanksgiving_2026", "title": "2026 Thanksgiving Pack", "on_sale": true, "folder": "thanksgiving",
+			"id": "thanksgiving_2026", "title": "2026 Thanksgiving Pack", "on_sale": false, "coming_soon": true, "folder": "thanksgiving",
 			"blurb": "The whole table, afloat: a roast turkey, corn on the cob, candied yams, green bean casserole, cranberry sauce, stuffing, a gravy boat, drumsticks, dinner rolls, pumpkin pie, mashed potatoes, a cornucopia and the Mayflower. Pilgrim, colonial and 1620 deckhand outfits for your CEO and captains, and the crew in capotains, coifs, Monmouth caps or a turkey hat.",
 			"ships": {
 				"model_11": "turkey", "model_12": "turkey", "model_13": "turkey",
@@ -65,7 +65,35 @@
 			]
 		},
 		{
-			"id": "christmas_2026", "title": "2026 Christmas Pack", "on_sale": true, "folder": "christmas",
+			"id": "halloween_2026", "title": "2026 Halloween Pack", "on_sale": true, "folder": "halloween",
+			"blurb": "A fleet to haunt the harbours: five coffins (wood, black, a vampire's, a mummy's sarcophagus and one chained shut), a witch's broomstick, a black cat, a skeleton, a caramel apple, a spellbook, a vampire bat, a jack-o'-lantern, a bubbling cauldron, a sheet ghost, candy corn, a skull, a witch's hat, a black widow, a ghost ship, a haunted house and Frankenstein's monster. A witch, a vampire, a skeleton, a mummy, a scarecrow, Frankenstein's monster and a jack-o'-lantern head for your CEO and captains; witch hats, skull masks, mummy wraps, scarecrow hats, flat tops and pumpkins for the crew.",
+			"ships": {
+				"model_1": "coffin_wood", "model_2": "coffin_black", "model_3": "coffin_vampire", "model_4": "sarcophagus", "model_5": "coffin_chained",
+				"model_34": "broom", "model_35": "broom", "model_8": "broom", "model_9": "broom", "model_10": "broom",
+				"model_11": "black_cat", "model_12": "black_cat", "model_13": "black_cat",
+				"model_14": "skeleton", "model_15": "skeleton", "model_16": "skeleton",
+				"model_17": "caramel_apple", "model_18": "caramel_apple", "model_19": "caramel_apple",
+				"model_20": "spellbook", "model_21": "spellbook", "model_22": "spellbook",
+				"model_32": "bat", "model_33": "bat",
+				"model_25": "jack_o_lantern",
+				"model_26": "cauldron", "model_27": "ghost", "model_28": "candy_corn",
+				"model_29": "skull", "model_30": "witch_hat", "model_31": "spider",
+				"model_6": "ghost_ship", "model_7": "haunted_house",
+				"model_23": "monster", "model_24": "monster"
+			},
+			"ship_names": {"coffin_wood": "Wooden coffin", "coffin_black": "Black coffin", "coffin_vampire": "Vampire's coffin", "sarcophagus": "Mummy's sarcophagus", "coffin_chained": "Chained coffin", "broom": "Witch's broomstick", "black_cat": "Black cat", "skeleton": "Skeleton", "caramel_apple": "Caramel apple", "spellbook": "Spellbook", "bat": "Vampire bat", "jack_o_lantern": "Jack-o'-lantern", "cauldron": "Witch's cauldron", "ghost": "Sheet ghost", "candy_corn": "Candy corn", "skull": "Skull", "witch_hat": "Witch's hat", "spider": "Black widow", "ghost_ship": "Ghost ship", "haunted_house": "Haunted house", "monster": "Frankenstein's monster"},
+			"outfits": [
+				{"id": "witch", "name": "Witch", "top": ["Witch's gown"], "shoes": ["Witch's boots"], "headwear": ["Witch hat"], "crew_hats": ["Witch hat"], "shirts": [["Witch purple", "#4a2a6a"]]},
+				{"id": "vampire", "name": "Vampire", "top": ["Vampire's cape"], "bottoms": ["Tuxedo trousers"], "shirts": [["Vampire black", "#141216"]]},
+				{"id": "skeleton", "name": "Skeleton", "top": ["Skeleton suit"], "bottoms": ["Skeleton leggings"], "headwear": ["Skull mask"], "crew_hats": ["Skull mask"], "shirts": [["Skeleton black", "#18171a"]], "trousers": [["Skeleton black", "#18171a"]]},
+				{"id": "mummy", "name": "Mummy", "top": ["Mummy wraps"], "bottoms": ["Mummy legs"], "headwear": ["Mummy wrap"], "crew_hats": ["Mummy wrap"], "shirts": [["Mummy linen", "#d9cfb4"]]},
+				{"id": "scarecrow", "name": "Scarecrow", "top": ["Scarecrow's shirt"], "bottoms": ["Patched jeans"], "headwear": ["Scarecrow hat"], "crew_hats": ["Scarecrow hat"], "shirts": [["Scarecrow plaid", "#b5552a"]], "trousers": [["Patched denim", "#4a6a8a"]]},
+				{"id": "monster", "name": "Frankenstein's monster", "top": ["Monster's jacket"], "bottoms": ["Ragged trousers"], "shoes": ["Platform boots"], "headwear": ["Monster's flat top"], "crew_hats": ["Monster's flat top"], "shirts": [["Monster green", "#4a5a3a"]]},
+				{"id": "pumpkin_head", "name": "Jack-o'-lantern head", "headwear": ["Jack-o'-lantern"], "crew_hats": ["Jack-o'-lantern"], "shirts": [["Pumpkin orange", "#e8761e"]]}
+			]
+		},
+		{
+			"id": "christmas_2026", "title": "2026 Christmas Pack", "on_sale": false, "coming_soon": true, "folder": "christmas",
 			"blurb": "The fleet wrapped for the holidays: five presents, a candy cane, a yule log, a gingerbread man, a tin of cookies, a nutcracker, a string of lights, baubles, a snowman, a stocking, a boiled sweet, a gingerbread house, a toboggan, Santa's sleigh and sack, and a Christmas tree. Santa and Mrs Claus, an elf, a reindeer, an ugly sweater, a nutcracker and a carol singer for your CEO and captains, with Santa's beard; Santa hats, elf hats, antlers, earmuffs and holly top hats for the crew.",
 			"ships": {
 				"model_1": "present_mini", "model_2": "present_stripes", "model_3": "present_gold", "model_4": "present_snow", "model_5": "present_candy",

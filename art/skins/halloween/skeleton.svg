@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="52" viewBox="0 0 180 52">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<g fill="#f2ecdc" stroke="#1a1410" stroke-width="1.2">
+<path d="M10,15 L44,19 L44,22 L10,19 Z M10,33 L44,30 L44,33 L10,37 Z"/>
+<ellipse cx="8" cy="14" rx="5" ry="4"/><ellipse cx="8" cy="38" rx="5" ry="4"/>
+<circle cx="46" cy="20.5" r="3"/><circle cx="46" cy="31.5" r="3"/>
+<path d="M48,20 L72,22 L72,24 L48,22 Z M48,30 L72,28 L72,30 L48,32 Z"/>
+<path d="M72,14 Q84,18 84,26 Q84,34 72,38 Q66,26 72,14 Z"/>
+<path d="M88,13 Q100,6 118,8 L118,10 Q100,9 90,16 Z M88,39 Q100,46 118,44 L118,42 Q100,43 90,36 Z"/>
+<path d="M92,17 Q102,12 118,13 L118,15 Q104,15 94,20 Z M92,35 Q102,40 118,39 L118,37 Q104,37 94,32 Z"/>
+<path d="M96,21 Q106,18 118,18 L118,20 Q108,20 98,23 Z M96,31 Q106,34 118,34 L118,32 Q108,32 98,29 Z"/>
+<path d="M120,10 Q128,4 132,10 L130,12 Q126,8 122,12 Z M120,42 Q128,48 132,42 L130,40 Q126,44 122,40 Z"/>
+<path d="M108,10 L76,8 L76,10 L108,12 Z M108,42 L76,44 L76,42 L108,40 Z"/>
+<circle cx="74" cy="9" r="2.4"/><circle cx="74" cy="43" r="2.4"/>
+<path d="M72,9 L56,6 L56,8 L72,11 Z M72,43 L56,46 L56,44 L72,41 Z"/>
+<path d="M56,4 L48,2 L46,5 L48,8 L56,9 Z M56,48 L48,50 L46,47 L48,44 L56,43 Z"/>
+</g>
+<g fill="#f2ecdc" stroke="#1a1410" stroke-width="1"><rect x="84" y="24" width="6" height="4" rx="1"/><rect x="91" y="24" width="6" height="4" rx="1"/><rect x="98" y="24" width="6" height="4" rx="1"/><rect x="105" y="24" width="6" height="4" rx="1"/><rect x="112" y="24" width="6" height="4" rx="1"/><rect x="119" y="24" width="6" height="4" rx="1"/><rect x="126" y="24" width="6" height="4" rx="1"/><rect x="133" y="24" width="6" height="4" rx="1"/></g>
+<path d="M140,26 Q140,8 158,8 Q178,8 178,26 Q178,44 158,44 Q140,44 140,26 Z" fill="#f2ecdc" stroke="#1a1410" stroke-width="1.5"/>
+<ellipse cx="162" cy="18" rx="5" ry="5" fill="#1a1410"/><ellipse cx="162" cy="34" rx="5" ry="5" fill="#1a1410"/>
+<path d="M170,24 L174,26 L170,28 Z" fill="#1a1410"/>
+<path d="M146,18 L146,34 M146,21 L150,21 M146,24 L150,24 M146,27 L150,27 M146,30 L150,30" stroke="#1a1410" stroke-width="1"/>
+</svg>
