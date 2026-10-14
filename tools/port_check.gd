@@ -194,10 +194,10 @@ func _check(id: String, at: Vector2, bearing: float, flip: float) -> Dictionary:
 			y += 1.0
 		x += 1.0
 	# The mouth, and the funnel out from it: the water the harbour curves sail
-	# (MapView.HARBOUR_REACH times the mouth's distance, at least HARBOUR_MIN_NM).
+	# (out to the harbour gate, MapView.GATE_UNITS, and the stretch past it
+	# where they join the lane: see MapView._lane_reaches()).
 	var mouth: Vector2 = layout.mouth
-	var mouth_nm := mouth.x * 60.0 / SHIP_WORLD_ZOOM
-	var reach_nm := maxf(mouth_nm * MapView.HARBOUR_REACH, MapView.HARBOUR_MIN_NM)
+	var reach_nm := MapView.GATE_UNITS * 60.0 / SHIP_WORLD_ZOOM * (1.0 + MapView.HARBOUR_JOIN_SHARE * MapView.HARBOUR_REACH_GROW)
 	var mouth_land := _land(_lon_lat(at, bearing, flip, mouth))
 	var funnel := 0
 	var funnel_points := 0

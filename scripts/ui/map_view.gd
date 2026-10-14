@@ -398,14 +398,6 @@ const PORT_SIZE_CHECK_S := 5.0
 ## The land's triangles are sorted into cells this big (projected degrees) to
 ## tell if a point's on the land (see _on_land()).
 const LAND_CELL_DEG := 1.0
-## How far (projected degrees) the view moves before route lines' harbour curves
-## are worked out again (see _lane_pieces()): the globe's turn changes them
-## by a hair over that.
-const LANE_CURVE_DRIFT := 1.0
-## How long (ms) a frame may spend working out harbour curves (see _lane_curve_memo()).
-const LANE_CURVE_MS := 1.5
-var _lane_curve_frame := -1
-var _lane_curve_spent := 0.0
 ## Width of the dark edge round ocean, sea and strait names.
 const SEA_LABEL_OUTLINE := 3
 ## Width of the dark edge round ocean, sea and strait names.
@@ -857,8 +849,6 @@ var _land_sim: Object = null
 ## What wildlife was drawn where, for clicking: [screen point, reach (px),
 ## "group", "colony" or "home", index]. And its art by name.
 var _fauna_hits := []
-## Route lines' curves' reaches along their lanes (see _lane_pieces()), for one zoom.
-var _lane_reach_memo := {}
 var _weather_layer := Control.new()
 ## The storm whose popup is open, and the one under the mouse (Weather.key()s; "" for none).
 var selected_storm := ""
@@ -3944,16 +3934,18 @@ const PORT_MAX_REACH := 300.0
 ## and the ways in and out of its harbour (see _anchors_in_lanes()): room for
 ## a passing ship's own beam, and some to spare.
 const ANCHOR_LANE_MARGIN_NM := 3.0
-## How far out (nm) from its port a ship's way between the harbour mouth and
-## a lane can reach (HARBOUR_REACH times the biggest marina's mouth's distance,
-## and the curve's own bulge): for finding the ports whose ways reach an
-## anchorage (see _anchors_in_lanes()).
-const HARBOUR_CORRIDOR_NM := 90.0
-## A ship near a port curves between its lane and its harbour over at least
-## this many times the harbour's distance from the port in lane (see
-## _harbour_pose()).
-const HARBOUR_REACH := 3.0
-const HARBOUR_APPROACH_OUT := 2.2  # The approach pose, in line with the mouth, this many mouths out (see _lane_curve()).
+## A port's harbour gate: this far out from the port along its facing (dock
+## units; past the biggest marina's mouth), where every lane to or from it
+## starts and ends (see _gate_pose(); tools/build_map_data.gd GATE_UNITS is the
+## same number, and lays each port's approach from the gate out to open sea
+## into its lanes). And how far (dock units from the port) the lanes keep off
+## every port's marina (the data tool's MARINA_KEEP_UNITS: the biggest marina
+## and the rocks round it), for the record.
+const GATE_UNITS := 38.0
+const MARINA_KEEP_UNITS := 30.0
+## A ship near a port curves between its lane and its harbour, joining the
+## lane this share of the gate's distance past the gate (see _lane_reaches()).
+const HARBOUR_JOIN_SHARE := 0.5
 ## The shortest stretch of lane (nm) a ship curves in or out of port over.
 const HARBOUR_MIN_NM := 2.0
 ## How many times its reach a curve's stretch of lane may grow to match a
@@ -4009,14 +4001,9 @@ const SLOT_ENTRY_CLEAR := 0.5
 const SLOT_TURN_LENGTHS := 0.7
 const CHANNEL_SIDE := 0.25
 const SLOT_PATH_HANDLE := 0.35
-## A lane that comes in to a port from behind or beside its jetty (nearer the
-## port along the sea than JETTY_ROUND_FROM of the jetty's radius) rounds the
-## jetty's end first, out past it by JETTY_ROUND of its radius each way (see _round_jetty()).
+## The pontoon moorings keep this many of the jetty's radius out past its end
+## (see _lay_moorings()).
 const JETTY_ROUND := 1.5
-const JETTY_ROUND_FROM := 0.9
-## A plain curve in that keeps this many of the jetty's radius off the port
-## (and never behind the coast) needn't round it.
-const JETTY_CLEAR := 1.15
 const ENTRANCE_WIDTHS := 3.0
 ## Points round the marina's circle, for drawing.
 const MARINA_ARC_POINTS := 64
@@ -6220,9 +6207,8 @@ func _free_anchor(port_id: String, pool: String, taken: Dictionary) -> int:
 
 ## Which of a port's anchor points (_anchor_spots()) are in the shipping
 ## lanes: 1 for each one a lane the map draws (_active_lanes(): every
-## company's routes, just as laid), or a ship's
-## way between this port's harbour mouth and its lanes (_harbour_corridors()),
-## passes within its ship's swing of, and ANCHOR_LANE_MARGIN_NM more. Worked out again when
+## company's routes, just as laid, each from its port's gate out along the
+## port's approach) passes within its ship's swing of, and ANCHOR_LANE_MARGIN_NM more. Worked out again when
 ## the drawn lanes change; ships already lying there stay put.
 func _anchors_in_lanes(port_id: String, pool: String) -> PackedByteArray:
 	var t_k := Time.get_ticks_usec()
@@ -6241,17 +6227,6 @@ func _anchors_in_lanes(port_id: String, pool: String) -> PackedByteArray:
 	var near := Rect2(port, Vector2.ZERO).grow(reach)
 	var lines: Array[PackedVector2Array] = _lanes_reaching(port_id + pool, near)
 	_prof("al.lanes", t_k)
-	t_k = Time.get_ticks_usec()
-	# And the ships' ways between the harbour mouths and the lanes: this
-	# port's, and those of any port near enough for its ways to reach the anchorage.
-	var here := GameData.get_port(port_id)
-	var here_at := Vector2(float(here.get("lon", 0.0)), float(here.get("lat", 0.0)))
-	for other: Dictionary in GameData.ports:
-		if other.id == port_id or Geo.distance_nm(here_at, Vector2(float(other.get("lon", 0.0)), float(other.get("lat", 0.0)))) > reach / per_nm + HARBOUR_CORRIDOR_NM:
-			continue
-		lines.append_array(_harbour_corridors(other.id))
-	lines.append_array(_harbour_corridors(port_id))
-	_prof("al.corridors", t_k)
 	t_k = Time.get_ticks_usec()
 	# Tested again only when those lines (or the spots) have changed: a
 	# ship's departure changes the fleet's lanes, but seldom any of these.
@@ -6312,101 +6287,6 @@ func _lanes_reaching(key: String, near: Rect2) -> Array[PackedVector2Array]:
 	return lines
 var _lanes_reaching_cache := {}
 
-## The ways ships sail between a port's harbour mouth and its lanes (the
-## curves in and out drawn with the lanes: see _lane_pieces()), for the lanes
-## drawn now that end at the port, as polylines on the ground (projected map
-## coordinates): the same curves as on screen (the lane's point reach nm out,
-## the harbour mouth on its right-hand side, the way in through the entrance),
-## worked out about the port as if the view were on it, so they're known
-## wherever it really is. Ships at anchor keep out of them (see
-## _anchors_in_lanes()).
-## `lanes`: the lanes to work them out for (as _active_lanes() lists them),
-## in place of the fleet's (a probe's: every lane out of the port).
-func _harbour_corridors(port_id: String, lanes: Array = []) -> Array[PackedVector2Array]:
-	# Kept while the lanes ending at the port (and how they're bent), its
-	# marina and its facing stay: worked out for every port near each berthing otherwise.
-	var layout := _port_layout(port_id)
-	var ends := []
-	var listed: Array = lanes if not lanes.is_empty() else _active_lanes()
-	for lane: Array in listed:
-		if lane[0] == port_id or lane[1] == port_id:
-			var sea_lane = GameData.lane(lane[0], lane[1])
-			var back = GameData.lane(lane[1], lane[0]) if lane[3] else null
-			ends.append([lane[0], lane[1], lane[3], _bent_lanes.has(sea_lane), _bent_lanes.has(back)])
-	var key := [ends, float(layout.radius), float(layout.width), layout.mouth, _port_sea_angle(port_id), float(_dock_flips.get(port_id, 1.0)), _bent_epoch]
-	var kept: Array = _corridor_cache.get(port_id, []) if lanes.is_empty() else []
-	if not kept.is_empty() and kept[0] == key:
-		return kept[1]
-	var out: Array[PackedVector2Array] = []
-	var port := GameData.get_port(port_id)
-	var origin := Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0)))
-	var squash := maxf(cos(deg_to_rad(origin.y)), 0.05)
-	var sea_angle := _port_sea_angle(port_id)
-	var flip := float(_dock_flips.get(port_id, 1.0))
-	var dock_nm := 60.0 / SHIP_WORLD_ZOOM
-	# About the port on the ground as it is on screen with the port in the
-	# middle (x east, y south, in nm): the marina's points and facings
-	# (_dock_point(), _dock_angle()), the entrance and its right-hand side.
-	var dock_point := func(local: Vector2) -> Vector2: return Vector2(local.x, local.y * flip).rotated(sea_angle) * dock_nm
-	var dock_angle := func(facing: float) -> float: return sea_angle + facing * flip
-	var side := float(layout.width) * KEEP_RIGHT_WIDTHS * dock_nm
-	var keep_right := func(pose: Array) -> Array: return [(pose[0] as Vector2) + Vector2.from_angle(float(pose[1]) + PI / 2.0) * side, pose[1]]
-	var entrance := func(facing_in: bool, out: float) -> Array: return [dock_point.call((layout.mouth as Vector2) * out), dock_angle.call(PI if facing_in else 0.0)]
-	var to_local := func(lon_lat: Vector2) -> Vector2: return Vector2(wrapf(lon_lat.x - origin.x, -180.0, 180.0) * 60.0 * squash, -(lon_lat.y - origin.y) * 60.0)
-	var to_ground := func(local: Vector2) -> Vector2: return Geo.project(Vector2(origin.x + local.x / (60.0 * squash), origin.y - local.y / 60.0))
-	for lane: Array in listed:
-		var ways := [[lane[0], lane[1]]]
-		if lane[3]:
-			ways.append([lane[1], lane[0]])
-		for way: Array in ways:
-			var from: String = way[0]
-			var to: String = way[1]
-			if from != port_id and to != port_id:
-				continue
-			var arriving := to == port_id
-			var sea_lane = GameData.lane(from, to)
-			if sea_lane == null:
-				continue
-			var length: float = sea_lane.length()
-			var harbour: Array = keep_right.call(entrance.call(arriving, 1.0))
-			# How far out the curve starts (see _lane_reaches()): never faster than at sea.
-			var reach := minf(maxf((harbour[0] as Vector2).length() * HARBOUR_REACH, HARBOUR_MIN_NM), length)
-			var most := reach * HARBOUR_REACH_GROW
-			var curve := PackedVector2Array()
-			for k in 3:
-				var mile := length - reach if arriving else reach
-				var sample: Array = _bent_sample(sea_lane, from, to, clampf(mile, 0.0, length))
-				var edge: Vector2 = to_local.call(Geo.unproject(sample[0]))
-				var heading := Vector2((sample[1] as Vector2).x, -(sample[1] as Vector2).y).angle()
-				var approach: Array = keep_right.call(entrance.call(arriving, HARBOUR_APPROACH_OUT))  # (As _lane_curve() has it.)
-				var poses := [[edge, heading], approach, harbour] if arriving else [harbour, approach, [edge, heading]]
-				# From behind the jetty: round its end first (see _round_jetty()).
-				var in_dock: Vector2 = edge.rotated(-sea_angle) / dock_nm
-				in_dock.y *= flip
-				var round_poses := _round_jetty(port_id, [in_dock, (heading - sea_angle) * flip], arriving)
-				for r in round_poses.size():
-					var pose: Array = round_poses[r]
-					poses.insert((1 if arriving else 2) + r, [dock_point.call(pose[0]), dock_angle.call(float(pose[1]))])
-				curve = _pose_path(poses, HARBOUR_CURVE_HANDLE)
-				var curve_nm := _path_length(curve)
-				if curve_nm <= reach or reach >= length or reach >= most:
-					break
-				reach = minf(minf(curve_nm * 1.05, length), most)
-			# On in through the entrance itself (see _lane_curve_memo()).
-			var gate: Array = keep_right.call(entrance.call(arriving, float(layout.radius) / (layout.mouth as Vector2).x))
-			if arriving:
-				curve.append(gate[0])
-			else:
-				curve.insert(0, gate[0])
-			var on_ground := PackedVector2Array()
-			for p: Vector2 in curve:
-				on_ground.append(to_ground.call(p))
-			out.append(on_ground)
-	if lanes.is_empty():
-		_corridor_cache[port_id] = [key, out]
-	return out
-var _corridor_cache := {}
-
 func _free_spot(ship: Ship) -> void:
 	var taken: Dictionary = _spot_tables.get(_spot_keys.get(ship, []), {})
 	taken.erase(_spot_slots[ship])
@@ -6418,9 +6298,10 @@ func _free_spot(ship: Ship) -> void:
 ## between its lane and the harbour: leaving its lane along the lane's heading
 ## and coming round to the harbour mouth heading in (or from where it lay
 ## there, its spot at the anchorage or the mouth, round onto its lane). The
-## curve takes the last (or first) HARBOUR_REACH times the harbour's distance
-## from the port of its lane (more if the curve is longer, so it's never
-## faster than at sea; the two ends share a short leg), gone along evenly.
+## curve goes through the harbour gate, where the lane starts (or ends), and
+## takes the first (or last) stretch of the lane past it (see _lane_reaches();
+## the two ends share a short leg), gone along evenly: a fixed way in dock
+## units and nautical miles, the same at every zoom.
 ## [screen point, angle], or [] when it isn't near a port.
 func _harbour_pose(ship: Ship) -> Array:
 	if not docks_shown() or ship.is_docked():
@@ -6549,59 +6430,24 @@ func _lane_curve(lane, from_port: String, to_port: String, length: float, arrivi
 	if _is_hidden(edge) or _is_hidden(harbour[0]):
 		return []
 	var on_lane := [edge, _heading_angle(sample[1], sample[0])]
-	# From behind the jetty (a lane that comes in along the coast): round its end first.
+	# Through the harbour gate, where the lane starts (and ends): straight out
+	# from the mouth to it (or in from it), so the ship leaves and comes in
+	# the way the lane's approach runs, the same at every zoom (the lane
+	# holds the whole way from gate to gate: see tools/build_map_data.gd).
 	var port := to_port if arriving else from_port
-	var round_poses := []
-	for pose: Array in _round_jetty(port, _screen_to_local(port, on_lane), arriving):
-		round_poses.append(_local_to_screen(port, pose))
-	via = round_poses + via if arriving else via + round_poses
-	# Lined up with the mouth from HARBOUR_APPROACH_OUT mouths out before the
-	# last stretch in (and out to there before turning for the lane): a lane
-	# coming in from the side made the curve hook round at the mouth.
-	var approach := _keep_right(port, _entrance_pose(port, false, arriving, HARBOUR_APPROACH_OUT))
-	var poses := [on_lane] + via + [approach, harbour] if arriving else [harbour, approach] + via + [on_lane]
+	var gate := _gate_pose(port, arriving)
+	var poses := [on_lane, gate] + via + [harbour] if arriving else [harbour] + via + [gate, on_lane]
 	var shaped := _loosen(poses, turn > 0.0, false, turn)
 	return [_pose_path(shaped, HARBOUR_CURVE_HANDLE), poses, shaped]
 
-## Coming in to a port's harbour from behind or beside its jetty (a lane
-## that comes in along the coast), or leaving that way: the poses to go by,
-## round the jetty's end, out past it on the lane's side (dock units, [point,
-## facing] each, in sailing order), or [] when the lane's out in front of the
-## entrance already or a plain curve to the mouth clears the jetty anyway.
-## lane_pose: where the ship leaves (or joins) its lane, [point, facing] in
-## dock units. From behind the marina (level with the jetty's end or nearer)
-## it first goes along past the marina's wall; from further along the coast
-## it makes straight for the jetty's end (by the wall it would have to turn
-## out to sea and back again, a loop: Shanghai's lanes from the north).
-func _round_jetty(port_id: String, lane_pose: Array, arriving: bool) -> Array:
-	var layout := _port_layout(port_id)
-	var radius := float(layout.radius)
-	var lane_local: Vector2 = lane_pose[0]
-	if lane_local.x >= radius * JETTY_ROUND_FROM or _clears_jetty(layout, lane_pose, arriving):
-		return []
-	var side := 1.0 if lane_local.y >= 0.0 else -1.0
-	var corner := Vector2(radius * JETTY_ROUND, side * radius * JETTY_ROUND)
-	var mouth: Vector2 = layout.mouth
-	var way := mouth - corner if arriving else corner - mouth
-	var poses := [[corner, way.angle()]]
-	if absf(lane_local.y) < radius * JETTY_ROUND:
-		poses.push_front([Vector2(-radius * 0.3, side * radius * JETTY_ROUND), 0.0 if arriving else PI])
-	if not arriving:
-		poses.reverse()
-	return poses
+## A port's harbour gate as a screen pose: GATE_UNITS out from the port along
+## its facing (in line with its marina's mouth), facing in or out. Every lane
+## to or from the port starts and ends there (tools/build_map_data.gd lays the
+## approach from the gate out to open sea into each one), so the ships' ways
+## between their berths and their lanes are the same at every zoom.
+func _gate_pose(port_id: String, facing_in: bool) -> Array:
+	return _entrance_pose(port_id, false, facing_in, GATE_UNITS / (_port_layout(port_id).mouth as Vector2).x)
 
-## True if the plain curve between a lane's pose (dock units) and a marina's
-## mouth keeps outside its jetty (JETTY_CLEAR of its radius) and off the coast
-## behind it (see _round_jetty()).
-static func _clears_jetty(layout: Dictionary, lane_pose: Array, arriving: bool) -> bool:
-	var radius := float(layout.radius)
-	var mouth := [layout.mouth, PI if arriving else 0.0]
-	for p: Vector2 in _pose_path([lane_pose, mouth] if arriving else [mouth, lane_pose], HARBOUR_CURVE_HANDLE):
-		if p.length() < radius * JETTY_CLEAR or p.x < 0.0:
-			return false
-	return true
-
-## How far (nm of lane) from each end of its leg a ship sails its curve in or
 ## out of port: [arriving, leaving], worked out once a leg (0 for none).
 func _harbour_reaches(ship: Ship, lane, length: float) -> PackedFloat32Array:
 	var key := [ship.from_port, ship.to_port]
@@ -6619,7 +6465,7 @@ func _harbour_reaches(ship: Ship, lane, length: float) -> PackedFloat32Array:
 
 ## How far (nm of lane) from each end of a lane the curves to its harbours
 ## take, [arriving, leaving], for the harbour poses `ends` (screen; [] for
-## none): HARBOUR_REACH times the harbour's distance from its port, at least
+## none): HARBOUR_JOIN_SHARE of the gate's distance past the gate, at least
 ## HARBOUR_MIN_NM, more if the curve is longer (so it's never faster than at
 ## sea), the two sharing a short lane. [reaches, true if both ports showed].
 func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends: Array, turn := 0.0, via := []) -> Array:
@@ -6635,10 +6481,12 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 		if harbour.is_empty() or _is_hidden(port_screen_position(port)):
 			shown = false
 			continue
-		var reach := maxf((harbour[0] as Vector2).distance_to(port_screen_position(port)) / px_per_nm * HARBOUR_REACH, HARBOUR_MIN_NM)
+		# The curve joins the lane HARBOUR_JOIN_SHARE of the gate's distance
+		# past the gate (nm: the same at every zoom), at least HARBOUR_MIN_NM.
+		var reach := maxf(GATE_UNITS * 60.0 / SHIP_WORLD_ZOOM * HARBOUR_JOIN_SHARE, HARBOUR_MIN_NM)
 		# A longer curve than its stretch of lane would be faster than at sea:
-		# give it as much lane as it's long (up to HARBOUR_REACH_GROW times: round
-		# the jetty from behind, a curve from further out is longer again).
+		# give it as much lane as it's long (up to HARBOUR_REACH_GROW times:
+		# from its spot at the anchorage, say, the curve's longer again).
 		var most := reach * HARBOUR_REACH_GROW
 		var curve := []
 		for k in 3:
@@ -6649,13 +6497,6 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 			if curve_nm <= reach or reach >= most:
 				break
 			reach = minf(curve_nm * 1.05, most)
-		# A curve over the land (cutting a corner of the coast): shortened,
-		# so it keeps to its lane (which is off the land) longer.
-		for k in 4:
-			if curve.is_empty() or reach <= HARBOUR_MIN_NM or not _curve_on_land(curve[0], port):
-				break
-			reach = maxf(reach * 0.6, HARBOUR_MIN_NM)
-			curve = _lane_curve(lane, from_port, to_port, length, arriving, minf(reach, length), harbour, 0.0 if arriving else turn, [] if arriving else via)
 		reaches[i] = reach
 	# A short leg: the two ends share it.
 	if reaches[0] + reaches[1] > length and reaches[0] + reaches[1] > 0.0:
@@ -6663,27 +6504,6 @@ func _lane_reaches(lane, length: float, to_port: String, from_port: String, ends
 		reaches[0] *= fit
 		reaches[1] *= fit
 	return [reaches, shown]
-
-## True if a harbour curve (screen points) runs over the land as drawn, outside
-## its port's marina (whose basin and harbour are painted over whatever's there).
-const CURVE_LAND_STEP_PX := 12.0
-func _curve_on_land(path: PackedVector2Array, port: String) -> bool:
-	var layout := _port_layout(port)
-	for i in range(1, path.size()):
-		var a := path[i - 1]
-		var b := path[i]
-		var pieces := maxi(ceili(a.distance_to(b) / CURVE_LAND_STEP_PX), 1)
-		for k in pieces + 1:
-			var at := a.lerp(b, float(k) / pieces)
-			if _marina_ground(layout, (_screen_to_local(port, [at, 0.0]) as Array)[0]):
-				continue
-			var spot := _screen_lon_lat(at)
-			if _on_land(spot):
-				return true
-			for other: String in _shore_neighbours_of(port):  # (Another port's marina close by: never through it.)
-				if _in_marina_at(other, spot):
-					return true
-	return false
 
 func _draw_overlay() -> void:
 	_canvas = _overlay
@@ -7315,44 +7135,20 @@ func _draw_active_lanes() -> void:
 	if _lane_painter == null and ClassDB.class_exists(&"LanePainter"):
 		_lane_painter = ClassDB.instantiate(&"LanePainter")
 		_lane_painter.setup({chunk = LANE_CHUNK, min_px = ACTIVE_LANE_MIN_PX, hidden = HIDDEN})
-		_lane_painter.set_providers(_lane_chunks, _lane_ends)
+		_lane_painter.set_providers(_lane_chunks, Callable())  # (No harbour curves: the lanes are drawn just as laid, gate to gate.)
 	if _lane_painter != null:
 		var epoch := _active_lanes_epoch * 2 + (1 if own_only else 0)
 		if lane_mesh and _lane_painter.has_method(&"build_mitred_mesh"):  # (Not in an older library: its mesh doesn't suit scripts/ui/lanes.gdshader.)
-			# The lanes with neither port's marina showing (no harbour curves, which
-			# are worked out on screen) as the mesh on the globe; the rest, few, by
-			# the native pass each frame. Which show depends on the zoom alone, so
-			# the split (and the mesh) holds while the map drags.
-			# (Zooming, the split made last stands till the zoom settles: marinas
-			# come and go at every zoom step, and the mesh is a few ms to build.)
-			if _zooming() and _lane_mesh != null and not _lane_mesh_epoch.is_empty() and _lane_mesh_epoch[0] == epoch:
-				_lane_mesh_node.visible = true
-				if _lane_mesh_curved.is_empty():
-					return
-				lanes = _lane_mesh_curved
-			else:
-				var curved := []
-				var straight := []
-				var curves := docks_shown() and _any_marina_shown()
-				for lane: Array in lanes:
-					if curves and (_marina_shown(lane[0]) or _marina_shown(lane[1])):
-						curved.append(lane)
-					else:
-						straight.append(lane)
-				_lane_mesh_curved = curved
-				_show_lane_mesh(straight, [epoch, curved.hash()])
-				if curved.is_empty():
-					return
-				lanes = curved
-		else:
-			_lane_mesh_node.visible = false
+			# All of them as the mesh on the globe, built again only when the
+			# lanes change: they're drawn just as laid, the same at every zoom.
+			_show_lane_mesh(lanes, [epoch])
+			return
+		_lane_mesh_node.visible = false
 		# (All of them natively, as one batch of triangles: a big fleet's are
-		# drawn again every frame the map's dragged. Harbour curves only while
-		# marinas can show, for lanes with a port on or near the screen: see
-		# _lane_curve_ends().)
+		# drawn again every frame the map's dragged.)
 		_lane_painter.draw(_canvas.get_canvas_item(), lanes, {toward = _toward, right = _right, up = _up, radius = _radius(), middle = size / 2.0,
 			view_angle = asin(minf((size.length() / 2.0 + 8.0) / _radius(), 1.0)), width = ACTIVE_LANE_WIDTH, epoch = epoch,
-			curves = docks_shown() and _any_marina_shown(), near = Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)})
+			curves = false, near = Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)})
 		return
 	for lane: Array in lanes:
 		_draw_lane(lane[0], lane[1], lane[2], false, ACTIVE_LANE_WIDTH, lane[3])
@@ -7374,7 +7170,6 @@ const LANE_MESH_RETRY_FRAMES := 30
 var _lane_mesh_node := Node2D.new()
 var _lane_mesh: ArrayMesh = null
 var _lane_mesh_epoch := []  # ([the lanes' epoch, a hash of the lanes drawn by the pass instead].)
-var _lane_mesh_curved := []  # The lanes the native pass draws (harbour curves), as split last.
 var _lane_mesh_retry := -1
 var _lane_material := ShaderMaterial.new()
 
@@ -7452,11 +7247,9 @@ func _active_lanes() -> Array:
 	_prof("lanes.active", t_a)
 	return _active_lanes_cache
 
-## A lane from one port to another as ships sail it: where a port's marina
-## shows, off the lane and round to its harbour mouth on the right-hand side
-## (the ships' own curves, see _harbour_pose()) and in through its entrance,
-## stopping there, where they part for their berths. `both_ways`: the way
-## back too, its curves only (sharing this one's middle).
+## A lane from one port to another as laid, gate to gate (see _gate_pose()),
+## the same at every zoom. `both_ways`: sailed the other way too (nothing
+## more to draw: the way back is the same line).
 func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, width := 2.5, both_ways := false) -> void:
 	var sea_lane = GameData.lane(from_port, to_port)
 	if sea_lane == null:
@@ -7466,12 +7259,6 @@ func _draw_lane(from_port: String, to_port: String, color: Color, dashed: bool, 
 	for piece: PackedVector2Array in pieces:
 		line.append_array(piece)
 	_draw_line_runs(line, color, dashed, width)
-	if both_ways and _lane_curve_ends(from_port, to_port) != [false, false]:  # (Without a marina showing, the way back has no curves.)
-		var back = GameData.lane(to_port, from_port)
-		if back != null:
-			var back_pieces := _lane_pieces(back, to_port, from_port)
-			_draw_line_runs(back_pieces[0], color, dashed, width)
-			_draw_line_runs(back_pieces[2], color, dashed, width)
 
 ## A bent lane's (see _bent_lane()) points on the sphere, and its chunks (see
 ## _chunk_caps()), worked out once.
@@ -7515,87 +7302,9 @@ func _ship_maybe_in_view(ship: Ship) -> bool:
 	var sea_lane = ship.leg_lane()
 	return sea_lane == null or _on_lane_in_view(sea_lane, ship.from_port, ship.to_port, ship.traveled_nm)
 
-## Which ends of a lane curve in to their harbours: [arriving, leaving], each
-## where its port's marina shows near the view.
-func _lane_curve_ends(from_port: String, to_port: String) -> Array:
-	var near := Rect2(Vector2.ZERO, size).grow(size.length() / 2.0)
-	var shows := [false, false]
-	for i in 2:
-		var port := to_port if i == 0 else from_port
-		var root := port_screen_position(port)
-		shows[i] = not _is_hidden(root) and near.has_point(root) and _marina_shown(port)
-	return shows
-
-## A lane's curves into and out of its ports' harbours (those that show:
-## `shows`, see _lane_curve_ends()): [how far (nm) from each end they take,
-## [in, out]; the curves, [in, out], each as points on the unit sphere; the
-## view's middle they were worked out at]. The curves only change with the
-## zoom, not as the map's dragged: worked out once a zoom (and again once
-## the view's moved a degree), kept on the globe and only put on screen
-## each frame.
-func _lane_curve_memo(sea_lane, from_port: String, to_port: String, shows: Array) -> Array:
-	var length: float = sea_lane.length()
-	var memo_key := "%s>%s %s %s" % [from_port, to_port, shows[0], shows[1]]
-	var memo: Array = _lane_reach_memo.get(memo_key, [])
-	if memo.is_empty() or (_center - (memo[2] as Vector2)).length() > LANE_CURVE_DRIFT:
-		# Only LANE_CURVE_MS of them a frame (when marinas first show, every
-		# lane near wants its curves at once): the rest straight in till the
-		# next frame (the static layer's drawn again then).
-		var frame := Engine.get_process_frames()
-		if frame != _lane_curve_frame:
-			_lane_curve_frame = frame
-			_lane_curve_spent = 0.0
-		if _lane_curve_spent >= LANE_CURVE_MS:
-			_static_layer.queue_redraw()
-			return [PackedFloat32Array([0.0, 0.0]), [PackedVector3Array(), PackedVector3Array()], _center]
-		var t_c := Time.get_ticks_usec()
-		var ends := []
-		for i in 2:
-			var port := to_port if i == 0 else from_port
-			ends.append(_keep_right(port, _entrance_pose(port, false, i == 0)) if shows[i] else [])
-		memo = [_lane_reaches(sea_lane, length, to_port, from_port, ends)[0].duplicate(), [PackedVector3Array(), PackedVector3Array()], _center]
-		for i in 2:
-			if memo[0][i] <= 0.0:
-				continue
-			var curve := _lane_curve(sea_lane, from_port, to_port, length, i == 0, memo[0][i], ends[i])
-			if curve.is_empty():
-				memo[0][i] = 0.0  # (Round the far side: straight in.)
-				continue
-			var points: PackedVector2Array = curve[0]
-			# On in through the entrance itself (from just outside the mouth), where
-			# ships part for their berths.
-			var port := to_port if i == 0 else from_port
-			var layout := _port_layout(port)
-			var gate := _keep_right(port, _entrance_pose(port, false, i == 0, float(layout.radius) / (layout.mouth as Vector2).x))
-			if i == 0:
-				points.append(gate[0])
-			else:
-				points.insert(0, gate[0])
-			var on_globe := PackedVector3Array()
-			for p in points:
-				on_globe.append(_screen_unit(p))
-			memo[1][i] = on_globe
-		_lane_reach_memo[memo_key] = memo
-		_lane_curve_spent += (Time.get_ticks_usec() - t_c) / 1000.0
-		_prof("lanes.curves", t_c)
-	return memo
-
-## A lane's harbour curves for the native lane pass (LanePainter's ends
-## provider): [reaches (nm from each end, [in, out]), the curve in, the curve
-## out (points on the unit sphere)], or [] where neither port's marina shows.
-func _lane_ends(from_port: String, to_port: String) -> Array:
-	var sea_lane = GameData.lane(from_port, to_port)
-	if sea_lane == null:
-		return []
-	var shows := _lane_curve_ends(from_port, to_port)
-	if not (shows[0] or shows[1]):
-		return []
-	var memo := _lane_curve_memo(sea_lane, from_port, to_port, shows)
-	return [PackedFloat32Array(memo[0]), memo[1][0], memo[1][1]]
-
-## A lane on screen in three pieces: the curve out of its first port's
-## harbour, the lane between, and the curve into its last port's (the curves
-## empty where a port's marina doesn't show, the lane then running on to it).
+## A lane on screen in three pieces, [out, between, in]: the lane itself
+## between (as laid, gate to gate), the other two empty (the lanes used to
+## bend into the harbours on screen; now the ships' own curves do that alone).
 func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedVector2Array]:
 	# Its points (as laid: see _bent_lane()) on the
 	# sphere are worked out once.
@@ -7603,16 +7312,8 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 	var lane_miles: PackedFloat64Array = bent.miles
 	var units := _bent_units(sea_lane, bent)
 	var length: float = sea_lane.length()
-	var shows := _lane_curve_ends(from_port, to_port)
-	var curved: bool = shows[0] or shows[1]
-	var curves: Array[PackedVector2Array] = [PackedVector2Array(), PackedVector2Array()]  # [in, out]
+	var curves: Array[PackedVector2Array] = [PackedVector2Array(), PackedVector2Array()]  # [in, out]: none, the lane's drawn just as laid.
 	var reaches := PackedFloat32Array([0.0, 0.0])
-	if curved:
-		var memo := _lane_curve_memo(sea_lane, from_port, to_port, shows)
-		reaches = memo[0]
-		for i in 2:
-			for p: Vector3 in memo[1][i]:
-				curves[i].append(_unit_to_screen(p))
 	var middle := PackedVector2Array()
 	var start := reaches[1]
 	var stop := length - reaches[0]
@@ -7655,7 +7356,7 @@ func _lane_pieces(sea_lane, from_port: String, to_port: String) -> Array[PackedV
 var _port_sizes_seen: Array = []
 var _bent_lanes := {}
 ## Up each time the laid lanes are thrown away (see _check_port_sizes()): what was
-## worked out from them is worked out again (_harbour_corridors(), _anchors_in_lanes()).
+## worked out from them is worked out again (_anchors_in_lanes()).
 var _bent_epoch := 0
 ## Lanes a frame that drew wanted laid out (sea lane -> [from, to]): done by the next frames (see _warm_lanes()).
 var _lanes_wanted := {}
@@ -7702,7 +7403,6 @@ func _check_port_sizes() -> void:
 		if _lane_painter != null:
 			_lane_painter.forget_lanes()
 			_lane_mesh_epoch = []  # (The mesh is built again with the harbour curves afresh.)
-		_lane_reach_memo.clear()
 
 ## A lane as the passes and the anchorage test take it: its points
 ## (projected) and miles just as laid, and its box (projected), for skipping
@@ -8517,9 +8217,8 @@ func _lane_chunks(from_port: String, to_port: String) -> Array:
 
 ## Further than this (nm of lane) from either of its ports, a cargo ship's
 ## drawn right on its lane: no curve in or out of a harbour reaches it (the
-## curves take at most HARBOUR_REACH times a harbour's distance from its
-## port, under 150 nm, and the harbour's within MARINA_MAX_REACH of the
-## port), so the fleet pass can skip it by its own point (see _fleet_pass()).
+## curves take at most HARBOUR_REACH_GROW times HARBOUR_JOIN_SHARE of the
+## gate's distance of lane past the gate, under 30 nm), so the fleet pass can skip it by its own point (see _fleet_pass()).
 const HARBOUR_END_ZONE_NM := 220.0
 
 ## The tow lines from each tug with a ship on its line (at sea, or in to its
@@ -13154,7 +12853,7 @@ func _lay_moorings(port_id: String, layout: Dictionary, roads: Array) -> Diction
 	for row in rows:
 		for side: float in [-1.0, 1.0]:
 			# The first row's fingers reach back to the quay land, but never into the
-			# way ships round the jetty's end (JETTY_ROUND out: see _round_jetty()).
+			# way ships round the jetty's end (JETTY_ROUND out).
 			var y := side * (maxf(radius + 1.0, radius * JETTY_ROUND + MOOR_LANE_MARGIN) + finger + MOOR_PONTOON_WIDTH / 2.0 + row * (2.0 * finger + MOOR_PONTOON_WIDTH + MOOR_ROW_CLEAR))
 			var s := -depth - 1.0
 			var run_from := s

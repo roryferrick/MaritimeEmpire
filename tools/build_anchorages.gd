@@ -5,15 +5,16 @@ extends Node
 ## hexagonal grid round the port, each far enough from every other that two
 ## ships swung round by the same wind never touch, each clear of land all
 ## the way round, as far as the longest ship in the game (the Mammoth) can
-## swing about its anchor, whatever way the wind blows, and none in the
-## funnel in front of the harbour mouth, where every ship in or out sails
-## (FUNNEL_DEG either side of the way to sea, out to where the ways into the
-## harbour from the lanes have all come together: see
-## MapView._harbour_corridors()). The map leaves out those its port's marina
-## could reach (MapView._anchor_spots()) and fills the rest nearest the port
-## first, favouring the sides over straight out in front (where the lanes
-## come in), and never one a lane sailed now, or a way between the harbour
-## and such a lane, runs through (MapView._anchors_in_lanes()).
+## swing about its anchor, whatever way the wind blows, none in the funnel
+## in front of the harbour mouth, where every ship in or out sails
+## (FUNNEL_DEG either side of the way to sea, out past the harbour gate to
+## where the ships' curves have joined the lane: see MapView._lane_reaches()),
+## and none on any port's approach (data/approaches.json: its lanes' fixed
+## way from its gate out to open sea). The map leaves out those its port's
+## marina could reach (MapView._anchor_spots()) and fills the rest nearest
+## the port first, favouring the sides over straight out in front (where the
+## lanes come in), and never one a lane sailed now runs through
+## (MapView._anchors_in_lanes()).
 ##
 ##   Godot --headless --path . tools/build_anchorages.tscn
 ##
@@ -40,12 +41,11 @@ const BOW_LENGTH_FACTOR := 0.6
 const EXCLUDE_BOXES := [[15.45, 37.95, 15.80, 38.40]]
 
 ## The funnel in front of the harbour mouth no ship anchors in: this far
-## either side of the way to sea (degrees), out to this share of how far out
-## the ways in from the lanes start (MapView.HARBOUR_REACH times the mouth's
-## distance, for the biggest marina the port can have), at least FUNNEL_MIN_NM.
+## either side of the way to sea (degrees), out past the harbour gate to
+## where the ships' curves have joined the lane (see _ready()), at least FUNNEL_MIN_NM.
 const FUNNEL_DEG := 30.0
-const FUNNEL_SHARE := 0.5
 const FUNNEL_MIN_NM := 6.0
+const APPROACHES := "res://data/approaches.json"
 ## A spot straight out in front counts this much further than one the same
 ## distance off to the side (so the sides fill first; the lanes come in in
 ## front), and one behind the port (where a ship coming to anchor would
@@ -83,15 +83,25 @@ func _ready() -> void:
 	var small_swing_nm := SMALL_LENGTH * 60.0 / SHIP_WORLD_ZOOM + MARGIN_NM
 	print("Swing room %.1f nm (ships up to %.1f units long: %.1f nm)" % [swing_nm, SMALL_LENGTH, small_swing_nm])
 
-	# The funnel's reach: the biggest marina a port can have (a hub's), and a
-	# canal port's (its mouth differs).
+	# The funnel's reach: out to the harbour gate (MapView.GATE_UNITS, where
+	# every lane starts) and the stretch past it where the ships' curves join
+	# the lane (see MapView._lane_reaches()); the same at every port.
 	var hub_berths := str((GameData.config.get("docks", {}) as Dictionary).get("hub_berths", "sssBBsss"))
 	var funnels := {}
 	for canal in [false, true]:
-		var layout: Dictionary = MapView._marina_layout(hub_berths, true, canal)
-		var mouth_nm := (layout.mouth as Vector2).x * 60.0 / SHIP_WORLD_ZOOM
-		funnels[canal] = maxf(maxf(mouth_nm * MapView.HARBOUR_REACH, MapView.HARBOUR_MIN_NM) * FUNNEL_SHARE, FUNNEL_MIN_NM)
-	print("Funnel in front of the mouth: %.0f degrees either side, out to %.1f nm (%.1f nm at a canal port)" % [FUNNEL_DEG, funnels[false], funnels[true]])
+		funnels[canal] = maxf(MapView.GATE_UNITS * 60.0 / SHIP_WORLD_ZOOM * (1.0 + MapView.HARBOUR_JOIN_SHARE * MapView.HARBOUR_REACH_GROW), FUNNEL_MIN_NM)
+	print("Funnel in front of the mouth: %.0f degrees either side, out to %.1f nm" % [FUNNEL_DEG, funnels[false]])
+	# And every port's approach (data/approaches.json: its lanes' fixed way
+	# from its gate out to open sea), (lon, lat) points: no anchoring on it.
+	var approaches := {}
+	if FileAccess.file_exists(APPROACHES):
+		for id: String in JSON.parse_string(FileAccess.get_file_as_string(APPROACHES)).ports:
+			var points := PackedVector2Array()
+			for p: Array in JSON.parse_string(FileAccess.get_file_as_string(APPROACHES)).ports[id].points:
+				points.append(Vector2(float(p[0]), float(p[1])))
+			approaches[id] = points
+	else:
+		print("No %s: build the lanes first (tools/build_map_data.gd); the approaches aren't kept clear" % APPROACHES)
 
 	var old: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(OUT)) if FileAccess.file_exists(OUT) else {}
 	var facing: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FACING)) if FileAccess.file_exists(FACING) else {}
@@ -124,9 +134,19 @@ func _ready() -> void:
 			var there: Vector2 = other[1]
 			var sea_way := Vector2.ZERO if is_nan(float(other[2])) else Vector2.from_angle(deg_to_rad(90.0 - float(other[2])))
 			others.append([Vector2(wrapf(there.x - at.x, -180.0, 180.0) * 60.0 * squash, (there.y - at.y) * 60.0), sea_way, float(other[3])])
+		# This port's approach and its neighbours' (within reach), as east and north nm of this port.
+		var ways := []
+		for other: Array in places:
+			if other[0] != port.id and Geo.distance_nm(at, other[1]) > SEARCH_NM * 2.0:
+				continue
+			var way := PackedVector2Array()
+			for p: Vector2 in approaches.get(other[0], PackedVector2Array()):
+				way.append(Vector2(wrapf(p.x - at.x, -180.0, 180.0) * 60.0 * squash, (p.y - at.y) * 60.0))
+			if way.size() >= 2:
+				ways.append(way)
 		var spots := {
-			all = _spots(at, bearing, swing_nm, swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm),
-			small = _spots(at, bearing, small_swing_nm, small_swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm),
+			all = _spots(at, bearing, swing_nm, swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm, ways),
+			small = _spots(at, bearing, small_swing_nm, small_swing_nm + MARGIN_NM, funnel_nm, others, keep_off_nm, ways),
 		}
 		for pool: String in spots:
 			spots[pool] = (spots[pool] as Array).filter(func(spot: Array) -> bool:
@@ -163,7 +183,7 @@ func _ready() -> void:
 ## the way to sea) out to SEARCH_NM, keeping those whose swing circle is all
 ## water and that aren't in the funnel in front of the mouth, nearest the
 ## port first (a spot out in front counting further: see FRONT_PENALTY).
-func _spots(at: Vector2, bearing: float, swing_nm: float, spacing_nm: float, funnel_nm: float, others: Array, keep_off_nm: float) -> Array:
+func _spots(at: Vector2, bearing: float, swing_nm: float, spacing_nm: float, funnel_nm: float, others: Array, keep_off_nm: float, ways: Array) -> Array:
 	var sea_way := Vector2.ZERO
 	var turn := 0.0
 	if not is_nan(bearing):
@@ -180,7 +200,7 @@ func _spots(at: Vector2, bearing: float, swing_nm: float, spacing_nm: float, fun
 				continue
 			if _local_in_funnel(local, sea_way, funnel_nm) or (sea_way != Vector2.ZERO and absf(rad_to_deg(local.angle_to(sea_way))) > BEHIND_DEG):
 				continue
-			if _near_another(local, others, keep_off_nm):
+			if _near_another(local, others, keep_off_nm) or _on_a_way(local, ways, swing_nm + MARGIN_NM):
 				continue
 			var point := _offset(at, local)
 			if _clear(point, swing_nm):
@@ -210,6 +230,16 @@ static func _near_another(local: Vector2, others: Array, keep_off_nm: float) -> 
 		var off: Vector2 = local - (other[0] as Vector2)
 		if off.length() < keep_off_nm or _local_in_funnel(off, other[1], float(other[2])):
 			return true
+	return false
+
+
+## True if a point (east and north nm of a port) is within `room` nm of any
+## of the ports' approaches (`ways`: each as such points).
+static func _on_a_way(local: Vector2, ways: Array, room: float) -> bool:
+	for way: PackedVector2Array in ways:
+		for k in range(1, way.size()):
+			if local.distance_to(Geometry2D.get_closest_point_to_segment(local, way[k - 1], way[k])) < room:
+				return true
 	return false
 
 

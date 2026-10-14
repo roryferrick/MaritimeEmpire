@@ -3,18 +3,27 @@ extends SceneTree
 ## Builds the game's map data from Natural Earth downloads:
 ##   data/world_map.res  land, coastline, borders and country labels, for drawing
 ##   data/sea_lanes.res  a sea route and its distance between every pair of ports
+##   data/approaches.json  every port's fixed way out from its harbour gate to open sea
 ##
-## Rerun after changing data/ports.json (takes several minutes; add
+## The lanes never touch the land as the map draws it, nor any port's marina:
+## they're routed on a grid (GRID_CELL) where a cell is water only if nothing
+## drawn (coast, lake island, a marina's disc) touches it or any of its eight
+## neighbours (see _build_grid()), between the ports' sea gates, and each port's
+## approach from its harbour gate (GATE_UNITS out along its facing, where the
+## ships' ways in and out of the marina end) out to its sea gate is laid once,
+## on the drawn coast itself, and shared by all its lanes (see _lay_approaches()).
+## Canals and the narrow straits (CHANNELS) are laid in exactly. The game sails
+## and draws every lane just as stored, at every zoom.
+##
+## Rerun after changing data/ports.json (takes about an hour and a half; add
 ## "-- --lanes-only" to skip rebuilding the map art, or "-- --map-only" to
 ## rebuild only the map art: land, lakes, rivers, borders and labels). After
 ## changing only data/canals.json, "-- --canals-only" lays the canals into the
 ## existing lanes again in seconds (without rounding the corners where they
 ## join; see _round_corners(), which needs the land grid of a lanes run):
 ##   Godot --headless --path . -s tools/build_map_data.gd
-## "-- --channels-only" lays every port's approach channels into the existing
-## lanes again (see _lay_channels(); a lanes run doesn't: run it after one).
 ## "-- --currents-only" plans the lanes' second ways round on the currents
-## (see _plan_current_ways(); after a lanes or channels run, which drop them).
+## (see _plan_current_ways(); after a lanes run, which drops them).
 ## "-- --fishing-only" routes the fishing grounds' lanes (see _plan_fishing_lanes(); last of all).
 ## "-- --biomes-only" redraws just the biome patches into the existing
 ## data/world_map.res (after changing BIOME_SIMPLIFY, say), in about a minute.
@@ -144,14 +153,6 @@ const ANIMALS := [
 	["quetzal", -90.4, 15.4, 2], ["quetzal", -84.33, 10.57, 2],
 ]
 const LANES_OUT := "res://data/sea_lanes.res"
-## Approach channels (see _lay_channels()): a port's lanes share their last
-## CHANNEL_NM nm, each leaving its own way CHANNEL_JOIN_NM out to join; lanes
-## coming in within CHANNEL_SPREAD_DEG of bearing of each other share one;
-## lanes shorter than CHANNEL_MIN_LANE_NM keep their own ways.
-const CHANNEL_NM := 80.0
-const CHANNEL_JOIN_NM := 105.0
-const CHANNEL_SPREAD_DEG := 30.0
-const CHANNEL_MIN_LANE_NM := 260.0
 
 ## Coastline simplification, in projected degrees (~0.7 nm at the equator).
 const SIMPLIFY_TOLERANCE := 0.012
@@ -182,14 +183,44 @@ const MIN_WRAP_SPAN := 150.0
 const COARSE := 5
 ## Extra cost for coarse cells that touch land, so lanes keep off the coast.
 const COAST_PENALTY := 1.3
-## How far (in cells) a port may be from the water cell its lanes start from.
+## How far (in cells) a fishing ground may be from the sea cell its lanes end at.
 const SNAP_RADIUS := 30
 ## Great-circle legs are split into pieces about this long (nm) where open water allows.
 const GREAT_CIRCLE_STEP_NM := 100.0
-## How closely (nm) a great-circle shortcut is checked for land, and how near
-## a port end it may pass the coast (see _great_circle_shortcuts()).
+## How closely (nm) a great-circle shortcut is checked for land (see _great_circle_shortcuts()).
 const ARC_CHECK_NM := 25.0
-const ARC_PORT_NM := 30.0
+## Every port's marina counts as land: a disc this many dock units across from
+## the port, covering the biggest marina a port can have (a hub's jetty, radius
+## 21, and the rocks round it, out to 1.32 radii and their size), at
+## MapView.SHIP_WORLD_ZOOM dock units a degree. Not a canal port's (the canal
+## runs through it). MapView.MARINA_KEEP_UNITS is the same number.
+const MARINA_KEEP_UNITS := 30.0
+const DOCK_UNITS_PER_DEG := 88.235
+## A port's harbour gate: this far out from the port along its facing (dock
+## units; past the biggest marina's mouth, 34.7), where every lane to or from
+## it starts and ends and the ships' ways in and out of the marina begin
+## (MapView.GATE_UNITS is the same number).
+const GATE_UNITS := 38.0
+## Its approach (see _lay_approaches()) leaves the gate straight out along the
+## facing for as long as the water allows, at most this far (dock units),
+## then makes for the nearest cell of open sea (a water cell of the routing
+## grid) on a finer grid of the drawn coast (APPROACH_CELL projected degrees),
+## looking at most APPROACH_REACH_DEG from the port.
+const STANDOFF_UNITS := 100.0
+const APPROACH_CELL := 0.025
+const APPROACH_REACH_DEG := 8.0
+## Lane points this near (degrees) a strait in CHANNELS run along it: that
+## stretch is laid along the strait's course exactly (see _splice_channels()).
+const CHANNEL_SNAP_DEG := 0.12
+## How far (cells) a body of safe water cut off from the ocean is joined on to
+## it through plain water, and how small a body is left be (see _join_enclosed_seas()).
+const CONNECT_REACH := 80
+const BODY_MIN_CELLS := 2
+## A course's end is joined to a body of safe water at least this big: open
+## water, not a pocket among the shore's cells (see _build_grid()).
+const BIG_BODY_CELLS := 100
+const APPROACHES_OUT := "res://data/approaches.json"
+const FACING_PATH := "res://data/port_facing.json"
 ## Lane corners are rounded into arcs this wide (see _round_corners()), drawn
 ## in steps of at most ARC_STEP_DEG of turn; turns under MIN_TURN_DEG are left
 ## alone, and an arc that hits land is tightened up to CORNER_TRIES times.
@@ -245,8 +276,9 @@ const LAKE_NAMES := {
 const LAKE_DRY_SALT_REGION := Rect2(110.0, -40.0, 45.0, 26.0)
 const LAKE_SALT_PANS: Array[String] = ["Lake Eyre North", "Lake Eyre South", "Lake Disappointment", "Lake Mackay", "Lake Gairdner",
 	"Lake Torrens", "Lake Frome", "Lake Amadeus", "Lake Carnegie", "Chott el Djerid", "Chott Melrhir"]
-## Rivers and straits too narrow for the grid to see. Carved as water, like
-## the canals in data/canals.json. Each is a list of [lon, lat] points.
+## Rivers and straits too narrow for the routing grid to see, each a list of
+## [lon, lat] points: carved through the safe grid a cell wide, and laid into
+## the lanes that run along them exactly (see _splice_channels()).
 ## Passages dredged out of the land itself (not just the lane grid): each a
 ## course (lon, lat) and a width (nm) cut from every land polygon it crosses,
 ## so the coast as drawn, the sea grid and the lanes all leave room for two
@@ -260,13 +292,22 @@ const DREDGES := [
 	["St. Lawrence", [[-71.10, 46.86], [-71.40, 46.76], [-71.90, 46.56], [-72.30, 46.40], [-72.70, 46.27], [-73.15, 46.02], [-73.30, 45.74], [-73.50, 45.56], [-73.70, 45.43], [-74.10, 45.31], [-74.50, 45.12], [-74.85, 45.03], [-75.20, 44.82], [-75.55, 44.63], [-75.90, 44.46], [-76.20, 44.29], [-76.50, 44.19], [-76.80, 44.12]], 13.0],
 ]
 const CHANNELS := {
-	"Strait of Gibraltar": [[-6.2, 35.95], [-5.6, 35.97], [-5.2, 36.0]],
+	"Strait of Gibraltar": [[-6.8, 35.90], [-6.2, 35.95], [-5.6, 35.97], [-5.2, 36.0], [-4.7, 36.05]],
 	"Dardanelles": [[26.15, 40.00], [26.27, 40.07], [26.40, 40.15], [26.45, 40.22], [26.55, 40.30], [26.68, 40.41], [26.80, 40.48]],
 	"Strait of Messina": [[15.68, 38.31], [15.66, 38.25], [15.62, 38.18], [15.60, 38.10], [15.57, 38.00]],
 	"Strait of Bonifacio": [[9.0, 41.33], [9.25, 41.32], [9.5, 41.30]],
+	"Dover Strait": [[2.60, 51.75], [2.10, 51.45], [1.65, 51.15], [1.20, 50.85], [0.60, 50.55], [0.00, 50.35]],
+	"North Channel (Irish Sea)": [[-6.40, 55.75], [-5.95, 55.45], [-5.60, 55.10], [-5.40, 54.80], [-5.20, 54.45], [-5.00, 54.10]],
+	"Sunda Strait": [[104.90, -6.75], [105.35, -6.40], [105.70, -6.05], [105.95, -5.75], [106.20, -5.55], [106.55, -5.40]],
+	"Strait of Malacca": [[97.80, 6.70], [98.50, 5.70], [99.20, 4.70], [99.85, 3.80], [100.45, 3.00], [101.00, 2.45], [101.70, 1.95], [102.50, 1.60], [103.10, 1.30], [103.50, 1.20]],
 	"Singapore Strait": [[103.5, 1.20], [103.8, 1.20], [104.1, 1.25], [104.4, 1.30]],
 	"Great Belt": [[11.0, 56.10], [10.95, 55.70], [11.0, 55.35], [11.05, 55.05], [11.2, 54.70], [11.5, 54.55]],
-	"Oresund (Copenhagen)": [[12.55, 56.15], [12.62, 56.04], [12.68, 55.96], [12.72, 55.86], [12.70, 55.76], [12.68, 55.68], [12.72, 55.58], [12.80, 55.48], [12.85, 55.38]],
+	"Oresund (Copenhagen)": [[12.55, 56.15], [12.62, 56.04], [12.68, 55.96], [12.72, 55.86], [12.70, 55.76], [12.68, 55.68], [12.72, 55.58], [12.80, 55.48], [12.85, 55.38], [12.95, 55.20], [13.10, 55.05]],
+	"Bab-el-Mandeb": [[42.30, 14.20], [42.55, 13.65], [42.85, 13.10], [43.05, 12.80], [43.25, 12.50], [43.45, 12.25], [43.75, 12.10], [44.10, 11.95]],
+	"Kii Channel (Osaka)": [[135.30, 34.45], [135.10, 34.30], [134.98, 34.10], [134.92, 33.85], [134.95, 33.55], [135.05, 33.30]],
+	"Gulf of Aqaba (Eilat & Aqaba)": [[34.75, 28.95], [34.70, 28.65], [34.62, 28.35], [34.55, 28.10], [34.50, 27.95], [34.35, 27.75], [34.15, 27.55]],
+	"Chesapeake Bay (Baltimore, Norfolk)": [[-76.19, 38.26], [-76.25, 38.00], [-76.20, 37.70], [-76.15, 37.40], [-76.05, 37.10], [-75.95, 36.95], [-75.70, 36.90]],
+	"Juan de Fuca and Haro Strait (Vancouver)": [[-123.79, 49.28], [-123.55, 49.00], [-123.35, 48.75], [-123.25, 48.55], [-123.15, 48.40], [-123.40, 48.30], [-123.90, 48.30], [-124.40, 48.40], [-124.90, 48.45], [-125.30, 48.40]],
 	"Elbe (Hamburg)": [[8.3, 53.95], [8.7, 53.88], [9.0, 53.85], [9.35, 53.72], [9.55, 53.60], [9.8, 53.54], [9.95, 53.54]],
 	"Western Scheldt (Antwerp)": [[3.3, 51.45], [3.6, 51.42], [3.9, 51.40], [4.1, 51.38], [4.25, 51.33], [4.33, 51.28]],
 	"The Narrows (New York)": [[-74.05, 40.66], [-74.045, 40.63], [-74.04, 40.605], [-74.03, 40.58], [-74.00, 40.53]],
@@ -282,6 +323,7 @@ const CHANNELS := {
 	"Kilindini (Mombasa)": [[39.70, -4.10], [39.67, -4.05]],
 	"Durban harbor": [[31.10, -29.88], [31.03, -29.87]],
 	"Bosphorus (Black Sea)": [[28.98, 41.00], [29.01, 41.04], [29.04, 41.08], [29.06, 41.12], [29.08, 41.17], [29.12, 41.22], [29.15, 41.26], [29.20, 41.30]],
+	"Gulf of Suez (Port Tewfik to the Red Sea)": [[32.58, 29.86], [32.566, 29.49], [32.62, 29.10], [32.80, 28.70], [33.05, 28.35], [33.40, 27.95], [33.85, 27.55], [34.20, 27.30]],
 	"Mississippi River (New Orleans)": [[-89.42, 28.93], [-89.33, 29.05], [-89.30, 29.15], [-89.38, 29.28], [-89.55, 29.40], [-89.70, 29.50], [-89.85, 29.65], [-89.98, 29.82], [-90.05, 29.95]],
 	"Icy Strait to Juneau": [[-136.60, 58.18], [-136.10, 58.25], [-135.60, 58.27], [-135.00, 58.35], [-134.75, 58.30], [-134.55, 58.28], [-134.42, 58.30]],
 	"Oslofjord": [[10.55, 59.00], [10.58, 59.30], [10.60, 59.50], [10.62, 59.66], [10.68, 59.80], [10.74, 59.90]],
@@ -298,15 +340,29 @@ const CHANNELS := {
 var _cols := 0
 var _rows := 0
 var _grid_origin := Vector2.ZERO  # Projected coords of cell (0, 0)'s corner.
-var _land := PackedByteArray()  # 1 = land
-var _near_land := PackedByteArray()  # 1 = land or next to land
+var _land := PackedByteArray()  # 1 = something drawn touches the cell, a marina's disc too (see _build_grid()).
+var _coast := PackedByteArray()  # 1 = the drawn land alone touches the cell.
+var _safe := PackedByteArray()  # 1 = water with water all round: where the lanes may go.
 ## The first grid row (a whole coarse cell) north of ARCTIC_LAT, and whether
 ## those rows count as land (while routing lanes between non-Arctic ports).
 var _arctic_row := 0
 var _block_arctic := false
-## 1 = water connected to the open ocean. Ports snap to these cells, so every
-## pair of ports has a route (and no search is wasted on an enclosed pocket).
+## 1 = safe water connected to the open ocean. The ports' sea gates are such
+## cells, so every pair of ports has a route (and no search is wasted on an
+## enclosed pocket).
 var _ocean := PackedByteArray()
+## The drawn land (data/world_map.res) for the approaches: its land, lake and
+## lake island triangles (see _drawn_land()); every port's marina as a disc
+## of land (see _build_marina_discs()), by 1-degree cell; every port's
+## approach (see _lay_approaches()); and the approach cells looked at for
+## the port in hand (see _fine_water()).
+var _land_test: Object = null
+var _lake_test: Object = null
+var _island_test: Object = null
+var _marina_discs := []
+var _disc_cells := {}
+var _approaches := {}
+var _fine_cells := {}
 ## Per fine cell, the coarse graph piece of water it's in (-1 if not ocean; see
 ## _build_coarse_graph()), and per piece, the fine cell routes pass through and
 ## its coarse cell.
@@ -315,6 +371,8 @@ var _piece_rep := PackedInt32Array()
 var _piece_cell := PackedInt32Array()
 ## Each canal from data/canals.json: {path (its centerline), divide}, as [lon, lat] points.
 var _canals: Array[Dictionary] = []
+## Each strait in CHANNELS: {name, path (its course), bounds}, as [lon, lat] points.
+var _courses: Array[Dictionary] = []
 
 
 func _init() -> void:
@@ -326,6 +384,12 @@ func _init() -> void:
 		for p in path:
 			bounds = bounds.expand(p)
 		_canals.append({path = path, divide = _to_points(canal.divide), bounds = bounds.grow(0.01)})
+	for course_name: String in CHANNELS:
+		var path := _to_points(CHANNELS[course_name])
+		var bounds := Rect2(path[0], Vector2.ZERO)
+		for p in path:
+			bounds = bounds.expand(p)
+		_courses.append({name = course_name, path = path, bounds = bounds.grow(CHANNEL_SNAP_DEG * 2.0)})
 	if "--canals-only" in args:
 		_resplice_lanes()
 		quit()
@@ -338,14 +402,8 @@ func _init() -> void:
 		_plan_current_ways()
 		quit()
 		return
-	if "--channels-only" in args:
-		_rechannel_lanes()
-		print("Done in %.1f min" % ((Time.get_ticks_msec() - started) / 60000.0))
-		quit()
-		return
-	if "--clear-land" in args:
-		_clear_lanes_of_land()
-		print("Done in %.1f min" % ((Time.get_ticks_msec() - started) / 60000.0))
+	if "--verify-only" in args:
+		_verify_lanes(load(LANES_OUT))
 		quit()
 		return
 	if "--animals-only" in args:
@@ -360,13 +418,15 @@ func _init() -> void:
 		_rebuild_biomes("--dry" in args)
 		quit()
 		return
-	var land_rings := _read_land_rings()
-	print("Land: %d rings" % land_rings.size())
 	if not "--lanes-only" in args:
+		var land_rings := _read_land_rings()
+		print("Land: %d rings" % land_rings.size())
 		_build_map(land_rings)
 	if not "--map-only" in args:
-		_build_grid(land_rings)
-		land_rings.clear()
+		_build_grid()
+		if "--grid-only" in args:  # (Just the grid's reports: the straits' courses, what's cut off.)
+			quit()
+			return
 		if "--audit" in args:
 			_audit_lanes()
 		else:
@@ -1758,7 +1818,21 @@ func _edge_key(a: Vector2, b: Vector2) -> Array:
 
 # --- Pathfinding grid ----------------------------------------------------
 
-func _build_grid(land_polygons: Array) -> void:
+## The routing grid, from the map as drawn (data/world_map.res, so the
+## lanes and the coast on screen agree): _land marks every cell any drawn
+## land touches at all (not just its centre: a triangle's cells are found
+## by its edges, so no sliver of coast slips between samples), the lakes as
+## water but for their islands, and every port's marina as a disc of land
+## (MARINA_KEEP_UNITS); _safe is the water cells with water all round them
+## (eight neighbours), so a line through safe cells' centres keeps a whole
+## cell off anything drawn, with the canals, the dredged passages and the
+## straits in CHANNELS carved through (one cell wide: the lanes are laid
+## along their courses exactly, see _splice_channels()); and _ocean the safe
+## cells joined to the open sea. The lanes are routed on the safe cells, and
+## everything that checks a lane against the land (_is_land()) looks at them.
+func _build_grid() -> void:
+	var started := Time.get_ticks_msec()
+	var map: WorldMapData = load(MAP_OUT)
 	var south := Geo.project(Vector2(0, GRID_SOUTH_LAT)).y
 	var north := Geo.project(Vector2(0, GRID_NORTH_LAT)).y
 	_grid_origin = Vector2(GRID_WEST, south)
@@ -1766,123 +1840,410 @@ func _build_grid(land_polygons: Array) -> void:
 	_rows = ceili((north - south) / GRID_CELL)
 	_arctic_row = ceili((Geo.project(Vector2(0, ARCTIC_LAT)).y - south) / GRID_CELL / COARSE) * COARSE
 	_land.resize(_cols * _rows)
-
-	# Scanline-fill every land polygon (outline and holes, even-odd) into the
-	# grid, plus a second copy 360 degrees east for the part past 180.
-	for polygon: Dictionary in land_polygons:
-		var rings := [_project_all(polygon.outline)]
-		for hole: PackedVector2Array in polygon.holes:
-			rings.append(_project_all(hole))
-		_fill_rings(rings, 0.0)
-		_fill_rings(rings, Geo.WORLD_WIDTH)
-
-	# Cut the sea lakes back out of the land (even-odd, so their islands stay land).
-	for feature: Dictionary in _read_geojson(LAKES_PATH):
-		if not str(feature.properties.get("name", "")) in SEA_LAKES:
+	_land.fill(0)
+	# Every cell a land triangle touches, at the real longitudes and 360 east.
+	for offset: float in [0.0, Geo.WORLD_WIDTH]:
+		_raster_triangles(map.land_triangles, offset, _land)
+	print("  land: %d triangles rastered in %d s" % [map.land_triangles.size() / 3, (Time.get_ticks_msec() - started) / 1000])
+	# The lakes are water (the map draws them over the land), their islands
+	# land: a land cell wholly inside a lake is water again.
+	_build_land_tests(map)
+	_centre_courses()
+	var lakes := PackedByteArray()
+	lakes.resize(_cols * _rows)
+	for triangles: PackedVector2Array in map.lake_triangles:
+		for offset: float in [0.0, Geo.WORLD_WIDTH]:
+			_raster_triangles(triangles, offset, lakes)
+	var lake_cells := 0
+	for i in _land.size():
+		if _land[i] == 0 or lakes[i] == 0:
 			continue
-		for polygon: Array in _feature_polygons(feature):
-			var lake_rings := []
-			for ring: Array in polygon:
-				lake_rings.append(_project_all(_to_points(ring)))
-			_fill_rings(lake_rings, 0.0)
-			_fill_rings(lake_rings, Geo.WORLD_WIDTH)
-
-	var channels: Array = CHANNELS.values().map(_to_points)
-	for dredge: Array in DREDGES:
-		channels.append(_to_points(dredge[1]))  # (The dredged passages, at least in the lanes' grid.)
-	for canal in _canals:
-		channels.append(canal.path)
-	for channel: PackedVector2Array in channels:
-		for i in range(1, channel.size()):
-			var a := Geo.project(channel[i - 1])
-			var b := Geo.project(channel[i])
-			_carve(a, b)
-			_carve(a + Vector2(Geo.WORLD_WIDTH, 0), b + Vector2(Geo.WORLD_WIDTH, 0))
-
-	_near_land = _land.duplicate()
-	for row in _rows:
+		var cell := Vector2i(i % _cols, i / _cols)
+		var corner := _grid_origin + Vector2(cell) * GRID_CELL
+		var inside := true
+		for sy in 3:
+			for sx in 3:
+				var p := corner + Vector2(sx, sy) * (GRID_CELL / 2.0)
+				var q := Vector2(wrapf(p.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0), p.y)
+				if not _lake_test.contains(q) or _island_test.contains(q):
+					inside = false
+					break
+			if not inside:
+				break
+		if inside:
+			_land[i] = 0
+			lake_cells += 1
+	_coast = _land.duplicate()
+	# Every port's marina (not a canal port's: the canal runs through it).
+	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
+	_build_marina_discs(ports)
+	var disc_cells := 0
+	for disc: Array in _marina_discs:
+		for offset: float in [0.0, Geo.WORLD_WIDTH]:
+			var c: Vector2 = (disc[0] as Vector2) + Vector2(offset, 0.0)
+			var r: float = disc[1]
+			var lo := _cell_of(c - Vector2(r, r))
+			var hi := _cell_of(c + Vector2(r, r))
+			for row in range(maxi(lo.y, 0), mini(hi.y, _rows - 1) + 1):
+				for col in range(maxi(lo.x, 0), mini(hi.x, _cols - 1) + 1):
+					var corner := _grid_origin + Vector2(col, row) * GRID_CELL
+					var dx := maxf(maxf(corner.x - c.x, c.x - corner.x - GRID_CELL), 0.0)
+					var dy := maxf(maxf(corner.y - c.y, c.y - corner.y - GRID_CELL), 0.0)
+					if dx * dx + dy * dy <= r * r and _land[row * _cols + col] == 0:
+						_land[row * _cols + col] = 1
+						disc_cells += 1
+	print("  lakes: %d cells opened; marinas: %d discs, %d cells closed (%d s)" % [lake_cells, _marina_discs.size(), disc_cells, (Time.get_ticks_msec() - started) / 1000])
+	# Safe water: water with water all round it.
+	_safe.resize(_cols * _rows)
+	_safe.fill(0)
+	var safe_cells := 0
+	for row in range(1, _rows - 1):
 		var base := row * _cols
-		for col in _cols:
-			if not _land[base + col]:
+		for col in range(1, _cols - 1):
+			var i := base + col
+			if _land[i] or _land[i - 1] or _land[i + 1] or _land[i - _cols] or _land[i - _cols - 1] or _land[i - _cols + 1] \
+					or _land[i + _cols] or _land[i + _cols - 1] or _land[i + _cols + 1]:
 				continue
-			for dy in range(-1, 2):
-				var r := row + dy
-				if r < 0 or r >= _rows:
+			_safe[i] = 1
+			safe_cells += 1
+	# The canals, the dredged passages and the straits carved through.
+	var courses: Array = []
+	for course: Dictionary in _courses:
+		courses.append(course.path)  # (The straits' courses as centred: see _centre_courses().)
+	for dredge: Array in DREDGES:
+		courses.append(_to_points(dredge[1]))
+	for canal in _canals:
+		courses.append(canal.path)
+	var course_names: Array = CHANNELS.keys()
+	for dredge: Array in DREDGES:
+		course_names.append(dredge[0])
+	for canal in _canals:
+		course_names.append("canal")
+	var carved := []  # Per course and copy of the world: [the cells it carved, its two end cells, its name, the ends (lon, lat)].
+	for k in courses.size():
+		var course: PackedVector2Array = courses[k]
+		for offset: float in [0.0, Geo.WORLD_WIDTH]:
+			var shift := Vector2(offset, 0.0)
+			_carved_now = {}
+			for i in range(1, course.size()):
+				_carve(Geo.project(course[i - 1]) + shift, Geo.project(course[i]) + shift)
+			carved.append([_carved_now, [_cell_of(Geo.project(course[0]) + shift), _cell_of(Geo.project(course[-1]) + shift)], course_names[k], [course[0], course[-1]]])
+	# Each course's two ends joined to safe water off the course (a canal or
+	# strait is a cell wide, and often stops among the shore's cells: without
+	# this it's a dead-end spur, and Panama is sailed round the Horn).
+	_label_safe()
+	var course_ends_short := 0
+	for entry: Array in carved:
+		for e in 2:
+			var end: Vector2i = entry[1][e]
+			if _in_grid(end) and not _join_body(PackedInt32Array([end.y * _cols + end.x]), false, entry[0]):
+				course_ends_short += 1
+				if (entry[3][e] as Vector2).x <= 180.0:
+					print("  %s: its end at %s found no safe water off the course" % [entry[2], _lon_lat_text(entry[3][e])])
+	print("  courses: %d carved, %d ends found no safe water off the course within %d cells" % [carved.size(), course_ends_short, CONNECT_REACH])
+	_join_enclosed_seas()
+	print("Grid: %d x %d cells, %d safe (%d s)" % [_cols, _rows, safe_cells, (Time.get_ticks_msec() - started) / 1000])
+	var args := OS.get_cmdline_user_args()
+	if "--reach-probe" in args:  # (The ocean reachable from a point without crossing the seam: "--reach-probe 38.7,21.4".)
+		var at := args[args.find("--reach-probe") + 1].split(",")
+		var start := _cell_of(Geo.project(Vector2(float(at[0]), float(at[1]))))
+		var seen := {start: true}
+		var queue: Array[Vector2i] = [start]
+		var head := 0
+		var box := Rect2i(start, Vector2i.ONE)
+		var southmost := start
+		var far := start
+		while head < queue.size():
+			var cell: Vector2i = queue[head]
+			head += 1
+			for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var next := cell + step
+				if seen.has(next) or not _in_grid(next) or not _ocean[next.y * _cols + next.x] or absi(next.x - start.x) > 150 or absi(next.y - start.y) > 150:
 					continue
-				var rbase := r * _cols
-				for dx in range(-1, 2):
-					var c := col + dx
-					if c >= 0 and c < _cols:
-						_near_land[rbase + c] = 1
+				seen[next] = true
+				queue.append(next)
+				box = box.expand(next)
+				if next.y < southmost.y:
+					southmost = next
+				if (next - start).length() > (far - start).length():
+					far = next
+		print("  reach probe from %s: %d ocean cells within 150, box %s to %s, southernmost %s, furthest %s" % [_lon_lat_text(Vector2(float(at[0]), float(at[1]))), queue.size(), _lon_lat_text(Geo.unproject(_cell_center(box.position))), _lon_lat_text(Geo.unproject(_cell_center(box.end))), _lon_lat_text(Geo.unproject(_cell_center(southmost))), _lon_lat_text(Geo.unproject(_cell_center(far)))])
+	# Every strait's course against the drawn land (the lanes are laid along
+	# them exactly): where a course clips the coast, move its points.
+	for course_entry: Dictionary in _courses:
+		var course_name: String = course_entry.name
+		var course: PackedVector2Array = course_entry.path
+		var samples := 0
+		var on_land := 0
+		var runs := []  # [[first (lon, lat), last], ...]
+		for i in range(1, course.size()):
+			var a := Geo.project(course[i - 1])
+			var b := Geo.project(course[i])
+			var steps := maxi(1, ceili(a.distance_to(b) / 0.004))
+			for s in steps + 1:
+				var p := a.lerp(b, float(s) / steps)
+				samples += 1
+				if _drawn_land(p):
+					on_land += 1
+					var at := Geo.unproject(p)
+					if runs.is_empty() or Geo.distance_nm(runs[-1][1], at) > 1.0:
+						runs.append([at, at])
+					else:
+						runs[-1][1] = at
+		if on_land > 0:
+			var where := []
+			for run: Array in runs.slice(0, 4):
+				where.append("%s to %s" % [_lon_lat_text(run[0]), _lon_lat_text(run[1])])
+			print("  COURSE ON LAND: %s, %.0f%% of it (%d stretches: %s)" % [course_name, 100.0 * on_land / samples, runs.size(), "; ".join(where)])
+	if "--course-probe" in args:  # (A look at a course's cells: "--course-probe Bab-el-Mandeb".)
+		var wanted: String = args[args.find("--course-probe") + 1]
+		for k in courses.size():
+			if str(course_names[k]) != wanted:
+				continue
+			var course: PackedVector2Array = courses[k]
+			for i in range(1, course.size()):
+				var a := Geo.project(course[i - 1])
+				var b := Geo.project(course[i])
+				var steps := maxi(1, ceili(a.distance_to(b) / (GRID_CELL * 0.25)))
+				var last := Vector2i(-1, -1)
+				for s in steps + 1:
+					var cell := _cell_of(a.lerp(b, float(s) / steps))
+					if cell == last:
+						continue
+					last = cell
+					var index := cell.y * _cols + cell.x
+					print("  %s cell %s at %s: coast %d land %d safe %d ocean %d" % [wanted, cell, _lon_lat_text(Geo.unproject(_cell_center(cell))), _coast[index], _land[index], _safe[index], _ocean[index]])
+
+
+## Joins every body of safe water cut off from the ocean (a sea behind a
+## strait too narrow for a safe cell, a bay a course stops in, a course that
+## stops short of the open sea) to it by the shortest way through plain
+## water (cells no drawn land touches: a marina's disc doesn't stop it, a
+## strait's course is the way past the port that stands on it), carving that
+## way, largest body first, round after round till none can be. Reports
+## what's left cut off (carve a course for it in CHANNELS).
+func _join_enclosed_seas() -> void:
+	var left := []
+	for round in 12:
+		_mark_ocean()
+		var bodies := _enclosed_bodies()
+		left = bodies
+		if bodies.is_empty():
+			break
+		var joined := 0
+		for body: PackedInt32Array in bodies:
+			if _join_body(body):
+				joined += 1
+		print("  round %d: %d bodies of safe water cut off, %d joined to the ocean" % [round + 1, bodies.size(), joined])
+		if joined == 0:
+			break
 	_mark_ocean()
-	print("Grid: %d x %d cells" % [_cols, _rows])
+	var lines := []
+	for body: PackedInt32Array in left.slice(0, 20):
+		var at := Geo.unproject(_cell_center(Vector2i(body[0] % _cols, body[0] / _cols)))
+		if at.x <= 180.0:  # (Not the copy of the world 360 east.)
+			lines.append("%d cells at %s" % [body.size(), _lon_lat_text(at)])
+	print("Safe water still cut off from the ocean: %d bodies of %d cells or more%s" % [left.size(), BODY_MIN_CELLS, (": " + "; ".join(lines)) if not lines.is_empty() else ""])
 
 
-## Flood-fills the water reachable from the middle of the Pacific. Moves are
-## 4-way, matching the pathfinder (it only cuts corners when both sides are water).
+## Every safe cell's body (4-way connected safe water) and each body's cells
+## (see _join_body_through(): a course's end joins open water, not a pocket).
+var _body_of := PackedInt32Array()
+var _body_size: Array[int] = []
+func _label_safe() -> void:
+	_body_of.resize(_safe.size())
+	_body_of.fill(-1)
+	_body_size.clear()
+	for i in _safe.size():
+		if not _safe[i] or _body_of[i] >= 0:
+			continue
+		var body := _body_size.size()
+		_body_of[i] = body
+		var queue := PackedInt32Array([i])
+		var head := 0
+		while head < queue.size():
+			var index := queue[head]
+			head += 1
+			var col := index % _cols
+			for next: int in [index - 1 if col > 0 else -1, index + 1 if col < _cols - 1 else -1, index - _cols, index + _cols]:
+				if next >= 0 and next < _safe.size() and _safe[next] and _body_of[next] < 0:
+					_body_of[next] = body
+					queue.append(next)
+		_body_size.append(queue.size())
+
+
+## The bodies of safe water not joined to the ocean (4-way, as _mark_ocean()
+## floods), of BODY_MIN_CELLS or more, largest first, each its cells' indices.
+func _enclosed_bodies() -> Array:
+	var seen := PackedByteArray()
+	seen.resize(_safe.size())
+	var found := []
+	for i in _safe.size():
+		if not _safe[i] or _ocean[i] or seen[i]:
+			continue
+		var queue := PackedInt32Array([i])
+		seen[i] = 1
+		var head := 0
+		while head < queue.size():
+			var index := queue[head]
+			head += 1
+			var col := index % _cols
+			for next: int in [index - 1 if col > 0 else -1, index + 1 if col < _cols - 1 else -1, index - _cols, index + _cols]:
+				if next >= 0 and next < _safe.size() and _safe[next] and not seen[next]:
+					seen[next] = 1
+					queue.append(next)
+		if queue.size() >= BODY_MIN_CELLS:
+			found.append(queue)
+	found.sort_custom(func(a: PackedInt32Array, b: PackedInt32Array) -> bool: return a.size() > b.size())
+	return found
+
+
+## Carves the shortest way from a body of safe water to any ocean cell, at
+## most CONNECT_REACH cells long: through plain water (cells no drawn land
+## touches) if there is one, else through cells whose centres are on the
+## water (the shore cells a course ends among, where the lane runs by the
+## cell's centre: a river mouth, a lake's end of a canal). True if there is one.
+func _join_body(body: PackedInt32Array, goal_ocean := true, own := {}) -> bool:
+	return _join_body_through(body, false, goal_ocean, own) or _join_body_through(body, true, goal_ocean, own)
+
+
+## `goal_ocean`: the goal is an ocean cell (else a safe cell off the course
+## itself (`own`) in a body of BIG_BODY_CELLS or more: open water, not a pocket
+## among the shore's cells; see _build_grid()).
+func _join_body_through(body: PackedInt32Array, shore_cells: bool, goal_ocean: bool, own: Dictionary) -> bool:
+	var parents := {}
+	var queue := PackedInt32Array()
+	for index in body:
+		parents[index] = -1
+		queue.append(index)
+	var depth := PackedInt32Array()
+	depth.resize(queue.size())
+	var head := 0
+	var found := -1
+	var total := _safe.size()
+	while head < queue.size() and found < 0:
+		var index := queue[head]
+		var steps := depth[head]
+		head += 1
+		if steps >= CONNECT_REACH:
+			continue
+		var col := index % _cols
+		for next: int in [index - 1 if col > 0 else -1, index + 1 if col < _cols - 1 else -1, index - _cols, index + _cols]:
+			if next < 0 or next >= total or parents.has(next):
+				continue
+			parents[next] = index
+			if (_ocean[next] if goal_ocean else (_safe[next] == 1 and not own.has(next) and _body_size[_body_of[next]] >= BIG_BODY_CELLS)):
+				found = next
+				break
+			if _coast[next] and not (shore_cells and not _drawn_land(_cell_center(Vector2i(next % _cols, next / _cols)))):
+				continue
+			queue.append(next)
+			depth.append(steps + 1)
+	if found < 0:
+		return false
+	var cell := found
+	while cell >= 0:
+		_safe[cell] = 1
+		cell = parents[cell]
+	return true
+
+
+## Marks every cell a triangle touches at all, in a grid mask (shifted
+## x_offset west, for the copy of the world 360 degrees east): per row of
+## cells the triangle reaches, the span of its edges within that row's band.
+func _raster_triangles(triangles: PackedVector2Array, x_offset: float, into: PackedByteArray) -> void:
+	var origin := _grid_origin - Vector2(x_offset, 0.0)
+	for t in range(0, triangles.size(), 3):
+		var a := (triangles[t] - origin) / GRID_CELL
+		var b := (triangles[t + 1] - origin) / GRID_CELL
+		var c := (triangles[t + 2] - origin) / GRID_CELL
+		var y0 := minf(a.y, minf(b.y, c.y))
+		var y1 := maxf(a.y, maxf(b.y, c.y))
+		if y1 <= 0.0 or y0 >= _rows or maxf(a.x, maxf(b.x, c.x)) <= 0.0 or minf(a.x, minf(b.x, c.x)) >= _cols:
+			continue
+		for row in range(maxi(floori(y0), 0), mini(ceili(y1) - 1, _rows - 1) + 1):
+			var span := Vector2(INF, -INF)
+			span = _band_span(a, b, row, span)
+			span = _band_span(b, c, row, span)
+			span = _band_span(c, a, row, span)
+			if span.x > span.y:
+				continue
+			var base := row * _cols
+			for col in range(maxi(floori(span.x), 0), mini(ceili(span.y) - 1, _cols - 1) + 1):
+				into[base + col] = 1
+
+
+## An edge's x span within the band of cells row (y in [row, row + 1]),
+## widened into `span` (x lo, x hi), in cell units.
+static func _band_span(p: Vector2, q: Vector2, row: int, span: Vector2) -> Vector2:
+	if p.y == q.y:
+		if p.y >= row and p.y <= row + 1:
+			span.x = minf(span.x, minf(p.x, q.x))
+			span.y = maxf(span.y, maxf(p.x, q.x))
+		return span
+	if p.y > q.y:
+		var swap := p
+		p = q
+		q = swap
+	var ya := maxf(p.y, float(row))
+	var yb := minf(q.y, float(row + 1))
+	if ya > yb:
+		return span
+	var xa := p.x + (q.x - p.x) * (ya - p.y) / (q.y - p.y)
+	var xb := p.x + (q.x - p.x) * (yb - p.y) / (q.y - p.y)
+	span.x = minf(span.x, minf(xa, xb))
+	span.y = maxf(span.y, maxf(xa, xb))
+	return span
+
+
+## Flood-fills the safe water reachable from the middle of the Pacific. Moves
+## are 4-way, matching the pathfinder (it only cuts corners when both sides are water).
 func _mark_ocean() -> void:
-	_ocean.resize(_land.size())
+	_ocean.resize(_safe.size())
+	_ocean.fill(0)
 	var start := _cell_of(Geo.project(Vector2(-150.0, 0.0)))
 	var queue := PackedInt32Array([start.y * _cols + start.x])
 	_ocean[queue[0]] = 1
-	var total := _land.size()
+	var total := _safe.size()
 	var head := 0
 	while head < queue.size():
 		var index := queue[head]
 		head += 1
 		var col := index % _cols
-		if col > 0 and not _land[index - 1] and not _ocean[index - 1]:
+		if col > 0 and _safe[index - 1] and not _ocean[index - 1]:
 			_ocean[index - 1] = 1
 			queue.append(index - 1)
-		if col < _cols - 1 and not _land[index + 1] and not _ocean[index + 1]:
+		if col < _cols - 1 and _safe[index + 1] and not _ocean[index + 1]:
 			_ocean[index + 1] = 1
 			queue.append(index + 1)
-		if index >= _cols and not _land[index - _cols] and not _ocean[index - _cols]:
+		if index >= _cols and _safe[index - _cols] and not _ocean[index - _cols]:
 			_ocean[index - _cols] = 1
 			queue.append(index - _cols)
-		if index + _cols < total and not _land[index + _cols] and not _ocean[index + _cols]:
+		if index + _cols < total and _safe[index + _cols] and not _ocean[index + _cols]:
 			_ocean[index + _cols] = 1
 			queue.append(index + _cols)
-	print("Ocean: %d connected water cells" % queue.size())
+	print("Ocean: %d connected safe cells" % queue.size())
 
 
-func _fill_rings(rings: Array, x_offset: float) -> void:
-	var crossings := {}  # row -> x positions where an edge crosses the row's center line
-	var origin := _grid_origin - Vector2(x_offset, 0)
-	for ring: PackedVector2Array in rings:
-		for i in ring.size():
-			var a := (ring[i] - origin) / GRID_CELL
-			var b := (ring[(i + 1) % ring.size()] - origin) / GRID_CELL
-			if a.y == b.y:
-				continue
-			var lo := minf(a.y, b.y)
-			var hi := maxf(a.y, b.y)
-			var first_row := maxi(0, ceili(lo - 0.5))
-			var last_row := mini(_rows - 1, ceili(hi - 0.5) - 1)
-			for row in range(first_row, last_row + 1):
-				var t := (row + 0.5 - a.y) / (b.y - a.y)
-				if not crossings.has(row):
-					crossings[row] = PackedFloat32Array()
-				crossings[row].append(a.x + t * (b.x - a.x))
-	for row: int in crossings:
-		var xs: PackedFloat32Array = crossings[row]
-		xs.sort()
-		for i in range(0, xs.size() - 1, 2):
-			var c0 := maxi(0, ceili(xs[i] - 0.5))
-			var c1 := mini(_cols - 1, ceili(xs[i + 1] - 0.5) - 1)
-			for col in range(c0, c1 + 1):
-				_land[row * _cols + col] ^= 1
-
-
+## Carves a course (projected) through the safe grid, one cell wide and
+## 4-connected (so the pathfinder, which only cuts a corner between two
+## water cells, can follow it).
 func _carve(a: Vector2, b: Vector2) -> void:
 	var steps := maxi(1, ceili(a.distance_to(b) / (GRID_CELL * 0.25)))
+	var previous := Vector2i(-1, -1)
 	for s in steps + 1:
 		var cell := _cell_of(a.lerp(b, float(s) / steps))
-		for dy in range(-1, 2):
-			for dx in range(-1, 2):
-				var c := cell + Vector2i(dx, dy)
-				if _in_grid(c):
-					_land[c.y * _cols + c.x] = 0
+		if previous.x >= 0 and cell.x != previous.x and cell.y != previous.y:
+			_open(Vector2i(cell.x, previous.y))
+		_open(cell)
+		previous = cell
+
+
+var _carved_now := {}  # The cells the course being carved has (see _build_grid()).
+func _open(cell: Vector2i) -> void:
+	if _in_grid(cell):
+		_safe[cell.y * _cols + cell.x] = 1
+		_carved_now[cell.y * _cols + cell.x] = true
 
 
 func _cell_of(point: Vector2) -> Vector2i:
@@ -1898,12 +2259,434 @@ func _in_grid(cell: Vector2i) -> bool:
 	return cell.x >= 0 and cell.x < _cols and cell.y >= 0 and cell.y < _rows
 
 
+## True where a lane may not go: anything but safe water (see _build_grid()),
+## and the Arctic while it's blocked.
 func _is_land(cell: Vector2i) -> bool:
-	return not _in_grid(cell) or _land[cell.y * _cols + cell.x] == 1 or (_block_arctic and cell.y >= _arctic_row)
+	return not _in_grid(cell) or _safe[cell.y * _cols + cell.x] == 0 or (_block_arctic and cell.y >= _arctic_row)
 
 
-func _is_near_land(cell: Vector2i) -> bool:
-	return not _in_grid(cell) or _near_land[cell.y * _cols + cell.x] == 1 or (_block_arctic and cell.y >= _arctic_row)
+## The nearest ocean cell within `radius` cells of one, or (-1, -1).
+func _nearest_ocean_cell(cell: Vector2i, radius: int) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_distance := INF
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			var c := cell + Vector2i(dx, dy)
+			if _in_grid(c) and _ocean[c.y * _cols + c.x] and Vector2(dx, dy).length() < best_distance:
+				best_distance = Vector2(dx, dy).length()
+				best = c
+	return best
+
+
+## The ocean cell a projected point is in, or (-1, -1).
+func _ocean_cell_at(p: Vector2) -> Vector2i:
+	var cell := _cell_of(p)
+	if _in_grid(cell) and _ocean[cell.y * _cols + cell.x]:
+		return cell
+	return Vector2i(-1, -1)
+
+
+# --- The drawn land, and the marinas -----------------------------------------
+
+func _build_land_tests(map: WorldMapData) -> void:
+	_land_test = ClassDB.instantiate(&"LandTest")
+	_land_test.build(map.land_triangles, 1.0)
+	var lakes := PackedVector2Array()
+	for triangles: PackedVector2Array in map.lake_triangles:
+		lakes.append_array(triangles)
+	_lake_test = ClassDB.instantiate(&"LandTest")
+	_lake_test.build(lakes, 1.0)
+	_island_test = ClassDB.instantiate(&"LandTest")
+	_island_test.build(map.lake_island_triangles, 1.0)
+
+
+## Every strait's course (CHANNELS, in _courses) moved to the middle of its
+## channel on the drawn map: the course is first densified to a point every
+## COURSE_STEP projected degrees, then each point is moved square to the
+## course (up to COURSE_SHIFT either way) to the water point with the most
+## clearance from the drawn land (the biggest circle of water round it, up
+## to COURSE_CLEAR), the nearest such point when several have the same; a
+## point with no water within reach stays (a river the map hasn't got). The
+## courses are hand-drawn to a few miles; the lanes are laid along them exactly.
+const COURSE_STEP := 0.05
+const COURSE_SHIFT := 0.2
+const COURSE_CLEAR := 0.12
+const COURSE_SCAN := 0.005
+func _centre_courses() -> void:
+	var moved := 0
+	var total := 0
+	for course: Dictionary in _courses:
+		var path: PackedVector2Array = course.path
+		var dense := PackedVector2Array([Geo.project(path[0])])
+		for i in range(1, path.size()):
+			var a := Geo.project(path[i - 1])
+			var b := Geo.project(path[i])
+			var steps := maxi(1, ceili(a.distance_to(b) / COURSE_STEP))
+			for s in range(1, steps + 1):
+				dense.append(a.lerp(b, float(s) / steps))
+		var centred := PackedVector2Array()
+		for i in dense.size():
+			var before := dense[maxi(i - 1, 0)]
+			var after := dense[mini(i + 1, dense.size() - 1)]
+			var along := (after - before).normalized()
+			var across := along.orthogonal() if along != Vector2.ZERO else Vector2.RIGHT
+			var best := dense[i]
+			var best_clear := _clearance(dense[i])
+			var best_shift := 0.0
+			var t := COURSE_SCAN
+			while t <= COURSE_SHIFT:
+				for side: float in [1.0, -1.0]:
+					var p := dense[i] + across * t * side
+					var clear := _clearance(p)
+					if clear > best_clear + 1e-9 or (absf(clear - best_clear) <= 1e-9 and t < best_shift):
+						best = p
+						best_clear = clear
+						best_shift = t
+				t += COURSE_SCAN
+			total += 1
+			if best_shift > 0.0:
+				moved += 1
+			centred.append(Geo.unproject(best))
+		course.path = centred
+		var bounds := Rect2(centred[0], Vector2.ZERO)
+		for p in centred:
+			bounds = bounds.expand(p)
+		course.bounds = bounds.grow(CHANNEL_SNAP_DEG * 2.0)
+	print("  straits' courses centred in their channels: %d of %d points moved" % [moved, total])
+
+
+## How much water there is round a projected point: the radius (projected
+## degrees, up to COURSE_CLEAR, in COURSE_SCAN steps) of the biggest circle
+## of water (8 points round it) centred there; 0 on the land.
+func _clearance(p: Vector2) -> float:
+	if _drawn_land(p):
+		return 0.0
+	var r := COURSE_SCAN
+	while r <= COURSE_CLEAR:
+		for k in 8:
+			if _drawn_land(p + Vector2.from_angle(TAU * k / 8.0) * r):
+				return r - COURSE_SCAN * 0.5
+		r += COURSE_SCAN
+	return COURSE_CLEAR
+
+
+## True where the drawn map has land (the lakes water, their islands land):
+## a projected point.
+func _drawn_land(p: Vector2) -> bool:
+	var q := Vector2(wrapf(p.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0), p.y)
+	if not _land_test.contains(q):
+		return false
+	return not _lake_test.contains(q) or _island_test.contains(q)
+
+
+## Every port's marina as a disc (see MARINA_KEEP_UNITS): [centre
+## (projected), radius (projected), port id], sorted by 1-degree cell.
+func _build_marina_discs(ports: Array) -> void:
+	_marina_discs.clear()
+	_disc_cells.clear()
+	var canal_ports := _canal_ports()
+	for port: Dictionary in ports:
+		if canal_ports.has(port.id):
+			continue
+		var lat := float(port.lat)
+		var centre := Geo.project(Vector2(float(port.lon), lat))
+		var radius := MARINA_KEEP_UNITS / DOCK_UNITS_PER_DEG / maxf(cos(deg_to_rad(lat)), 0.05)
+		_marina_discs.append([centre, radius, str(port.id)])
+	for disc: Array in _marina_discs:
+		var c: Vector2 = disc[0]
+		var r: float = disc[1]
+		for x in range(floori(c.x - r), floori(c.x + r) + 1):
+			for y in range(floori(c.y - r), floori(c.y + r) + 1):
+				_disc_cells.get_or_add(Vector2i(posmod(x + 180, 360) - 180, y), []).append(disc)
+
+
+## The ports a canal runs through (data/canals.json ports).
+func _canal_ports() -> Dictionary:
+	var out := {}
+	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
+		for id: String in canal.get("ports", []):
+			out[id] = true
+	return out
+
+
+## The port whose marina disc a projected point is in, or "".
+func _marina_disc_at(p: Vector2) -> String:
+	var x := wrapf(p.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0)
+	for disc: Array in _disc_cells.get(Vector2i(floori(x), floori(p.y)), []):
+		var c: Vector2 = disc[0]
+		var dx: float = x - c.x
+		dx -= roundf(dx / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
+		if Vector2(dx, p.y - c.y).length() <= float(disc[1]):
+			return str(disc[2])
+	return ""
+
+
+## True where a projected point may not be sailed on the drawn map: land, or
+## any port's marina (but for the ones in _ignored_discs: a port whose gate
+## lies in a neighbour's disc, two marinas that would overlap at their
+## biggest, has to sail out through it).
+var _ignored_discs := {}
+func _blocked(p: Vector2) -> bool:
+	if _drawn_land(p):
+		return true
+	var disc := _marina_disc_at(p)
+	return not disc.is_empty() and not _ignored_discs.has(disc)
+
+
+# --- Approaches -----------------------------------------------------------
+
+## Every port's approach: its lanes' fixed way between its harbour gate
+## (GATE_UNITS out along its facing, the way its marina's mouth faces) and
+## its sea gate, a cell of open sea where the routing takes over. Straight
+## out along the facing as far as the water (and no marina) allows, up to
+## STANDOFF_UNITS, and if that's not open sea yet, from there round the
+## coast on a finer grid (APPROACH_CELL) of the map as drawn, to the nearest
+## cell of open sea. Shared by every lane the port has, so a ship always
+## leaves (and comes in) the same way, whoever it's bound for. Saved to
+## data/approaches.json for the other tools.
+func _lay_approaches(ports: Array) -> void:
+	var started := Time.get_ticks_msec()
+	var facing: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FACING_PATH))
+	var canal_ports := _canal_ports()
+	_approaches.clear()
+	var stats := {straight = 0, round = 0, gate_blocked = 0, no_way = 0}
+	var out := {}
+	var longest := []
+	for port: Dictionary in ports:
+		var at := Vector2(float(port.lon), float(port.lat))
+		var centre := Geo.project(at)
+		var unit := 1.0 / DOCK_UNITS_PER_DEG / maxf(cos(deg_to_rad(at.y)), 0.05)  # Projected degrees per dock unit here.
+		var way := _mouth_way(port, facing, canal_ports.has(port.id))
+		var gate := centre + way * GATE_UNITS * unit
+		var points := PackedVector2Array([gate])
+		var note := ""
+		_ignored_discs.clear()
+		var in_disc := _marina_disc_at(gate)
+		if not in_disc.is_empty():
+			_ignored_discs[in_disc] = true
+			note = "gate in %s's marina disc (the two marinas would overlap at their biggest)" % in_disc
+		if _drawn_land(gate):
+			stats.gate_blocked += 1
+			note = "gate on the land as drawn"
+		# Straight out while the water allows.
+		var step := way * APPROACH_CELL * 0.5
+		var p := gate
+		var reached := _ocean_cell_at(p)
+		while reached.x < 0 and (p - centre).length() < STANDOFF_UNITS * unit:
+			var next := p + step
+			if _blocked(next):
+				break
+			p = next
+			reached = _ocean_cell_at(p)
+		if reached.x >= 0:
+			if p != gate:
+				points.append(p)
+			stats.straight += 1
+		else:
+			if p != gate:
+				points.append(p)
+			_fine_cells.clear()
+			var path := _approach_path(p)
+			if path.is_empty():
+				# A river port, say, whose gate is on the drawn land (or in a lake
+				# the river doesn't drain to): straight to the nearest cell of open
+				# water (a course from CHANNELS, up the river) if one comes near,
+				# over whatever lies between, else no lanes.
+				var course_cell := _nearest_ocean_cell(_cell_of(p), ceili(1.5 / GRID_CELL))
+				if course_cell.x >= 0:
+					points.append(_cell_center(course_cell))
+					reached = course_cell
+					note += "; STRAIGHT to the nearest open water %.1f degrees off (over whatever's between)" % (_cell_center(course_cell) - p).length()
+				else:
+					stats.no_way += 1
+					note += "; NO WAY round the coast to open sea within %.0f degrees: no lanes (carve a course in CHANNELS)" % APPROACH_REACH_DEG
+			else:
+				for q in _straighten_fine(path):
+					points.append(q)
+				reached = _cell_of(points[-1])
+				stats.round += 1
+		var lon_lat := PackedVector2Array()
+		for q in points:
+			lon_lat.append(Geo.unproject(q))
+		var nm := _length_nm(lon_lat)
+		_approaches[port.id] = {gate = lon_lat[0], points = lon_lat, cell = reached}
+		var entry := {gate = [snappedf(lon_lat[0].x, 0.0001), snappedf(lon_lat[0].y, 0.0001)], nm = snappedf(nm, 0.1), points = []}
+		for q in lon_lat:
+			entry.points.append([snappedf(q.x, 0.0001), snappedf(q.y, 0.0001)])
+		if not note.is_empty():
+			entry.note = note
+			print("  %s: %s" % [port.id, note])
+		out[port.id] = entry
+		longest.append([nm, port.id])
+	longest.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	print("Approaches: %d straight out, %d round the coast, %d gates blocked, %d with no way (%d s); longest: %s" % [stats.straight, stats.round, stats.gate_blocked, stats.no_way, (Time.get_ticks_msec() - started) / 1000,
+		", ".join(longest.slice(0, 12).map(func(e: Array) -> String: return "%s %.0f nm" % [e[1], e[0]]))])
+	var file := FileAccess.open(APPROACHES_OUT, FileAccess.WRITE)
+	file.store_string(JSON.stringify({
+		_comment = "Every port's approach, built by tools/build_map_data.gd (see _lay_approaches()): gate is its harbour gate (lon, lat), %.0f dock units out from the port along its facing, where its lanes start and end and the ships' ways in and out of the marina begin; points runs from the gate out to its sea gate, where the open-sea routing takes over, and is the first stretch of every lane the port has; nm is its length." % GATE_UNITS,
+		gate_units = GATE_UNITS, ports = out}, "\t"))
+	file.close()
+
+
+## Which way a port's marina mouth faces, as a unit vector in projected
+## space (east, north): its facing's bearing (data/port_facing.json), or at
+## a canal port straight away from where its canal leaves it (the marina
+## is turned so its canal side faces the canal: MapView._canal_turn()).
+func _mouth_way(port: Dictionary, facing: Dictionary, canal_port: bool) -> Vector2:
+	var entry: Dictionary = facing.get("manual", {}).get(port.id, facing.get("facing", {}).get(port.id, {}))
+	var bearing := deg_to_rad(float(entry.get("bearing", 0.0)))
+	var sea := Vector2(sin(bearing), cos(bearing))
+	if not canal_port:
+		return sea
+	# MapView._canal_exit_angle(): the canal's way out of the port, to its
+	# first point CANAL_EXIT_DEG away, whichever way is furthest from the sea.
+	var at := Vector2(float(port.lon), float(port.lat))
+	var squash := cos(deg_to_rad(at.y))
+	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
+		if not (canal.get("ports", []) as Array).has(port.id):
+			continue
+		var path: Array = canal.path
+		var local := func(point: Array) -> Vector2: return Vector2((float(point[0]) - at.x) * squash, float(point[1]) - at.y)
+		var nearest := 0
+		for i in path.size():
+			if (local.call(path[i]) as Vector2).length() < (local.call(path[nearest]) as Vector2).length():
+				nearest = i
+		var best := Vector2.ZERO
+		for step: int in [1, -1]:
+			var i := nearest
+			while i + step >= 0 and i + step < path.size() and (local.call(path[i]) as Vector2).length() < 0.25:
+				i += step
+			var exit: Vector2 = local.call(path[i])
+			if exit.length() > 0.0 and (best == Vector2.ZERO or exit.normalized().dot(sea) < best.normalized().dot(sea)):
+				best = exit
+		if best != Vector2.ZERO:
+			return -best.normalized()
+	return sea
+
+
+## The approach grid's cell (APPROACH_CELL, aligned with the routing grid) of
+## a projected point.
+func _fine_cell_of(p: Vector2) -> Vector2i:
+	var q := (p - _grid_origin) / APPROACH_CELL
+	return Vector2i(floori(q.x), floori(q.y))
+
+
+func _fine_center(cell: Vector2i) -> Vector2:
+	return _grid_origin + (Vector2(cell) + Vector2(0.5, 0.5)) * APPROACH_CELL
+
+
+## True if an approach cell is all water on the drawn map and in no marina
+## (its corners, its edges' middles and its centre), worked out when first asked.
+func _fine_water(cell: Vector2i) -> bool:
+	if _fine_cells.has(cell):
+		return _fine_cells[cell]
+	var corner := _grid_origin + Vector2(cell) * APPROACH_CELL
+	var water := true
+	for sy in 3:
+		for sx in 3:
+			if _blocked(corner + Vector2(sx, sy) * (APPROACH_CELL / 2.0)):
+				water = false
+				break
+		if not water:
+			break
+	_fine_cells[cell] = water
+	return water
+
+
+## The way from a water point round the coast to the nearest cell of open sea
+## (an ocean cell of the routing grid), as approach cells' centres (projected),
+## by breadth-first search over the approach cells (a corner cut only between
+## two water cells; the first cell counts as water, it's where the point is).
+## [] if none within APPROACH_REACH_DEG.
+func _approach_path(from: Vector2) -> PackedVector2Array:
+	var start := _fine_cell_of(from)
+	var reach := ceili(APPROACH_REACH_DEG / APPROACH_CELL)
+	var parents := {start: start}
+	var queue: Array[Vector2i] = [start]
+	var head := 0
+	var found := Vector2i(-1, -1)
+	while head < queue.size():
+		var cell: Vector2i = queue[head]
+		head += 1
+		if _ocean_cell_at(_fine_center(cell)).x >= 0:
+			found = cell
+			break
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				if dx == 0 and dy == 0:
+					continue
+				var next := cell + Vector2i(dx, dy)
+				if parents.has(next) or absi(next.x - start.x) > reach or absi(next.y - start.y) > reach:
+					continue
+				# Open sea (or a carved course, which may run through a marina's
+				# disc or a river's drawn banks) is the goal whatever its cell holds.
+				if _ocean_cell_at(_fine_center(next)).x >= 0:
+					parents[next] = cell
+					found = next
+					break
+				if not _fine_water(next):
+					continue
+				if dx != 0 and dy != 0 and not (_fine_water(cell + Vector2i(dx, 0)) and _fine_water(cell + Vector2i(0, dy))):
+					continue
+				parents[next] = cell
+				queue.append(next)
+			if found.x >= 0:
+				break
+		if found.x >= 0:
+			break
+	if found.x < 0:
+		return PackedVector2Array()
+	var cells: Array[Vector2i] = []
+	var cell := found
+	while cell != start:
+		cells.append(cell)
+		cell = parents[cell]
+	cells.reverse()
+	var out := PackedVector2Array([from])
+	for c in cells:
+		out.append(_fine_center(c))
+	return out
+
+
+## An approach path with the points a straight line over water can skip dropped
+## (the first point kept, and the last).
+func _straighten_fine(path: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var i := 0
+	while i < path.size() - 1:
+		var j := i + 1
+		while j + 1 < path.size() and _fine_clear(path[i], path[j + 1]):
+			j += 1
+		out.append(path[j])
+		i = j
+	return out
+
+
+## True if the straight line between two projected points runs through water
+## approach cells only.
+func _fine_clear(a: Vector2, b: Vector2) -> bool:
+	var steps := maxi(1, ceili(a.distance_to(b) / (APPROACH_CELL * 0.25)))
+	for s in range(1, steps):
+		if not _fine_water(_fine_cell_of(a.lerp(b, float(s) / steps))):
+			return false
+	return true
+
+
+## A whole lane (lon, lat): the first port's approach (shifted `offset_a`
+## east) from its gate out to its sea gate, the sea route from there (its
+## first point is that sea gate, its last the other's), and the second
+## port's approach back in to its gate (shifted `offset_b`). With no second
+## port (a fishing ground's lane), the sea route's end is the lane's.
+func _with_approaches(a_id: String, offset_a: float, sea: PackedVector2Array, b_id := "", offset_b := 0.0) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p: Vector2 in _approaches[a_id].points:
+		out.append(p + Vector2(offset_a, 0.0))
+	out.append_array(sea.slice(1))
+	if not b_id.is_empty():
+		var back: PackedVector2Array = _approaches[b_id].points
+		for k in range(back.size() - 2, -1, -1):
+			out.append(back[k] + Vector2(offset_b, 0.0))
+	return out
 
 
 # --- Sea lanes -----------------------------------------------------------
@@ -1916,29 +2699,79 @@ func _build_lanes() -> void:
 	var coarse := _build_coarse_graph()
 	var astar := _fine_astar()
 	print("Pathfinding grid ready")
+	var probe_args := OS.get_cmdline_user_args()
+	if "--route-probe" in probe_args:  # (A route between two points, "--route-probe lon,lat,lon,lat": its cells, length and turning points.)
+		var nums := probe_args[probe_args.find("--route-probe") + 1].split(",")
+		var from := Vector2(float(nums[0]), float(nums[1]))
+		var to := Vector2(float(nums[2]), float(nums[3]))
+		var a := _nearest_water(_cell_of(Geo.project(from)))
+		var b := _nearest_water(_cell_of(Geo.project(to)))
+		var cells := _route(coarse, astar, a, b)
+		print("  route probe %s -> %s: cells %s and %s (ocean %d %d), %d route cells" % [from, to, a, b, _ocean[a.y * _cols + a.x], _ocean[b.y * _cols + b.x], cells.size()])
+		var coarse_path := coarse.get_id_path(_fine_piece[a.y * _cols + a.x], _fine_piece[b.y * _cols + b.x])
+		print("  route probe: coarse path %d pieces; start piece %d" % [coarse_path.size(), _fine_piece[a.y * _cols + a.x]])
+		var walk := a
+		for n in 12:  # (The cells north of the start, their pieces and links.)
+			var next := walk + Vector2i(0, 1)
+			var pa := _fine_piece[walk.y * _cols + walk.x]
+			var pb := _fine_piece[next.y * _cols + next.x]
+			print("    %s ocean %d piece %d -> %s ocean %d piece %d: %s" % [walk, _ocean[walk.y * _cols + walk.x], pa, next, _ocean[next.y * _cols + next.x], pb, "same" if pa == pb else ("linked" if pa >= 0 and pb >= 0 and coarse.are_points_connected(pa, pb) else "NOT linked")])
+			walk = next
+		if not cells.is_empty():
+			var points := _lane_points(Geo.unproject(_cell_center(a)), cells, Geo.unproject(_cell_center(b)))
+			var text := []
+			for p in points:
+				text.append("%.2f,%.2f" % [p.x, p.y])
+			print("  route probe: %.0f nm: %s" % [_length_nm(points), " ".join(text)])
+	if "--course-probe" in probe_args and CHANNELS.has(probe_args[probe_args.find("--course-probe") + 1]):  # (The course's cells in the coarse graph.)
+		var course := _to_points(CHANNELS[probe_args[probe_args.find("--course-probe") + 1]])
+		var last_piece := -1
+		for i in range(1, course.size()):
+			var a := Geo.project(course[i - 1])
+			var b := Geo.project(course[i])
+			var steps := maxi(1, ceili(a.distance_to(b) / (GRID_CELL * 0.25)))
+			for s in steps + 1:
+				var cell := _cell_of(a.lerp(b, float(s) / steps))
+				var piece := _fine_piece[cell.y * _cols + cell.x]
+				if piece == last_piece:
+					continue
+				print("  probe cell %s piece %d %s" % [cell, piece, "" if last_piece < 0 else ("linked to %d" % last_piece if coarse.are_points_connected(piece, last_piece) else "NOT LINKED to %d" % last_piece)])
+				last_piece = piece
+		var first := _cell_of(Geo.project(course[0]))
+		var last := _cell_of(Geo.project(course[-1]))
+		var coarse_path := coarse.get_id_path(_fine_piece[first.y * _cols + first.x], _fine_piece[last.y * _cols + last.x])
+		print("  probe: coarse path of %d pieces from %s to %s" % [coarse_path.size(), first, last])
+		for k in range(1, coarse_path.size()):
+			var rep_a := _piece_rep[coarse_path[k - 1]]
+			var rep_b := _piece_rep[coarse_path[k]]
+			var ca := Vector2i(rep_a % _cols, rep_a / _cols)
+			var cb := Vector2i(rep_b % _cols, rep_b / _cols)
+			var hop := astar.get_id_path(ca, cb)
+			print("    hop %s -> %s: clear %s, fine path %d cells" % [ca, cb, _clear_of_land(ca, cb), hop.size()])
+		var routed := _route(coarse, astar, first, last)
+		print("  probe: _route gives %d cells" % routed.size())
 
 	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
 	ports.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.id < b.id)
-	# Each port's starting water cell, at its real longitude and (if it fits in
-	# the grid) 360 degrees east: [[lon offset, cell], ...]
-	var starts := {}
-	for port: Dictionary in ports:
-		var options := []
-		for offset in [0.0, Geo.WORLD_WIDTH]:
-			var p := Geo.project(Vector2(port.lon + offset, port.lat))
-			if p.x < GRID_EAST - 1.0:
-				var cell := _nearest_water(_cell_of(p))
-				if cell.x >= 0:
-					options.append([offset, cell])
-					var snap := Vector2(cell - _cell_of(p)).length()
-					if snap > 12 and offset == 0.0:
-						print("  note: %s is %.0f cells from open water" % [port.id, snap])
-		if options.is_empty():
-			push_error("%s is not near any water" % port.id)
-		starts[port.id] = options
 	if "--check" in OS.get_cmdline_user_args():
 		_print_water_check()
 		return
+	_lay_approaches(ports)
+	# Each port's sea gate (the cell its lanes' routing starts from), at its
+	# real longitude and (if it fits in the grid) 360 degrees east: [[lon
+	# offset, cell, the gate (lon, lat)], ...]
+	var starts := {}
+	for port: Dictionary in ports:
+		var options := []
+		var approach: Dictionary = _approaches[port.id]
+		var gate: Vector2 = approach.points[-1]
+		for offset in [0.0, Geo.WORLD_WIDTH]:
+			var p := Geo.project(gate + Vector2(offset, 0.0))
+			if p.x < GRID_EAST - 1.0 and (approach.cell as Vector2i).x >= 0:
+				options.append([offset, _cell_of(p), gate + Vector2(offset, 0.0)])
+		if options.is_empty():
+			push_error("%s has no sea gate" % port.id)
+		starts[port.id] = options
 
 	var data := SeaLaneData.new()
 	var started := Time.get_ticks_msec()
@@ -1987,21 +2820,27 @@ func _build_lanes() -> void:
 				search_usec += t1 - t0
 				if cells.is_empty():
 					continue
-				var points := _lane_points(Vector2(lon_a, a.lat), cells, Vector2(lon_b, b.lat))
-				points = _splice_canals(points)
+				# Sea gate to sea gate, the canals and straits laid in exactly, the
+				# corners rounded; then each port's approach on its end.
+				var sea := _lane_points(option_a[2], cells, option_b[2])
+				sea = _splice_channels(_splice_canals(sea))
+				sea = _round_corners(sea)
+				var points := _with_approaches(a.id, option_a[0], sea, b.id, option_b[0])
 				shape_usec += Time.get_ticks_usec() - t1
 				var distance := _length_nm(points)
 				if distance < best_distance:
 					best_distance = distance
 					best = points
-		if not best.is_empty():
-			best = _round_corners(best)
-			best_distance = _length_nm(best)
 		if best.is_empty():
-			push_error("No sea route from %s to %s" % [a.id, b.id])
+			var why := []
+			for option: Array in starts[a.id] + starts[b.id]:
+				var cell: Vector2i = option[1]
+				var index := cell.y * _cols + cell.x
+				why.append("%s+%.0f cell %s safe %d ocean %d piece %d" % [option[2], option[0], cell, _safe[index], _ocean[index], _fine_piece[index]])
+			push_error("No sea route from %s to %s (span %.0f): %s" % [a.id, b.id, span, "; ".join(why)])
 		else:
-			# Shift the lane so it starts at the first port's real longitude.
-			var shift: float = a.lon - best[0].x
+			# Shift the lane so it starts at the first port's real longitude (its gate's).
+			var shift: float = (_approaches[a.id].gate as Vector2).x - best[0].x
 			data.keys.append("%s-%s" % [a.id, b.id])
 			data.starts.append(data.points.size())
 			for p in best:
@@ -2019,6 +2858,118 @@ func _build_lanes() -> void:
 	assert(err == OK, "Couldn't save %s" % LANES_OUT)
 	print("Lanes: %d, %d points" % [data.keys.size(), data.points.size()])
 	_print_stats(data)
+	if only.is_empty():
+		_verify_lanes(data)
+
+
+## "--verify-only" (and the end of a full lanes run): every lane against the
+## map as drawn, where it runs over the land (by LandTest.land_runs(), in
+## steps of VERIFY_STEP projected degrees) and through a marina's disc
+## (another port's: a lane's own ports' are its approach's business), with
+## the worst places (0.5-degree bins) and ports listed. The lanes are built
+## never to, but for the stretches laid along a course (CHANNELS) up a
+## river the map hasn't got, and a port whose approach had no way out.
+const VERIFY_STEP := 0.004
+func _verify_lanes(data: SeaLaneData) -> void:
+	var started := Time.get_ticks_msec()
+	if _land_test == null:
+		_build_land_tests(load(MAP_OUT))
+	if _marina_discs.is_empty():
+		_build_marina_discs(JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports)
+	var bins := {}  # 0.5-degree bin (lon, lat) -> [stretches, a lane key]
+	var discs := {}  # port id -> [lanes through its disc, a lane key]
+	var lanes_on_land := 0
+	var lanes_in_discs := 0
+	var stretches := 0
+	var on_land_nm := 0.0
+	var disc_centres := []
+	for disc: Array in _marina_discs:
+		disc_centres.append(disc)
+	for i in data.keys.size():
+		var points := data.points.slice(data.starts[i], data.starts[i + 1])
+		var projected := _project_all(points)
+		var ids := data.keys[i].split("-")
+		var runs: PackedFloat64Array = _land_test.land_runs(projected, VERIFY_STEP, Geo.WORLD_WIDTH)
+		var hit := false
+		for k in range(0, runs.size(), 3):
+			var seg := int(runs[k])
+			var a := projected[seg - 1]
+			var b := projected[seg]
+			var t0 := runs[k + 1]
+			var t1 := runs[k + 2]
+			var middle := a.lerp(b, (t0 + t1) / 2.0)
+			if not (_drawn_land(a.lerp(b, t0)) or _drawn_land(middle) or _drawn_land(a.lerp(b, t1))):
+				continue  # (A lake.)
+			hit = true
+			stretches += 1
+			on_land_nm += Geo.distance_nm(points[seg - 1].lerp(points[seg], t0), points[seg - 1].lerp(points[seg], t1))
+			var at := Geo.unproject(middle)
+			var bin := Vector2i(floori(wrapf(at.x, -180.0, 180.0) * 2.0), floori(at.y * 2.0))
+			var entry: Array = bins.get(bin, [0, data.keys[i]])
+			entry[0] += 1
+			bins[bin] = entry
+		if hit:
+			lanes_on_land += 1
+		# Through another port's marina disc: any segment within its radius.
+		var box := Rect2(projected[0], Vector2.ZERO)
+		for p in projected:
+			box = box.expand(p)
+		var crossed := false
+		for disc: Array in disc_centres:
+			var port_id: String = disc[2]
+			if port_id == ids[0] or port_id == ids[1]:
+				continue
+			var r: float = disc[1]
+			for offset: float in [0.0, Geo.WORLD_WIDTH, -Geo.WORLD_WIDTH]:
+				var c: Vector2 = (disc[0] as Vector2) + Vector2(offset, 0.0)
+				if not box.grow(r).has_point(c):
+					continue
+				var through := false
+				for s in range(1, projected.size()):
+					if c.distance_to(Geometry2D.get_closest_point_to_segment(c, projected[s - 1], projected[s])) <= r:
+						through = true
+						break
+				if through:
+					var entry: Array = discs.get(port_id, [0, data.keys[i]])
+					entry[0] += 1
+					discs[port_id] = entry
+					crossed = true
+					break
+		if crossed:
+			lanes_in_discs += 1
+		if i % 10000 == 0 and i > 0:
+			print("  checked %d / %d lanes (%d s)" % [i, data.keys.size(), (Time.get_ticks_msec() - started) / 1000])
+	print("Checked %d lanes against the drawn map in %d s: %d run over the land (%d stretches, %.0f nm in all), %d through another port's marina disc" % [data.keys.size(), (Time.get_ticks_msec() - started) / 1000, lanes_on_land, stretches, on_land_nm, lanes_in_discs])
+	# The longest ways round: each lane's length over the great-circle distance
+	# between its ports (a strait the grid has shut sends lanes round a continent).
+	var port_list: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
+	var at := {}
+	for port: Dictionary in port_list:
+		at[port.id] = Vector2(float(port.lon), float(port.lat))
+	var detours := []
+	for i in data.keys.size():
+		var ids := data.keys[i].split("-")
+		if ids.size() < 2 or not at.has(ids[0]) or not at.has(ids[1]):
+			continue
+		var straight := Geo.distance_nm(at[ids[0]], at[ids[1]])
+		if straight > 50.0:
+			detours.append([data.distances[i] / straight, data.keys[i], data.distances[i], straight])
+	detours.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	var over := 0
+	for d: Array in detours:
+		if d[0] > 2.5:
+			over += 1
+	print("Detours: %d lanes over 2.5 times the great-circle distance; the worst:" % over)
+	for d: Array in detours.slice(0, 30):
+		print("  %s: %.0f nm, %.1f times the %.0f nm straight" % [d[1], d[2], d[0], d[3]])
+	var worst: Array = bins.keys()
+	worst.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return int(bins[a][0]) > int(bins[b][0]))
+	for bin: Vector2i in worst.slice(0, 25):
+		print("  land at lon %.1f lat %.1f: %d stretches (%s)" % [bin.x * 0.5, bin.y * 0.5, bins[bin][0], bins[bin][1]])
+	var ports: Array = discs.keys()
+	ports.sort_custom(func(a: String, b: String) -> bool: return int(discs[a][0]) > int(discs[b][0]))
+	for port_id: String in ports.slice(0, 25):
+		print("  through %s's marina disc: %d lanes (%s)" % [port_id, discs[port_id][0], discs[port_id][1]])
 
 
 ## The fine pathfinder over the grid (land solid), for short hops the coarse
@@ -2034,11 +2985,11 @@ func _fine_astar() -> AStarGrid2D:
 	for row in _rows:
 		var col := 0
 		while col < _cols:
-			if not _land[row * _cols + col]:
+			if _safe[row * _cols + col]:
 				col += 1
 				continue
 			var run_start := col
-			while col < _cols and _land[row * _cols + col]:
+			while col < _cols and not _safe[row * _cols + col]:
 				col += 1
 			astar.fill_solid_region(Rect2i(run_start, row, col - run_start, 1))
 	return astar
@@ -2052,7 +3003,7 @@ static func _is_arctic_pair(pair: Array) -> bool:
 
 ## Makes the grid north of ARCTIC_LAT count as land (blocked) or water again,
 ## in the coarse graph (its pieces there disabled), the fine pathfinder (its
-## water there solid) and the land checks (_is_land(), _is_near_land()).
+## water there solid) and the land checks (_is_land()).
 func _set_arctic_blocked(coarse: AStar2D, fine: AStarGrid2D, blocked: bool) -> void:
 	if _block_arctic == blocked or _arctic_row >= _rows:
 		_block_arctic = blocked
@@ -2071,11 +3022,11 @@ func _set_arctic_blocked(coarse: AStar2D, fine: AStarGrid2D, blocked: bool) -> v
 		for row in range(_arctic_row, _rows):
 			var col := 0
 			while col < _cols:
-				if not _land[row * _cols + col]:
+				if _safe[row * _cols + col]:
 					col += 1
 					continue
 				var run_start := col
-				while col < _cols and _land[row * _cols + col]:
+				while col < _cols and not _safe[row * _cols + col]:
 					col += 1
 				fine.fill_solid_region(Rect2i(run_start, row, col - run_start, 1))
 	print("  the Arctic is %s" % ("blocked" if blocked else "open"))
@@ -2177,7 +3128,7 @@ func _build_coarse_graph() -> AStar2D:
 			var touches_land := false
 			for fy in range(y0, y1):
 				for fx in range(x0, x1):
-					touches_land = touches_land or _land[fy * _cols + fx] == 1
+					touches_land = touches_land or _safe[fy * _cols + fx] == 0
 			for fy in range(y0, y1):
 				for fx in range(x0, x1):
 					var seed := fy * _cols + fx
@@ -2194,7 +3145,7 @@ func _build_coarse_graph() -> AStar2D:
 						stack.remove_at(stack.size() - 1)
 						var col := index % _cols
 						var row := index / _cols
-						var score := center.distance_to(Vector2(col + 0.5, row + 0.5)) + (100.0 if _near_land[index] else 0.0)
+						var score := center.distance_to(Vector2(col + 0.5, row + 0.5))
 						if score < best_score:
 							best_score = score
 							best = index
@@ -2274,7 +3225,7 @@ func _clear_of_land(a: Vector2i, b: Vector2i) -> bool:
 	var steps := ceili(pa.distance_to(pb) * 2.0)
 	for s in range(1, steps):
 		var p := pa.lerp(pb, float(s) / steps)
-		if _land[floori(p.y) * _cols + floori(p.x)]:
+		if not _safe[floori(p.y) * _cols + floori(p.x)]:
 			return false
 	return true
 
@@ -2349,7 +3300,7 @@ func _lane_points(start: Vector2, cells: Array[Vector2i], end: Vector2) -> Packe
 		var a := points[k - 1]
 		var b := points[k]
 		var pieces := floori(Geo.distance_nm(a, b) / GREAT_CIRCLE_STEP_NM)
-		if pieces >= 2 and _arc_clear(a, b, k == 1, k == points.size() - 1):
+		if pieces >= 2 and _arc_clear(a, b):
 			var previous_lon := a.x
 			for s in range(1, pieces):
 				var p := Geo.great_circle_lerp(a, b, float(s) / pieces)
@@ -2369,18 +3320,17 @@ func _great_circle_shortcuts(points: PackedVector2Array) -> PackedVector2Array:
 	var i := 0
 	while i < points.size() - 1:
 		var j := i + 1
-		while j + 1 < points.size() and _arc_clear(points[i], points[j + 1], i == 0, j + 1 == points.size() - 1):
+		while j + 1 < points.size() and _arc_clear(points[i], points[j + 1]):
 			j += 1
 		out.append(points[j])
 		i = j
 	return out
 
 
-## True if the great circle between two (lon, lat) points stays off the coast,
-## apart from within ARC_PORT_NM of an end that's a port. The arc is followed
-## in ARC_CHECK_NM pieces, each checked cell by cell, so no strip of land
-## narrower than a piece slips through.
-func _arc_clear(a: Vector2, b: Vector2, a_is_port: bool, b_is_port: bool) -> bool:
+## True if the great circle between two (lon, lat) points stays on safe
+## water. The arc is followed in ARC_CHECK_NM pieces, each checked cell by
+## cell, so no strip of land narrower than a piece slips through.
+func _arc_clear(a: Vector2, b: Vector2) -> bool:
 	# Lanes are stored from their first port's longitude, so a lane heading west
 	# across the Pacific runs past -180; check that stretch on the copy of the
 	# world 360 degrees east, which the grid also holds.
@@ -2397,14 +3347,75 @@ func _arc_clear(a: Vector2, b: Vector2, a_is_port: bool, b_is_port: bool) -> boo
 		point.x += roundf((previous.x - point.x) / (Geo.WORLD_WIDTH / GRID_CELL)) * Geo.WORLD_WIDTH / GRID_CELL
 		var steps := maxi(1, ceili(previous.distance_to(point) * 2.0))
 		for k in range(1, steps + 1):
-			var along := (t - 1.0 / pieces + float(k) / steps / pieces) * length
-			if (a_is_port and along < ARC_PORT_NM) or (b_is_port and length - along < ARC_PORT_NM):
-				continue
 			var p := previous.lerp(point, float(k) / steps)
-			if _is_near_land(Vector2i(floori(p.x), floori(p.y))):
+			if _is_land(Vector2i(floori(p.x), floori(p.y))):
 				return false
 		previous = point
 	return true
+
+
+## Lays each strait's course (CHANNELS) into a lane that runs along it (at
+## either east-west copy of the world): the straits are carved through the
+## safe grid one cell wide, so a lane through one runs along its course's
+## cells; here the stretch from the lane's first point within
+## CHANNEL_SNAP_DEG of the course to its last is replaced by the course
+## itself (from the nearest point on it to the one to the nearest to the
+## other), so the ship keeps to the middle of the strait exactly. A lane that
+## only passes near a course's end (its stretch along the course shorter
+## than CHANNEL_SNAP_DEG) is left alone.
+func _splice_channels(points: PackedVector2Array) -> PackedVector2Array:
+	for course: Dictionary in _courses:
+		for offset in [0.0, Geo.WORLD_WIDTH]:
+			var shift := Vector2(offset, 0.0)
+			var bounds: Rect2 = (course.bounds as Rect2)
+			bounds.position += shift
+			var path := PackedVector2Array()
+			for p: Vector2 in course.path:
+				path.append(p + shift)
+			points = _splice_course(points, path, bounds)
+	return points
+
+
+func _splice_course(points: PackedVector2Array, path: PackedVector2Array, bounds: Rect2) -> PackedVector2Array:
+	var projected_path := _project_all(path)
+	var along := PackedFloat64Array([0.0])
+	for k in range(1, projected_path.size()):
+		along.append(along[-1] + projected_path[k - 1].distance_to(projected_path[k]))
+	var first := -1
+	var last := -1
+	var first_near := []  # [how far along the course, the nearest point on it (projected)]
+	var last_near := []
+	for i in points.size():
+		if not bounds.has_point(points[i]):
+			continue
+		var p := Geo.project(points[i])
+		var best := [INF, 0.0, Vector2.ZERO]
+		for k in range(1, projected_path.size()):
+			var q := Geometry2D.get_closest_point_to_segment(p, projected_path[k - 1], projected_path[k])
+			var distance := p.distance_to(q)
+			if distance < best[0]:
+				best = [distance, along[k - 1] + projected_path[k - 1].distance_to(q), q]
+		if best[0] > CHANNEL_SNAP_DEG:
+			continue
+		if first < 0:
+			first = i
+			first_near = best.slice(1)
+		last = i
+		last_near = best.slice(1)
+	if first < 0 or last <= first or absf(float(last_near[0]) - float(first_near[0])) < CHANNEL_SNAP_DEG:
+		return points
+	var out := points.slice(0, first)
+	out.append(Geo.unproject(first_near[1]))
+	var forward: bool = float(last_near[0]) > float(first_near[0])
+	var lo := minf(float(first_near[0]), float(last_near[0]))
+	var hi := maxf(float(first_near[0]), float(last_near[0]))
+	var order := range(path.size()) if forward else range(path.size() - 1, -1, -1)
+	for v: int in order:
+		if along[v] > lo and along[v] < hi:
+			out.append(path[v])
+	out.append(Geo.unproject(last_near[1]))
+	out.append_array(points.slice(last + 1))
+	return out
 
 
 ## Lays each canal's centerline into a lane that crosses it (at either
@@ -2444,757 +3455,6 @@ func _resplice_lanes() -> void:
 	assert(err == OK, "Couldn't save %s" % LANES_OUT)
 	print("Canals laid into %d of %d lanes" % [changed, out.keys.size()])
 	_print_stats(out)
-
-
-## Lays each port's approach channels into the existing lanes, for
-## "--channels-only" (see _lay_channels()).
-func _rechannel_lanes() -> void:
-	var land_rings := _read_land_rings()
-	_build_grid(land_rings)
-	land_rings.clear()
-	var data: SeaLaneData = load(LANES_OUT)
-	var out := _lay_channels(data)
-	var err := ResourceSaver.save(out, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
-	assert(err == OK, "Couldn't save %s" % LANES_OUT)
-	_print_stats(out)
-
-
-## "--clear-land": every lane (the ports', the currents' second ways and the
-## fishing lanes) taken off the land as the map draws it (data/world_map.res,
-## the lakes as water), and its corners rounded. The lanes are routed on a
-## grid of GRID_CELL cells, coarser than the drawn coast, so near land they
-## clipped it; here each stretch over land is bent round it (a point pushed
-## out square to the stretch, the nearer side first, further out till the
-## way round is clear; two points where one won't do), and every corner
-## sharper than MIN_TURN_DEG is rounded with an arc that's clear of the land
-## (TURN_RADIUS_NM, shrunk till it fits), then checked again. Runs last, after
-## the channels, the currents and the fishing lanes (which make lanes anew).
-const LAND_STEP := 0.004  # Projected degrees between samples (a quarter of a mile at the equator).
-const LAND_PORT_NM := 15.0  # Within this of a lane's ends (the ports, on the coast) the land isn't minded: the harbour curves take over there.
-const LAND_PUSHES: Array[float] = [0.01, 0.02, 0.035, 0.05, 0.07, 0.1, 0.14, 0.2, 0.28, 0.4, 0.55, 0.75, 1.0, 1.3]
-const LAND_PUSH_ANGLES: Array[float] = [90.0, -90.0, 60.0, -60.0, 120.0, -120.0, 40.0, -40.0, 140.0, -140.0]  # Off the piece's own way, degrees.
-const LAND_PASSES := 16
-## A long piece (over LAND_SPLIT_NM) with a short stretch of land on it is first
-## cut LAND_SPLIT_MARGIN_NM either side of the stretch, so the way round is
-## found for the short middle piece alone: bending a thousand-mile piece as a
-## whole swung it into other coasts and failed (lanes through Palau's marina).
-const LAND_SPLIT_NM := 80.0
-const LAND_SPLIT_MARGIN_NM := 25.0  # (More than a marina disc, so the cut ends sit outside it.)
-## A lane leaves its port out through its marina's mouth: this far out along
-## the port's facing (dock units of 1/75 degree; the mouth is 19 to 35 out).
-const LAND_MOUTH_UNITS := 24.0
-## A lane whose way on from the mouth turns back sharply goes out to this many
-## mouth distances first (MapView.HARBOUR_APPROACH_OUT, where the approach pose lies).
-const LAND_STANDOFF_MOUTHS := 2.2
-## Every port's marina counts as land for the pass (a lane never crosses another
-## port's harbour): a disc this many dock units across from the port (the
-## biggest marina a port can have, a hub's, radius 21, its jetty and room),
-## at MapView.SHIP_WORLD_ZOOM dock units a degree. Not a canal port's (the
-## canal runs through it), nor a lane's own ports' (LAND_PORT_NM exempts them).
-const MARINA_KEEP_UNITS := 23.5
-const MARINA_DOCK_UNITS_PER_DEG := 88.235
-const FACING_PATH := "res://data/port_facing.json"
-var _mouths := {}  # Port id -> the point just outside its mouth (projected).
-var _marina_discs := []  # [centre (projected), radius, port id] of every marina counted as land.
-
-var _disc_cells := {}  # 1-degree projected cell -> the discs touching it.
-
-## The port whose marina disc a projected point is in, or "".
-func _marina_disc_at(p: Vector2) -> String:
-	var x := wrapf(p.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0)
-	for disc: Array in _disc_cells.get(Vector2i(floori(x), floori(p.y)), []):
-		var c: Vector2 = disc[0]
-		var dx: float = x - c.x
-		dx -= roundf(dx / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
-		if Vector2(dx, p.y - c.y).length() <= float(disc[1]):
-			return str(disc[2])
-	return ""
-
-
-func _sort_discs() -> void:
-	_disc_cells.clear()
-	for disc: Array in _marina_discs:
-		var c: Vector2 = disc[0]
-		var r: float = disc[1]
-		for x in range(floori(c.x - r), floori(c.x + r) + 1):
-			for y in range(floori(c.y - r), floori(c.y + r) + 1):
-				_disc_cells.get_or_add(Vector2i(posmod(x + 180, 360) - 180, y), []).append(disc)
-var _land_test: Object = null
-var _lake_test: Object = null
-var _island_test: Object = null
-var _land_stats := {lanes = 0, mouths = 0, moved = 0, stretches = 0, fixed = 0, pushed = 0, failed = 0, merged = 0, corners = 0, points_added = 0}
-var _land_left_bins := {}
-func _clear_lanes_of_land() -> void:
-	var map: WorldMapData = load(MAP_OUT)
-	var facing: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FACING_PATH))
-	var canal_ports := {}
-	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
-		for id: String in canal.get("ports", []):
-			canal_ports[id] = true
-	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
-	# Every marina as a disc of land (see MARINA_KEEP_UNITS), in the land test and
-	# the lake islands' (a marina on a lake is land there too).
-	var marinas := PackedVector2Array()
-	_marina_discs.clear()
-	for port: Dictionary in ports:
-		if canal_ports.has(port.id):
-			continue
-		var lat := float(port.lat)
-		var centre := Geo.project(Vector2(float(port.lon), lat))
-		var radius := MARINA_KEEP_UNITS / MARINA_DOCK_UNITS_PER_DEG / maxf(cos(deg_to_rad(lat)), 0.05)
-		_marina_discs.append([centre, radius, str(port.id)])
-		for k in 24:
-			marinas.append(centre)
-			marinas.append(centre + Vector2.from_angle(TAU * k / 24.0) * radius)
-			marinas.append(centre + Vector2.from_angle(TAU * (k + 1) / 24.0) * radius)
-	var land := PackedVector2Array(map.land_triangles)
-	land.append_array(marinas)
-	_land_test = ClassDB.instantiate(&"LandTest")
-	_land_test.build(land, 1.0)
-	var lakes := PackedVector2Array()
-	for triangles: PackedVector2Array in map.lake_triangles:
-		lakes.append_array(triangles)
-	_lake_test = ClassDB.instantiate(&"LandTest")
-	_lake_test.build(lakes, 1.0)
-	var islands := PackedVector2Array(map.lake_island_triangles)
-	islands.append_array(marinas)
-	_island_test = ClassDB.instantiate(&"LandTest")
-	_island_test.build(islands, 1.0)
-	_sort_discs()
-	print("Marinas as land: %d discs" % (marinas.size() / 72))
-	if "--land-probe" in OS.get_cmdline_user_args():  # (A look at the land and discs round a point: lon,lat.)
-		var at := OS.get_cmdline_user_args()[OS.get_cmdline_user_args().find("--land-probe") + 1].split(",")
-		var c := Vector2(float(at[0]), float(at[1]))
-		for disc: Array in _marina_discs:
-			if disc[2] == "ROR":
-				print("  ROR disc centre %s radius %.4f; probe at %s; land size %d (+%d marina points); land_test at centre+0.05: %s, island_test: %s" % [disc[0], disc[1], Geo.project(c), land.size(), marinas.size(), _land_test.contains(disc[0] + Vector2(0.05, 0.0)), _island_test.contains(disc[0] + Vector2(0.05, 0.0))])
-				var k := marinas.find(disc[0])
-				print("  first fan triangle: %s %s %s" % [marinas[k], marinas[k + 1], marinas[k + 2]])
-		for d: float in [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 0.9]:
-			var row := []
-			for k in 8:
-				var p := Geo.project(c + Vector2.from_angle(TAU * k / 8.0) * d)
-				row.append("%s%s" % ["L" if _drawn_land(p) else ".", _marina_disc_at(p)])
-			print("  ring %.2f: %s" % [d, " ".join(row)])
-		return
-	var data: SeaLaneData = load(LANES_OUT)
-	# Where each port's lanes leave through its marina's mouth (not a canal port's: its lanes run on into the canal).
-	for port: Dictionary in ports:
-		var entry: Dictionary = facing.get("manual", {}).get(port.id, facing.get("facing", {}).get(port.id, {}))
-		if canal_ports.has(port.id) or not entry.has("bearing"):
-			continue
-		var at := Vector2(float(port.lon), float(port.lat))
-		var bearing := deg_to_rad(float(entry.bearing))
-		var off := Vector2(sin(bearing), cos(bearing)) * LAND_MOUTH_UNITS / 75.0  # (East, north: degrees.)
-		_mouths[port.id] = Geo.project(Vector2(at.x + off.x / maxf(cos(deg_to_rad(at.y)), 0.05), at.y + off.y))
-	var out := SeaLaneData.new()
-	var started := Time.get_ticks_msec()
-	var args := OS.get_cmdline_user_args()
-	var limit := int(args[args.find("--limit") + 1]) if "--limit" in args else data.keys.size()
-	var only := args[args.find("--keys") + 1].split(",") if "--keys" in args else PackedStringArray()  # (Just these lanes, for a look: with --dry, nothing saved.)
-	for i in data.keys.size():
-		var ids := data.keys[i].split("-")
-		var chosen := i < limit and (only.is_empty() or only.has(data.keys[i]))
-		var fixed := _lane_off_land(data.points.slice(data.starts[i], data.starts[i + 1]), ids[0], ids[1]) if chosen else [data.points.slice(data.starts[i], data.starts[i + 1]), false]
-		out.keys.append(data.keys[i])
-		out.starts.append(out.points.size())
-		out.points.append_array(fixed[0])
-		out.distances.append(_length_nm(fixed[0]) if fixed[1] else data.distances[i])
-		if i % 5000 == 0:
-			print("  %d / %d lanes (%d s): %s" % [i, data.keys.size(), (Time.get_ticks_msec() - started) / 1000, _land_stats])
-	out.starts.append(out.points.size())
-	out.variant_keys = data.variant_keys
-	out.variant_months = data.variant_months
-	out.variant_currents = data.variant_currents
-	for i in data.variant_keys.size():
-		var ids := data.variant_keys[i].split("-")
-		var fixed := _lane_off_land(data.variant_points.slice(data.variant_starts[i], data.variant_starts[i + 1]), ids[0], ids[1] if ids.size() > 1 else "")
-		out.variant_starts.append(out.variant_points.size())
-		out.variant_points.append_array(fixed[0])
-		out.variant_distances.append(_length_nm(fixed[0]) if fixed[1] else data.variant_distances[i])
-	out.variant_starts.append(out.variant_points.size())
-	if not "--dry" in args:
-		var err := ResourceSaver.save(out, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
-		assert(err == OK, "Couldn't save %s" % LANES_OUT)
-	print("Lanes off the land: %s (%d lanes, %d points -> %d)" % [_land_stats, out.keys.size(), data.points.size(), out.points.size()])
-	var bins: Array = _land_left_bins.keys()
-	bins.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return int(_land_left_bins[a]) > int(_land_left_bins[b]))
-	for bin: Vector2i in bins.slice(0, 25):
-		print("  land left at lon %.1f lat %.1f: %d stretches" % [bin.x * 0.2, bin.y * 0.2, _land_left_bins[bin]])
-	_print_stats(out)
-
-
-## True where the drawn map has land (the lakes water, their islands land).
-func _drawn_land(p: Vector2) -> bool:
-	var q := Vector2(wrapf(p.x, -Geo.WORLD_WIDTH / 2.0, Geo.WORLD_WIDTH / 2.0), p.y)
-	if not _land_test.contains(q):
-		return false
-	if not _marina_disc_at(q).is_empty():
-		return true  # (A marina: land whatever the lakes say; Palau's lagoon is drawn as a lake.)
-	return not _lake_test.contains(q) or _island_test.contains(q)
-
-
-## The stretches of a projected polyline over the drawn land: [[piece, t0, t1], ...]
-## (see LandTest.land_runs(); a stretch that's only over a lake is not one).
-func _land_stretches(line: PackedVector2Array) -> Array:
-	var runs: PackedFloat64Array = _land_test.land_runs(line, LAND_STEP, Geo.WORLD_WIDTH)
-	var out := []
-	for k in range(0, runs.size(), 3):
-		var i := int(runs[k])
-		var t0 := runs[k + 1]
-		var t1 := runs[k + 2]
-		var a := line[i - 1]
-		var b := line[i]
-		if _drawn_land(a.lerp(b, t0)) or _drawn_land(a.lerp(b, t1)) or _drawn_land(a.lerp(b, (t0 + t1) / 2.0)):
-			out.append([i, t0, t1])
-	return out
-
-
-## A lane (lon, lat) taken off the land and its corners rounded: [points, changed].
-## Land right by its ends (LAND_PORT_NM: the port's own coast) and along a
-## canal is left be. A piece over land in two places is first cut at the
-## water between them, so each stretch gets its own way round.
-func _lane_off_land(lane: PackedVector2Array, from_port := "", to_port := "") -> Array:
-	_land_stats.lanes += 1
-	for key in _land_stats.keys():
-		if str(key).begins_with("merged_"):
-			_land_stats.erase(key)
-	var line := _project_all(lane)
-	var changed := false
-	# Out through the mouth first (and in through it at the other end): the
-	# point just outside each port's mouth put in after its port point (the
-	# routed lane went straight for the nearest water cell, over whatever lay
-	# between: the "first chunk" the user saw), unless the lane's already out that way.
-	for end in 2:
-		var port := from_port if end == 0 else to_port
-		if not _mouths.has(port) or line.size() < 2:
-			continue
-		var mouth: Vector2 = _mouths[port]
-		var root := line[0] if end == 0 else line[-1]
-		var next := line[1] if end == 0 else line[-2]
-		mouth.x += roundf((root.x - mouth.x) / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
-		var out_way := (mouth - root).normalized()
-		if out_way.dot((next - root).normalized()) > 0.94:
-			continue  # (Within 20 degrees of that way already.)
-		# Its way on from the mouth would turn more than 75 degrees (a port with
-		# the sea on one side and the lane going the other): out to a stand-off
-		# further along the facing first, so the lane goes out to sea and round
-		# the land rather than through the marina; the passes below take the
-		# rest of it off the land.
-		var via := [mouth]
-		if out_way.dot((next - mouth).normalized()) < 0.26:
-			via.append(root + (mouth - root) * LAND_STANDOFF_MOUTHS)
-		if end == 0:
-			for k in via.size():
-				line.insert(1 + k, via[k])
-		else:
-			for k in via.size():
-				line.insert(line.size() - 1, via[k])
-		changed = true
-		_land_stats.mouths += 1
-	for pass_ in LAND_PASSES:
-		# A lane point itself on the land (a water cell's middle that the drawn
-		# coast runs over): moved to the nearest water. Not the ends (the ports).
-		for i in range(line.size() - 2, 0, -1):
-			if _drawn_land(line[i]) and not _near_canal(Geo.unproject(line[i])):
-				# A point in another port's marina (a routed waypoint at that port): dropped,
-				# so the lane runs straight past and the stretch through the disc is gone round.
-				var disc := _marina_disc_at(line[i])
-				if not disc.is_empty() and disc != from_port and disc != to_port and line.size() > 2:
-					line.remove_at(i)
-					changed = true
-					_land_stats.moved += 1
-					continue
-				var moved := _nearest_drawn_water(line[i])
-				if moved != line[i]:
-					line[i] = moved
-					changed = true
-					_land_stats.moved += 1
-		var stretches := _minded(line, _land_stretches(line))
-		if stretches.is_empty():
-			break
-		if "--why" in OS.get_cmdline_user_args() and pass_ == 0:
-			for stretch: Array in stretches.slice(0, 12):
-				var i: int = stretch[0]
-				print("    stretch piece %d of %d t %.2f-%.2f at %s (piece %.1f nm)" % [i, line.size(), stretch[1], stretch[2], Geo.unproject(line[i - 1].lerp(line[i], (float(stretch[1]) + float(stretch[2])) / 2.0)), Geo.distance_nm(Geo.unproject(line[i - 1]), Geo.unproject(line[i]))])
-		var split := false
-		var by_piece := {}
-		for stretch: Array in stretches:
-			by_piece.get_or_add(int(stretch[0]), []).append(stretch)
-		var pieces: Array = by_piece.keys()
-		pieces.sort()
-		pieces.reverse()  # (From the end, so the pieces before keep their places.)
-		for i: int in pieces:
-			var runs: Array = by_piece[i]
-			var a := line[i - 1]
-			var b := line[i]
-			if runs.size() > 1:
-				runs.sort_custom(func(x: Array, y: Array) -> bool: return float(x[1]) < float(y[1]))
-				for k in range(runs.size() - 1, 0, -1):  # (The water between each run and the next: a new point.)
-					line.insert(i, a.lerp(b, (float(runs[k - 1][2]) + float(runs[k][1])) / 2.0))
-				split = true
-				changed = true
-				continue
-			var piece_nm := Geo.distance_nm(Geo.unproject(a), Geo.unproject(b))
-			if piece_nm > LAND_SPLIT_NM:
-				var m := LAND_SPLIT_MARGIN_NM / piece_nm
-				var ta := maxf(float(runs[0][1]) - m, 0.0)
-				var tb := minf(float(runs[0][2]) + m, 1.0)
-				if ta > 0.02 or tb < 0.98:
-					if tb < 0.98:
-						line.insert(i, a.lerp(b, tb))
-					if ta > 0.02:
-						line.insert(i, a.lerp(b, ta))
-					split = true
-					changed = true
-					continue
-			_land_stats.stretches += 1
-			var detour := _detour(a, b, float(runs[0][1]), float(runs[0][2]))
-			if detour.is_empty():
-				# No clean way round from here: the point on the water that leaves
-				# the least land, put in all the same, and the rest gone round in
-				# the passes to come (each stretch shorter, till it's off).
-				detour = _best_push(a, b, float(runs[0][1]), float(runs[0][2]))
-				if detour.is_empty():
-					# Stuck: a short piece whose ends sit on the shore (the routed lane's own
-					# points on an island's cells, Palau's). Its two ends are dropped, so the
-					# pieces either side join into one long piece, cut again 25 nm clear of
-					# the land and gone round from open water in the passes to come.
-					if i - 1 > 1 and i < line.size() - 2 and _land_stats.get("merged_" + str(i), 0) < 2:
-						_land_stats["merged_" + str(i)] = int(_land_stats.get("merged_" + str(i), 0)) + 1
-						line.remove_at(i)
-						line.remove_at(i - 1)
-						changed = true
-						split = true
-						_land_stats.merged += 1
-					continue
-				_land_stats.pushed += 1
-			else:
-				_land_stats.fixed += 1
-			_land_stats.points_added += detour.size()
-			for k in detour.size():
-				line.insert(i + k, detour[k])
-			changed = true
-		if split:
-			continue  # (Looked at again with the pieces cut.)
-	var left := _minded(line, _land_stretches(line))
-	_land_stats.failed += left.size()
-	for stretch: Array in left:  # (Where the land that couldn't be gone round lies, by fifths of a degree.)
-		var i: int = stretch[0]
-		var at := Geo.unproject(line[i - 1].lerp(line[i], (float(stretch[1]) + float(stretch[2])) / 2.0))
-		var bin := Vector2i(floori(wrapf(at.x, -180.0, 180.0) / 0.2), floori(at.y / 0.2))
-		_land_left_bins[bin] = int(_land_left_bins.get(bin, 0)) + 1
-	if "--why" in OS.get_cmdline_user_args():
-		for stretch: Array in left.slice(0, 6):
-			var i: int = stretch[0]
-			print("    LEFT %s-%s piece %d of %d t %.2f-%.2f at %s (piece %.1f nm)" % [from_port, to_port, i, line.size(), stretch[1], stretch[2], Geo.unproject(line[i - 1].lerp(line[i], (float(stretch[1]) + float(stretch[2])) / 2.0)), Geo.distance_nm(Geo.unproject(line[i - 1]), Geo.unproject(line[i]))])
-	line = _round_lane_corners(line)
-	var out := PackedVector2Array()
-	for p in line:
-		var lon_lat := Geo.unproject(p)
-		out.append(Vector2(snappedf(lon_lat.x, 0.0001), snappedf(lon_lat.y, 0.0001)))
-	return [out, changed or out.size() != lane.size()]
-
-
-## The stretches over land that are minded: not within LAND_PORT_NM of either
-## end of the lane (the port's own coast), nor along a canal.
-func _minded(line: PackedVector2Array, stretches: Array) -> Array:
-	var out := []
-	if stretches.is_empty():
-		return out
-	var along := PackedFloat64Array([0.0])  # Nm to each point from the start.
-	for k in range(1, line.size()):
-		along.append(along[k - 1] + Geo.distance_nm(Geo.unproject(line[k - 1]), Geo.unproject(line[k])))
-	var total: float = along[-1]
-	for stretch: Array in stretches:
-		var i: int = stretch[0]
-		var piece := along[i] - along[i - 1]
-		var from := along[i - 1] + piece * float(stretch[1])
-		var to := along[i - 1] + piece * float(stretch[2])
-		if to < LAND_PORT_NM or from > total - LAND_PORT_NM:
-			continue
-		if (from < LAND_PORT_NM and to < 2.0 * LAND_PORT_NM) or (to > total - LAND_PORT_NM and from > total - 2.0 * LAND_PORT_NM):
-			continue  # (The port's own coast running on a little: the harbour curve sails that, not the lane.)
-		var middle := line[i - 1].lerp(line[i], (float(stretch[1]) + float(stretch[2])) / 2.0)
-		if _near_canal(Geo.unproject(middle)):
-			continue
-		out.append(stretch)
-	return out
-
-
-## True within LAND_CANAL_DEG of a canal's path (lon, lat): its approaches and
-## the canal itself run through the land as drawn.
-const LAND_CANAL_DEG := 0.06
-const LAND_DREDGE_DEG := 0.12  # (The dredged passages: the St Lawrence above Quebec is a river the drawn land hasn't got.)
-var _dredge_courses := []  # [[points (lon, lat), bounds], ...]
-func _near_canal(p: Vector2) -> bool:
-	for canal: Dictionary in _canals:
-		for offset in [0.0, Geo.WORLD_WIDTH, -Geo.WORLD_WIDTH]:
-			var q := p - Vector2(offset, 0.0)
-			if not (canal.bounds as Rect2).grow(LAND_CANAL_DEG).has_point(q):
-				continue
-			var path: PackedVector2Array = canal.path
-			for k in range(1, path.size()):
-				if q.distance_to(Geometry2D.get_closest_point_to_segment(q, path[k - 1], path[k])) < LAND_CANAL_DEG:
-					return true
-	if _dredge_courses.is_empty():
-		for dredge: Array in DREDGES:
-			var course := _to_points(dredge[1])
-			var bounds := Rect2(course[0], Vector2.ZERO)
-			for c in course:
-				bounds = bounds.expand(c)
-			_dredge_courses.append([course, bounds.grow(LAND_DREDGE_DEG)])
-	for course: Array in _dredge_courses:
-		if not (course[1] as Rect2).has_point(p):
-			continue
-		var path: PackedVector2Array = course[0]
-		for k in range(1, path.size()):
-			if p.distance_to(Geometry2D.get_closest_point_to_segment(p, path[k - 1], path[k])) < LAND_DREDGE_DEG:
-				return true
-	return false
-
-
-## The nearest point on the water to a projected point on the land (rings
-## of 16 directions, out to the furthest push), or the point itself if none.
-func _nearest_drawn_water(p: Vector2) -> Vector2:
-	for d: float in LAND_PUSHES:
-		for k in 16:
-			var w := p + Vector2.from_angle(TAU * k / 16.0) * d
-			if not _drawn_land(w):
-				return w
-	return p
-
-
-## The way round the land between a and b (projected): one point pushed out
-## square to the piece from the middle of the land, the nearer side first,
-## further and further out; or two points where one won't do. [] if none.
-func _detour(a: Vector2, b: Vector2, t0: float, t1: float) -> PackedVector2Array:
-	var along := (b - a).normalized()
-	var across := along.orthogonal()
-	var middle := a.lerp(b, (t0 + t1) / 2.0)
-	for d: float in LAND_PUSHES:
-		for angle: float in LAND_PUSH_ANGLES:
-			var w := middle + along.rotated(deg_to_rad(angle)) * d
-			if not _drawn_land(w) and _minded_free(PackedVector2Array([a, w, b]), t0, t1):
-				return PackedVector2Array([w])
-	var from := a.lerp(b, maxf(t0 - 0.1, 0.0))
-	var to := a.lerp(b, minf(t1 + 0.1, 1.0))
-	for d: float in LAND_PUSHES:
-		for sign: float in [1.0, -1.0]:
-			var w1 := from + across * sign * d
-			var w2 := to + across * sign * d
-			if not _drawn_land(w1) and not _drawn_land(w2) and _minded_free(PackedVector2Array([a, w1, w2, b]), t0, t1):
-				return PackedVector2Array([w1, w2])
-			# Or the two set wider apart, round a longer coast.
-			var w3 := a.lerp(b, maxf(t0 - 0.3, 0.0)) + across * sign * d
-			var w4 := a.lerp(b, minf(t1 + 0.3, 1.0)) + across * sign * d
-			if not _drawn_land(w3) and not _drawn_land(w4) and _minded_free(PackedVector2Array([a, w3, w4, b]), t0, t1):
-				return PackedVector2Array([w3, w4])
-	return PackedVector2Array()
-
-
-## Where no way round is clear: the point on the water, pushed out square to
-## the piece from the land's middle (either side, out to the furthest push),
-## that leaves the least land along a -> w -> b. [] if none is on the water.
-func _best_push(a: Vector2, b: Vector2, t0: float, t1: float) -> PackedVector2Array:
-	var along := (b - a).normalized()
-	var across := along.orthogonal()
-	var middle := a.lerp(b, (t0 + t1) / 2.0)
-	var best := PackedVector2Array()
-	var least := INF
-	for d: float in LAND_PUSHES:
-		for sign: float in [1.0, -1.0]:
-			var w := middle + across * sign * d
-			if _drawn_land(w):
-				continue
-			var way := PackedVector2Array([a, w, b])
-			var land := 0.0
-			for stretch: Array in _land_stretches(way):
-				var i: int = stretch[0]
-				land += (float(stretch[2]) - float(stretch[1])) * way[i - 1].distance_to(way[i])
-			if land < least:
-				least = land
-				best = PackedVector2Array([w])
-	var before := (t1 - t0) * a.distance_to(b)
-	return best if least < before * 0.9 else PackedVector2Array()
-
-
-## True if a way round (a short projected polyline) is clear of the land, but
-## for land right at its ends that the piece had anyway (a lane end on the
-## coast, or a piece cut at the water between two stretches whose far ends
-## still touch): only the run that's being gone round must be gone.
-func _minded_free(way: PackedVector2Array, t0: float, t1: float) -> bool:
-	for stretch: Array in _land_stretches(way):
-		var i: int = stretch[0]
-		if i == 1 and float(stretch[1]) <= 0.0 and t0 <= 0.0 and float(stretch[2]) < 0.03:
-			continue  # (The start point itself on the land, as before.)
-		if i == way.size() - 1 and float(stretch[2]) >= 1.0 and t1 >= 1.0 and float(stretch[1]) > 0.97:
-			continue  # (And the end point.)
-		return false
-	return true
-
-
-## A projected polyline with every corner sharper than LAND_ROUND_TURN_DEG
-## within LAND_ROUND_NM of either end (where the ships are watched coming and
-## going; rounding every corner of every lane trebled the lanes' points)
-## rounded by an arc that keeps off the drawn land (TURN_RADIUS_NM, halved till it fits).
-const LAND_ROUND_TURN_DEG := 12.0
-const LAND_ROUND_NM := 300.0
-func _round_lane_corners(line: PackedVector2Array) -> PackedVector2Array:
-	var out := PackedVector2Array()
-	var n := line.size()
-	var along := PackedFloat64Array([0.0])
-	for k in range(1, n):
-		along.append(along[k - 1] + Geo.distance_nm(Geo.unproject(line[k - 1]), Geo.unproject(line[k])))
-	var total: float = along[-1]
-	for i in n:
-		if i == 0 or i == n - 1 or (along[i] > LAND_ROUND_NM and total - along[i] > LAND_ROUND_NM):
-			out.append(line[i])
-			continue
-		var leg_in := line[i] - line[i - 1]
-		var leg_out := line[i + 1] - line[i]
-		if leg_in.length() < 1e-6 or leg_out.length() < 1e-6:
-			out.append(line[i])
-			continue
-		var turn := leg_in.angle_to(leg_out)
-		if absf(turn) < deg_to_rad(LAND_ROUND_TURN_DEG) or absf(turn) > PI - 0.01:
-			out.append(line[i])
-			continue
-		var nm_per_unit := 60.0 * maxf(cos(deg_to_rad(Geo.unproject(line[i]).y)), 0.05)
-		var tangent := minf(TURN_RADIUS_NM / nm_per_unit * tan(absf(turn) / 2.0), minf(leg_in.length(), leg_out.length()) * 0.48)
-		var arc := PackedVector2Array()
-		for attempt in CORNER_TRIES:
-			var tried := _arc(line[i], leg_in.normalized(), leg_out.normalized(), tangent, turn)
-			if _land_stretches(tried).is_empty():
-				arc = tried
-				break
-			tangent *= 0.5
-		if arc.is_empty():
-			out.append(line[i])
-		else:
-			_land_stats.corners += 1
-			for p in arc:
-				if out.is_empty() or p.distance_to(out[-1]) > 1e-6:
-					out.append(p)
-	return out
-
-
-## Every port's lanes come in to it along a few shared approach channels
-## (like a real port's traffic separation scheme) rather than each on its own
-## way: its lanes' ends are gathered by the bearing they come in from (those
-## within CHANNEL_SPREAD_DEG of each other together), and each group's last
-## CHANNEL_NM nm are made one and the same, the way of the lane nearest the
-## middle of the group; the rest leave their own way CHANNEL_JOIN_NM out and
-## join the channel's outer end straight across (only where that join is
-## clear of the coast; else the lane keeps its own way in). So ships bound
-## for a port, from wherever, come in by one of a few known ways, and the
-## water between the channels is quiet (for anchorages, and for keeping
-## ships clear of each other). Lanes shorter than CHANNEL_MIN_LANE_NM, and
-## the ends of lanes at ports on a canal or through one, keep their own ways.
-func _lay_channels(data: SeaLaneData) -> SeaLaneData:
-	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
-	var canal_ports := {}
-	for canal: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(CANALS_PATH)).canals:
-		for id: String in canal.get("ports", []):
-			canal_ports[id] = true
-	var lanes: Array[PackedVector2Array] = []
-	for i in data.keys.size():
-		lanes.append(data.points.slice(data.starts[i], data.starts[i + 1]))
-	# Each port's lane ends: port id -> [[lane index, end (0 at the first port, 1 at the second)], ...].
-	var ends := {}
-	for i in data.keys.size():
-		var ids := data.keys[i].split("-")
-		for end in 2:
-			var port: String = ids[end]
-			if not ends.has(port):
-				ends[port] = []
-			ends[port].append([i, end])
-	var changed := {}
-	var refused := 0
-	var kept_short := 0
-	var channel_counts := []
-	for port: Dictionary in ports:
-		var id: String = port.id
-		if canal_ports.has(id) or not ends.has(id):
-			continue
-		# Where each of its lanes comes in: [bearing at CHANNEL_NM out, lane, end].
-		var entries := []
-		for entry: Array in ends[id]:
-			var lane: PackedVector2Array = lanes[entry[0]]
-			if data.distances[entry[0]] < CHANNEL_MIN_LANE_NM:
-				kept_short += 1
-				continue
-			var inner := _inner_point(lane, entry[1], CHANNEL_JOIN_NM)
-			if inner.is_empty():
-				continue
-			var on_canal := false
-			var root: Vector2 = lane[0] if entry[1] == 0 else lane[-1]
-			for k in _inner_range(lane, entry[1], int(inner[1])):
-				if _on_canal(lane[k]):
-					on_canal = true
-					break
-			if on_canal:
-				continue
-			var at: Vector2 = _inner_point(lane, entry[1], CHANNEL_NM)[0]
-			var bearing := rad_to_deg(_local(root, at).angle())
-			entries.append([bearing, entry[0], entry[1]])
-		if entries.size() < 2:
-			continue
-		var groups := _bearing_groups(entries, CHANNEL_SPREAD_DEG)
-		channel_counts.append(groups.size())
-		for group: Array in groups:
-			if group.size() < 2:
-				continue
-			# The channel: the way in of the lane nearest the group's middle.
-			var middle := _mean_bearing(group)
-			group.sort_custom(func(a: Array, b: Array) -> bool: return absf(wrapf(a[0] - middle, -180.0, 180.0)) < absf(wrapf(b[0] - middle, -180.0, 180.0)))
-			var lead: Array = group[0]
-			var lead_lane: PackedVector2Array = lanes[lead[1]]
-			var lead_inner := _inner_point(lead_lane, lead[2], CHANNEL_NM)
-			var channel := PackedVector2Array([lead_inner[0]])  # From its outer end in to the port.
-			for k in _inner_range(lead_lane, lead[2], int(lead_inner[1])):
-				channel.append(lead_lane[k])
-			var lead_root: Vector2 = lead_lane[0] if lead[2] == 0 else lead_lane[-1]
-			for member: Array in group.slice(1):
-				var lane: PackedVector2Array = lanes[member[1]]
-				var end: int = member[2]
-				var join := _inner_point(lane, end, CHANNEL_JOIN_NM)
-				var root: Vector2 = lane[0] if end == 0 else lane[-1]
-				# The channel's points, on this lane's copy of the world.
-				var shift := roundf((root.x - lead_root.x) / Geo.WORLD_WIDTH) * Geo.WORLD_WIDTH
-				var way := PackedVector2Array()
-				for p in channel:
-					way.append(Vector2(p.x + shift, p.y))
-				way[-1] = root  # (The same port, at this lane's longitude.)
-				if not _arc_clear(join[0], way[0], false, false):
-					refused += 1
-					continue
-				# The lane's own way out to the join, straight to the channel's
-				# outer end, then the channel in; the two new corners rounded.
-				var outer := PackedVector2Array()
-				var corners := []
-				if end == 1:
-					for k in range(0, int(join[1]) + 1):
-						outer.append(lane[k])
-					corners = [outer.size(), outer.size() + 1]
-					outer.append(join[0])
-					outer.append_array(way)
-				else:
-					var back := way.duplicate()
-					back.reverse()  # Port -> channel's outer end.
-					outer.append_array(back)
-					corners = [outer.size() - 1, outer.size()]
-					outer.append(join[0])
-					for k in range(int(join[1]), lane.size()):
-						outer.append(lane[k])
-				lanes[member[1]] = _round_joins(outer, corners)
-				changed[member[1]] = true
-	var out := SeaLaneData.new()
-	for i in data.keys.size():
-		out.keys.append(data.keys[i])
-		out.starts.append(out.points.size())
-		for p in lanes[i]:
-			out.points.append(Vector2(snappedf(p.x, 0.0001), snappedf(p.y, 0.0001)))
-		out.distances.append(_length_nm(lanes[i]) if changed.has(i) else data.distances[i])
-	out.starts.append(out.points.size())
-	var most := 0
-	var total := 0
-	for n: int in channel_counts:
-		most = maxi(most, n)
-		total += n
-	print("Approach channels laid into %d lane ends of %d lanes: %d ports with channels (%.1f each, at most %d); %d joins refused for the coast, %d lane ends of short lanes left alone" % [changed.size(), data.keys.size(), channel_counts.size(), float(total) / maxi(channel_counts.size(), 1), most, refused, kept_short])
-	return out
-
-
-## Where a lane is `nm` along it from one of its ends (0: its first point, 1:
-## its last): [the point, the index of the first lane point further out
-## than it from that end], or [] if the lane's too short.
-func _inner_point(lane: PackedVector2Array, end: int, nm: float) -> Array:
-	var along := 0.0
-	var n := lane.size()
-	for step in range(1, n):
-		var i := step if end == 0 else n - 1 - step
-		var previous := i - 1 if end == 0 else i + 1
-		var piece := Geo.distance_nm(lane[previous], lane[i])
-		if along + piece >= nm:
-			var t := (nm - along) / maxf(piece, 0.0001)
-			return [lane[previous].lerp(lane[i], t), i]
-		along += piece
-	return []
-
-
-## The indices of a lane's points from one end (0: its first point, 1: its
-## last) in to `outer` (exclusive), outer end first.
-static func _inner_range(lane: PackedVector2Array, end: int, outer: int) -> Array:
-	var indices := []
-	if end == 0:
-		for k in range(outer - 1, -1, -1):
-			indices.append(k)
-	else:
-		for k in range(outer + 1, lane.size()):
-			indices.append(k)
-	return indices
-
-
-## A (lon, lat) point as east and north nm of a root point.
-static func _local(root: Vector2, point: Vector2) -> Vector2:
-	return Vector2(wrapf(point.x - root.x, -180.0, 180.0) * 60.0 * maxf(cos(deg_to_rad(root.y)), 0.05), (point.y - root.y) * 60.0)
-
-
-## Lane ends ([bearing, ...]) gathered into groups no wider than `spread`
-## degrees of bearing: cut at the widest gaps round the circle, then any
-## group still too wide cut into equal slices.
-static func _bearing_groups(entries: Array, spread: float) -> Array:
-	entries.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
-	var n := entries.size()
-	# Start after the widest gap round the circle.
-	var widest := -1.0
-	var first := 0
-	for i in n:
-		var gap := wrapf(entries[(i + 1) % n][0] - entries[i][0], 0.0, 360.0) if n > 1 else 360.0
-		if gap > widest:
-			widest = gap
-			first = (i + 1) % n
-	var groups := []
-	var group := []
-	for k in n:
-		var entry: Array = entries[(first + k) % n]
-		if group.is_empty() or wrapf(entry[0] - group[0][0], 0.0, 360.0) <= spread:
-			group.append(entry)
-		else:
-			groups.append(group)
-			group = [entry]
-	if not group.is_empty():
-		groups.append(group)
-	return groups
-
-
-## The middle bearing of a group of lane ends.
-static func _mean_bearing(group: Array) -> float:
-	var sum := Vector2.ZERO
-	for entry: Array in group:
-		sum += Vector2.from_angle(deg_to_rad(entry[0]))
-	return rad_to_deg(sum.angle()) if sum.length() > 0.001 else float(group[0][0])
-
-
-## Rounds the new corners (`corners`: their indices) where a lane joins its
-## channel (see _lay_channels()): at the join point and at the channel's outer end.
-func _round_joins(points: PackedVector2Array, corners: Array) -> PackedVector2Array:
-	var projected := _project_all(points)
-	var out := PackedVector2Array()
-	var n := points.size()
-	for i in n:
-		var arc := PackedVector2Array()
-		if i in corners and i > 0 and i < n - 1:
-			arc = _corner_arc(projected, i)
-		if arc.is_empty():
-			out.append(points[i])
-		else:
-			for p in arc:
-				var lon_lat := Geo.unproject(p)
-				if out.is_empty() or lon_lat.distance_to(out[-1]) > 0.001:
-					out.append(lon_lat)
-	return out
 
 
 ## The grid is too coarse to follow a canal (lanes can slip through lakes
@@ -3323,10 +3583,9 @@ func _corner_arc(projected: PackedVector2Array, i: int) -> PackedVector2Array:
 	# Near the map's scale there, a projected degree is 60 nm x cos(latitude).
 	var nm_per_unit := 60.0 * cos(deg_to_rad(Geo.unproject(b).y))
 	var tangent := minf(TURN_RADIUS_NM / nm_per_unit * tan(absf(turn) / 2.0), minf(leg_in.length(), leg_out.length()) * 0.48)
-	var port_end := projected[0] if i == 1 else (projected[-1] if i == projected.size() - 2 else Vector2.INF)
 	for attempt in CORNER_TRIES:
 		var arc := _arc(b, leg_in.normalized(), leg_out.normalized(), tangent, turn)
-		if _projected_on_water(arc, port_end):
+		if _projected_on_water(arc):
 			return arc
 		tangent *= 0.5
 	return PackedVector2Array()
@@ -3348,20 +3607,14 @@ static func _arc(b: Vector2, u1: Vector2, u2: Vector2, tangent: float, turn: flo
 	return out
 
 
-## True if a projected polyline crosses no land, allowing land within a few
-## cells of a port end (ports sit on the shore).
-func _projected_on_water(line: PackedVector2Array, port_end: Vector2) -> bool:
-	var port := Vector2.INF
-	if port_end != Vector2.INF:
-		port = _projected_grid_point(port_end)
+## True if a projected polyline keeps to safe water.
+func _projected_on_water(line: PackedVector2Array) -> bool:
 	var previous := _projected_grid_point(line[0])
 	for k in line.size():
 		var point := _projected_grid_point(line[k])
 		var steps := maxi(1, ceili(previous.distance_to(point) * 2.0))
 		for s in steps + 1:
 			var p := previous.lerp(point, float(s) / steps)
-			if port != Vector2.INF and p.distance_to(port) < 3.0:
-				continue
 			if _is_land(Vector2i(floori(p.x), floori(p.y))):
 				return false
 		previous = point
@@ -3375,32 +3628,29 @@ func _projected_grid_point(p: Vector2) -> Vector2:
 	return (p - _grid_origin) / GRID_CELL
 
 
-## True if a (lon, lat) lane point is on a canal's centerline (at either
-## east-west copy of the world).
+## True if a (lon, lat) lane point is on a canal's centerline or a strait's
+## course (at either east-west copy of the world): laid in exactly, never rounded.
 func _on_canal(p: Vector2) -> bool:
-	for canal: Dictionary in _canals:
+	for course: Dictionary in _canals + _courses:
 		for offset in [0.0, Geo.WORLD_WIDTH]:
 			var q := p - Vector2(offset, 0.0)
-			if not canal.bounds.has_point(q):
+			if not course.bounds.has_point(q):
 				continue
-			var path: PackedVector2Array = canal.path
+			var path: PackedVector2Array = course.path
 			for k in range(1, path.size()):
 				if q.distance_to(Geometry2D.get_closest_point_to_segment(q, path[k - 1], path[k])) < 0.001:
 					return true
 	return false
 
 
-## True if the straight (projected) line between two cells stays off the
-## coast, apart from right next to either end.
+## True if the straight (projected) line between two cells keeps to safe water.
 func _clear_line(a: Vector2i, b: Vector2i) -> bool:
 	var pa := Vector2(a) + Vector2(0.5, 0.5)
 	var pb := Vector2(b) + Vector2(0.5, 0.5)
 	var steps := ceili(pa.distance_to(pb) * 2.0)
 	for s in range(1, steps):
 		var p := pa.lerp(pb, float(s) / steps)
-		var cell := Vector2i(floori(p.x), floori(p.y))
-		var near_end := p.distance_to(pa) < 2.5 or p.distance_to(pb) < 2.5
-		if _is_land(cell) or (_is_near_land(cell) and not near_end):
+		if _is_land(Vector2i(floori(p.x), floori(p.y))):
 			return false
 	return true
 
@@ -3450,7 +3700,7 @@ func _print_water_check() -> void:
 	for spot_name: String in spots:
 		var cell := _cell_of(Geo.project(spots[spot_name]))
 		var index := cell.y * _cols + cell.x
-		var state := "outside grid" if not _in_grid(cell) else ("LAND" if _land[index] else ("ocean" if _ocean[index] else "water, NOT connected"))
+		var state := "outside grid" if not _in_grid(cell) else ("not safe" if not _safe[index] else ("ocean" if _ocean[index] else "safe, NOT connected"))
 		print("  %s: %s" % [spot_name, state])
 
 
@@ -3521,21 +3771,18 @@ func _worst_detour(points: PackedVector2Array) -> Array:
 				continue
 			if not worst.is_empty() and saving <= worst[0]:
 				continue
-			if _open_water_between(points[i], points[j], i == 0, j == points.size() - 1):
+			if _open_water_between(points[i], points[j]):
 				worst = [saving, i, j]
 	return worst
 
 
-## True if the straight (projected) line between two lane points crosses no
-## land, allowing land right at a port end (ports sit on the shore).
-func _open_water_between(a: Vector2, b: Vector2, a_is_port: bool, b_is_port: bool) -> bool:
+## True if the straight (projected) line between two lane points keeps to safe water.
+func _open_water_between(a: Vector2, b: Vector2) -> bool:
 	var pa := _grid_point(a)
 	var pb := _grid_point(b)
 	var steps := ceili(pa.distance_to(pb) * 2.0)
 	for s in range(1, steps):
 		var p := pa.lerp(pb, float(s) / steps)
-		if (a_is_port and p.distance_to(pa) < 3.0) or (b_is_port and p.distance_to(pb) < 3.0):
-			continue
 		var cell := Vector2i(floori(p.x), floori(p.y))
 		if _is_land(cell):
 			return false
@@ -3597,9 +3844,7 @@ var _ride_near := {}
 ## rest's second ways); "--why" says what it found.
 func _plan_current_ways() -> void:
 	var started := Time.get_ticks_msec()
-	var land_rings := _read_land_rings()
-	_build_grid(land_rings)
-	land_rings.clear()
+	_build_grid()
 	var coarse := _build_coarse_graph()
 	var astar := _fine_astar()
 	_set_arctic_blocked(coarse, astar, true)
@@ -3844,6 +4089,8 @@ func _current_ways(lane: PackedVector2Array, rides: Array, currents: Currents, s
 		if miles[i] < cut or total - miles[i] < cut:
 			continue
 		var p := way[i]
+		if _ocean_cell_at(Geo.project(p + Vector2(shift, 0.0))).x < 0:
+			continue  # (On a port's approach, or in a strait: the second way leaves from open sea.)
 		var cell := Vector2i(posmod(floori(p.x / RIDE_CELL_DEG), roundi(360.0 / RIDE_CELL_DEG)), floori(p.y / RIDE_CELL_DEG))
 		for entry: Array in _ride_near.get(cell, []):
 			if not near.has(entry[0]):
@@ -4087,14 +4334,13 @@ const FISHING_DIRECT_NM := 1600.0
 
 func _plan_fishing_lanes() -> void:
 	var started := Time.get_ticks_msec()
-	var land_rings := _read_land_rings()
-	_build_grid(land_rings)
-	land_rings.clear()
+	_build_grid()
 	var coarse := _build_coarse_graph()
 	var astar := _fine_astar()
 	_set_arctic_blocked(coarse, astar, false)
 	var fish: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/fisheries.json"))
 	var ports: Array = JSON.parse_string(FileAccess.get_file_as_string(PORTS_PATH)).ports
+	_lay_approaches(ports)
 	var old: SeaLaneData = load(LANES_OUT)
 	# Everything but the old fishing lanes, as it was.
 	var data := SeaLaneData.new()
@@ -4127,24 +4373,28 @@ func _plan_fishing_lanes() -> void:
 				if to.x < GRID_WEST + 0.5 or to.x > GRID_EAST - 0.5:
 					continue
 				for offset: float in [0.0, 360.0]:
-					var from := Geo.project(Vector2(port.lon + offset, port.lat))
-					if from.x > GRID_EAST - 1.0 or absf(from.x - to.x) > MAX_ROUTE_SPAN:
+					# From the port's sea gate (its approach, then the sea: see _with_approaches()).
+					var approach: Dictionary = _approaches[port.id]
+					var sea_gate: Vector2 = approach.points[-1] + Vector2(offset, 0.0)
+					var from := Geo.project(sea_gate)
+					if (approach.cell as Vector2i).x < 0 or from.x > GRID_EAST - 1.0 or absf(from.x - to.x) > MAX_ROUTE_SPAN:
 						continue
-					var a := _nearest_water(_cell_of(from))
+					var a := _cell_of(from)
 					var b := _nearest_water(_cell_of(to))
-					if a.x < 0 or b.x < 0:
+					if b.x < 0:
 						continue
 					var cells := _route(coarse, astar, a, b)
 					if cells.is_empty():
 						continue
-					var points := _round_corners(_lane_points(Vector2(port.lon + offset, port.lat), cells, Geo.unproject(_cell_center(b))))
+					var sea := _round_corners(_splice_channels(_splice_canals(_lane_points(sea_gate, cells, Geo.unproject(_cell_center(b))))))
+					var points := _with_approaches(port.id, offset, sea)
 					var nm := _length_nm(points)
 					if nm < best_nm:
 						best_nm = nm
 						best = points
 			if best.is_empty():
 				continue
-			var shift_back: float = port.lon - best[0].x
+			var shift_back: float = (_approaches[port.id].gate as Vector2).x - best[0].x
 			data.keys.append("%s-@%s" % [port.id, ground.id])
 			data.starts.append(data.points.size())
 			for p in best:
