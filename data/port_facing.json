@@ -46,11 +46,6 @@
 			"quay": "right",
 			"note": "Shanghai (Yangshan): out to the open East China Sea, not across the islands"
 		},
-		"PDX": {
-			"bearing": 285.0,
-			"quay": "right",
-			"note": "2026-10-12: moved 0.14 deg W, turned from 315 to 285, so its mouth and the water in front of it are clear of the land (tools/port_check.gd)"
-		},
 		"DAV": {
 			"bearing": 315.0,
 			"quay": "right",

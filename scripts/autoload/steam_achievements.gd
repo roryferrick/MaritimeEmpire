@@ -15,6 +15,8 @@ extends Node
 ## CSV to copy in). Until then setAchievement() fails quietly and everything
 ## works as it does without Steam.
 
+## The Hidden gems line's stars on Steam (hidden there until earned).
+const GEM_DESCRIPTIONS := ["Find a hidden gem", "Find two hidden gems", "Find all three hidden gems"]
 ## This player's own achievements: [id, name, what it takes].
 const EXTRAS := [
 	["here_we_go_again", "Here we go again", "Found your second company"],
@@ -97,9 +99,10 @@ static func catalog() -> Array:
 	for line: Dictionary in Achievements.lines():
 		for k in 3:
 			out.append({api = api_name(str(line.id), k + 1), name = "%s %s" % [line.name, "★".repeat(k + 1)],
-				description = "%s %s" % [Fmt.thousands(int(line.stars[k])), line.unit], hidden = false})
+				description = GEM_DESCRIPTIONS[k] if line.id == "hidden_gems" else "%s %s" % [Fmt.thousands(int(line.stars[k])), line.unit],
+				hidden = line.id == "hidden_gems"})
 	for badge: Array in Achievements.BADGES:
-		out.append({api = api_name(str(badge[0])), name = str(badge[1]), description = str(badge[2]), hidden = str(badge[0]) == "hidden_gem"})
+		out.append({api = api_name(str(badge[0])), name = str(badge[1]), description = str(badge[2]), hidden = false})
 	for extra: Array in EXTRAS:
 		out.append({api = api_name(str(extra[0])), name = str(extra[1]), description = str(extra[2]), hidden = false})
 	return out

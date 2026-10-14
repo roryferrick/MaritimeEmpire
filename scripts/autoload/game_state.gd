@@ -88,8 +88,23 @@ const AUTO_RECOVERY_INTERVAL := 0.5
 const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
-## The hidden gem (click the company name): money it gives, once per company.
+## The hidden gems: three spots on the map that each pay HIDDEN_GEM_MONEY, once
+## per company, when clicked (see claim_hidden_gem()): a wonder's picture
+## (wonder, a WonderPopup id) or a stretch of land ((lon, lat) area, clicked on
+## the land: MapView.gem_at()). Finding them earns the Hidden gems line's stars.
 const HIDDEN_GEM_MONEY := 10000000
+const HIDDEN_GEMS := {
+	"giza": {name = "the Great Pyramid of Giza", wonder = "great_pyramid"},
+	"oregon": {name = "Oregon", area = [
+		Vector2(-124.8, 42.0), Vector2(-124.8, 42.8), Vector2(-124.4, 44.0), Vector2(-124.3, 45.0), Vector2(-124.2, 46.0),
+		Vector2(-123.9, 46.25), Vector2(-123.4, 46.18), Vector2(-123.0, 46.1), Vector2(-122.8, 45.85), Vector2(-122.75, 45.65),
+		Vector2(-122.3, 45.55), Vector2(-121.2, 45.65), Vector2(-120.6, 45.75), Vector2(-119.6, 45.92), Vector2(-119.0, 46.0),
+		Vector2(-116.92, 46.0), Vector2(-116.47, 45.6), Vector2(-116.78, 45.1), Vector2(-117.0, 44.75), Vector2(-117.24, 44.3),
+		Vector2(-117.03, 44.0), Vector2(-117.03, 42.0)]},
+	"talkeetna": {name = "the Talkeetna Mountains", area = [
+		Vector2(-150.1, 62.3), Vector2(-150.0, 61.75), Vector2(-148.9, 61.65), Vector2(-147.3, 61.8), Vector2(-146.4, 62.2),
+		Vector2(-146.8, 62.7), Vector2(-148.0, 63.0), Vector2(-149.4, 62.75)]},
+}
 ## Each commodity's industry building, built on a hub's plots (see
 ## build_industry(); its art is art/industry/<commodity>.svg).
 const INDUSTRY_NAMES := {
@@ -177,9 +192,6 @@ var first_prices_used: Array[String]:
 	get: return company.first_prices_used
 var mega_upgrades: Array[String]:
 	get: return company.mega_upgrades
-var hidden_gem_claimed: bool:
-	get: return company.hidden_gem_claimed
-	set(value): company.hidden_gem_claimed = value
 var home_port: String:
 	get: return company.home_port
 	set(value): company.home_port = value
@@ -671,15 +683,21 @@ func buy_mega(model_id: String) -> void:
 	save_game()
 
 
-## Adds HIDDEN_GEM_MONEY to the bank, the first time only.
-func claim_hidden_gem() -> void:
-	if hidden_gem_claimed:
+## True if this player's company has found a hidden gem (a HIDDEN_GEMS id).
+func hidden_gem_found(gem_id: String) -> bool:
+	return company.hidden_gems.has(gem_id)
+
+
+## A hidden gem found: adds HIDDEN_GEM_MONEY to the bank, the first time only.
+func claim_hidden_gem(gem_id: String) -> void:
+	if not HIDDEN_GEMS.has(gem_id) or hidden_gem_found(gem_id):
 		return
-	if Net.command(&"claim_hidden_gem"):
+	if Net.command(&"claim_hidden_gem", [gem_id]):
 		return
-	hidden_gem_claimed = true
+	company.hidden_gems.append(gem_id)
 	money += HIDDEN_GEM_MONEY
-	ActivityLog.add("You found a hidden gem: +%s" % Fmt.money(HIDDEN_GEM_MONEY), ActivityLog.Kind.GOOD)
+	ActivityLog.add("You found a hidden gem in %s: +%s (%d of %d)" % [HIDDEN_GEMS[gem_id].name, Fmt.money(HIDDEN_GEM_MONEY),
+		company.hidden_gems.size(), HIDDEN_GEMS.size()], ActivityLog.Kind.GOOD)
 	save_game()
 
 

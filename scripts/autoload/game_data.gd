@@ -862,7 +862,7 @@ func get_ship_model(id: String) -> Dictionary:
 
 ## Ports taken out of the game, and the nearby port that took the place of each
 ## in older saves (see GameState._without_retired_ports()).
-const RETIRED_PORTS := {"LAX": "LGB", "IHB": "GRY", "BUH": "GRY", "ALG": "TNG", "ETH": "AQJ"}
+const RETIRED_PORTS := {"LAX": "LGB", "IHB": "GRY", "BUH": "GRY", "ALG": "TNG", "ETH": "AQJ", "PDX": "SEA"}
 
 
 func _load_lanes() -> void:

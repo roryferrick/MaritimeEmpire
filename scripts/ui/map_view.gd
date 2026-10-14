@@ -30,6 +30,9 @@ signal home_clicked(kind: String, index: int)
 signal industry_clicked(port_id: String, slot: int)
 ## A wonder of the world clicked (see _draw_wonders()).
 signal wonder_clicked(id: String)
+## A hidden gem on the land clicked (GameState.HIDDEN_GEMS with an area, not yet
+## found by this player: see gem_at()).
+signal gem_clicked(gem_id: String, lon_lat: Vector2)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 ## While choosing a region to unlock (choosing_region): a locked region's
@@ -3255,6 +3258,8 @@ func _click(screen_pos: Vector2) -> void:
 	elif not _industry_at(screen_pos).is_empty():
 		var plot := _industry_at(screen_pos)
 		industry_clicked.emit(plot[0], plot[1])
+	elif not gem_at(screen_pos).is_empty():
+		gem_clicked.emit(gem_at(screen_pos), _screen_lon_lat(screen_pos))
 	elif not marina_port.is_empty():
 		port_clicked.emit(marina_port)  # Anywhere on its marina.
 	elif show_ships and _pod_at(screen_pos) >= 0:
@@ -12059,6 +12064,22 @@ func _wonder_at(screen_pos: Vector2) -> String:
 			best_dist = dist
 			best = hit[2]
 	return best
+
+## The hidden gem whose stretch of land (GameState.HIDDEN_GEMS area) is under
+## a screen point, if this player hasn't found it yet, or "".
+func gem_at(screen_pos: Vector2) -> String:
+	var lon_lat := _screen_lon_lat(screen_pos)
+	for gem_id: String in GameState.HIDDEN_GEMS:
+		var area: Array = GameState.HIDDEN_GEMS[gem_id].get("area", [])
+		if not area.is_empty() and not GameState.hidden_gem_found(gem_id) \
+				and Geometry2D.is_point_in_polygon(lon_lat, PackedVector2Array(area)) and _on_land(lon_lat):
+			return gem_id
+	return ""
+
+## Where a (lon, lat) point is on screen, or Vector2.INF round the far side.
+func lon_lat_screen_position(lon_lat: Vector2) -> Vector2:
+	var at := world_to_screen(Geo.project(lon_lat))
+	return Vector2.INF if _is_hidden(at) else at
 
 ## Where a wonder stands on screen, or Vector2.INF round the far side.
 func wonder_screen_position(id: String) -> Vector2:

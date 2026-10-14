@@ -31,8 +31,8 @@ var earlier_containers := 0
 var first_prices_used: Array[String] = []
 ## Models with their mega upgrade (see GameState.mega_error()).
 var mega_upgrades: Array[String] = []
-## Whether the hidden gem has been claimed this run.
-var hidden_gem_claimed := false
+## The hidden gems found (GameState.HIDDEN_GEMS ids), each paid out once.
+var hidden_gems: Array[String] = []
 ## Total company XP from deliveries; see Progression for levels.
 var xp := 0.0
 ## Money cargo purchases leave in the bank (set on the Finances screen).
@@ -138,7 +138,7 @@ func to_dict() -> Dictionary:
 		"earlier_containers": earlier_containers,
 		"first_prices_used": first_prices_used,
 		"mega_upgrades": mega_upgrades,
-		"hidden_gem_claimed": hidden_gem_claimed,
+		"hidden_gems": hidden_gems,
 		"bank_reserve": bank_reserve,
 		"loan": loan,
 		"ceo": ceo,
@@ -174,7 +174,7 @@ static func from_dict(data: Dictionary) -> Company:
 		company.earlier_containers = int(data.get("containers_delivered", 0))
 	company.first_prices_used.assign(data.get("first_prices_used", []))
 	company.mega_upgrades.assign(data.get("mega_upgrades", []))
-	company.hidden_gem_claimed = bool(data.get("hidden_gem_claimed", false))
+	company.hidden_gems.assign(data.get("hidden_gems", []))
 	company.bank_reserve = int(data.get("bank_reserve", 0))
 	company.loan = int(data.get("loan", 0))
 	company.ceo = data.get("ceo", {})
@@ -196,6 +196,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.tutorial_done.assign(data.get("tutorial_done", []))
 	for id: String in data.get("achievements", {}):
 		company.achievements[id] = int(data.achievements[id])
+	company.achievements.erase("hidden_gem")  # (The old one-gem badge, now the Hidden gems line.)
 	company.discovered.assign(data.get("discovered", []))
 	company.show_active_routes = bool(data.get("show_active_routes", true))
 	company.muted_models.assign(data.get("muted_models", []))

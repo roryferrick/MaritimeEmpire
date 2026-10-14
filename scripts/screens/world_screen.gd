@@ -49,6 +49,8 @@ func _ready() -> void:
 	_map.animals_clicked.connect(_open_animals_popup)
 	_map.industry_clicked.connect(_open_industry_popup)
 	_map.wonder_clicked.connect(_open_wonder_popup)
+	_map.gem_clicked.connect(func(gem_id: String, lon_lat: Vector2) -> void:
+		_open_gem_popup(gem_id, _map.lon_lat_screen_position.bind(lon_lat)))
 	_map.home_clicked.connect(_open_home_popup)
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	Settings.changed.connect(func() -> void: _map.show_active_lanes = GameState.show_active_routes)  # (Routes, on the Settings page.)
@@ -653,11 +655,34 @@ func _open_industry_popup(port_id: String, slot: int) -> void:
 
 ## A wonder of the world clicked on the map: its popup, following it.
 func _open_wonder_popup(id: String) -> void:
+	for gem_id: String in GameState.HIDDEN_GEMS:  # A hidden gem in its picture: that first, then the wonder.
+		if str(GameState.HIDDEN_GEMS[gem_id].get("wonder", "")) == id and not GameState.hidden_gem_found(gem_id):
+			_open_gem_popup(gem_id, func() -> Vector2: return _map.wonder_screen_position(id), _show_wonder_popup.bind(id))
+			return
+	_show_wonder_popup(id)
+
+
+func _show_wonder_popup(id: String) -> void:
 	var popup := WonderPopup.new()
 	popup.id = id
 	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
 	popup.follow = func() -> Vector2:
 		var at := _map.wonder_screen_position(id)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)
+
+
+## A hidden gem found on the map (GameState.HIDDEN_GEMS): its popup, following
+## where it is on screen (where), then claimed() once it's claimed.
+func _open_gem_popup(gem_id: String, where: Callable, claimed := Callable()) -> void:
+	var popup := GemPopup.new()
+	popup.gem_id = gem_id
+	popup.claimed = claimed
+	var last := [Vector2.ZERO]  # Where it last was (lambdas capture by value: kept in an array).
+	popup.follow = func() -> Vector2:
+		var at: Vector2 = where.call()
 		if at != Vector2.INF:
 			last[0] = _map.get_global_transform() * at
 		return last[0]

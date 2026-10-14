@@ -7,7 +7,8 @@ extends RefCounted
 ## one for the company level, one for money in the bank, and one for the field
 ## guide (the animals seen: a flock, pod or group clicked on the map, see
 ## discover()), one for the wonders of the world seen (clicked on the map, see
-## discover()). Badges for firsts and other milestones (BADGES).
+## discover()), one for the hidden gems found (GameState.HIDDEN_GEMS). Badges
+## for firsts and other milestones (BADGES).
 ##
 ## A company's Company.achievements: id -> stars earned (1 for a badge). Once
 ## earned, kept (selling ships or spending money doesn't take them back).
@@ -36,6 +37,8 @@ const MONEY_STARS := [10000000, 500000000, 5000000000]
 const ANIMAL_STARS := [1.0 / 3.0, 2.0 / 3.0, 1.0]
 ## Wonders of the world seen for each star: 10, 25 and all of them (0: all).
 const WONDER_STARS := [10, 25, 0]
+## Hidden gems found for each star (GameState.HIDDEN_GEMS: three of them).
+const GEM_STARS := [1, 2, 3]
 ## The ship lines owning one of each counts for the Full house badge.
 const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "tanker", "vehicles", "seafood"]
 ## Badges: [id, name, what it takes].
@@ -53,7 +56,6 @@ const BADGES := [
 	["loan", "Borrowed time", "Take out a loan"],
 	["debt_free", "Debt free", "Pay a loan back in full"],
 	["mega", "Mega", "Give a ship model its mega upgrade"],
-	["hidden_gem", "Hidden gem", "Find the hidden gem"],
 ]
 
 
@@ -70,6 +72,7 @@ static func lines() -> Array:
 	out.append({id = "money", name = "Money in the bank", unit = "in the bank", stars = MONEY_STARS})
 	out.append({id = "animals", name = "Field guide", unit = "animals seen", stars = ANIMAL_STARS.map(func(share: float) -> int: return roundi(share * animal_count()))})
 	out.append({id = "wonders", name = "Wonders of the world", unit = "wonders seen", stars = WONDER_STARS.map(func(need: int) -> int: return need if need > 0 else GameData.wonders.size())})
+	out.append({id = "hidden_gems", name = "Hidden gems", unit = "hidden gems found", stars = GEM_STARS})
 	return out
 
 
@@ -92,6 +95,8 @@ static func progress(company: Company, line_id: String) -> int:
 			return wonders_seen(company)
 		"animals":
 			return seen_count(company)
+		"hidden_gems":
+			return company.hidden_gems.size()
 	return 0
 
 
@@ -131,8 +136,6 @@ static func badge_done(company: Company, badge_id: String) -> bool:
 			return company.achievements.has("loan") and company.loan <= 0
 		"mega":
 			return not company.mega_upgrades.is_empty()
-		"hidden_gem":
-			return company.hidden_gem_claimed
 	return false
 
 

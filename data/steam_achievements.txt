@@ -125,6 +125,9 @@ ANIMALS_3,Field guide ★★★,187 animals seen,0
 WONDERS_1,Wonders of the world ★,10 wonders seen,0
 WONDERS_2,Wonders of the world ★★,25 wonders seen,0
 WONDERS_3,Wonders of the world ★★★,49 wonders seen,0
+HIDDEN_GEMS_1,Hidden gems ★,Find a hidden gem,1
+HIDDEN_GEMS_2,Hidden gems ★★,Find two hidden gems,1
+HIDDEN_GEMS_3,Hidden gems ★★★,Find all three hidden gems,1
 FIRST_DELIVERY,Maiden voyage,Deliver a cargo,0
 FIRST_HUB,Branching out,Build a hub,0
 FIVE_HUBS,Network,Have 5 hubs,0
@@ -138,7 +141,6 @@ ALL_CANALS,Lock keeper,Cross every canal,0
 LOAN,Borrowed time,Take out a loan,0
 DEBT_FREE,Debt free,Pay a loan back in full,0
 MEGA,Mega,Give a ship model its mega upgrade,0
-HIDDEN_GEM,Hidden gem,Find the hidden gem,1
 HERE_WE_GO_AGAIN,Here we go again,Found your second company,0
 THE_GAME_STARTS_NOW,The game starts now,Buy your first Trans Atlantic,0
 TOP_OF_THE_LINE,Top of the line,Buy a Dominator,0

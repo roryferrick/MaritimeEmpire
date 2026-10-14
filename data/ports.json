@@ -182,7 +182,6 @@
 		{ "id": "SNR", "name": "Nantes-Saint-Nazaire", "country": "France", "lat": 47.242, "lon": -2.242, "rank": 178, "size": 13 },
 		{ "id": "OPO", "name": "Porto", "country": "Portugal", "lat": 41.18, "lon": -8.70, "rank": 179, "size": 10 },
 		{ "id": "SSA", "name": "Salvador", "country": "Brazil", "lat": -12.932, "lon": -38.481, "rank": 180, "size": 26 },
-		{ "id": "PDX", "name": "Portland, Oregon", "country": "United States", "lat": 45.56, "lon": -123.93, "rank": 181, "size": 1 },
 		{ "id": "BUN", "name": "Buenaventura", "country": "Colombia", "lat": 3.89, "lon": -77.18, "rank": 182, "size": 25 },
 		{ "id": "ANF", "name": "Antofagasta", "country": "Chile", "lat": -23.64, "lon": -70.41, "rank": 183, "size": 17 },
 		{ "id": "FOR", "name": "Fortaleza", "country": "Brazil", "lat": -3.71, "lon": -38.48, "rank": 184, "size": 9 },
