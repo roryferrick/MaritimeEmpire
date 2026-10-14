@@ -26,7 +26,18 @@ func _ready() -> void:
 	add_theme_constant_override(&"separation", 6)
 	_row("Base", _base, "Where it lands its catch and sets out from: any port. It sails there once it's in port.")
 	_row("Target", _target, "What it goes after. The most timely and profitable is chosen again for every trip from what's in season and the stocks left.")
-	_row("Catch", _landing, "Kept in the cold store, its catch waits for your seafood carriers (Reefers) to take it where it pays most.")
+	_row("Catch", _landing, "Kept in the freezer (at your HQ and hubs only; anywhere else it sells), its catch waits for your seafood carriers (Reefers) to take it where it pays most.")
+	var grounds := Button.new()
+	grounds.text = "Fishing Grounds…"
+	grounds.tooltip_text = "Pick grounds on the map and send boats there by model (refuelling on the way to far ones)."
+	grounds.pressed.connect(func() -> void: GameRoot.find(self).open_fishing_screen())
+	add_child(grounds)
+	if not ship.fish_area.is_empty():
+		var sent := Label.new()
+		sent.theme_type_variation = &"DimLabel"
+		sent.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sent.text = "Sent to %s on the Fishing Grounds screen." % Fisheries.ground_name(ship.fish_area)
+		add_child(sent)
 	var ports := GameData.ports.duplicate()
 	ports.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a.name) < str(b.name))
 	for port: Dictionary in ports:
@@ -50,7 +61,7 @@ func _ready() -> void:
 	_base.item_selected.connect(func(index: int) -> void:
 		GameState.set_fishing_base(ship, str(_base.get_item_metadata(index)))
 		_fill_targets.call_deferred())
-	for entry: Array in [["auto", "Store for my carriers where they call, else sell"], ["sell", "Sell where it's landed"], ["store", "Keep in the cold store"]]:
+	for entry: Array in [["auto", "Freeze for my carriers where they call, else sell"], ["sell", "Sell where it's landed"], ["store", "Keep in the freezer (HQ and hubs)"]]:
 		_landing.add_item(entry[1])
 		_landing.set_item_metadata(_landing.item_count - 1, entry[0])
 		if entry[0] == ship.fish_landing:

@@ -547,6 +547,14 @@ var route: Array[String] = []:
 	set(value):
 		route = value
 		_static_layer.queue_redraw()
+## The route's legs beyond one tank: leg index (from route[i] to the next) ->
+## its refuel stops (GameState.refuel_stops()), drawn through, each marked.
+var route_hops: Dictionary = {}:
+	set(value):
+		route_hops = value
+		_static_layer.queue_redraw()
+## Refuel stops' colour, on the map and in the lists that name them.
+const REFUEL_COLOR := Color(0.36, 0.82, 0.95)
 
 ## A ship line (ship_models.json category, e.g. "grain") whose cargo gets a
 ## box over each port with room for one (see _place_price_boxes()): each
@@ -612,6 +620,9 @@ var selected_port := "":
 ## Where the view opens (when it's first given a size): centered on this port
 ## (by default the company's home port), zoomed right out to the whole globe if
 ## opens_whole_globe, else to game_config's initial_view_width_deg.
+## Asked first with a click's screen position: true takes the click (the map
+## then does nothing with it), as the Fishing Grounds screen does for its grounds.
+var click_filter := Callable()
 var opens_at_port := ""
 var opens_whole_globe := false
 
@@ -1097,6 +1108,20 @@ func _exit_tree() -> void:
 	if GameState.berth_route.get_object() == self:
 		GameState.berth_route = Callable()
 
+## The antialiasing pass over the map (Settings.antialias; see
+## antialias.gdshader), over the globe, marinas, lanes and ports and under
+## the labels, ships and birds: hidden when off, so it costs nothing then.
+const ANTIALIAS_SHADER := preload("res://scripts/ui/antialias.gdshader")
+var _antialias := ColorRect.new()
+
+
+func _apply_antialias() -> void:
+	var span: int = Settings.ANTIALIAS_SPANS[Settings.antialias]
+	_antialias.visible = span > 0
+	if span > 0:
+		(_antialias.material as ShaderMaterial).set_shader_parameter(&"span", span)
+
+
 func _ready() -> void:
 	ambience = Ambience.new(self)
 	add_child(ambience)  # The World map's sound: sea, harbours, storms, horns and the animals in view (see Ambience).
@@ -1108,6 +1133,7 @@ func _ready() -> void:
 			_still_birds.queue_redraw()
 		if _lights_layer != null:
 			_lights_layer.queue_redraw()
+		_apply_antialias()
 		_changed())
 	if not GameState.berth_route.is_valid():
 		GameState.berth_route = berth_route_seconds  # (The first map open measures ships' ways in and out of port.)
@@ -1292,6 +1318,13 @@ func _ready() -> void:
 		_draw_dock_layer()
 		_prof("dock_layer", t0))
 	_add_night_layers()
+	_antialias.material = ShaderMaterial.new()
+	(_antialias.material as ShaderMaterial).shader = ANTIALIAS_SHADER
+	_antialias.mouse_filter = MOUSE_FILTER_IGNORE
+	_antialias.set_anchors_preset(PRESET_FULL_RECT)
+	add_child(_antialias)
+	move_child(_antialias, _label_layer.get_index())  # (Under the labels, which it would blur, and the ships and birds, drawn from art already smooth.)
+	_apply_antialias()
 	_dock_layer.texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# Docked ships are drawn on the dock layer only on the gray map (as dots): redraw it for them only there.
 	GameState.ship_changed.connect(func(_ship: Ship) -> void:
@@ -3009,6 +3042,18 @@ func _track_followed() -> void:
 
 ## Centers on a port (by default the company's home port), showing
 ## game_config.json's initial_view_width_deg degrees of the globe across.
+## Turns the globe to a (lon, lat) point, at a zoom (px a projected degree;
+## <= 0 keeps the zoom).
+func look_at_lon_lat(lon_lat: Vector2, zoom := -1.0) -> void:
+	followed = null
+	followed_bird = -1
+	_look_at(Geo.project(lon_lat))
+	if zoom > 0.0:
+		_zoom = clampf(zoom, _min_zoom(), MAX_ZOOM)
+		_zoom_goal = _zoom
+	_changed()
+
+
 func reset_view(center_port := "") -> void:
 	followed = null
 	followed_bird = -1
@@ -3106,7 +3151,8 @@ func _gui_input(event: InputEvent) -> void:
 					if not _dragging and button.button_index == MOUSE_BUTTON_LEFT:
 						followed = null  # (A click anywhere lets the followed ship go.)
 						followed_bird = -1
-						_click(button.position)
+						if not (click_filter.is_valid() and bool(click_filter.call(button.position))):
+							_click(button.position)
 					elif _dragging:
 						_fling = _drag_fling()
 					_pressed_button = MOUSE_BUTTON_NONE
@@ -4770,6 +4816,8 @@ func _hq_look(port_id: String) -> Array:
 		if hub != null and hub.is_hq:
 			look = [each.name, each.color, hq_level(each)]
 			break
+		if hub != null and look.is_empty():
+			look = ["hub", each.color, clampi(2 + hub.level / 3, 2, 4)]  # (A hub's warehouses: see _draw_hub_warehouses(). An HQ found after it wins.)
 	var industry := _industry_hub(port_id)
 	if industry != null:
 		look.append_array([industry.industries.duplicate(), industry.industry_slots(), industry == GameState.hub_at(port_id)])
@@ -4919,16 +4967,18 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	# The basin's edge (its three walls), and the land's outer edge.
 	_canvas.draw_polyline(_marina_polygon(port_id, PackedVector2Array([Vector2(0.0, half), Vector2(-depth, half), Vector2(-depth, -half), Vector2(0.0, -half)])), QUAY_EDGE, 1.0, true)
 	_canvas.draw_polyline(_marina_polygon(port_id, land), QUAY_EDGE, 1.0, true)
+	# The town first: its ground reaches over the quay, so the HQ (or a hub's
+	# warehouses) and the industry go on top of it.
 	var t_m := Time.get_ticks_usec()
+	_draw_town(port_id, layout, scale)
+	_prof("marina.town", t_m)
+	t_m = Time.get_ticks_usec()
 	_draw_hq_building(port_id, layout)
 	_draw_industry(port_id, layout)
 	_prof("marina.hq_industry", t_m)
 	t_m = Time.get_ticks_usec()
 	_draw_lighthouse(port_id, layout, scale)
 	_prof("marina.lighthouse", t_m)
-	t_m = Time.get_ticks_usec()
-	_draw_town(port_id, layout, scale)
-	_prof("marina.town", t_m)
 	t_m = Time.get_ticks_usec()
 	# The jetty: round the sea half, each side of the entrance, lit at its ends.
 	var gap: float = layout.gap
@@ -5034,12 +5084,19 @@ static func _shrink(points: PackedVector2Array, by: float) -> PackedVector2Array
 ## a terrace on its roof and a helicopter pad.
 func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 	var owner: Company = null
+	var hub_owner: Company = null
+	var owned_hub: Hub = null
 	for each in GameState.all_companies():
 		var hub := each.hub_at(port_id)
 		if hub != null and hub.is_hq:
 			owner = each
 			break
+		if hub != null and hub_owner == null:
+			hub_owner = each
+			owned_hub = hub
 	if owner == null:
+		if hub_owner != null:
+			_draw_hub_warehouses(port_id, layout, owned_hub, GameState.company_color_value(hub_owner.color))
 		return
 	var level := hq_level(owner)
 	var tint := GameState.company_color_value(owner.color)
@@ -5058,6 +5115,49 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 		_draw_hq_house(port_id, level, box, tint)
 	else:
 		_draw_hq_block(port_id, level, foot, box, tint)
+
+## A hub that isn't an HQ: its company's warehouses on the HQ's half of the
+## quay, roofed in its colour so whose hub it is shows from above (more of
+## them as the hub levels up: 2 to 4), the one nearest the basin its freezer
+## (a white roof with a band of the colour), each with its shadow, ridge,
+## roof sheeting and loading doors on the basin side.
+func _draw_hub_warehouses(port_id: String, layout: Dictionary, hub: Hub, tint: Color) -> void:
+	var region := _hq_region(layout)
+	if region.size() < 3:
+		return
+	var box := _bounds(region)
+	var count := clampi(2 + hub.level / 3, 2, 4)
+	var gap := box.size.y * 0.08
+	var depth := (box.size.y - gap * (count - 1)) / count
+	var length := box.size.x * 0.86
+	var roof := tint.lerp(Color(0.55, 0.55, 0.55), 0.2)
+	for i in count:
+		var shed := Rect2(Vector2(box.position.x, box.end.y - (i + 1) * depth - i * gap), Vector2(length * (1.0 if i == 0 else lerpf(0.94, 0.78, float(i) / count)), depth))
+		var freezer := i == 0
+		var drop := _shadow_drop(port_id, 0.55)
+		var shadow := _marina_polygon(port_id, _rect_points(shed))
+		for k in shadow.size():
+			shadow[k] += drop
+		_canvas.draw_colored_polygon(shadow, Color(0, 0, 0, 0.26))
+		var top := Color("#e8ecef") if freezer else roof
+		_hq_poly(port_id, _rect_points(shed), top)
+		# Its roof sheeting across, and the ridge along its middle.
+		var x := shed.position.x + 0.4
+		while x < shed.end.x - 0.1:
+			_hq_line(port_id, Vector2(x, shed.position.y), Vector2(x, shed.end.y), Color(0, 0, 0, 0.12), 0.05)
+			x += 0.4
+		_hq_line(port_id, Vector2(shed.position.x, shed.get_center().y), Vector2(shed.end.x, shed.get_center().y), top.darkened(0.3), 0.1)
+		if freezer:
+			_hq_poly(port_id, _rect_points(Rect2(shed.position + Vector2(0, shed.size.y * 0.38), Vector2(shed.size.x, shed.size.y * 0.24))), tint)
+			# The cooling units on its roof.
+			for k in 3:
+				_hq_poly(port_id, _rect_points(Rect2(shed.position + Vector2(shed.size.x * (0.25 + 0.22 * k), shed.size.y * 0.12), Vector2.ONE * minf(shed.size.y * 0.18, 0.6))), Color("#9aa3aa"))
+		_hq_outline(port_id, _rect_points(shed), top.darkened(0.45), 0.08)
+		# Loading doors on the end nearest the basin.
+		var doors := 2 if shed.size.y > 2.0 else 1
+		for k in doors:
+			var y := shed.position.y + shed.size.y * (k + 1) / (doors + 1)
+			_hq_line(port_id, Vector2(shed.position.x, y - 0.3), Vector2(shed.position.x, y + 0.3), Color("#2c2c2c"), 0.22)
 
 ## An HQ building's footprint at a level (dock units): from the corner of its
 ## half of the quay furthest inland and from the channel, growing towards the
@@ -7100,10 +7200,15 @@ func _draw_route() -> void:
 	if route.is_empty():
 		return
 	var color := _color(&"route")
-	for i in range(1, route.size()):
-		_draw_lane(route[i - 1], route[i], color, false)
-	if route.size() >= 2 and route[-1] != route[0]:
-		_draw_lane(route[-1], route[0], color, true)
+	for i in route.size():
+		if i == route.size() - 1 and (route.size() < 2 or route[-1] == route[0]):
+			break
+		var at := route[i]
+		var stops: Array = route_hops.get(i, [])
+		for port: String in stops + [route[(i + 1) % route.size()]]:
+			_draw_lane(at, port, color, i == route.size() - 1)
+			at = port
+	_draw_refuel_marks(route_hops.values())
 
 	var stops := {}  # port id -> stop numbers
 	for i in route.size():
@@ -8960,17 +9065,17 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 	var rigged: bool = art.has("fishing_details") and ship != null and ship.is_working_ground()
 	_canvas.draw_texture_rect(art.fishing_details if rigged else art.details, rect, false, fade)
 
-## The skin the player's ships of a model wear (the equipped skin pack's: see
-## Cosmetics.ship_skin()), or null: other players' and the rivals' ships are
+## The skin the player's ships of a model wear (the Inventory's choice for the
+## model, or the equipped skin pack's: see Cosmetics.default_skin()), or null: other players' and the rivals' ships are
 ## drawn as they are.
 func _ship_skin(ship: Ship) -> Texture2D:
 	if ship.skin == "base":
 		return null
 	if not ship.skin.is_empty():
 		return Cosmetics.skin_texture(ship.skin, ship.model_id)  # (Its own choice: see SkinPicker.)
-	if Cosmetics.equipped.is_empty() or GameState.owner_of(ship) != GameState.company:
+	if GameState.owner_of(ship) != GameState.company:
 		return null
-	return Cosmetics.ship_skin(ship.model_id)
+	return Cosmetics.default_skin(ship.model_id)  # (The Inventory's choice for the model, else the pack worn.)
 
 ## A skin in place of a ship's art: the one picture, in its own colours (no
 ## hull tint, cargo or details), leaning a little with the roll like a superstructure.
@@ -13759,3 +13864,25 @@ func _draw_landmark(batch: PolyBatch, what: String, rect: Rect2, wall: Color, ro
 			batch.poly(_rect_points(rect.grow(-0.14)), roof)
 ## A town's lights at night (see _draw_marina_lights()): a warm glow over
 ## the whole town, and its windows lit (once they're big enough to see).
+
+
+## A ring and "Refuel" over each refuel stop in `stop_lists` (arrays of port ids).
+func _draw_refuel_marks(stop_lists: Array) -> void:
+	var font := get_theme_default_font()
+	var shadow := _color(&"label_shadow")
+	var drawn := {}
+	for stops: Array in stop_lists:
+		for port_id: String in stops:
+			if drawn.has(port_id):
+				continue
+			drawn[port_id] = true
+			var at := port_screen_position(port_id)
+			if at == Vector2.INF:
+				continue
+			var radius := _port_radius(port_id) + 4.0
+			_canvas.draw_arc(at, radius, 0.0, TAU, 24, REFUEL_COLOR, 2.0, true)
+			var text := "Refuel"
+			var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE).x
+			var pos := at + Vector2(-width / 2.0, radius + PORT_FONT_SIZE + 2.0)
+			_canvas.draw_string(font, pos + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
+			_canvas.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, REFUEL_COLOR)

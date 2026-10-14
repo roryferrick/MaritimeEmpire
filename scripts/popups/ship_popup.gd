@@ -429,6 +429,14 @@ func _refresh() -> void:
 	%RouteLabel.visible = not ship.is_service()
 	if ship.has_route():
 		%RouteLabel.text = "Route: %s (loops)" % GameData.route_text(ship.route)
+		# Legs beyond one tank: the refuel stops on the way.
+		var stops: Array[String] = []
+		for i in ship.route.size():
+			for port in GameState.refuel_stops(ship, ship.route[i], ship.route[(i + 1) % ship.route.size()]):
+				if not stops.has(port):
+					stops.append(port)
+		if not stops.is_empty():
+			%RouteLabel.text += " — %s on the way" % GameState.refuel_text(stops)
 	else:
 		%RouteLabel.text = "No route assigned."
 	%PendingLabel.visible = not ship.pending_route.is_empty()

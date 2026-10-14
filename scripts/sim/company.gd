@@ -58,6 +58,11 @@ var totals := {}
 ## port for its seafood carriers to take (see GameState._land_catch()):
 ## port id -> {family: crates}.
 var cold_stores := {}
+## The fishing grounds it has picked on the Fishing Grounds screen, and for each
+## boat model sent there where its catch is landed and whether it goes in the
+## freezer: {ground id: {model id: {port, freeze}}}. Which boats are sent is
+## each boat's own (Ship.fish_area).
+var fish_areas := {}
 ## What it has traded at each port (see GameState._tally_port_trade()): port id ->
 ## {since (play time it began keeping count there), goods: {commodity id:
 ## [units bought, money spent, units sold, money earned]}}.
@@ -147,6 +152,7 @@ func to_dict() -> Dictionary:
 		"regions": regions,
 		"totals": totals,
 		"cold_stores": cold_stores,
+		"fish_areas": fish_areas,
 		"port_trade": port_trade,
 		"canal_stats": canal_stats,
 		"finance_window": finance_window,
@@ -188,6 +194,7 @@ static func from_dict(data: Dictionary) -> Company:
 		company.hubs.append(Hub.new(company.home_port, true))
 	company.totals = data.get("totals", {})
 	company.cold_stores = data.get("cold_stores", {})
+	company.fish_areas = data.get("fish_areas", {}) if data.get("fish_areas") is Dictionary else {}
 	company.port_trade = data.get("port_trade", {})
 	company.canal_stats = data.get("canal_stats", {})
 	company.finance_window = data.get("finance_window", [])

@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## Lists purchasable ship models from data/ship_models.json, in tabs (TABS:
-## cargo ships, bulk and tankers, seafood, service) of sections by category,
+## cargo and bulk, food, tankers, seafood, service) of sections by category,
 ## laid out in rows with the sections of a row side by side,
 ## each as wide as its models (up to 6 cards a row): container ships; ore and
 ## grain carriers; livestock carriers and tankers; vehicle carriers and recovery
@@ -20,11 +20,13 @@ const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
 	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"]]
 ## The Shop's tabs: [title, rows], each row its sections side by side (by
-## category). Lines that belong together share a tab: the cargo ships, the
-## bulk carriers and tankers, everything to do with seafood, the service boats.
+## category). Lines that belong together share a tab: the container, vehicle and
+## ore carriers, the food carriers (grain and livestock), the tankers,
+## everything to do with seafood, the service boats.
 const TABS := [
-	["Cargo ships", [["container"], ["vehicles", "livestock"]]],
-	["Bulk & tankers", [["ore", "grain"], ["tanker"]]],
+	["Cargo & bulk", [["container"], ["vehicles", "ore"]]],
+	["Food", [["grain", "livestock"]]],
+	["Tankers", [["tanker"]]],
 	["Seafood", [["fishing", "crabbing"], ["seafood"]]],
 	["Service", [["recovery", "tug"], ["icebreaker"]]],
 ]

@@ -36,6 +36,9 @@ var sand_dollars := 0
 var owned: Array = []
 ## The pack whose ship skins the player's ships wear ("" for none).
 var equipped := ""
+## Each model's own choice from the Inventory (InventoryPage), over the pack
+## worn: model id -> "pack/skin" (an owned skin that fits it) or "base".
+var model_skins := {}
 ## Every grant and purchase: {at (unix time), kind, amount, note}.
 var ledger: Array = []
 var _skins := {}  # pack id -> {model id -> Texture2D}
@@ -78,13 +81,20 @@ func _load_profile() -> void:
 		equipped = str(data.get("equipped", ""))
 		if not wearable(equipped):
 			equipped = ""
+		model_skins = {}
+		var choices: Variant = data.get("model_skins", {})
+		if choices is Dictionary:
+			for model_id: String in choices:
+				var key := str(choices[model_id])
+				if key == "base" or (_is_skin(key) and owned.has(key)):
+					model_skins[model_id] = key
 		ledger = data.get("ledger", []) if data.get("ledger", []) is Array else []
 
 
 func _save_profile() -> void:
 	var file := FileAccess.open(PROFILE_PATH, FileAccess.WRITE)
 	if file != null:
-		file.store_string(JSON.stringify({sand_dollars = sand_dollars, owned = owned, equipped = equipped, ledger = ledger}, "\t"))
+		file.store_string(JSON.stringify({sand_dollars = sand_dollars, owned = owned, equipped = equipped, model_skins = model_skins, ledger = ledger}, "\t"))
 	changed.emit()
 
 
@@ -307,6 +317,35 @@ func ship_skin(model_id: String) -> Texture2D:
 				skins[model] = load(path)
 		_skins[equipped] = skins
 	return (_skins[equipped] as Dictionary).get(model_id, null)
+
+
+## What the player's ships of a model wear by default (a ship's own choice
+## aside: Ship.skin): the model's Inventory choice, else the pack worn's
+## skin for it (ship_skin()); null for the base ship.
+func default_skin(model_id: String) -> Texture2D:
+	var key := str(model_skins.get(model_id, ""))
+	if key == "base":
+		return null
+	if not key.is_empty():
+		return skin_texture(key, model_id)
+	return ship_skin(model_id)
+
+
+## Sets a model's Inventory choice: an owned skin's "pack/skin" that fits it,
+## "base", or "" to go with the pack worn.
+func set_model_skin(model_id: String, key: String) -> void:
+	if key.is_empty():
+		model_skins.erase(model_id)
+	elif key == "base" or (owned.has(key) and skin_texture(key, model_id) != null):
+		model_skins[model_id] = key
+	else:
+		return
+	_save_profile()
+
+
+## True if the player's ships wear any skin by default (a pack, or a model's choice).
+func wears_any() -> bool:
+	return not equipped.is_empty() or model_skins.values().any(func(key: String) -> bool: return key != "base")
 
 
 ## True if a "pack/skin" key names a skin of the catalog.

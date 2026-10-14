@@ -214,6 +214,34 @@ func open_route_screen(ship: Ship) -> void:
 	%RouteScreen.open(ship)
 
 
+## The Fishing Grounds screen (FishingScreen), full screen like the Route
+## Assignment one; made the first time it's opened.
+var _fishing_screen: FishingScreen = null
+
+func open_fishing_screen() -> void:
+	_popup_host.close()
+	if _fishing_screen == null:
+		_fishing_screen = FishingScreen.new()
+		_fishing_screen.visible = false
+		%RouteScreen.add_sibling(_fishing_screen)
+		_fishing_screen.finished.connect(_close_fishing_screen)
+	for s: Screen in _screens:
+		_screens[s].visible = false
+	%TopBar.visible = false
+	%BottomNav.visible = false
+	%ActivityLogPanel.visible = false
+	_fishing_screen.visible = true
+	_fishing_screen.open()
+
+
+func _close_fishing_screen() -> void:
+	_fishing_screen.visible = false
+	%TopBar.visible = true
+	%BottomNav.visible = true
+	%ActivityLogPanel.visible = true
+	show_screen(_current_screen)
+
+
 func is_route_screen_open() -> bool:
 	return %RouteScreen.visible
 
@@ -409,6 +437,22 @@ func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if not key or not key.pressed or key.echo or is_instance_valid(_escape_menu):
 		return
+	# Esc with something on a tab focused (a list, a table, a picker), which
+	# would take it for itself: the tab's popup closes, else the menu opens.
+	if event.is_action_pressed(&"ui_cancel"):
+		var focused := get_viewport().gui_get_focus_owner()
+		var on_tab := focused != null and _current_screen != Screen.WORLD and (_screens[_current_screen] as Control).is_ancestor_of(focused)
+		if on_tab:
+			focused.release_focus()
+			get_viewport().set_input_as_handled()
+			if focused is LineEdit or focused is TextEdit:
+				return  # (Typing: Esc just leaves the box.)
+			if is_instance_valid(_popup_host.current):
+				_popup_host.close()
+			else:
+				_escape_menu = EscapeMenu.new()
+				add_child(_escape_menu)
+			return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return

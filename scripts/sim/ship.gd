@@ -85,6 +85,15 @@ var route: Array[String] = []
 ## Replaces route when the ship reaches the end of its current leg.
 var pending_route: Array[String] = []
 var route_index := -1
+## Bound for a port beyond one tank (GameState.refuel_path()): that port, while it
+## steps there by way of refuel stops (to_port the next of them), "" otherwise.
+## A port it stops at on the way is only a refuel stop: no trade, its cargo
+## or catch stays aboard.
+var hop_to := ""
+## Where _try_depart() last meant it to end up (hop_to as it sets off). Not saved.
+var bound_for := ""
+## The leg _try_depart() meant bound_for for (its next stop then).
+var bound_step := ""
 var paused := false
 var docked_at := ""
 var from_port := ""
@@ -320,6 +329,10 @@ var catch_grade := 1.0
 var work_s := 0.0
 var work_limit_s := 0.0
 var fish_wait := ""
+## Fishing boat only: the port its trip set out from and comes back to: its
+## base, or, for a ground beyond a trip from its base, the port it went to
+## first, by way of refuel stops, to fish from (see GameState.fishing_stage()).
+var fish_home := ""
 ## Which of a ground's GameState.GROUND_BOATS spots it works (0 up), so boats on one ground spread out (MapView).
 var fish_slot := 0
 ## Icebreaker only: the ice area (game_config icebreaking) it's stationed at,
@@ -698,6 +711,11 @@ func has_route() -> bool:
 	return not route.is_empty()
 
 
+## In port only to refuel on its way somewhere beyond one tank (see hop_to).
+func is_refuel_stop() -> bool:
+	return is_docked() and not hop_to.is_empty() and docked_at != hop_to
+
+
 ## Green on the status dot: has a route and isn't paused.
 func is_running() -> bool:
 	return has_route() and not paused
@@ -1017,6 +1035,9 @@ func _align_heading() -> Vector2:
 
 ## Index of the route stop to sail to next from the port the ship is docked at.
 func next_route_index() -> int:
+	# At a refuel stop on the way to its next stop: still bound for it.
+	if not hop_to.is_empty() and docked_at != hop_to and route_index >= 0 and route_index < route.size() and route[route_index] == hop_to:
+		return route_index
 	if route_index >= 0 and route_index < route.size() and route[route_index] == docked_at:
 		return (route_index + 1) % route.size()
 	var here := route.find(docked_at)
@@ -1060,6 +1081,11 @@ func status_text() -> String:
 				return "Coming alongside at %s" % port
 			BERTH_OUT:
 				return "Pulling out of %s%s" % [port, " for %s" % GameData.port_name(depart_to) if not depart_to.is_empty() else " to anchor"]
+		if is_refuel_stop():
+			var onward := "Refuelling at %s on the way to %s" % [port, GameData.port_name(hop_to)]
+			if not is_docking() and is_held():
+				onward += " — %s" % hold_reason
+			return onward
 		if is_docking():
 			return ("Unloading at %s" if dock_time < dock_seconds() / 2.0 else "Loading at %s") % port
 		var text := "Docked at %s" % port
@@ -1082,6 +1108,8 @@ func status_text() -> String:
 	if paused:
 		return "Stopping at %s" % destination
 	var text := "En route to %s — %d%% · arrives %s" % [destination, int(leg_progress() * 100.0), Fmt.calendar_short(arrival_time())]
+	if not hop_to.is_empty() and hop_to != to_port:
+		text = "En route to %s to refuel, then on to %s — %d%% · arrives %s" % [destination, GameData.port_name(hop_to), int(leg_progress() * 100.0), Fmt.calendar_short(arrival_time())]
 	return text + " — won't make it!" if at_risk else text
 
 
@@ -1266,8 +1294,10 @@ func _fishing_status_text() -> String:
 			return "%s for %s at %s — %s / %s crates" % [doing, what, where, Fmt.thousands(floori(catch)), Fmt.thousands(capacity())]
 		"home":
 			if catch <= 0.0:
-				return "Heading home to %s" % GameData.port_name(base_port)
-			return "Heading home to %s with %s crates of %s" % [GameData.port_name(base_port), Fmt.thousands(floori(catch)), what]
+				return "Heading back to %s" % GameData.port_name(fish_home if not fish_home.is_empty() else base_port)
+			return "Heading back to %s with %s crates of %s" % [GameData.port_name(fish_home if not fish_home.is_empty() else base_port), Fmt.thousands(floori(catch)), what]
+	if is_refuel_stop():
+		return "Refuelling at %s on the way to %s%s" % [GameData.port_name(docked_at), GameData.port_name(hop_to), " with %s crates" % Fmt.thousands(floori(catch)) if catch >= 1.0 else ""]
 	if is_docked() and not fish_wait.is_empty() and not is_docking():
 		return "At %s: %s" % [GameData.port_name(docked_at), fish_wait]
 	return ""
@@ -1320,12 +1350,14 @@ func to_dict() -> Dictionary:
 		"route": route,
 		"pending_route": pending_route,
 		"route_index": route_index,
+		"hop_to": hop_to,
 		"paused": paused,
 		"docked_at": docked_at,
 		"from_port": from_port,
 		"to_port": to_port,
 		"fish_target": fish_target,
 		"fish_area": fish_area,
+		"fish_home": fish_home,
 		"fish_landing": fish_landing,
 		"fish_phase": fish_phase,
 		"fish_ground": fish_ground,
@@ -1412,11 +1444,13 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.route.assign(data.get("route", []))
 	ship.pending_route.assign(data.get("pending_route", []))
 	ship.route_index = int(data.get("route_index", -1))
+	ship.hop_to = str(data.get("hop_to", ""))
 	ship.paused = bool(data.get("paused", false))
 	ship.from_port = data.get("from_port", "")
 	ship.to_port = data.get("to_port", "")
 	ship.fish_target = str(data.get("fish_target", ""))
 	ship.fish_area = str(data.get("fish_area", ""))
+	ship.fish_home = str(data.get("fish_home", ""))
 	ship.fish_landing = str(data.get("fish_landing", "auto"))
 	ship.fish_phase = str(data.get("fish_phase", ""))
 	ship.fish_ground = str(data.get("fish_ground", ""))

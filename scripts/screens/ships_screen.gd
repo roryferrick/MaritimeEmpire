@@ -93,6 +93,13 @@ func _ready() -> void:
 	%Header.add_child(_upgrade_all)
 	_upgrade_all.add_child(_upgrade_all_alert)
 	%Header.move_child(_upgrade_all, %CountLabel.get_index())
+	var grounds := Button.new()  # Where the fishing and crabbing boats go (FishingScreen).
+	grounds.text = "Fishing Grounds"
+	grounds.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)
+	grounds.tooltip_text = "Pick fishing grounds on the map and send your fishing and crabbing boats there by model."
+	grounds.pressed.connect(func() -> void: GameRoot.find(self).open_fishing_screen())
+	%Header.add_child(grounds)
+	%Header.move_child(grounds, %CountLabel.get_index())
 	var uniforms := Button.new()  # What the crews wear (UniformsPage).
 	uniforms.text = "Uniforms"
 	uniforms.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)

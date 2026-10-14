@@ -30,7 +30,7 @@ func open(ship: Ship) -> void:
 	var current := "Current route: %s" % GameData.route_text(ship.route) if ship.has_route() else "No current route."
 	var needs := str(ship.model().get("min_port", ""))
 	var docks := " Docks only at %s ports or bigger, or at an HQ or hub." % needs.capitalize() if not needs.is_empty() else ""
-	%CurrentLabel.text = "%s\nRange: %s nm per leg.%s Starting from %s." % [
+	%CurrentLabel.text = "%s\nRange: %s nm on a tank; ports farther off are reached by way of refuel stops, shown on the map and below.%s Starting from %s." % [
 		current, Fmt.thousands(roundi(ship.range_nm())), docks, GameData.port_name(ship.reference_port())]
 	_refresh()
 	# Refit once the top and bottom bars have gone and the map has its full size.
@@ -55,13 +55,12 @@ func _add_waypoint(port_id: String) -> void:
 		_message = "Already stopping at %s. Pick a different port." % GameData.port_name(port_id)
 	elif not _ship.fits_port(port_id):
 		_message = GameState.port_size_error(_ship.model(), port_id)
-	elif port_id != from and not _ship.can_sail(from, port_id):
-		_message = "%s is out of range: %s nm from %s, and this ship's range is %s nm." % [
-			GameData.port_name(port_id), Fmt.thousands(roundi(GameData.distance_nm(from, port_id))),
-			GameData.port_name(from), Fmt.thousands(roundi(_ship.range_nm()))]
+	elif port_id != from and not GameState.can_get_to(_ship, from, port_id):
+		_message = GameState._reach_error(_ship, from, port_id)
 	else:
 		_waypoints.append(port_id)
-		_message = ""
+		var stops := GameState.refuel_stops(_ship, from, port_id)
+		_message = "" if stops.is_empty() else "Beyond one tank from %s: it %s on the way." % [GameData.port_name(from), GameState.refuel_text(stops)]
 	_refresh()
 
 
@@ -106,9 +105,16 @@ func _refresh() -> void:
 	_map.price_origin = from
 	var dimmed := {}
 	for port: Dictionary in GameData.ports:
-		if port.id != from and not _ship.can_sail(from, port.id):
+		if port.id != from and not GameState.can_get_to(_ship, from, port.id):
 			dimmed[port.id] = true
 	_map.dimmed_ports = dimmed
+	# Legs beyond one tank go by way of their refuel stops, marked on the map.
+	var hops := {}
+	for i in (_waypoints.size() if _waypoints.size() >= 2 else 0):
+		var stops := GameState.refuel_stops(_ship, _waypoints[i], _waypoints[(i + 1) % _waypoints.size()])
+		if not stops.is_empty():
+			hops[i] = stops
+	_map.route_hops = hops
 	_rebuild_list()
 
 	var error := GameState.route_error(_waypoints, _ship)
@@ -131,6 +137,15 @@ func _rebuild_list() -> void:
 	var total_nm := 0.0
 	var total_lock_s := 0.0
 	var total_sailing_s := 0.0
+	var total_refuels := 0
+	# Getting to the first stop from where the ship is now, if that needs refuel stops.
+	var start := _ship.reference_port()
+	if n > 0 and not _waypoints.has(start):
+		var first_stops := GameState.refuel_stops(_ship, start, _waypoints[0])
+		if not first_stops.is_empty():
+			var getting := _refuel_label(first_stops)
+			getting.text = "      Getting to %s from %s first: it %s." % [GameData.port_name(_waypoints[0]), GameData.port_name(start), GameState.refuel_text(first_stops)]
+			%WaypointList.add_child(getting)
 	for i in n:
 		var stop_row := HBoxContainer.new()
 		var stop := Label.new()
@@ -150,18 +165,31 @@ func _rebuild_list() -> void:
 		var next := _waypoints[(i + 1) % n]
 		if next == _waypoints[i]:
 			continue
-		var distance := GameData.distance_nm(_waypoints[i], next)
-		var lock_s := GameData.canal_lock_seconds(_waypoints[i], next)
-		var sailing_s := _sailing_seconds(_waypoints[i], next)
+		# Beyond one tank: by way of its refuel stops, each a stop in port (its time counted).
+		var stops := GameState.refuel_stops(_ship, _waypoints[i], next)
+		var distance := 0.0
+		var lock_s := 0.0
+		var sailing_s := 0.0
+		var at := _waypoints[i]
+		for port: String in stops + [next]:
+			distance += GameData.distance_nm(at, port)
+			lock_s += GameData.canal_lock_seconds(at, port)
+			sailing_s += _sailing_seconds(at, port)
+			if port != next:
+				lock_s += _ship.dock_seconds()
+			at = port
+		total_refuels += stops.size()
 		total_sailing_s += sailing_s
 		total_nm += distance
 		total_lock_s += lock_s
 		var leg := Label.new()
-		leg.theme_type_variation = &"DimLabel" if _ship.can_sail(_waypoints[i], next) else &"ErrorLabel"
+		leg.theme_type_variation = &"DimLabel" if GameState.can_get_to(_ship, _waypoints[i], next) else &"ErrorLabel"
 		leg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var prefix := "back to" if i == n - 1 else "to"
 		leg.text = "      %s %s · %s%s" % [prefix, GameData.port_name(next), _leg_text(distance, sailing_s, lock_s), _canal_text(_waypoints[i], next)]
 		%WaypointList.add_child(leg)
+		if not stops.is_empty():
+			%WaypointList.add_child(_refuel_label(stops))
 		var trade := Label.new()
 		var sails_empty: bool = GameState.market.best_cargo(_ship.model(), _waypoints[i], next)[0] == ""
 		trade.theme_type_variation = &"ErrorLabel" if sails_empty else &"GainLabel"
@@ -175,6 +203,8 @@ func _rebuild_list() -> void:
 		%TotalLabel.text = "Add at least one more port."
 	else:
 		%TotalLabel.text = "Full loop: %s" % _leg_text(total_nm, total_sailing_s, total_lock_s)
+		if total_refuels > 0:
+			%TotalLabel.text += "\nIncludes %d refuel stop%s (no trading there), marked on the map." % [total_refuels, "" if total_refuels == 1 else "s"]
 
 
 ## Distance and time: sailing at top speed (slower in convoy canals), plus
@@ -265,3 +295,12 @@ func _trade_text(from_port: String, to_port: String) -> String:
 	var fee := GameState.port_fee(to_port, margin)
 	return "loads %s: about +%s%s" % [GameData.commodity(best[0]).get("name", best[0]), Fmt.money(roundi(best[1] * quantity - fee)),
 		" after a %s port fee" % Fmt.money(fee) if fee > 0 else ""]
+
+
+## Refuel stops' colour in the list (as on the map: MapView.REFUEL_COLOR).
+func _refuel_label(stops: Array[String]) -> Label:
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override(&"font_color", MapView.REFUEL_COLOR)
+	label.text = "      Beyond one tank: %s on the way (no trading there)" % GameState.refuel_text(stops)
+	return label

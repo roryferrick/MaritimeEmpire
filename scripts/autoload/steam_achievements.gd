@@ -147,7 +147,7 @@ func check(company: Company) -> Array:
 			"the_game_starts_now", "top_of_the_line", "call_the_mammoth":
 				done = models_bought.has(_model_for(id))
 			"dressed_for_the_occasion":
-				done = not Cosmetics.equipped.is_empty() or GameState.fleet(company).any(func(ship: Ship) -> bool: return not ship.skin.is_empty() and ship.skin != "base")
+				done = Cosmetics.wears_any() or GameState.fleet(company).any(func(ship: Ship) -> bool: return not ship.skin.is_empty() and ship.skin != "base")
 			"full_wardrobe":
 				for pack: Dictionary in Cosmetics.catalog.get("packs", []):
 					if Cosmetics.owns(str(pack.id)):

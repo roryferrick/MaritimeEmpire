@@ -3,8 +3,8 @@ class_name SkinPicker
 extends Control
 ## A ship's skin (the Skin button on its popup): the skins this player owns
 ## that fit its model (Cosmetics.skins_for_model()), each with its picture
-## and name, and the base ship, and "as the Shop" (the pack worn there, if
-## any: Ship.skin ""). Picking one sets it (GameState.set_skin()) and closes.
+## and name, and the base ship, and "as the Inventory" (the model's choice
+## there, or the pack worn: Ship.skin ""). Picking one sets it (GameState.set_skin()) and closes.
 ## Over whatever opened it, dimming it; Esc, X or a click outside closes it.
 
 const PICTURE := Vector2(144, 42)
@@ -52,14 +52,14 @@ func _ready() -> void:
 	var note := Label.new()
 	note.theme_type_variation = &"DimLabel"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "The %s skins you own. More are in the Shop (Esc menu)." % str(ship.model().get("name", ""))
+	note.text = "The %s skins you own. More are in the Shop on the title screen; the Inventory there sets what each model wears by default." % str(ship.model().get("name", ""))
 	content.add_child(note)
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override(&"h_separation", 8)
 	grid.add_theme_constant_override(&"v_separation", 8)
 	content.add_child(grid)
-	var choices := [["", "As the Shop", null, "The pack worn in the Shop, if any"], ["base", "Base ship", null, "The ship as it is"]]
+	var choices := [["", "As the Inventory", null, "What the Inventory (on the title screen) sets for this model, or the pack worn"], ["base", "Base ship", null, "The ship as it is"]]
 	for skin: Dictionary in Cosmetics.skins_for_model(ship.model_id):
 		choices.append([Cosmetics.skin_key(str(skin.pack), str(skin.id)), str(skin.name), skin.texture, str(skin.pack_title)])
 	for choice: Array in choices:
@@ -110,7 +110,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## The ship as it is: its hull in its map colour with its details (and, for
-## "as the Shop", the same with a question mark over it).
+## "as the Inventory", the same with a question mark over it).
 class BasePicture extends Control:
 	var model: Dictionary
 	var plain: bool

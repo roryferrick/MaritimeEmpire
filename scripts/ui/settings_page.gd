@@ -4,7 +4,8 @@ extends Control
 ## Settings (from the Esc menu), in two tabs. General: three-step sliders for
 ## how ships far off are drawn (Settings.ship_look), the map's routes (none,
 ## only mine, all: GameState.show_active_routes and Settings.own_routes_only)
-## and the night (always day, half as dark, full: Settings.night), and the
+## the night (always day, half as dark, full: Settings.night) and antialiasing
+## (off, low, medium, high: Settings.antialias), and the
 ## Birds switch (Settings) and, in a game with the tutorial, the Tutorial switch (its tips).
 ## Audio: a volume for everything and for each kind of sound (Settings'
 ## buses). Over whatever opened it, dimming it; Esc, X or a click outside
@@ -80,6 +81,10 @@ func _general_tab() -> Control:
 	box.add_child(_levels(night_names, Settings.NIGHTS.find(Settings.night),
 		"The side of the world away from the sun goes dark, with ships', harbours' and towns' lights: always day, only half as dark, or the full night.",
 		func(level: int) -> void: Settings.night = Settings.NIGHTS[level]))
+	box.add_child(_heading("Antialiasing"))
+	box.add_child(_levels(Settings.ANTIALIAS_NAMES, Settings.antialias,
+		"Smooths the jagged edges of coasts, ships and lines on the map: off, or blending 3, 5 or 9 pixels along each edge. Only edge pixels are worked on, so even High costs little; Off costs nothing.",
+		func(level: int) -> void: Settings.antialias = level))
 	box.add_child(_heading("Map"))
 	var birds := CheckButton.new()
 	birds.text = "Birds"

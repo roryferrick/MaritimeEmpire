@@ -62,6 +62,16 @@ var birds := true:
 		birds = value
 		_save()
 		changed.emit()
+## Antialiasing on the map (MapView's edge pass, scripts/ui/antialias.gdshader):
+## 0 off (no pass at all), 1 low, 2 medium, 3 high: on each edge pixel the
+## pass blends 3, 5 or 9 pixels along the edge (ANTIALIAS_SPANS).
+const ANTIALIAS_NAMES := ["Off", "Low (3)", "Medium (5)", "High (9)"]
+const ANTIALIAS_SPANS := [0, 3, 5, 9]
+var antialias := 0:
+	set(value):
+		antialias = clampi(value, 0, ANTIALIAS_SPANS.size() - 1)
+		_save()
+		changed.emit()
 var _volumes := {}
 
 
@@ -81,6 +91,7 @@ func _ready() -> void:
 		night = dark if dark in NIGHTS else "full"
 		birds = bool(config.get_value("general", "birds", true))
 		own_routes_only = bool(config.get_value("general", "own_routes_only", false))
+		antialias = int(config.get_value("general", "antialias", 0))
 		for entry: Array in VOLUMES:
 			_volumes[entry[0]] = clampf(float(config.get_value("audio", str(entry[0]), 1.0)), 0.0, volume_most(str(entry[0])))
 	for entry: Array in VOLUMES:
@@ -116,6 +127,7 @@ func _save() -> void:
 	config.set_value("general", "night", night)
 	config.set_value("general", "birds", birds)
 	config.set_value("general", "own_routes_only", own_routes_only)
+	config.set_value("general", "antialias", antialias)
 	for entry: Array in VOLUMES:
 		config.set_value("audio", str(entry[0]), volume(str(entry[0])))
 	config.save(PATH)

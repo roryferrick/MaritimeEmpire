@@ -69,6 +69,88 @@ static func is_ground(port_id: String) -> bool:
 	return port_id.begins_with("@")
 
 
+## A ground's name ("Bristol Bay"), or its id.
+static func ground_name(ground_id: String) -> String:
+	return str(shared().grounds.get(ground_id, {}).get("name", ground_id))
+
+
+## A ground's name short, for lists and labels: "Off Yingkou" for the
+## inshore grounds named for a coast off a port, else its name without its
+## "the", capitalised ("Bering Sea shelf").
+static func short_ground_name(ground_id: String) -> String:
+	var full := ground_name(ground_id)
+	var off := full.rfind(" off ")
+	if off >= 0 and (full.contains(" coast off ") or full.contains("waters off ")):
+		return "Off " + full.substr(off + 5)
+	if full.begins_with("the "):
+		full = full.substr(4)
+	return full.substr(0, 1).to_upper() + full.substr(1)
+
+
+## A species' colour on the map's month pies: its family's, a little lighter
+## or darker for each species after the first in the family, so two of a
+## family side by side can be told apart.
+func species_color(species_id: String) -> Color:
+	var family := family_of(species_id)
+	var base := Color.from_string(str(families.get(family, {}).get("color", "#7f8c99")), Color(0.5, 0.55, 0.6))
+	if not _family_members.has(family):
+		var members: Array[String] = []
+		for id: String in species:
+			if family_of(id) == family:
+				members.append(id)
+		members.sort()
+		_family_members[family] = members
+	var index := (_family_members[family] as Array).find(species_id)
+	if index <= 0:
+		return base
+	var step := 0.16 * ceilf(index / 2.0)
+	return base.lightened(step) if index % 2 == 1 else base.darkened(step)
+
+var _family_members := {}
+
+
+## How good a ground is over the year, for ranking (the Fishing Grounds
+## screen): each month the best a crate-a-day there is worth (the thickest
+## species in season, by its density, grade and family's base price a ton),
+## averaged over the twelve months; 0 for a ground with nothing.
+func ground_quality(ground_id: String) -> float:
+	if _quality.has(ground_id):
+		return _quality[ground_id]
+	var ground: Dictionary = grounds.get(ground_id, {})
+	var total := 0.0
+	for month in 12:
+		var best := 0.0
+		for species_id: String in ground.get("species", {}):
+			if not in_season(ground_id, species_id, month):
+				continue
+			var value := float(ground.species[species_id].density) * float(species[species_id].get("grade", 1.0)) * float(families.get(family_of(species_id), {}).get("base", 0.0))
+			best = maxf(best, value)
+		total += best
+	_quality[ground_id] = total / 12.0
+	return _quality[ground_id]
+
+var _quality := {}
+
+
+## The species of a ground in season in a month (0-11), thickest first.
+func in_season_at(ground_id: String, month: int) -> Array[String]:
+	var out: Array[String] = []
+	var ground: Dictionary = grounds.get(ground_id, {})
+	for species_id: String in ground.get("species", {}):
+		if in_season(ground_id, species_id, month):
+			out.append(species_id)
+	out.sort_custom(func(a: String, b: String) -> bool: return float(ground.species[a].density) > float(ground.species[b].density))
+	return out
+
+
+## True if a boat model's gear and depth can work anything on a ground.
+func model_works_ground(model: Dictionary, ground_id: String) -> bool:
+	for species_id: String in grounds.get(ground_id, {}).get("species", {}):
+		if can_work(model, ground_id, species_id):
+			return true
+	return false
+
+
 ## True if a commodity is a seafood family.
 func is_seafood(commodity_id: String) -> bool:
 	return families.has(commodity_id)

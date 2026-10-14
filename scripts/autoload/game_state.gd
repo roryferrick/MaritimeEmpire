@@ -1405,7 +1405,8 @@ func suggest_ship_name() -> String:
 ## Why a route can't be given to a ship, or "" if it's valid. Routes loop, so
 ## the last stop also can't be the same as the first, and every leg (including
 ## the one back to the start, and the trip from where the ship is now to the
-## route's first port) must be within the ship's range.
+## route's first port) must be one it can make, refuelling at ports on the way
+## if it's beyond one tank (see refuel_path()).
 func route_error(route: Array[String], ship: Ship) -> String:
 	if route.size() < 2:
 		return "A route needs at least 2 ports."
@@ -1420,12 +1421,187 @@ func route_error(route: Array[String], ship: Ship) -> String:
 	for i in route.size():
 		var from := route[i]
 		var to := route[(i + 1) % route.size()]
-		if not ship.can_sail(from, to):
-			return _range_error(ship, from, to)
+		if not can_get_to(ship, from, to):
+			return _reach_error(ship, from, to)
 	var start := ship.reference_port()
-	if not route.has(start) and not ship.can_sail(start, route[0]):
-		return _range_error(ship, start, route[0])
+	if not route.has(start) and not can_get_to(ship, start, route[0]):
+		return _reach_error(ship, start, route[0])
 	return ""
+
+
+# --- Refuel stops ----------------------------------------------------------------
+
+## A port beyond one tank is reached by way of refuel stops: the ship sails
+## port to port, each leg one it can sail on a full tank (Ship.can_sail()),
+## each stop a port it fits that its company has unlocked, and fills up at
+## each (Ship.hop_to; GameState._try_depart() picks the next stop). Routes
+## may have legs like that, a fishing boat's ground may lie beyond a trip
+## from its port, and a ship sent somewhere new steps its way there.
+
+## A refuel stop counts as this many extra miles, so of two ways about as
+## long the one with fewer stops wins.
+const REFUEL_STOP_NM := 120.0
+## Each port's lanes to the others, nearest first ([id, nm] each), built for a
+## port the first time it's asked for.
+var _lane_neighbours := {}
+## Kept refuel trees (refuel_tree()), dropped when the month changes (the
+## currents change how long legs take) or the regions do.
+var _refuel_trees := {}
+var _refuel_trees_key := []
+
+
+func _lane_neighbours_of(port_id: String) -> Array:
+	if not _lane_neighbours.has(port_id):
+		var out := []
+		for port: Dictionary in GameData.ports:
+			var id := str(port.id)
+			if id == port_id:
+				continue
+			var nm := GameData.distance_nm(port_id, id, -1)
+			if nm < INF:
+				out.append([id, nm])
+		out.sort_custom(func(a: Array, b: Array) -> bool: return float(a[1]) < float(b[1]))
+		_lane_neighbours[port_id] = out
+	return _lane_neighbours[port_id]
+
+
+## True if a company may use a port as a stop (its region unlocked; the AI
+## rivals go anywhere).
+func port_open_to(who: Company, port_id: String) -> bool:
+	if not who.ai.is_empty():
+		return true
+	var region := str(GameData.port_region(port_id).get("id", ""))
+	return region.is_empty() or who.regions.has(region)
+
+
+## Every port a ship can get to from `from` stepping port to port and
+## refuelling at each: {nm: {port: miles there, refuel stops counted},
+## prev: {port: the stop before it}, stops: {port: refuel stops on the way}}.
+## Kept for ships alike (model, speed, burn, wear) from the same port.
+func refuel_tree(ship: Ship, from: String) -> Dictionary:
+	var who := owner_of(ship)
+	var month_key := [GameData.month, regions.size(), companies.size()]
+	if month_key != _refuel_trees_key:
+		_refuel_trees.clear()
+		_refuel_trees_key = month_key
+	var key := [ship.model_id, ship.top_speed(), ship.fuel_per_s(), ship.wear_per_s(), who.regions.size() if who.ai.is_empty() else -1, from]
+	if _refuel_trees.has(key):
+		return _refuel_trees[key]
+	var reach := ship.range_nm()
+	var best := {from: 0.0}
+	var prev := {}
+	var stops := {from: 0}
+	var done := {}
+	var open := {from: true}  # (Ports reached but not yet stepped on from.)
+	# Legs are checked for fuel (Ship.can_sail(), costly the first time for a
+	# lane: its zones) only as the search settles on them, not every one in
+	# range: a leg that fails is ruled out and the port is reached again by
+	# its next best way from the ports already settled.
+	var bad := {}
+	while not open.is_empty():
+		var here := ""
+		var here_nm := INF
+		for port: String in open:
+			if float(best[port]) < here_nm:
+				here_nm = best[port]
+				here = port
+		open.erase(here)
+		if here != from and not ship.can_sail(prev[here], here):
+			bad[[prev[here], here]] = true
+			best.erase(here)
+			prev.erase(here)
+			var ways := []
+			for settled: String in done:
+				var leg := GameData.distance_nm(settled, here, -1)
+				if leg <= reach and not bad.has([settled, here]):
+					ways.append([float(best[settled]) + leg + (REFUEL_STOP_NM if settled != from else 0.0), settled])
+			ways.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+			if not ways.is_empty():
+				best[here] = ways[0][0]
+				prev[here] = ways[0][1]
+				stops[here] = int(stops[ways[0][1]]) + (1 if ways[0][1] != from else 0)
+				open[here] = true  # (Checked again when it's next the nearest.)
+			continue
+		done[here] = true
+		for pair: Array in _lane_neighbours_of(here):
+			var nm := float(pair[1])
+			if nm > reach:
+				break
+			var there := str(pair[0])
+			if done.has(there) or bad.has([here, there]):
+				continue
+			var total := here_nm + nm + (REFUEL_STOP_NM if here != from else 0.0)
+			if total >= float(best.get(there, INF)):
+				continue
+			if not port_open_to(who, there) or not ship.fits_port(there) or not ship.fits_lane(here, there):
+				continue
+			best[there] = total
+			prev[there] = here
+			stops[there] = int(stops[here]) + (1 if here != from else 0)
+			open[there] = true
+	var tree := {nm = best, prev = prev, stops = stops}
+	_refuel_trees[key] = tree
+	return tree
+
+
+## The ports a ship stops at going from `from` to `to`, `to` last: just [to]
+## for a leg it can sail on one tank, the refuel stops before it otherwise;
+## [] if it can't get there even refuelling on the way.
+func refuel_path(ship: Ship, from: String, to: String) -> Array[String]:
+	var path: Array[String] = []
+	if from == to:
+		return path
+	if ship.can_sail(from, to):
+		path.append(to)
+		return path
+	var tree := refuel_tree(ship, from)
+	if not (tree.prev as Dictionary).has(to):
+		return path
+	var at := to
+	while at != from:
+		path.push_front(at)
+		at = tree.prev[at]
+	return path
+
+
+## The refuel stops on the way from one port to another (refuel_path() less
+## its end); [] for a leg sailed on one tank, or one it can't make at all.
+func refuel_stops(ship: Ship, from: String, to: String) -> Array[String]:
+	var path := refuel_path(ship, from, to)
+	if not path.is_empty():
+		path.pop_back()
+	return path
+
+
+## True if a ship can get from one port to another at all, refuelling on the way if it must.
+func can_get_to(ship: Ship, from: String, to: String) -> bool:
+	return from == to or ship.can_sail(from, to) or (refuel_tree(ship, from).prev as Dictionary).has(to)
+
+
+## The sea miles from one port to another by way of its refuel stops (INF if it can't get there).
+func refuel_path_nm(ship: Ship, from: String, to: String) -> float:
+	var nm := 0.0
+	var at := from
+	var path := refuel_path(ship, from, to)
+	if path.is_empty() and from != to:
+		return INF
+	for port in path:
+		nm += GameData.distance_nm(at, port)
+		at = port
+	return nm
+
+
+## "refuels at Valletta and Heraklion" and the like, for the route screen,
+## popups and the log.
+static func refuel_text(stops: Array) -> String:
+	var names := PackedStringArray()
+	for port: String in stops:
+		names.append(GameData.port_name(port))
+	if names.is_empty():
+		return ""
+	if names.size() == 1:
+		return "refuels at %s" % names[0]
+	return "refuels at %s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[-1]]
 
 
 ## A port's size as shown: "Medium 29".
@@ -1446,6 +1622,16 @@ func can_launch_at(model_id: String, port_id: String) -> bool:
 	var model := GameData.get_ship_model(model_id)
 	var too_big_for_seaway: bool = not model.get("seaway", false) and GameData.get_port(port_id).get("seaway", false)
 	return hub_at(port_id) != null and not too_big_for_seaway and port_sizes.fits(model, port_id)
+
+
+## Why a ship can't get from one port to another even refuelling on the way.
+func _reach_error(ship: Ship, from: String, to: String) -> String:
+	if not ship.fits_port(to) or not ship.fits_lane(from, to):
+		return _range_error(ship, from, to)
+	if not port_open_to(owner_of(ship), to):
+		return locked_port_error(to)
+	return "%s can't be reached from %s, even refuelling on the way: no chain of ports within this ship's %s nm range leads there." % [
+		GameData.port_name(to), GameData.port_name(from), Fmt.thousands(roundi(ship.range_nm()))]
 
 
 func _range_error(ship: Ship, from: String, to: String) -> String:
@@ -1473,6 +1659,7 @@ func assign_route(ship: Ship, route: Array[String]) -> void:
 	if ship.is_docked():
 		ship.route = route.duplicate()
 		ship.pending_route.clear()
+		ship.hop_to = ""  # (A new plan: any refuel stops are worked out again from here.)
 		ship.route_index = ship.route.find(ship.docked_at)
 	else:
 		ship.pending_route = route.duplicate()
@@ -2053,6 +2240,12 @@ func _arrive(ship: Ship, port: String, paid := true) -> void:
 	MapView._prof("sim.arrive", t_x)
 
 func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
+	# A refuel stop on its way to somewhere beyond one tank (see hop_to): no
+	# trade here, its cargo (or catch) stays aboard for where it's bound. A new
+	# route waiting to start drops the old plan.
+	if not ship.pending_route.is_empty() or ship.hop_to == port:
+		ship.hop_to = ""
+	var refuel_stop := not ship.hop_to.is_empty()
 	ship.weather_wait = ""
 	ship.ice_wait = ""
 	ship.at_risk = false
@@ -2068,11 +2261,13 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 	# XP counts the leg it came, none if a recovery boat carried it back.
 	ship.cargo_payment = 0
 	ship.cargo_leg_nm = 0.0
-	if not ship.cargo_id.is_empty():
+	if not ship.cargo_id.is_empty() and not refuel_stop:
+		# Counted from where it was loaded (refuel stops on the way don't count as legs).
+		var origin := ship.cargo_from if not ship.cargo_from.is_empty() and GameData.distance_nm(ship.cargo_from, port) < INF else ship.from_port
 		var sale := ship.cargo_qty * company_sell_price(port, ship.cargo_id, owner_of(ship))
-		ship.cargo_payment = roundi(sale + trade_bonus(ship.from_port, port, sale - ship.cargo_cost, ship.model_id, owner_of(ship)))
-		ship.cargo_leg_nm = GameData.distance_nm(ship.from_port, port) if paid and ship.from_port != port else 0.0
-	ship.unloaded = ship.is_service() and not ship.is_fishing()
+		ship.cargo_payment = roundi(sale + trade_bonus(origin, port, sale - ship.cargo_cost, ship.model_id, owner_of(ship)))
+		ship.cargo_leg_nm = GameData.distance_nm(origin, port) if paid and origin != port else 0.0
+	ship.unloaded = ship.is_service() and not ship.is_fishing() or refuel_stop
 	ship.docked_at = port
 	ship.from_port = ""
 	ship.to_port = ""
@@ -2144,12 +2339,12 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		ship.dock_time = -1.0
 		ship_changed.emit(ship)
 	var t_ad := Time.get_ticks_usec()
-	if ship.is_service() and not ship.base_port.is_empty() and ship.docked_at != ship.base_port and not _on_ice_duty(ship):
+	if ship.is_fishing():
+		_fishing_in_port(ship, delta)
+		MapView._prof("adv.fishing", t_ad)
+	elif ship.is_service() and not ship.base_port.is_empty() and ship.docked_at != ship.base_port and not _on_ice_duty(ship):
 		_try_depart(ship, delta, ship.base_port)
 		MapView._prof("adv.try_depart", t_ad)
-	elif ship.is_fishing():
-		_fishing_in_port(ship)
-		MapView._prof("adv.fishing", t_ad)
 	elif ship.is_running():
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
 		MapView._prof("adv.try_depart", t_ad)
@@ -2245,13 +2440,13 @@ func _unload(ship: Ship) -> void:
 
 func _unload_timed(ship: Ship) -> void:
 	ship.unloaded = true
-	if ship.is_fishing() and ship.catch > 0.0:
+	if ship.is_fishing() and ship.catch > 0.0 and ship.docked_at == ship.base_port:  # (Elsewhere it's on its way home: see _fishing_in_port().)
 		_land_catch(ship, ship.docked_at)
 	if not ship.cargo_id.is_empty():
 		var t_u := Time.get_ticks_usec()
 		_sell_cargo(ship)
 		MapView._prof("unload.sell", t_u)
-	if ship.is_running():
+	if ship.is_running() and not ship.is_refuel_stop():
 		var t_l := Time.get_ticks_usec()
 		_load_cargo(ship, ship.route[ship.next_route_index()])
 		MapView._prof("unload.load", t_l)
@@ -2404,6 +2599,17 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	if not ship.fits_port(to):
 		_set_hold(ship, "%s is too small for this ship; assign a new route" % GameData.port_name(to))
 		return
+	# Beyond one tank: the next refuel stop on the way (see refuel_path()) is
+	# where it sails now, and it carries on from there. Its cargo is still for `to`.
+	var bound := to
+	if not ship.can_sail(ship.docked_at, to):
+		var path := refuel_path(ship, ship.docked_at, to)
+		if path.is_empty():
+			_set_hold(ship, "%s is beyond this ship's reach, even refuelling on the way; assign a new route" % GameData.port_name(to))
+			return
+		to = path[0]
+	ship.bound_for = bound  # (Becomes its hop_to as it sets off for `to`: see _set_off().)
+	ship.bound_step = to
 	# A storm over the port: wait it out (nothing for the player to do).
 	var storm := weather.closed_by(ship.docked_at)
 	if not storm.is_empty():
@@ -2426,7 +2632,7 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	# A cargo ship lying at the anchorage loads, refuels and repairs only in
 	# port: it comes in for a stop if it needs to (see _anchored_call()).
 	var anchored := not ship.is_service() and ship.berth < 0
-	if anchored and _anchored_call(ship, to):
+	if anchored and _anchored_call(ship, to, bound):
 		return
 	var phase := ship.refill_phase_seconds()
 	var topping_up := not anchored and ship.auto_refuel and ship.fuel < ship.fuel_tank() and _can_spend(ship)
@@ -2456,7 +2662,7 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 			else:
 				_set_hold(ship, "waiting for money to buy fuel for %s" % destination)
 			return
-	if _waiting_for_load(ship, to):
+	if not ship.is_refuel_stop() and _waiting_for_load(ship, bound):
 		return
 	# Leaving a port in an ice area that has an icebreaker: wait for it to lead
 	# the way out (it calls _depart() itself; see _begin_escort()).
@@ -2482,18 +2688,20 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 ## the money for them. True if it's coming in or waiting; false if it can go
 ## on to set off straight from the anchorage (or be held for a reason the
 ## stop wouldn't help: out of range, no money for fuel...).
-func _anchored_call(ship: Ship, to: String) -> bool:
+func _anchored_call(ship: Ship, to: String, bound := "") -> bool:
 	var who := owner_of(ship)
-	if ship.cargo_id.is_empty():
-		var best: String = market.best_cargo(ship.model(), ship.docked_at, to, who)[0]
+	if bound.is_empty():
+		bound = to
+	if ship.cargo_id.is_empty() and not ship.is_refuel_stop():
+		var best: String = market.best_cargo(ship.model(), ship.docked_at, bound, who)[0]
 		if not best.is_empty():
 			if ship.full_loads and not in_debt(who):
-				var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
+				var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, bound, ship.model())))
 				ship.load_need = roundi(room * company_buy_price(ship.docked_at, best, who) + ship.bill + fuel_reserve(who) + who.bank_reserve)
 				if who.money < ship.load_need:
 					ship.load_check_time = play_time + LOAD_RECHECK_S
 					_set_hold(ship, "")
-					var reason := "waiting for money for a full load to %s" % GameData.port_name(to)
+					var reason := "waiting for money for a full load to %s" % GameData.port_name(bound)
 					if who.bank_reserve > 0:
 						reason += " (keeping %s in the bank)" % Fmt.money(who.bank_reserve)
 					_set_load_wait(ship, reason)
@@ -2592,11 +2800,15 @@ func _depart_timed(ship: Ship, to: String) -> void:
 ## unloading: a new ship, or a new route), or straight from the anchorage.
 func _set_off(ship: Ship, to: String, from_berth := false) -> void:
 	docks.release(ship)  # It might have been queuing (a convoy leaving an iced port).
+	var bound := ship.bound_for if not ship.bound_for.is_empty() and ship.bound_step == to else to
+	ship.bound_for = ""
+	ship.bound_step = ""
 	ship.berth_phase = Ship.BERTH_NONE
 	if not ship.is_service():
 		ship.route_index = ship.next_route_index()
-		if from_berth:
-			_load_cargo(ship, to)
+		if from_berth and not ship.is_refuel_stop():  # (No trade at a refuel stop.)
+			_load_cargo(ship, bound)
+	ship.hop_to = bound if bound != to else ""  # (Bound beyond this leg: the port it's sailing to is a refuel stop.)
 	_leave_port(ship)
 	ship.from_port = ship.docked_at
 	ship.to_port = to
@@ -4149,13 +4361,19 @@ func fishing_options(ship: Ship, base := "") -> Array:
 		func(port: String, family: String) -> float: return company_sell_price(port, family, who))
 
 
-## Its next trip: {ground, species, work_limit_s} (worked out from its target,
-## or the best this season), or {wait: why it stays in port}.
+## Its next trip from the port it fishes from (fishing_stage()): {ground,
+## species, work_limit_s} (worked out from its target, or its ground's best
+## this season, or the best anywhere), or {wait: why it stays in port}.
 func fishing_plan(ship: Ship) -> Dictionary:
 	var fish := Fisheries.shared()
-	var choices := fishing_options(ship)
+	var choices := fishing_options(ship, fishing_stage(ship))
 	if choices.is_empty():
 		return {wait = "no fishing grounds within reach for its gear"}
+	if ship.fish_target.is_empty() and not ship.fish_area.is_empty():
+		# Sent to a ground (the Fishing Grounds screen): only what's there.
+		choices = choices.filter(func(option: Dictionary) -> bool: return option.ground == ship.fish_area)
+		if choices.is_empty():
+			return {wait = "nothing at %s it can catch" % Fisheries.ground_name(ship.fish_area)}
 	var pick := {}
 	var full := ""  # (A ground it would have gone to, with GROUND_BOATS boats on it already.)
 	var counts := _ground_boats(ship)
@@ -4168,6 +4386,10 @@ func fishing_plan(ship: Ship) -> Dictionary:
 				pick = option
 				break
 		if pick.is_empty():
+			if not ship.fish_area.is_empty():
+				if not full.is_empty():
+					return {wait = "%s has %d boats on it already" % [Fisheries.ground_name(ship.fish_area), GROUND_BOATS]}
+				return {wait = "nothing it can catch is in season at %s now" % Fisheries.ground_name(ship.fish_area)}
 			if not full.is_empty():
 				return {wait = "every ground in season within reach has %d boats on it" % GROUND_BOATS}
 			return {wait = "nothing it can catch is in season within reach"}
@@ -4234,11 +4456,71 @@ func _fishing_hull_seconds(ship: Ship, ground: String, sail_s: float) -> float:
 	return spend / (wear * (Fisheries.ROUGH_WEAR if rough else 1.0))
 
 
-## A fishing boat in port at its base with its stop done: it lands anything
-## it brought back, then sets out on its next trip once it has the fuel.
-func _fishing_in_port(ship: Ship) -> void:
-	if ship.catch > 0.0:
-		_land_catch(ship, ship.docked_at)
+## The port a fishing boat sets out on its trips from: its base, unless it's
+## been sent to a ground (fish_area) beyond a trip from there, when it's the
+## port by that ground it can reach (refuelling on the way: refuel_path())
+## that makes the way there and out to the ground shortest. "" if it can't
+## get to any.
+func fishing_stage(ship: Ship) -> String:
+	var base := ship.base_port
+	if ship.fish_area.is_empty() or base.is_empty():
+		return base
+	var key := [base, ship.fish_area, ship.model_id, ship.fuel_per_s(), regions.size()]
+	if ship.get_meta(&"stage_key", []) == key:
+		return str(ship.get_meta(&"stage", base))
+	var stage := fishing_stage_from(ship, base, ship.fish_area)
+	ship.set_meta(&"stage_key", key)
+	ship.set_meta(&"stage", stage)
+	return stage
+
+
+## fishing_stage() for any base and ground: the base itself if a trip from it
+## reaches the ground, else the best port to fish from (or "").
+func fishing_stage_from(ship: Ship, base: String, ground: String) -> String:
+	var fish := Fisheries.shared()
+	var reach := ship.range_nm()
+	if fish.miles_to(base, ground) <= reach:
+		return base
+	var best := ""
+	var best_nm := INF
+	for port: String in fish.grounds.get(ground, {}).get("ports", []):
+		var out := fish.miles_to(port, ground)
+		if out > reach or not ship.fits_port(port) or not port_open_to(owner_of(ship), port):
+			continue
+		var there := refuel_path_nm(ship, base, port)
+		if there + out < best_nm:
+			best_nm = there + out
+			best = port
+	return best
+
+
+## A fishing boat in port with its stop done. At its base it lands anything it
+## brought back. Then: with a catch aboard away from its base, it heads home
+## to land it; away from the port it fishes from (fishing_stage()), it heads
+## there (both by way of refuel stops if they're beyond one tank:
+## _try_depart()); at that port it sets out on its next trip once it has the fuel.
+func _fishing_in_port(ship: Ship, delta := 0.0) -> void:
+	var here := ship.docked_at
+	if ship.catch > 0.0 and here == ship.base_port:
+		_land_catch(ship, here)
+	if not ship.paused:
+		var stage := fishing_stage(ship)
+		if stage.is_empty():
+			_set_fish_wait(ship, "can't reach %s from %s, even refuelling on the way" % [Fisheries.ground_name(ship.fish_area), GameData.port_name(ship.base_port)])
+			if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
+				_pull_out(ship, "")
+			return
+		if ship.catch > 0.0 and ship.catch < 1.0 and here != ship.base_port:
+			ship.catch = 0.0  # (Less than a crate: not worth the trip home.)
+		var goal := ship.base_port if ship.catch >= 1.0 else stage
+		if here != goal:
+			ship.fish_home = ""
+			_set_fish_wait(ship, "")
+			_try_depart(ship, delta, goal)
+			if ship.is_docked() and ship.is_held():
+				_set_fish_wait(ship, ship.hold_reason)
+			return
+		ship.fish_home = here
 	# Waiting (out of season, out of fuel money): it looks again every FISH_RECHECK_S, not every step.
 	if not ship.fish_wait.is_empty() and play_time < float(ship.get_meta(&"fish_check", 0.0)):
 		return
@@ -4268,11 +4550,16 @@ func _fishing_in_port(ship: Ship) -> void:
 	# which starts the trip once it's clear). From the moorings, it sets off
 	# from its spot (the map takes it out the way it came in).
 	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
-		var legs := Fisheries.shared().legs(ship.base_port, plan.ground)
+		var legs := Fisheries.shared().legs(_trip_home(ship), plan.ground)
 		ship.set_meta(&"fish_trip", true)
 		_pull_out(ship, str((legs[0] as Array)[0][1]))
 		return
 	_set_off_fishing(ship, plan)
+
+
+## The port a fishing boat's trip set out from and comes back to.
+func _trip_home(ship: Ship) -> String:
+	return ship.fish_home if not ship.fish_home.is_empty() else ship.base_port
 
 
 ## A fishing boat clear of its pier (or at its spot) with a trip to make sets
@@ -4298,7 +4585,7 @@ func _set_fish_wait(ship: Ship, why: String) -> void:
 
 ## How many boats (every company's) can work a ground at once: each its own
 ## spot on it (Ship.fish_slot), so they spread out over it.
-const GROUND_BOATS := 4
+const GROUND_BOATS := 8
 
 
 ## Each ground's boats heading out to it or working it (not those on their way
@@ -4325,7 +4612,7 @@ func _free_ground_slot(ground: String, ship: Ship) -> int:
 
 ## Sets out for a ground: on a job the whole trip (Ship.JOB_FISH), sailing its legs out.
 func _start_fishing(ship: Ship, ground: String, species: String, work_limit_s: float) -> void:
-	var legs := Fisheries.shared().legs(ship.base_port, ground)
+	var legs := Fisheries.shared().legs(_trip_home(ship), ground)
 	_set_hold(ship, "")
 	_leave_port(ship)
 	ship.docked_at = ""
@@ -4413,7 +4700,7 @@ func _work_ground(ship: Ship, delta: float) -> void:
 		var stock_t := float(fish.grounds[ship.fish_ground].stock_t)
 		fish_stocks[key] = maxf(stock - amount / (stock_t * 40.0), 0.0)  # (40 crates a ton.)
 	# Time to head home?
-	var home_nm := fish.miles_to(ship.base_port, ship.fish_ground)
+	var home_nm := fish.miles_to(_trip_home(ship), ship.fish_ground)
 	var home_s := ship.sailing_seconds(home_nm, ship.maintenance)
 	var short := home_s == INF or ship.fuel < ship.fuel_per_s() * (home_s + DEPARTURE_MARGIN_S) * 1.05
 	var worn := ship.maintenance - ship.wear_per_s() * home_s * 1.05 <= FISH_HOME_MAINTENANCE  # (Home with FISH_HOME_MAINTENANCE left.)
@@ -4422,7 +4709,7 @@ func _work_ground(ship: Ship, delta: float) -> void:
 
 
 func _head_home(ship: Ship) -> void:
-	var legs := Fisheries.shared().legs(ship.base_port, ship.fish_ground)
+	var legs := Fisheries.shared().legs(_trip_home(ship), ship.fish_ground)
 	ship.fish_phase = "home"
 	ship.job_segments = (legs[1] as Array).duplicate(true)
 	_start_segment(ship, ship.job_segments.pop_front())
@@ -4440,9 +4727,10 @@ func _fishing_lost(ship: Ship) -> void:
 
 
 ## Lands a boat's catch at a port, at the price a crate of its family fetches
-## there (its species' grade in): sold there, or into the company's cold
-## store for its seafood carriers (by its landing choice; "auto" stores it
-## where a carrier of the company's calls, else sells). Earns XP like a
+## there (its species' grade in): sold there, or, at the company's HQ or a
+## hub (the only ports with its freezers), into its cold store for its seafood
+## carriers (by its landing choice; "auto" stores it where a carrier of the
+## company's calls, else sells). Earns XP like a
 ## delivery of it over the miles out and back.
 func _land_catch(ship: Ship, port: String) -> void:
 	var crates := floori(ship.catch)
@@ -4453,7 +4741,8 @@ func _land_catch(ship: Ship, port: String) -> void:
 	var who := owner_of(ship)
 	var family := Fisheries.shared().family_of(species)
 	var value := roundi(crates * company_sell_price(port, family, who) * ship.catch_grade)
-	var store := ship.fish_landing == "store" or (ship.fish_landing == "auto" and _carrier_calls(port, who))
+	# Freezers are at the company's HQ and hubs only (anywhere else it sells).
+	var store := hub_at(port, who) != null and (ship.fish_landing == "store" or (ship.fish_landing == "auto" and _carrier_calls(port, who)))
 	if store:
 		var at: Dictionary = who.cold_stores.get_or_add(port, {})
 		at[family] = float(at.get(family, 0.0)) + crates * ship.catch_grade  # (Its grade as more crates of the family.)
@@ -4553,3 +4842,130 @@ func set_fish_landing(ship: Ship, mode: String) -> void:
 	if ship.is_fishing() and mode in ["auto", "sell", "store"]:
 		ship.fish_landing = mode
 		ship_changed.emit(ship)
+
+
+# --- The Fishing Grounds screen's assignments --------------------------------------
+
+## A company picked (or dropped) a fishing ground. Dropping one calls its boats off it.
+signal fish_areas_changed
+
+## Picks a ground on the Fishing Grounds screen (on), or drops it and calls
+## every boat sent there off it (they go back to fishing the best within reach of their port).
+func select_fish_area(ground: String, on: bool) -> void:
+	if Net.command(&"select_fish_area", [ground, on]):
+		return
+	if not Fisheries.shared().grounds.has(ground):
+		return
+	if on:
+		company.fish_areas.get_or_add(ground, {})
+	else:
+		company.fish_areas.erase(ground)
+		for ship in fleet(company):
+			if ship.is_fishing() and ship.fish_area == ground:
+				_call_off(ship)
+	fish_areas_changed.emit()
+
+
+## The boats of a company's fleet of a model sent to a ground.
+func fish_area_boats(ground: String, model_id: String, who: Company = null) -> Array[Ship]:
+	var out: Array[Ship] = []
+	for ship in fleet(who if who != null else company):
+		if ship.model_id == model_id and ship.fish_area == ground and ship.is_fishing():
+			out.append(ship)
+	return out
+
+
+## A company's boats of a model not sent to any ground (free to send).
+func free_fish_boats(model_id: String, who: Company = null) -> Array[Ship]:
+	var out: Array[Ship] = []
+	for ship in fleet(who if who != null else company):
+		if ship.model_id == model_id and ship.is_fishing() and ship.fish_area.is_empty() and not ship.is_lost():
+			out.append(ship)
+	return out
+
+
+## Where a model's boats sent to a ground land their catch and whether it goes
+## in the freezer ({port, freeze}): as set, or by default the port by the
+## ground nearest it (fish_area_default_port()), selling.
+func fish_area_setting(ground: String, model_id: String) -> Dictionary:
+	var setting: Dictionary = company.fish_areas.get(ground, {}).get(model_id, {})
+	var port := str(setting.get("port", ""))
+	if port.is_empty():
+		port = fish_area_default_port(ground)
+	return {port = port, freeze = bool(setting.get("freeze", false)) and hub_at(port) != null}
+
+
+## The port by a ground its lanes run from that's nearest it (unlocked first).
+func fish_area_default_port(ground: String) -> String:
+	var fish := Fisheries.shared()
+	var best := ""
+	var best_nm := INF
+	for port: String in fish.grounds.get(ground, {}).get("ports", []):
+		var nm := fish.miles_to(port, ground) + (0.0 if is_port_unlocked(port) else 100000.0)
+		if nm < best_nm:
+			best_nm = nm
+			best = port
+	return best
+
+
+## Sends boats of a model to a ground (or calls some off) until `count` of them
+## are there: the free ones nearest the ground first, each based at the
+## model's landing port there, its catch frozen or sold as set (see
+## set_fish_area_model()); called off, a boat goes back to fishing the best
+## within reach of its port.
+func assign_fish_boats(ground: String, model_id: String, count: int) -> void:
+	if Net.command(&"assign_fish_boats", [ground, model_id, count]):
+		return
+	var fish := Fisheries.shared()
+	if not fish.grounds.has(ground) or not fish.model_works_ground(GameData.get_ship_model(model_id), ground):
+		return
+	company.fish_areas.get_or_add(ground, {})
+	var sent := fish_area_boats(ground, model_id)
+	while sent.size() > maxi(count, 0):
+		_call_off(sent.pop_back())
+	if sent.size() < count:
+		var free := free_fish_boats(model_id)
+		var end := Fisheries.end_of(ground)
+		free.sort_custom(func(a: Ship, b: Ship) -> bool:
+			return GameData.distance_nm(a.reference_port() if not a.reference_port().is_empty() else a.base_port, end, -1) < GameData.distance_nm(b.reference_port() if not b.reference_port().is_empty() else b.base_port, end, -1))
+		var setting := fish_area_setting(ground, model_id)
+		for ship in free:
+			if sent.size() >= count:
+				break
+			ship.fish_area = ground
+			ship.fish_target = ""
+			ship.base_port = str(setting.port)
+			ship.fish_landing = "store" if setting.freeze else "sell"
+			ship.fish_wait = ""
+			ship.set_meta(&"fish_check", 0.0)
+			sent.append(ship)
+			ship_changed.emit(ship)
+	fish_areas_changed.emit()
+
+
+## Where a model's boats sent to a ground land their catch (any port they can
+## get to), and whether it goes in the freezer (the company's HQ or a hub
+## only): for the boats there now and any sent later.
+func set_fish_area_model(ground: String, model_id: String, port: String, freeze: bool) -> void:
+	if Net.command(&"set_fish_area_model", [ground, model_id, port, freeze]):
+		return
+	if GameData.get_port(port).is_empty() or Fisheries.is_ground(port) or not Fisheries.shared().grounds.has(ground):
+		return
+	freeze = freeze and hub_at(port) != null
+	var models: Dictionary = company.fish_areas.get_or_add(ground, {})
+	models[model_id] = {port = port, freeze = freeze}
+	for ship in fish_area_boats(ground, model_id):
+		ship.base_port = port
+		ship.fish_landing = "store" if freeze else "sell"
+		ship.fish_wait = ""
+		ship.set_meta(&"fish_check", 0.0)
+		ship_changed.emit(ship)
+	fish_areas_changed.emit()
+
+
+func _call_off(ship: Ship) -> void:
+	ship.fish_area = ""
+	ship.fish_target = ""
+	ship.fish_wait = ""
+	ship.set_meta(&"fish_check", 0.0)
+	ship_changed.emit(ship)

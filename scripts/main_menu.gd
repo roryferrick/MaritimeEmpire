@@ -58,7 +58,7 @@ func _clear() -> void:
 		child.queue_free()
 
 
-## Single Player, Multiplayer and the Shop (see SkinShop).
+## Single Player, Multiplayer, the Shop (see SkinShop) and the Inventory (InventoryPage).
 func _show_modes() -> void:
 	page = ""
 	_clear()
@@ -74,6 +74,12 @@ func _show_modes() -> void:
 	shop.tooltip_text = "Skins for your ships, CEO, captains and crew, bought with Sand Dollars."
 	shop.pressed.connect(func() -> void: add_child(SkinShop.new()))
 	%Slots.add_child(shop)
+	var inventory := Button.new()
+	inventory.custom_minimum_size = MODE_BUTTON_SIZE
+	inventory.text = "Inventory"
+	inventory.tooltip_text = "Every skin you own, and what your ships wear."
+	inventory.pressed.connect(func() -> void: add_child(InventoryPage.new()))
+	%Slots.add_child(inventory)
 
 
 ## A mode's heading, its save slots and Back.
