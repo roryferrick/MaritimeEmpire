@@ -6,7 +6,8 @@
 For each reel in tools/reels/reels.json: the beats' shots cut in order (each
 shot's frames from its "from" second, every "speed"th frame, for "len"
 seconds), each beat's caption popping in near the top, the end card over the
-last beat, and a silent audio track (Instagram is happier with one). Writes
+last beat, and the reel's "audio" (the voiceover) or else a silent track
+(Instagram is happier with one). Writes
 marketing/reels/<file>.mp4 (1080x1920, 30 fps, H.264).
 """
 import json
@@ -78,7 +79,10 @@ def build(reel_id: str, reel: dict) -> None:
             last = f"v{i}"
             inputs += 1
     filters.append(f"[{last}]format=yuv420p[out]")
-    args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+    if reel.get("audio"):  # The voiceover (a path under marketing/reels), once recorded.
+        args += ["-i", os.path.join(OUT, reel["audio"])]
+    else:
+        args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
     args += ["-filter_complex", ";".join(filters), "-map", "[out]", "-map", f"{inputs}:a",
              "-t", f"{length:.3f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "slow", "-crf", "17",
              "-profile:v", "high", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",

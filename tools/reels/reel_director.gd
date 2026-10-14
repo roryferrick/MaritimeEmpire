@@ -445,7 +445,7 @@ func shot_scooter_leaves(seconds: float) -> void:
 	GameState.assign_route(ship, route)
 	var ok := await warp(900.0, func() -> bool: return ship.berth_phase == Ship.BERTH_OUT, 4)
 	print("  scooter out: ", ok, " phase ", ship.berth_phase, " docked ", ship.docked_at, " route ", ship.route)
-	follow(ship, 2000.0)
+	follow(ship, 3600.0)
 	await settle(10)
 	await rec("scooter_leaves", seconds)
 
@@ -506,7 +506,7 @@ func _stage_loss() -> void:
 func shot_lost_ship(seconds: float) -> void:
 	await _stage_loss()
 	portrait()
-	follow(_lost, 1100.0)
+	follow(_lost, 2600.0)
 	await settle(15)
 	await rec("lost_ship", seconds)
 
@@ -516,7 +516,7 @@ func shot_recovery_lift(seconds: float) -> void:
 	portrait()
 	var boat := _lost.rescuer
 	await warp(3000.0, func() -> bool: return boat.job_phase == Ship.JOB_ALIGN or boat.job_phase == Ship.JOB_TOW, 8)
-	follow(_lost, 2400.0)
+	follow(_lost, 3600.0)
 	await settle(5)
 	await rec("recovery_lift", seconds)
 
@@ -574,8 +574,9 @@ func shot_compare_companies(seconds: float) -> void:
 			(button as Button).pressed.emit()
 			(button as Button).button_pressed = true
 	await settle(20)
-	var table := card_of(find_text("Companies", game.get_node("%FinancesScreen"))).get_global_rect()
-	await rec("compare_companies", seconds, Callable(), push(grow(table, 40.0), grow(table, 4.0), seconds))
+	var heading := find_text("Companies", game.get_node("%FinancesScreen")).get_global_rect()
+	var table := Rect2(heading.position.x - 14, heading.position.y - 12, minf(1268.0 - heading.position.x, 1000.0), 172)
+	await rec("compare_companies", seconds, Callable(), push(grow(table, 50.0), grow(table, 2.0), seconds))
 
 
 ## Not a reel shot: full landscape screenshots of the pages, to pick crops from.
@@ -908,7 +909,7 @@ func shot_mammoth_lift(seconds: float) -> void:
 	print("  mammoth job: '", GameState.send_recovery(lost), "' rescuer ", lost.rescuer.model_id if lost.rescuer != null else "none")
 	var boat := lost.rescuer
 	await warp(3000.0, func() -> bool: return boat.job_phase == Ship.JOB_ALIGN or boat.job_phase == Ship.JOB_TOW, 8)
-	follow(lost, 2400.0)
+	follow(lost, 3600.0)
 	await settle(5)
 	await rec("mammoth_lift", seconds)
 
