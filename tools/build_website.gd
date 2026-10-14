@@ -47,7 +47,7 @@ const PAGE_ART := {
 	"World": ["globe", "The whole globe, every port and the fleet's lanes"],
 	"Panama Canal": ["panama", "Colon, the canal and Balboa"],
 	"Headquarters and hubs": ["singapore", "Singapore and Tanjung Pelepas, side by side on the strait"],
-	"Wonders of the world": ["istanbul", "Istanbul's marina by night, with the Hagia Sophia"],
+	"Wonders of the world": ["istanbul", "Istanbul's marina, with the Hagia Sophia"],
 	"Tugs": ["rotterdam", "Rotterdam and Antwerp-Bruges: basins, piers and towns"],
 	"Ship models": ["shop", "The Shop: every model with its speed, hold, range and crew"],
 	"Birds": ["shanghai", "Shanghai, with its gulls over the harbour"],
@@ -568,7 +568,7 @@ func _head(title: String, prefix: String, description: String) -> String:
 <link rel="stylesheet" href="%sstyle.css">
 <meta property="og:title" content="%s">
 <meta property="og:description" content="%s">
-<meta property="og:image" content="%s/assets/shots/harbour.webp">
+<meta property="og:image" content="%s/assets/shots/rome.webp">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 </head>

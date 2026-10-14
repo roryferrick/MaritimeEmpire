@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name SkinShop
 extends Control
-## The Shop (from the Esc menu), in two tabs. Skin packs: every pack on sale
+## The Shop (from the title screen), in two tabs. Skin packs: every pack on sale
 ## (Cosmetics.packs_for_sale()), each with its ship skins and its outfits
 ## sold one at a time (a Sand Dollar price each), or all its ship skins, all
 ## its outfits, or the whole pack at once (a bundle never charges for skins
@@ -11,7 +11,13 @@ extends Control
 ## money (Cosmetics.buy_bundle()). Over whatever opened it, dimming it; Esc, X
 ## or a click outside closes it.
 
-const PANEL_SIZE := Vector2(760, 0)
+const PANEL_SIZE := Vector2(1120, 0)
+## Each skin's panel in a pack's grid, and its picture.
+const SKIN_COLUMNS := 4
+const SKIN_PANEL_WIDTH := 245.0
+const PICTURE_SIZE := Vector2(0, 140)
+## The look the outfits are shown on (the outfit's parts put over it).
+const MODEL_SEED := 1620
 
 var _packs_box := VBoxContainer.new()
 var _balance := Label.new()
@@ -86,7 +92,7 @@ func _packs_tab() -> Control:
 	top.add_child(prices)
 	box.add_child(top)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 420)
+	scroll.custom_minimum_size = Vector2(0, 470)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
 	box.add_child(scroll)
@@ -185,17 +191,17 @@ func _pack_card(pack: Dictionary) -> Control:
 	blurb.text = str(pack.get("blurb", ""))
 	box.add_child(blurb)
 	var ships := Cosmetics.ship_skins(id)
-	box.add_child(_group(id, "Ship skins", "ships", ships.map(func(skin: Dictionary) -> Array: return [str(skin.id), str(skin.name), _models_text(skin.models)])))
+	box.add_child(_group(id, "Ship skins", "ships", ships.map(func(skin: Dictionary) -> Array: return [str(skin.id), str(skin.name), _models_text(skin.models), _ship_picture(id, skin)])))
 	var outfits := Cosmetics.outfits(id)
-	box.add_child(_group(id, "Outfits (CEO, captains and crew)", "humans", outfits.map(func(outfit: Dictionary) -> Array: return [str(outfit.id), str(outfit.name), _outfit_text(outfit)])))
+	box.add_child(_group(id, "Outfits (CEO, captains and crew)", "humans", outfits.map(func(outfit: Dictionary) -> Array: return [str(outfit.id), str(outfit.name), _outfit_text(outfit), _outfit_picture(outfit)])))
 	return card
 
 
 ## A group of a pack's skins: its heading with the all-of-them button, then a
-## button per skin (Buy, or ticked when owned).
+## panel per skin (see _skin_panel()). skins: [id, name, info, picture].
 func _group(pack_id: String, heading_text: String, which: String, skins: Array) -> Control:
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 4)
+	box.add_theme_constant_override(&"separation", 6)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 8)
 	var heading := Label.new()
@@ -206,30 +212,102 @@ func _group(pack_id: String, heading_text: String, which: String, skins: Array) 
 		row.add_child(_bundle_button(pack_id, which, "All of these"))
 	box.add_child(row)
 	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override(&"h_separation", 6)
-	grid.add_theme_constant_override(&"v_separation", 4)
+	grid.columns = SKIN_COLUMNS
+	grid.add_theme_constant_override(&"h_separation", 8)
+	grid.add_theme_constant_override(&"v_separation", 8)
 	for skin: Array in skins:
-		var skin_id: String = skin[0]
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(0, 30)
-		button.size_flags_horizontal = SIZE_EXPAND_FILL
-		button.add_theme_font_size_override(&"font_size", 13)
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.clip_text = true
-		button.tooltip_text = str(skin[2])
-		if Cosmetics.owns_skin(pack_id, skin_id):
-			button.text = "✓ %s" % skin[1]
-			button.disabled = true
-		else:
-			button.text = "%s · %d" % [skin[1], Cosmetics.price("skin")]
-			button.pressed.connect(func() -> void:
-				var problem := Cosmetics.buy_skin(pack_id, skin_id)
-				if not problem.is_empty():
-					_status_packs.text = problem)
-		grid.add_child(button)
+		grid.add_child(_skin_panel(pack_id, skin))
 	box.add_child(grid)
 	return box
+
+
+## A skin's own panel: its picture, its name, what it is (who wears it, or
+## what it unlocks: the whole of it in the tooltip) and Buy with its price,
+## or Owned.
+func _skin_panel(pack_id: String, skin: Array) -> Control:
+	var skin_id: String = skin[0]
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = &"CardPanel"
+	panel.custom_minimum_size = Vector2(SKIN_PANEL_WIDTH, 0)
+	panel.size_flags_horizontal = SIZE_EXPAND_FILL
+	panel.tooltip_text = str(skin[2])
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 6)
+	panel.add_child(box)
+	var picture: Control = skin[3]
+	picture.custom_minimum_size = PICTURE_SIZE
+	picture.mouse_filter = MOUSE_FILTER_PASS
+	box.add_child(picture)
+	var name := Label.new()
+	name.text = str(skin[1])
+	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(name)
+	var info := Label.new()
+	info.theme_type_variation = &"DimLabel"
+	info.add_theme_font_size_override(&"font_size", 12)
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.max_lines_visible = 4
+	info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	info.text = str(skin[2])
+	info.size_flags_vertical = SIZE_EXPAND_FILL
+	box.add_child(info)
+	var button := Button.new()
+	button.add_theme_font_size_override(&"font_size", 13)
+	if Cosmetics.owns_skin(pack_id, skin_id):
+		button.text = "✓ Owned"
+		button.disabled = true
+	else:
+		var cost := Cosmetics.price("skin")
+		button.text = "Buy · %s" % Cosmetics.amount_money(cost)
+		button.disabled = Cosmetics.sand_dollars < cost
+		if button.disabled:
+			button.tooltip_text = "You need %s more: see the Sand Dollars tab." % Cosmetics.amount(cost - Cosmetics.sand_dollars)
+		button.pressed.connect(func() -> void:
+			var problem := Cosmetics.buy_skin(pack_id, skin_id)
+			if not problem.is_empty():
+				_status_packs.text = problem)
+	box.add_child(button)
+	return panel
+
+
+## A ship skin's picture: its art for the first model that wears it.
+static func _ship_picture(pack_id: String, skin: Dictionary) -> Control:
+	var picture := TextureRect.new()
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var models: Array = skin.models
+	if not models.is_empty():
+		picture.texture = Cosmetics.skin_texture(Cosmetics.skin_key(pack_id, str(skin.id)), str(models[0]))
+	return picture
+
+
+## An outfit's picture: a whole-body portrait wearing it (its parts over a
+## fixed made-up look; a gown or Mrs Claus on a woman's frame).
+static func _outfit_picture(outfit: Dictionary) -> Control:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = MODEL_SEED
+	var look := Characters.random_look(rng)
+	look.body = 0
+	look.facial_hair = 0
+	look.headwear = 0
+	look.eyewear = 0
+	look.height = 50
+	look.build = 50
+	var words := (str(outfit.name) + " " + " ".join(outfit.get("top", []))).to_lower()
+	for word: String in ["gown", "dress", "mrs", "wife"]:
+		if words.contains(word):
+			look.body = 1
+	for key: String in Cosmetics.OUTFIT_PARTS:
+		for option_name: String in outfit.get(key, []):
+			for i in Characters.option_count(key):
+				if Characters.option_name(key, i) == option_name:
+					look[key] = i
+	var holder := CenterContainer.new()
+	var portrait := Portrait.new({name = str(outfit.name), look = look})
+	portrait.custom_minimum_size = Vector2(95, 140)
+	holder.add_child(portrait)
+	return holder
 
 
 func _bundle_button(pack_id: String, which: String, text: String) -> Button:

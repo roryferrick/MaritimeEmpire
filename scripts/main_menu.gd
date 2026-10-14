@@ -1,9 +1,10 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name MainMenu
 extends Control
-## Title screen: Single Player or Multiplayer, then that mode's save slots (a
-## row per slot: Continue a company, or start a New Game in an empty slot, and
-## Delete), with Back; and Quit. Multiplayer saves are kept apart from single
+## Title screen: Single Player, Multiplayer or the Shop (skins: see
+## SkinShop); the first two lead to that mode's save slots (a row per slot:
+## Continue a company, or start a New Game in an empty slot, and Delete), with
+## Back; and Quit. Multiplayer saves are kept apart from single
 ## player ones and played solo until hosting is built.
 
 const GAME_SCENE := "res://scenes/game.tscn"
@@ -57,7 +58,7 @@ func _clear() -> void:
 		child.queue_free()
 
 
-## Single Player and Multiplayer.
+## Single Player, Multiplayer and the Shop (see SkinShop).
 func _show_modes() -> void:
 	page = ""
 	_clear()
@@ -67,6 +68,12 @@ func _show_modes() -> void:
 		button.text = MODES[online]
 		button.pressed.connect(_show_slots.bind(online))
 		%Slots.add_child(button)
+	var shop := Button.new()
+	shop.custom_minimum_size = MODE_BUTTON_SIZE
+	shop.text = "Shop"
+	shop.tooltip_text = "Skins for your ships, CEO, captains and crew, bought with Sand Dollars."
+	shop.pressed.connect(func() -> void: add_child(SkinShop.new()))
+	%Slots.add_child(shop)
 
 
 ## A mode's heading, its save slots and Back.
