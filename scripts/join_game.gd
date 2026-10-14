@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
-## Joining a friend's multiplayer game: the games hosted on Steam and on this
+## Joining a multiplayer game: the games hosted on Steam and on this
 ## network (each with its host's company, players and a lock if it has a
 ## password), or one at an address (a Steam invite joins its game straight
 ## away); then a password if it needs one; then picking a company:
@@ -142,7 +142,7 @@ func _show_find() -> void:
 	var name_row := HBoxContainer.new()
 	name_row.add_child(_dim("Your name", false))
 	_name_edit.text = player_name
-	_name_edit.placeholder_text = "What friends see you as"
+	_name_edit.placeholder_text = "What other players see you as"
 	_name_edit.max_length = GameState.MAX_COMPANY_NAME_LENGTH
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name_edit.text_changed.connect(func(text: String) -> void: player_name = text)
@@ -153,7 +153,7 @@ func _show_find() -> void:
 	_show_games()
 	if Net.steam == null:
 		_page.add_child(_dim(Net.steam_problem))
-	_page.add_child(_dim("Or join by address (your friend's IP address; over the internet they'll need to forward port %d):" % Net.PORT))
+	_page.add_child(_dim("Or join by address (the host's IP address; over the internet they'll need to forward port %d):" % Net.PORT))
 	var address_row := HBoxContainer.new()
 	_address_edit.placeholder_text = "e.g. 192.168.1.20"
 	_address_edit.text = last_address
@@ -196,7 +196,7 @@ func _show_games() -> void:
 		_games.remove_child(child)
 		child.queue_free()
 	if Net.games.is_empty():
-		_games.add_child(_dim("  Looking for games... (your friend hosts one from Multiplayer)"))
+		_games.add_child(_dim("  Looking for games... (anyone can host one from Multiplayer)"))
 		return
 	for key: String in Net.games:
 		var game: Dictionary = Net.games[key]

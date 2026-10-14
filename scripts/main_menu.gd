@@ -12,7 +12,7 @@ const SLOT_BUTTON_SIZE := Vector2(420, 92)
 const DELETE_BUTTON_SIZE := Vector2(96, 92)
 const MODE_BUTTON_SIZE := Vector2(420, 64)
 const MODES := {false: "Single Player", true: "Multiplayer"}
-const MULTIPLAYER_NOTE := "Host one of your multiplayer games for friends to join, or join a friend's."
+const MULTIPLAYER_NOTE := "Host one of your multiplayer games for anyone to join, or join someone else's."
 const JOIN_SCENE := "res://scenes/join_game.tscn"
 ## Shown on the title screen and in the Esc menu.
 const COPYRIGHT := "© 2026 Rory Ferrick. All rights reserved. Map data: Natural Earth (public domain). Steam integration: GodotSteam (MIT). Made with Godot Engine (MIT)."
@@ -91,7 +91,7 @@ func _show_slots(online: bool) -> void:
 		var join := Button.new()
 		join.custom_minimum_size = Vector2(420, 52)
 		join.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		join.text = "Join a Friend's Game"
+		join.text = "Join a Game"
 		join.pressed.connect(func() -> void: get_tree().change_scene_to_file(JOIN_SCENE))
 		%Slots.add_child(join)
 	var back := Button.new()
@@ -169,7 +169,7 @@ func _delete() -> void:
 	_show_slots(GameState.multiplayer_save)
 
 
-## The Multiplayer page's hosting settings: the game's name in friends' lists
+## The Multiplayer page's hosting settings: the game's name in the games list
 ## (the company's by default), an optional password, how many can play, and
 ## whether to filter bad words out of ship names and chat.
 func _host_settings() -> GridContainer:
@@ -195,7 +195,7 @@ func _host_settings() -> GridContainer:
 			players.select(players.item_count - 1)
 	players.item_selected.connect(func(index: int) -> void: host_settings.max_players = players.get_item_id(index))
 	var connection := OptionButton.new()
-	connection.add_item("Steam: friends anywhere find it in their list")
+	connection.add_item("Steam: anyone on Steam finds it in their list")
 	connection.add_item("Local network, or by address")
 	if Net.steam == null:
 		connection.select(1)

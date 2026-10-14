@@ -52,6 +52,9 @@ const LOBBY_GAME := "maritime_empire"
 const LOBBY_REFRESH_S := 5.0
 ## Steam's lobby types and its "joined the lobby" response (Steam's own numbers).
 const LOBBY_TYPE_PUBLIC := 2
+## How many games Steam lists at most (nearest first): every public game, not
+## just friends', so room for a busy evening.
+const LOBBY_LIST_MAX := 200
 const LOBBY_ENTER_SUCCESS := 1
 ## The whole game a newcomer starts from goes in parts no bigger than this
 ## (Steam won't send a message over 512 KB).
@@ -252,7 +255,7 @@ func _process_timed(delta: float) -> void:
 # --- Hosting -----------------------------------------------------------------
 
 ## Starts hosting the game that's open (GameState's session): others can join
-## it. Over Steam (a lobby friends find in their list) when it's running,
+## it. Over Steam (a public lobby anyone finds in their list) when it's running,
 ## unless settings.steam is false; otherwise on the local network and by
 ## address. Returns why it couldn't, or "".
 func host(settings := {}) -> String:
@@ -318,7 +321,7 @@ func _on_lobby_created(result: int, id: int) -> void:
 			steam.leaveLobby(id)  # Left before Steam answered.
 		return
 	if result != 1:
-		ActivityLog.add("Couldn't open this game on Steam, so friends can't find it. Try hosting again.", ActivityLog.Kind.BAD)
+		ActivityLog.add("Couldn't open this game on Steam, so no one can find it. Try hosting again.", ActivityLog.Kind.BAD)
 		return
 	lobby_id = id
 	steam.setLobbyJoinable(id, true)
@@ -347,7 +350,7 @@ func invite_friends() -> String:
 	if steam == null or lobby_id == 0:
 		return "The game isn't open on Steam yet."
 	if not steam.isOverlayEnabled():
-		return "Steam's overlay isn't available (it only opens when Steam starts the game). Friends can find this game under Join a Friend's Game."
+		return "Steam's overlay isn't available (it only opens when Steam starts the game). Anyone can find this game under Join a Game."
 	steam.activateGameOverlayInviteDialog(lobby_id)
 	return ""
 
@@ -1151,6 +1154,7 @@ func _request_lobbies() -> void:
 		return
 	steam.addRequestLobbyListStringFilter("game", LOBBY_GAME, 0)  # 0: equal.
 	steam.addRequestLobbyListDistanceFilter(3)  # 3: worldwide.
+	steam.addRequestLobbyListResultCountFilter(LOBBY_LIST_MAX)  # (Steam sends 50 unless asked for more.)
 	steam.requestLobbyList()
 
 
