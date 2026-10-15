@@ -47,13 +47,16 @@ foreach ($t in $targets) {
 	if ($out.EndsWith(".zip")) {
 		# macOS exports straight to a zipped .app. Beside it: how to get past
 		# Gatekeeper ("damaged" - the build is only ad-hoc signed).
-		Copy-Item $out $zip
-		Add-Type -AssemblyName System.IO.Compression.FileSystem
-		$archive = [IO.Compression.ZipFile]::Open($zip, "Update")
+		# Copied with bsdtar (Windows' tar.exe), which keeps each file's Unix
+		# permissions; .NET's ZipFile rewrote the archive as made on Windows,
+		# so a Mac unzipped the app without its executable bits.
+		Copy-Item (Join-Path $PSScriptRoot "mac_readme.txt") (Join-Path $dir "READ ME FIRST.txt")
+		Push-Location $dir
 		try {
-			[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $PSScriptRoot "mac_readme.txt"), "READ ME FIRST.txt") | Out-Null
+			& tar.exe -cf $zip --format zip "@$out" "READ ME FIRST.txt"
+			if ($LASTEXITCODE -ne 0) { throw "Zipping the macOS build failed." }
 		} finally {
-			$archive.Dispose()
+			Pop-Location
 		}
 	} else {
 		Compress-Archive -Path (Join-Path $dir "*") -DestinationPath $zip
