@@ -59,6 +59,7 @@ const PAGE_ART := {
 	"2. Ships screen": ["fleet", "The Ships screen: the whole fleet, by model"],
 	"3. Shop screen": ["shop", "The Shop"],
 	"Farms": ["farms", "The Farms screen: a farm port's plots, what each grows, and the farm store"],
+	"Vehicle makers and factories": ["makers", "The Makers screen: a maker's likeness and perks, its vehicles, and your factory for it"],
 	"Company types": ["types", "Choosing your company type: six trades, each with its five tiers of ships"],
 	"Company logos": ["logo", "Making your company logo"],
 	"Company ratings": ["ratings", "The Ratings page: each type's stars and what goes into them"],
