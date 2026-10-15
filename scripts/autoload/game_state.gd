@@ -91,7 +91,7 @@ const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
@@ -329,6 +329,10 @@ var rivals := RivalAI.new(self)
 var ratings := Ratings.new(self)
 ## Cruise ships' voyages, bookings, prices and refits (see Cruises).
 var cruises := Cruises.new(self)
+## The farm ports' plots, crops, herds and weather years (see Farms).
+var farms := Farms.new(self)
+## A farm changed hands, was planted or stocked, or a day's harvest came in (see Farms).
+signal farms_changed
 ## Each step's ships, natively where the native library's there (ShipStepper:
 ## see native/README.md), and whether to use it (tests compare the two).
 var _ship_stepper: Object = null
@@ -413,6 +417,9 @@ func _step(delta: float) -> void:
 	MapView._prof("sim.rivals", t_s)
 	ratings.step(delta)
 	t_s = Time.get_ticks_usec()
+	farms.step(delta)
+	MapView._prof("sim.farms", t_s)
+	t_s = Time.get_ticks_usec()
 	_storm_warning_clock += delta
 	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
 		_storm_warning_clock = 0.0
@@ -475,6 +482,11 @@ func calendar_time_at(at_play_time: float) -> int:
 		_calendar_start = Time.get_unix_time_from_datetime_string(str(calendar.get("start", "2000-01-01T00:00:00")))
 		_calendar_rate = calendar_seconds_per_second()
 	return int(_calendar_start + at_play_time * _calendar_rate)
+
+
+## Calendar days that pass per second of play (at 1x).
+func days_per_second() -> float:
+	return calendar_seconds_per_second() / 86400.0
 
 
 ## Calendar seconds that pass per second of play (at 1x).
@@ -857,6 +869,7 @@ func _check_payday() -> void:
 		tally[1] += 1
 	for who: Company in paid:
 		wages_paid.emit(paid[who][2], paid[who][0], paid[who][1])
+	farms.pay_wages()  # (The farm workers', at the same time.)
 	# Interest on loans, paid at the same time.
 	for who in all_companies():
 		var interest := loan_interest(who.loan)
@@ -2492,7 +2505,7 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 	if not ship.cargo_id.is_empty() and not refuel_stop:
 		# Counted from where it was loaded (refuel stops on the way don't count as legs).
 		var origin := ship.cargo_from if not ship.cargo_from.is_empty() and GameData.distance_nm(ship.cargo_from, port) < INF else ship.from_port
-		var sale := ship.cargo_qty * company_sell_price(port, ship.cargo_id, owner_of(ship))
+		var sale := ship.cargo_qty * company_sell_price(port, ship.cargo_id, owner_of(ship)) * ship.cargo_value_factor(play_time, days_per_second())
 		ship.cargo_payment = roundi(sale + trade_bonus(origin, port, sale - ship.cargo_cost, ship.model_id, owner_of(ship)))
 		ship.cargo_leg_nm = GameData.distance_nm(origin, port) if paid and origin != port else 0.0
 	ship.unloaded = ship.is_service() and not ship.is_fishing() or refuel_stop
@@ -2747,12 +2760,20 @@ func _sell_cargo(ship: Ship) -> void:
 func _load_cargo(ship: Ship, to: String) -> String:
 	if ship.is_service() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return ""
+	ship.cargo_breed = ""
+	ship.cargo_fresh = 1.0
+	ship.cargo_since = play_time
+	ship.cargo_farm = false
 	if str(ship.model().get("category", "")) == "seafood":
 		var t_st := Time.get_ticks_usec()
 		var stored := _load_from_store(ship, to)
 		MapView._prof("load.store", t_st)
 		if not stored.is_empty():
 			return stored[0]
+	if owner_of(ship).farm_stores.has(ship.docked_at):  # (Its farm's harvest, free: see Farms.load_ship().)
+		var farmed := farms.load_ship(ship, to)
+		if not farmed.is_empty():
+			return farmed[0]
 	var who := owner_of(ship)
 	var t_b := Time.get_ticks_usec()
 	var best := market.best_cargo(ship.model(), ship.docked_at, to, who)
@@ -2761,7 +2782,7 @@ func _load_cargo(ship: Ship, to: String) -> String:
 		return ""
 	var price := company_buy_price(ship.docked_at, best[0], who)
 	var reserve := fuel_reserve(who)
-	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())))
+	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(ship.docked_at, to, ship.model())) / GameData.hold_of(best[0]))
 	var quantity := mini(room, floori((float(who.money) - ship.bill - reserve - who.bank_reserve) / price))
 	if in_debt(who):
 		quantity = room  # On credit (see in_debt()).
@@ -3663,7 +3684,7 @@ func fuel_reserve(of: Company = null) -> float:
 func cargo_toll(ship: Ship, canal: Dictionary) -> int:
 	if ship.cargo_id.is_empty():
 		return 0
-	var value := ship.cargo_qty * market.sell_price(ship.to_port, ship.cargo_id)
+	var value := ship.cargo_qty * market.sell_price(ship.to_port, ship.cargo_id) * ship.cargo_value_factor(play_time, days_per_second())
 	return roundi(value * float(canal.get("toll_share", 0.0)))
 
 
@@ -4337,6 +4358,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	divine.reset()
 	divine.on = bool(options.get("divine", false))
 	ratings.reset()
+	farms.reset()
 	rivals.reset()
 	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
@@ -4386,6 +4408,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	seasons = bool(data.get("seasons", false))
 	weather.from_dict(data.get("weather", {}))
 	divine.from_dict(data.get("divine", {}))
+	farms.from_dict(data.get("farms", {}))
 	next_ship_id = int(data.get("next_ship_id", 1))
 	for ship_data: Dictionary in data.get("ships", []):
 		var ship := Ship.from_dict(ship_data)
@@ -4479,6 +4502,7 @@ func world_dict() -> Dictionary:
 		"seasons": seasons,
 		"weather": weather.to_dict(),
 		"divine": divine.to_dict(),
+		"farms": farms.to_dict(),
 		"market": market.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
@@ -5218,3 +5242,75 @@ func _call_off(ship: Ship) -> void:
 	ship.fish_wait = ""
 	ship.set_meta(&"fish_check", 0.0)
 	ship_changed.emit(ship)
+
+
+# --- Farms (see Farms): this player's actions ------------------------------------------
+
+## Buys a plot from the land (Farms.buy_error() says why it can't).
+func buy_plot(key: String) -> void:
+	if Net.command(&"buy_plot", [key]):
+		return
+	farms.buy(company, key)
+
+
+## Sells a plot back to the land, its herd into the store first.
+func sell_plot(key: String) -> void:
+	if Net.command(&"sell_plot", [key]):
+		return
+	var price := farms.sell_to_land(company, key)
+	if price > 0 and ai_acting == null:
+		ActivityLog.add("Sold your plot at %s back to the land for %s." % [GameData.port_name(Farms.port_of(key)), Fmt.money(price)], ActivityLog.Kind.INFO)
+
+
+## Lists a plot for other Agriculture companies at an asking price (0 takes it off the list).
+func list_plot(key: String, price: int) -> void:
+	if Net.command(&"list_plot", [key, price]):
+		return
+	farms.list(company, key, price)
+
+
+## Buys another company's listed plot at its asking price.
+func buy_listed_plot(key: String) -> void:
+	if Net.command(&"buy_listed_plot", [key]):
+		return
+	farms.buy_listing(company, key)
+
+
+func plant_plot(key: String, crop_id: String) -> void:
+	if Net.command(&"plant_plot", [key, crop_id]):
+		return
+	farms.plant(company, key, crop_id)
+
+
+func stock_plot(key: String, breed_id: String) -> void:
+	if Net.command(&"stock_plot", [key, breed_id]):
+		return
+	farms.stock(company, key, breed_id)
+
+
+func clear_plot(key: String) -> void:
+	if Net.command(&"clear_plot", [key]):
+		return
+	farms.clear(company, key)
+
+
+func upgrade_plot(key: String, upgrade_id: String) -> void:
+	if Net.command(&"upgrade_plot", [key, upgrade_id]):
+		return
+	farms.add_upgrade(company, key, upgrade_id)
+
+
+func build_cold_store(port_id: String) -> void:
+	if Net.command(&"build_cold_store", [port_id]):
+		return
+	farms.build_cold_store(company, port_id)
+
+
+## Sells what's in the farm store at a port of one item, at the port's price.
+func sell_farm_item(port_id: String, item: String) -> void:
+	if Net.command(&"sell_farm_item", [port_id, item]):
+		return
+	var value := farms.sell_item(company, port_id, item)
+	if value > 0 and ai_acting == null:
+		ActivityLog.add("Sold the %s in your farm store at %s for %s." % [Farms.item_name(item).to_lower(), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
+

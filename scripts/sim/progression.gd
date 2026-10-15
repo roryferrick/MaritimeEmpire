@@ -267,7 +267,8 @@ static func _build_company_costs(company: Company) -> Array[int]:
 
 ## XP per minute from every unlocked cargo model with all its slots filled
 ## at this level, at sea at_sea_share of the time. A company from before types
-## counts every model but the new_tier ones (so its levels stay as they were).
+## counts every model but the new_tier ones (so its levels stay as they were),
+## and no company counts the farm_line ones (the Fresh produce carriers).
 ## One with types counts its types' models; for each type pick it has reached
 ## but not made yet, the average of the types it could still take (taken at
 ## that pick's level).
@@ -276,7 +277,7 @@ static func _full_fleet_xp_per_minute(level: int, company: Company = null) -> fl
 	var rate := 0.0
 	if company == null or company.all_types():
 		for model: Dictionary in GameData.ship_models:
-			if not model.get("recovery", false) and not model.get("new_tier", false):
+			if not model.get("recovery", false) and not model.get("new_tier", false) and not model.get("farm_line", false):
 				rate += _slots_from(model, int(model.get("unlock_level", 1)), level) * _xp_per_minute(model)
 		return rate * float(GameData.config.get("at_sea_share", 0.75))
 	for type_id: String in company.company_types:
@@ -296,7 +297,7 @@ static func _type_rate(type_id: String, taken_at: int, level: int) -> float:
 	var categories: Array = company_type(type_id).get("categories", [])
 	var rate := 0.0
 	for model: Dictionary in GameData.ship_models:
-		if categories.has(model.get("category", "")):
+		if categories.has(model.get("category", "")) and not model.get("farm_line", false):  # (Not the Fresh produce carriers: added with the farms, so companies keep their levels.)
 			rate += _slots_from(model, taken_at + tier_offset(model), level) * _xp_per_minute(model)
 	return rate
 
@@ -316,7 +317,7 @@ static func _xp_per_minute(model: Dictionary) -> float:
 		return 0.0
 	var weight := 0.0
 	for commodity_id: String in cargo:
-		weight += _value_weight(commodity_id)
+		weight += _value_weight(commodity_id) / GameData.hold_of(commodity_id)  # (A unit of hold's worth: capacity is in units of hold.)
 	weight /= cargo.size()
 	return xp_for_delivery(int(model.get("capacity", 0)), float(model.get("speed_nm_per_s", 0)) * 60.0) * weight
 

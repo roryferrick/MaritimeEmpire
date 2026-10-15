@@ -74,6 +74,12 @@ var totals := {}
 ## port for its seafood carriers to take (see GameState._land_catch()):
 ## port id -> {family: crates}.
 var cold_stores := {}
+## Its farm stores (Farms): port id -> {items: {item ("apples", or a breed's
+## young "cows:angus"): [units, freshness 0-1]}, cold (a cold store built)}.
+var farm_stores := {}
+## Its harvests' worth lately (fading a little each day: Farms), and what of
+## it spoiled and was collected by its ships: {harvested, spoiled, collected}.
+var farm_tally := {}
 ## The fishing grounds it has picked on the Fishing Grounds screen, and for each
 ## boat model sent there where its catch is landed and whether it goes in the
 ## freezer: {ground id: {model id: {port, freeze}}}. Which boats are sent is
@@ -194,6 +200,8 @@ func to_dict() -> Dictionary:
 		"regions": regions,
 		"totals": totals,
 		"cold_stores": cold_stores,
+		"farm_stores": farm_stores,
+		"farm_tally": farm_tally,
 		"fish_areas": fish_areas,
 		"port_trade": port_trade,
 		"canal_stats": canal_stats,
@@ -246,6 +254,8 @@ static func from_dict(data: Dictionary) -> Company:
 		company.hubs.append(Hub.new(company.home_port, true))
 	company.totals = data.get("totals", {})
 	company.cold_stores = data.get("cold_stores", {})
+	company.farm_stores = data.get("farm_stores", {}) if data.get("farm_stores") is Dictionary else {}
+	company.farm_tally = data.get("farm_tally", {}) if data.get("farm_tally") is Dictionary else {}
 	company.fish_areas = data.get("fish_areas", {}) if data.get("fish_areas") is Dictionary else {}
 	company.port_trade = data.get("port_trade", {})
 	company.canal_stats = data.get("canal_stats", {})

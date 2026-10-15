@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="64" viewBox="0 0 180 64">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M14,8 L140,8 Q168,10 176,32 Q168,54 140,56 L14,56 Q4,56 4,46 L4,18 Q4,8 14,8 Z" fill="#b97a3a" stroke="#1a1410" stroke-width="2"/>
+<g stroke="#8a5424" stroke-width="1.4" fill="none">
+<path d="M10,14 Q40,10 70,14 Q100,10 130,14 Q156,16 166,26"/><path d="M10,50 Q40,54 70,50 Q100,54 130,50 Q156,48 166,38"/>
+<path d="M18,10 L18,54 M32,9 L32,55 M46,9 L46,55 M60,9 L60,55 M74,9 L74,55 M88,9 L88,55 M102,9 L102,55 M116,9 L116,55 M130,9 L130,55 M144,11 L144,53 M158,16 L158,48"/>
+</g>
+<path d="M16,15 L138,15 Q160,17 166,32 Q160,47 138,49 L16,49 Q10,49 10,43 L10,21 Q10,15 16,15 Z" fill="#6a4020"/>
+<g stroke="#1a1410" stroke-width="1">
+<circle cx="24" cy="25" r="7" fill="#c8302c"/><circle cx="24" cy="40" r="7" fill="#d8a020"/>
+<ellipse cx="44" cy="32" rx="9" ry="10" fill="#e8761e"/><path d="M44,22 L44,42 M38,24 Q36,32 38,40 M50,24 Q52,32 50,40" fill="none" stroke="#b8561a"/>
+<circle cx="64" cy="24" r="6.5" fill="#b8c040"/><circle cx="64" cy="40" r="6.5" fill="#c8302c"/>
+<g fill="#6a2a6a"><circle cx="80" cy="27" r="3"/><circle cx="86" cy="27" r="3"/><circle cx="83" cy="32" r="3"/><circle cx="77" cy="32" r="3"/><circle cx="89" cy="32" r="3"/><circle cx="80" cy="37" r="3"/><circle cx="86" cy="37" r="3"/><circle cx="83" cy="42" r="3"/></g>
+<ellipse cx="108" cy="32" rx="12" ry="5" fill="#f0c840"/>
+<circle cx="130" cy="25" r="6.5" fill="#c8302c"/><circle cx="130" cy="40" r="6.5" fill="#f08c1c"/>
+<ellipse cx="150" cy="32" rx="7" ry="6" fill="#b8c040"/>
+</g>
+<g stroke="#e0a830" stroke-width="0.8"><path d="M98,32 L118,32"/><path d="M100,29 L116,29 M100,35 L116,35"/></g>
+<path d="M118,30 Q126,22 124,16 M118,34 Q126,42 124,48" fill="none" stroke="#6a8a3a" stroke-width="2.2" stroke-linecap="round"/>
+<g fill="#ffffff" opacity="0.6"><circle cx="21" cy="22" r="1.6"/><circle cx="61" cy="21" r="1.4"/><circle cx="127" cy="22" r="1.5"/><circle cx="21" cy="37" r="1.4"/></g>
+<path d="M24,18 L25,14 M64,17 L65,13 M130,18 L131,14" stroke="#4a2a14" stroke-width="1.4" stroke-linecap="round"/>
+<path d="M65,14 Q70,12 70,16 Q66,17 65,14 Z" fill="#4e8a2a"/>
+</svg>

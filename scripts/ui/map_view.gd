@@ -259,7 +259,7 @@ const INDUSTRY_ART_DIR := "res://art/industry/"
 const SHIP_ART_WIDTH := 180.0
 ## Where the cargo sits along the art (x from the stern, in art units). It
 ## fills from the stern forward in CARGO_STEPS steps, so part loads show.
-const CARGO_ZONES := {container = Vector2(34.0, 138.0), vehicles = Vector2(12.0, 147.4), livestock = Vector2(34.0, 138.0)}
+const CARGO_ZONES := {container = Vector2(34.0, 138.0), vehicles = Vector2(12.0, 147.4), livestock = Vector2(34.0, 138.0), produce = Vector2(34.0, 138.0)}
 const CARGO_STEPS := 4
 ## Bulk carriers' hatch covers (art units, as their <category>_details.svg draws
 ## them shut; <category>_details_open.svg is the same without them): where
@@ -4651,7 +4651,7 @@ func _update_marinas() -> void:
 			shown[port_id] = true
 			_check_stranded(port_id)
 			var item := _marina_item(port_id, i)
-			var key := [_dock_flips.get(port_id, 1.0), _hq_look(port_id), _land_cells.is_empty(), _shadow_key()]  # (The town needs the land; the shadows the sun.)
+			var key := [_dock_flips.get(port_id, 1.0), _hq_look(port_id), _land_cells.is_empty(), _shadow_key(), _farm_look(port_id)]  # (The town needs the land; the shadows the sun; a farm port's fields the season.)
 			var pivot := item.get_parent() as Node2D  # (Moved and turned, not the item: a Control turned draws again.)
 			var scale := _ship_scale()
 			var recorded_scale := float(item.get_meta(&"scale", 0.0))
@@ -4982,6 +4982,7 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	# warehouses) and the industry go on top of it.
 	var t_m := Time.get_ticks_usec()
 	_draw_town(port_id, layout, scale)
+	_draw_fields(port_id, layout)
 	_prof("marina.town", t_m)
 	t_m = Time.get_ticks_usec()
 	_draw_hq_building(port_id, layout)
@@ -8830,7 +8831,7 @@ const DECK_HAT_CELL := 7
 ## Dock workers on the quay beside a ship in port: line handlers at the
 ## bollards as it comes alongside and pulls out, and a gang working its cargo
 ## through its stop (DOCK_GANGS: [at least, more a tier] by its line).
-const DOCK_GANGS := {container = [2, 2], ore = [2, 1], grain = [2, 1], livestock = [2, 1], tanker = [2, 0], vehicles = [3, 1],
+const DOCK_GANGS := {container = [2, 2], ore = [2, 1], grain = [2, 1], livestock = [2, 1], produce = [2, 1], tanker = [2, 0], vehicles = [3, 1],
 	seafood = [3, 1], fishing = [1, 0], crabbing = [1, 1]}
 ## How far in from the quay's edge (dock units) the line handlers stand, and
 ## the band the gang works in: on the near half of a pier (PIER_WIDTH), its
@@ -9180,7 +9181,7 @@ static func _hatch_open(ship: Ship) -> float:
 func _draw_hatches(ship: Ship, hatches: Dictionary, rect: Rect2, open: float, fade: Color) -> void:
 	var to_rect := rect.size / Vector2(SHIP_ART_WIDTH, 52.0)
 	var place := func(box: Rect2) -> Rect2: return Rect2(rect.position + box.position * to_rect, box.size * to_rect)
-	var cargo := Color.from_string(str(HOLD_COLORS.get(ship.cargo_id, "")), EMPTY_HOLD)
+	var cargo := Color.from_string(str(HOLD_COLORS.get(ship.cargo_id, Farms.crop(ship.cargo_id).get("color", ""))), EMPTY_HOLD)  # (The farm crops in their own colours: data/farms.json.)
 	var hold := EMPTY_HOLD.lerp(cargo, clampf(ship.cargo_level() * 1.4, 0.0, 1.0)) * fade
 	var fill := Color.from_string(str(hatches.fill), Color.GRAY) * fade
 	var edge := Color.from_string(str(hatches.edge), Color.BLACK) * fade
@@ -12785,6 +12786,77 @@ static func _town_style(port_id: String) -> String:
 	if TOWN_COUNTRY_STYLES.has(country):
 		return TOWN_COUNTRY_STYLES[country]
 	return str(TOWN_REGION_STYLES.get(str(GameData.port_region(port_id).get("id", "")), "mediterranean"))
+
+# --- Farm fields ---------------------------------------------------------------
+
+## A farm port's fields (Farms): one a plot, in rows of FIELD_COLUMNS behind
+## its town (dock units), FIELD_DEPTH deep with FIELD_GAP between, in the crop's
+## colour by the season (Farms.look()), orchards as rows of trees, pastures
+## with their herd dotted about, and the owner's plots edged in its colour with a barn.
+const FIELD_COLUMNS := 4
+const FIELD_DEPTH := 7.0
+const FIELD_GAP := 0.8
+const FIELD_EDGE := Color(0.32, 0.26, 0.18, 0.8)
+const FIELD_BARN := Color("#8a2e22")
+var _farm_looks := {}  # Port id -> [Farms.version, its look].
+
+## A farm port's fields as they look now (null for any other port), kept till the farms change.
+func _farm_look(port_id: String) -> Variant:
+	if not Farms.is_farm_port(port_id):
+		return null
+	var kept: Array = _farm_looks.get(port_id, [])
+	if kept.is_empty() or int(kept[0]) != GameState.farms.version:
+		kept = [GameState.farms.version, GameState.farms.look(port_id)]
+		_farm_looks[port_id] = kept
+	return kept[1]
+
+func _draw_fields(port_id: String, layout: Dictionary) -> void:
+	var look: Variant = _farm_look(port_id)
+	if look == null:
+		return
+	var town := _town(port_id, layout)
+	var start := -(float(town.get("reach", 10.0)) + 3.0) if not town.is_empty() else _quay_inland(layout) - 12.0
+	var wide := float(layout.radius) * TOWN_HALF_RADII
+	var across := (wide * 2.0 - FIELD_GAP * (FIELD_COLUMNS - 1)) / FIELD_COLUMNS
+	var fields: Array = look
+	for i in fields.size():
+		var row := i / FIELD_COLUMNS
+		var column := i % FIELD_COLUMNS
+		var x1 := start - row * (FIELD_DEPTH + FIELD_GAP)
+		var x0 := x1 - FIELD_DEPTH
+		var y0 := -wide + column * (across + FIELD_GAP)
+		var y1 := y0 + across
+		var middle := Vector2((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+		if not _on_land(_dock_lon_lat(port_id, middle)) or _on_other_marina(port_id, middle):
+			continue  # (A plot out over the water, or on a neighbour's quay, isn't drawn: the coast bends.)
+		var field: Array = fields[i]
+		var points := _marina_polygon(port_id, PackedVector2Array([Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y1)]))
+		_canvas.draw_colored_polygon(points, field[0])
+		if bool(field[2]):  # An orchard's rows of trees.
+			var trees := PackedVector2Array()
+			for tx in range(1, 5):
+				for ty in range(1, 6):
+					trees.append(_dock_point(port_id, Vector2(lerpf(x0, x1, tx / 5.0), lerpf(y0, y1, ty / 6.0))))
+			var r := maxf(0.55 * dock_scale(port_id), 0.6)
+			for tree in trees:
+				_canvas.draw_circle(tree, r, Color("#3e6a2a"))
+		elif bool(field[3]):  # A pasture's herd.
+			var r := maxf(0.3 * dock_scale(port_id), 0.5)
+			for k in 7:
+				var at := Vector2(lerpf(x0, x1, GameData._hash01("%s%d/x%d" % [port_id, i, k])), lerpf(y0, y1, GameData._hash01("%s%d/y%d" % [port_id, i, k])))
+				_canvas.draw_circle(_dock_point(port_id, at), r, field[4])
+		else:  # Furrows.
+			for f in range(1, 4):
+				var y := lerpf(y0, y1, f / 4.0)
+				_canvas.draw_line(_dock_point(port_id, Vector2(x0 + 0.4, y)), _dock_point(port_id, Vector2(x1 - 0.4, y)), Color(field[0]).darkened(0.18), 1.0)
+		var outline := points.duplicate()
+		outline.append(points[0])
+		if field[1] != null:
+			_canvas.draw_polyline(outline, field[1], maxf(0.35 * dock_scale(port_id), 1.2), true)
+			var barn := Vector2(x1 - 1.2, y0 + 1.2)
+			_canvas.draw_colored_polygon(_marina_polygon(port_id, PackedVector2Array([barn, barn + Vector2(-1.0, 0.0), barn + Vector2(-1.0, 1.3), barn + Vector2(0.0, 1.3)])), FIELD_BARN)
+		else:
+			_canvas.draw_polyline(outline, FIELD_EDGE, 1.0, true)
 
 ## How far inland (dock units, past the quay) a port's town can reach.
 static func _town_rows(layout: Dictionary) -> int:

@@ -783,8 +783,16 @@ func cargo_text(model: Dictionary) -> String:
 	return "%s %s" % [Fmt.thousands(int(model.get("capacity", 0))), units]
 
 
-## "Toys, Clothing, Furniture, Coffee": what a model can carry.
+## What the lines carrying a long list say they carry (cargo_names()).
+const CARGO_SUMMARIES := {
+	grain = "Wheat, Corn, Soybeans, Rice, Barley, Coffee, Cocoa, Tea, Sugarcane, Spices, Almonds, Olives, Dates, Cotton and Rubber",
+	produce = "Fruit, Berries and Vegetables: 21 kinds, fresh",
+}
+
+## "Toys, Clothing, Furniture": what a model can carry (a long list summed up: CARGO_SUMMARIES).
 func cargo_names(model: Dictionary) -> String:
+	if CARGO_SUMMARIES.has(str(model.get("category", ""))):
+		return CARGO_SUMMARIES[str(model.category)]
 	return ", ".join(PackedStringArray(model.get("cargo", []).map(func(id: String) -> String: return commodity(id).get("name", id))))
 
 
@@ -798,6 +806,12 @@ static func current_commodity(id: String) -> String:
 
 func commodity(id: String) -> Dictionary:
 	return _commodities_by_id.get(id, {})
+
+
+## How many units of a ship's hold one of a commodity takes (markets.json
+## hold: a horse takes three head's room), 1 for most.
+func hold_of(id: String) -> float:
+	return maxf(float(commodity(id).get("hold", 1.0)), 1.0)
 
 
 ## The region a port is in: {id, name, ports}.

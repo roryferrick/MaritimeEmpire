@@ -28,14 +28,15 @@ const TOTAL_ROWS := [
 	["Cargo sales", "income", false], ["Cargo bought", "cargo", true], ["Fuel", "fuel", true], ["Repairs", "repair", true],
 	["Canal tolls", "tolls", true], ["Port fees", "port_fees", true], ["Crew wages", "wages", true], ["Loan interest", "interest", true],
 	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true], ["Logo changes", "logo", true], ["Cruise supplies", "supplies", true],
+	["Farm land bought", "land", true], ["Farm land sold", "land_sold", false], ["Farm costs (planting, herds, wages, upgrades)", "farms", true], ["Farm store sales", "farm_sales", false],
 ]
 ## Ship table groups, in shop order: [title, ship_models.json category].
 const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"]]
+	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"]]
 ## Money columns summed in each group's total row.
 const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "wages", "profit", "recent"]
 ## The Delivered card's heading for each markets.json unit.
-const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head of livestock", vehicle = "Vehicles"}
+const DELIVERED_UNITS := {container = "Containers", ton = "Tons", pallet = "Pallets", head = "Head of livestock", vehicle = "Vehicles", boat = "Boats"}
 ## Each group's rows sit on a faint band of its ship line's color.
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0

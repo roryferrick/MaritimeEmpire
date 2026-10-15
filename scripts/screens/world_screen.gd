@@ -15,7 +15,7 @@ const FIELD_GUIDE_BUTTON := 44.0
 const LINE_MIN_LUMINANCE := 0.5
 ## The price picker's ship lines: [name, ship_models.json category].
 const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Seafood carriers", "seafood"]]
+	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Seafood carriers", "seafood"]]
 ## The box (px) a seafood family's picture is fitted in, in the price picker
 ## (see _catch_icon()); and the family whose picture marks the seafood line.
 const CATCH_ICON_SIZE := Vector2i(30, 18)

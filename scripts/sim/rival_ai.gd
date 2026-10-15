@@ -248,6 +248,9 @@ func _busiest_port(who: Company) -> Variant:
 
 ## One think: as the rival (see the top), what it does now. Then this player's
 ## screens are told everything may have changed back.
+## How often (in thinks) a rival looks at its farms.
+const FARM_EVERY := 5
+
 func _think(rival: Company, mind: Dictionary) -> void:
 	var mine: Company = _state.company
 	_state.company = rival
@@ -263,6 +266,8 @@ func _think(rival: Company, mind: Dictionary) -> void:
 	_route_idle_ships(rival, settings)
 	news.append_array(_buy_ships(rival, settings))
 	news.append_array(_run_cruises(rival))
+	if int(mind.thinks) % FARM_EVERY == 0:  # (Its farms, simply: see Farms.run_rival().)
+		news.append_array((_state.farms as Farms).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
 	if float(settings.reroute_s) > 0.0 and float(mind.reroute) <= 0.0:
 		mind.reroute = float(settings.reroute_s)
 		_reroute_one(rival, settings)

@@ -17,6 +17,9 @@ const TIPS := [
 	"Grow the fleet as your slots allow, trade at more ports, and found every hub your level gives.",
 ]
 
+## How to raise Agriculture's fourth part, its farms.
+const FARM_TIP := "Buy plots at the farm ports (the Farms screen), grow what suits each climate (or fit greenhouses and irrigation), and send ships to collect the harvest before it spoils."
+
 ## How to raise each of a cruise line's parts.
 const CRUISE_TIPS := [
 	"Fit amenities in every deck slot, give more space to Balconies and Suites, and raise the service levels (the Ship tab of the Cruise planner).",
@@ -69,7 +72,7 @@ func _ready() -> void:
 	var note := Label.new()
 	note.theme_type_variation = &"DimLabel"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Each company type you run earns 0 to 5 stars from the last 2 hours of play, worked out every minute: a third each for its ships' condition, their reliability, and its scale and reach. At 2.5 stars nothing changes; above, its cargo sells for more, pays lower port fees and earns more XP, and below, the opposite. Cruises has four parts, a quarter each: guest experience, itinerary, reliability & safety, and value & reviews; its stars move what guests will pay."
+	note.text = "Each company type you run earns 0 to 5 stars from the last 2 hours of play, worked out every minute: a third each for its ships' condition, their reliability, and its scale and reach. At 2.5 stars nothing changes; above, its cargo sells for more, pays lower port fees and earns more XP, and below, the opposite. Agriculture has a fourth part, a quarter of its stars, for its farms. Cruises has four parts, a quarter each: guest experience, itinerary, reliability & safety, and value & reviews; its stars move what guests will pay."
 	content.add_child(note)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
@@ -134,6 +137,9 @@ func _type_card(company: Company, type_id: String) -> Control:
 	var figures: Dictionary = (ratings.details.get(company, {}) as Dictionary).get(type_id, {})
 	var lines := _cruise_texts(figures) if type_id == "cruises" else _part_texts(figures, company.level())
 	var tips: Array = CRUISE_TIPS if type_id == "cruises" else TIPS
+	if type_id == "agriculture":
+		tips = TIPS + [FARM_TIP]
+		lines.append(_farm_text(figures))
 	var names := Ratings.part_names(type_id)
 	for i in names.size():
 		var row := HBoxContainer.new()
@@ -176,6 +182,16 @@ func _cruise_texts(figures: Dictionary) -> Array:
 		"Maintenance %d%% on average · %d incidents and %d ports missed over the last %d voyages" % [roundi(float(figures.maintenance) * 100.0), int(figures.incidents), int(figures.skipped), int(figures.voyages)],
 		"Reviews %.1f of 5 over the last %d voyages" % [float(figures.review), int(figures.reviews)] if int(figures.reviews) > 0 else "No reviews yet (2.5 till the first voyage is back)",
 	]
+
+
+## Agriculture's Farms part's figures from the latest minute.
+func _farm_text(figures: Dictionary) -> String:
+	if not figures.has("farmed"):
+		return "Worked out every minute of play."
+	if int(figures.farmed) == 0:
+		return "No farms yet: buy a plot on the Farms screen."
+	return "%d plots farmed of about %d expected · climate fit %d%% · %d%% of the harvest collected, not spoiled" % [
+		int(figures.farmed), roundi(float(figures.expected_plots)), roundi(float(figures.farm_fit) * 100.0), roundi(float(figures.collected) * 100.0)]
 
 
 ## Each part's figures from the latest minute (or a note before the first).

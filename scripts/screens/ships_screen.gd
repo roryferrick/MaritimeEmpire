@@ -37,12 +37,13 @@ const HEADER_FONT_SIZE := 15
 const UPGRADE_ALL_GAP := 16.0
 ## The service ships' lines (the Service tab) and every line's heading.
 const SERVICE_LINES := ["recovery", "tug", "icebreaker"]
-const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers",
+const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
 	tanker = "Tankers", vehicles = "Vehicle carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers",
 	recovery = "Recovery boats", tug = "Tugs", icebreaker = "Icebreakers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers"}
 ## The tabs' place under the header, and where the list starts below them (px).
 const TABS_TOP := 60.0
 const LIST_TOP := 100.0
+const TAB_FONT_SIZE := 14
 const SORT_NAMES := {Sort.EARNINGS: "Earnings", Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit (all time)"}
 ## Sorted by earnings, the tiles re-sort this often (s) while the tab is open,
 ## and each time it opens.
@@ -429,6 +430,7 @@ func _add_tabs() -> void:
 	_tabs.offset_top = TABS_TOP
 	_tabs.offset_bottom = LIST_TOP - 4.0
 	_tabs.clip_tabs = false
+	_tabs.add_theme_font_size_override(&"font_size", TAB_FONT_SIZE)  # (Seven tabs with their stars and counts fit across.)
 	_tabs.tab_changed.connect(_apply_filter.unbind(1))
 	add_child(_tabs)
 	$Scroll.offset_top = LIST_TOP

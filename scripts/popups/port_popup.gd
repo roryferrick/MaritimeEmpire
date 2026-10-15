@@ -102,8 +102,40 @@ func _build_size() -> void:
 			parts.append("%s crates of %s" % [Fmt.thousands(floori(float(store[family]))), str(GameData.commodity(family).get("name", family)).to_lower()])
 		cold.text = "Your cold store: %s, for your seafood carriers" % ", ".join(parts)
 		%SizeBox.add_child(cold)
+	_add_farm_line()
 	_update_birds()
 	_update_size()
+
+
+## A farm port's line: its climate, its plots, the company's farm there, and a
+## button to it on the Farms screen.
+func _add_farm_line() -> void:
+	if not Farms.is_farm_port(port_id):
+		return
+	var farms := GameState.farms
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.add_theme_color_override(&"font_color", Color(0.72, 0.86, 0.5))
+	var total := int(Farms.port_info(port_id).get("plots", 0))
+	var mine := farms.owned_by(GameState.company, port_id).size()
+	label.text = "Farm port · %s climate · %d of %d plots free%s" % [Farms.climate_name(Farms.climate_of(port_id)), total - farms.taken_at(port_id), total,
+		" · %d yours" % mine if mine > 0 else ""]
+	var value := farms.store_value(GameState.company, port_id)
+	if value > 0:
+		label.text += " · your farm store holds %s" % Fmt.money(value)
+	row.add_child(label)
+	if Farms.can_farm(GameState.company):
+		var open := Button.new()
+		open.text = "Farms"
+		open.size_flags_vertical = SIZE_SHRINK_CENTER
+		open.pressed.connect(func() -> void:
+			GameRoot.find(self).show_farm(port_id)
+			queue_free())
+		row.add_child(open)
+	%SizeBox.add_child(row)
 
 
 func _update_size() -> void:

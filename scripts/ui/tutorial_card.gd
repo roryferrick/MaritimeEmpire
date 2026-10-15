@@ -194,6 +194,12 @@ func _tips_list() -> Array[Dictionary]:
 			show = func() -> bool: return seen.call("map") and GameState.company_types_available() > 0,
 			done = func() -> bool: return GameState.company_types_available() <= 0,
 			text = func() -> String: return "We've grown enough to go into a second trade. Press Choose a company type at the top right of the map (or on a locked tab in the Shop) and pick one: its smallest ships open straight away and the bigger ones follow as we level up.\n\nIt's for good, so look at what each carries and which ports near our hubs trade it. Another choice comes every %d levels." % Progression.type_pick_every()},
+		{id = "farms", who = "sonny", title = "Our own farms",
+			show = func() -> bool: return seen.call("trading") and Farms.can_farm(GameState.company) and GameState.company.level() >= 3,
+			done = func() -> bool: return not GameState.farms.owned_by(GameState.company).is_empty(),
+			text = func() -> String: return "The Farms tab, down at the bottom: the world's farm ports, each with a few plots of land for sale. Buy one, plant a crop that suits the climate (or graze a herd), and the harvest comes in by the season to our farm store at that port, where our own ships load it free.
+
+Grain carriers take the dry crops, Fresh produce carriers the fruit and vegetables (they lose a little value every day, so don't let them sit), livestock carriers the young stock. Watch the almanac: a drought or a frost can take most of a year's harvest."},
 		{id = "cruise_plan", who = "dick", title = "Plan a cruise",
 			show = func() -> bool: return seen.call("map") and GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and ship.route.size() < 2),
 			done = func() -> bool: return not GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and ship.route.size() < 2),
@@ -243,11 +249,11 @@ func _fishing_boats() -> Array[Ship]:
 static func _type_welcome() -> String:
 	match GameState.company.start_type():
 		"cargo":
-			return "We're in Cargo & Ore: container ships with toys, clothing, furniture and coffee, and bulk carriers with iron ore, coal and gold. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
+			return "We're in Cargo & Ore: container ships with toys, clothing and furniture, and bulk carriers with iron ore, coal and gold. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
 		"vehicles":
 			return "We're in Vehicles: car carriers taking cars, trucks and boats from the factories to the showrooms. Buy ships, give them routes between ports, and they'll buy vehicles where they're cheap and sell them where they're dear."
 		"agriculture":
-			return "We're in Agriculture: grain carriers with wheat, corn, soybeans, rice and barley, and livestock carriers with cattle, sheep and pigs. Buy ships, give them routes between ports, and they'll buy where the harvest is cheap and sell where it's wanted."
+			return "We're in Agriculture: farms at the world's farm ports, grain carriers with grain, coffee, cocoa, sugar and spices, Fresh produce carriers with fruit and vegetables, and livestock carriers with cattle, sheep, pigs and horses. Buy ships, give them routes between ports, and they'll buy where the harvest is cheap and sell where it's wanted."
 		"tankers":
 			return "We're in Tankers: oil and gas. Buy tankers, give them routes between ports, and they'll fill up where oil is cheap and sell it where it's dear."
 		"seafood":

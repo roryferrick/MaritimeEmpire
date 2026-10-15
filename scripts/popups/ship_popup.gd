@@ -184,15 +184,21 @@ func _update_cargo() -> void:
 	var sale_worth := 0.0
 	if not ship.cargo_id.is_empty():
 		var commodity := GameData.commodity(ship.cargo_id)
-		lines.append("Carrying %s %s of %s, bought for %s at %s." % [Fmt.thousands(ship.cargo_qty), commodity.get("units", "units"),
-			commodity.get("name", ship.cargo_id), Fmt.money(ship.cargo_cost), GameData.port_name(ship.cargo_from)])
+		var what := str(commodity.get("name", ship.cargo_id))
+		if not ship.cargo_breed.is_empty():  # (A farm's young stock: its breed's worth, see Farms.)
+			what = "%s %s (worth x%s)" % [Farms.breed_name(ship.cargo_breed), what.to_lower(), Fmt.decimal(Farms.breed_value(ship.cargo_breed), 1)]
+		var source := "from the farm at %s (worth %s there)" % [GameData.port_name(ship.cargo_from), Fmt.money(ship.cargo_cost)] if ship.cargo_farm else "bought for %s at %s" % [Fmt.money(ship.cargo_cost), GameData.port_name(ship.cargo_from)]
+		lines.append("Carrying %s %s of %s, %s." % [Fmt.thousands(ship.cargo_qty), commodity.get("units", "units"), what, source])
+		if Farms.loses_a_day(ship.cargo_id) > 0.0:
+			lines.append("Fresh: %d%% of its full value now, losing about %s%% a day aboard." % [roundi(ship.cargo_value_factor(GameState.play_time, GameState.days_per_second()) * 100.0),
+				Fmt.decimal(Farms.loses_a_day(ship.cargo_id) * (1.0 - float(ship.model().get("keeps_fresh", 0.0))) * 100.0, 1)])
 	if at.is_empty():
 		_cargo_label.text = "\n".join(lines)
 		return
 	# At its next stop: what it sells there, then what it buys there for the stop after.
 	var plan := "At %s: " % GameData.port_name(at)
 	if not ship.cargo_id.is_empty():
-		var sale := ship.cargo_qty * GameState.company_sell_price(at, ship.cargo_id, GameState.owner_of(ship))
+		var sale := ship.cargo_qty * GameState.company_sell_price(at, ship.cargo_id, GameState.owner_of(ship)) * ship.cargo_value_factor(GameState.play_time, GameState.days_per_second())
 		sale_worth = sale + GameState.trade_bonus(ship.cargo_from, at, sale - ship.cargo_cost, ship.model_id, GameState.owner_of(ship))
 		plan += "sells for about %s" % Fmt.money(roundi(sale_worth))
 	else:
@@ -241,7 +247,7 @@ func _next_load(port_id: String, to: String, sale: float) -> Array:
 	if str(best[0]).is_empty():
 		return []
 	var price := GameState.company_buy_price(port_id, best[0], who)
-	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(port_id, to, ship.model())))
+	var room := floori(ship.capacity() * (1.0 - GameData.leg_lightening(port_id, to, ship.model())) / GameData.hold_of(best[0]))
 	var quantity := room
 	if not GameState.in_debt(who) and price > 0.0:
 		var spare := float(who.money) + sale - GameState.fuel_reserve(who) - who.bank_reserve

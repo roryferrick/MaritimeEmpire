@@ -153,6 +153,17 @@ var cargo_qty := 0
 var cargo_cost := 0
 var cargo_payment := 0
 var cargo_leg_nm := 0.0
+## A farm's livestock aboard: its breed ("" for plain stock and everything
+## else), which its sale is worth more or less for (Farms.breed_value()).
+var cargo_breed := ""
+## Fresh cargo (fruit, berries, vegetables: Farms.is_fresh()): its freshness
+## when loaded (1 from the market, less from a farm store) and when (play
+## time); it loses Farms.loses_a_day() of its value a day aboard, keeps_fresh
+## less on the bigger Fresh produce carriers (see cargo_value_factor()).
+var cargo_fresh := 1.0
+var cargo_since := 0.0
+## True if the cargo aboard came from its company's farm store (Farms.load_ship()).
+var cargo_farm := false
 var unloaded := true
 ## Rates (per second) that refill what was missing on arrival within one refill phase.
 var repair_rate := 0.0
@@ -868,12 +879,23 @@ func fuel_level() -> float:
 	return clampf(fuel / tank, 0.0, 1.0) if tank > 0.0 else 0.0
 
 
+## What the cargo aboard sells for against plain stock at its full value: its
+## breed's value, times its freshness by now (what it was when loaded, a
+## farm store's dry crops a little under 1; fresh cargo less its daily loss
+## for the days aboard; never under a tenth).
+func cargo_value_factor(play_time: float, days_per_second: float) -> float:
+	var factor := Farms.breed_value(cargo_breed)
+	var loss := Farms.loses_a_day(cargo_id)
+	var days := maxf(play_time - cargo_since, 0.0) * days_per_second if loss > 0.0 else 0.0
+	return factor * maxf(cargo_fresh - loss * (1.0 - float(model().get("keeps_fresh", 0.0))) * days, 0.1)
+
+
 ## How full the hold is (0..1): the cargo aboard, emptying over the first half
 ## of a stop as it's unloaded and filling over the second half with what it loaded.
 func cargo_level() -> float:
 	if is_fishing():
 		return clampf(catch / capacity(), 0.0, 1.0) if capacity() > 0 else 0.0
-	var full := clampf(float(cargo_qty) / capacity(), 0.0, 1.0) if capacity() > 0 else 0.0
+	var full := clampf(float(cargo_qty) * GameData.hold_of(cargo_id) / capacity(), 0.0, 1.0) if capacity() > 0 else 0.0
 	if not is_docking() or dock_seconds() <= 0.0:
 		return full
 	return full * clampf(absf(1.0 - 2.0 * dock_time / dock_seconds()), 0.0, 1.0)
@@ -1415,6 +1437,10 @@ func to_dict() -> Dictionary:
 		"cargo_cost": cargo_cost,
 		"cargo_payment": cargo_payment,
 		"cargo_leg_nm": cargo_leg_nm,
+		"cargo_breed": cargo_breed,
+		"cargo_fresh": cargo_fresh,
+		"cargo_since": cargo_since,
+		"cargo_farm": cargo_farm,
 		"unloaded": unloaded,
 		"repair_rate": repair_rate,
 		"refuel_rate": refuel_rate,
@@ -1514,6 +1540,12 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.cargo_cost = int(data.get("cargo_cost", 0))
 	ship.cargo_payment = int(data.get("cargo_payment", 0))
 	ship.cargo_leg_nm = float(data.get("cargo_leg_nm", 0.0))
+	ship.cargo_breed = str(data.get("cargo_breed", ""))
+	ship.cargo_fresh = float(data.get("cargo_fresh", 1.0))
+	ship.cargo_since = float(data.get("cargo_since", 0.0))
+	ship.cargo_farm = bool(data.get("cargo_farm", false))
+	if ship.cargo_id == "coffee" and not (ship.model().get("cargo", []) as Array).has("coffee"):
+		ship.cargo_qty = roundi(ship.cargo_qty * 2250.0 / 160.0)  # (A save from before coffee was a farm crop by the ton: its containers as tons of the same worth.)
 	ship.unloaded = bool(data.get("unloaded", true))
 	ship.repair_rate = float(data.get("repair_rate", 0.0))
 	ship.refuel_rate = float(data.get("refuel_rate", 0.0))

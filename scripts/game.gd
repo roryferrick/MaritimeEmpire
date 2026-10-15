@@ -5,7 +5,7 @@ extends Control
 ## bottom nav, the full-screen Route Assignment screen, and the Esc menu;
 ## Space pauses and T opens the chat.
 
-enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -32,6 +32,9 @@ var _current_screen := Screen.WORLD
 	Screen.SHOP: %ShopButton,
 }
 @onready var _popup_host: PopupHost = %PopupHost
+## The Farms screen and its tab (made here: shown for Agriculture companies only, see _update_farms_tab()).
+var _farms_screen := FarmsScreen.new()
+var _farms_button := Button.new()
 
 ## Shown on the Ships tab while any ship needs the player (see
 ## Ship.attention_reason()), and on the Shop tab while any ship can be bought.
@@ -54,6 +57,20 @@ static func find(from: Node) -> GameRoot:
 
 func _ready() -> void:
 	add_to_group(GROUP)
+	_farms_screen.name = "FarmsScreen"
+	_farms_screen.visible = false
+	_farms_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	%MarketsScreen.add_sibling(_farms_screen)
+	_farms_button.name = "FarmsButton"
+	_farms_button.text = "Farms"
+	_farms_button.custom_minimum_size = Vector2(0, 48)
+	_farms_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	%ShopButton.add_sibling(_farms_button)
+	%ShopButton.get_parent().move_child(_farms_button, %ShopButton.get_index())
+	_screens[Screen.FARMS] = _farms_screen
+	_nav_buttons[Screen.FARMS] = _farms_button
+	GameState.company_types_changed.connect(_update_farms_tab)
+	_update_farms_tab()
 	var group := ButtonGroup.new()
 	for screen: Screen in _nav_buttons:
 		var button: Button = _nav_buttons[screen]
@@ -172,6 +189,17 @@ func _update_ships_alert() -> void:
 			named += " and %d more" % (names.size() - ALERT_NAMES_SHOWN)
 		parts.append("%d %s (%s)" % [names.size(), reason, named])
 	%ShipsButton.tooltip_text = "Ships needing you: %s" % ", ".join(parts) if not reasons.is_empty() else ""
+
+
+## The Farms tab shows for companies that can farm (Agriculture: see Farms.can_farm()).
+func _update_farms_tab() -> void:
+	_farms_button.visible = Farms.can_farm(GameState.company)
+
+
+## Opens the Farms screen at a farm port (the port popup's Farms button).
+func show_farm(port_id: String) -> void:
+	_farms_screen.show_port(port_id)
+	show_screen(Screen.FARMS)
 
 
 ## Switches to the World map, centered on a port.

@@ -92,7 +92,9 @@ func unit_profit(commodity_id: String, from_port: String, to_port: String, model
 ## next, and its profit per unit there (after the canal tolls, and with the
 ## leg's bonuses on the profit, with a company's hubs and upgrades: this
 ## player's unless `of` says), as [commodity id, profit per unit]; ["", 0] if nothing it
-## carries makes a profit. `memo` (when given) keeps the prices and bonuses
+## carries makes a profit. The profit is a unit of hold's (a horse takes
+## three: markets.json hold), and fresh cargo's counts what it loses on the
+## way. `memo` (when given) keeps the prices and bonuses
 ## it looks up for the next call, for a caller asking about many legs while
 ## nothing can change them (RivalAI, within a think).
 func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Company = null, memo: Variant = null) -> Array:
@@ -101,6 +103,7 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 	var model_id := str(model.get("id", ""))
 	var toll_share := GameData.leg_toll_share(from_port, to_port)
 	var factor := NAN  # (The leg's bonuses, from the memo: looked up once.)
+	var days := -1.0  # (The leg's calendar days at sea, for fresh cargo: worked out once if needed.)
 	for commodity_id: String in model.get("cargo", []):
 		var sell: float
 		var buy: float
@@ -128,8 +131,14 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 						kept[factor_key] = _state.trade_bonus_factor(from_port, to_port, model_id, of)
 					factor = kept[factor_key]
 				bonus = (sell - buy) * (factor - 1.0)
+		var loss := Farms.loses_a_day(commodity_id)
+		if loss > 0.0:  # Fresh cargo: what it'll have lost by the time it's there (see Ship.cargo_value_factor()).
+			if days < 0.0:
+				days = GameData.distance_nm(from_port, to_port) / maxf(float(model.get("speed_nm_per_s", 1.0)), 0.1) * _state.days_per_second()
+			var kept := maxf(1.0 - loss * (1.0 - float(model.get("keeps_fresh", 0.0))) * days, 0.1)
+			bonus -= sell * (1.0 - kept)
 		var margin := sell - buy
-		var profit := margin + bonus - sell * toll_share
+		var profit := (margin + bonus - sell * toll_share) / GameData.hold_of(commodity_id)  # (A unit of hold: a horse takes three.)
 		if profit > best_profit:
 			best = commodity_id
 			best_profit = profit
