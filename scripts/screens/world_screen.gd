@@ -2,8 +2,9 @@
 extends Control
 ## The main map: ports, ships, canal locks, storms and sea animals, with their
 ## popups, and the price picker in the top right (a ship line's prices over the
-## ports), with an Unlock a region button over it while a market region can be
-## unlocked (see _add_region_choice()). The Routes and Tutorial switches are on
+## ports), with Choose a company type (CompanyTypeDialog) and Unlock a region
+## buttons over it while a type can be chosen or a market region unlocked (see
+## _add_region_choice()). The Routes and Tutorial switches are on
 ## the Settings page (Esc menu: see SettingsPage); the map follows them.
 
 const ZOOM_BUTTON_SIZE := Vector2(44, 44)
@@ -31,6 +32,8 @@ var _price_menu := PopupPanel.new()
 ## locked region has a button at its middle (click it, or the region, then
 ## again to unlock it: _armed is the one clicked once).
 var _unlock_button := Button.new()
+## Choosing another company type (CompanyTypeDialog): shown above Unlock a region while one can be chosen.
+var _type_button := Button.new()
 var _choose_layer := Control.new()
 var _region_buttons := {}  # Region id -> its Button.
 var _armed := ""
@@ -75,6 +78,7 @@ func _process(_delta: float) -> void:
 	MapView._prof("proc.world_screen", t_x)
 
 func _process_timed(_delta: float) -> void:
+	_type_button.visible = GameState.company_types_available() > 0
 	var available := GameState.regions_available()
 	_unlock_button.visible = available > 0 and not _map.choosing_region
 	_unlock_button.text = "Unlock a region (%d)" % available if available > 1 else "Unlock a region"
@@ -108,6 +112,12 @@ func _add_region_choice() -> void:
 	_unlock_button.pressed.connect(_start_choosing)
 	%MapControls.add_child(_unlock_button)
 	%MapControls.move_child(_unlock_button, 0)
+	_type_button.text = "Choose a company type"
+	_type_button.tooltip_text = "Branch out into another company type: its smallest ships open now, the bigger ones as you level up."
+	_type_button.visible = false
+	_type_button.pressed.connect(func() -> void: CompanyTypeDialog.open(self))
+	%MapControls.add_child(_type_button)
+	%MapControls.move_child(_type_button, 0)
 	_choose_layer.set_anchors_preset(PRESET_FULL_RECT)
 	_choose_layer.mouse_filter = MOUSE_FILTER_IGNORE
 	_choose_layer.visible = false

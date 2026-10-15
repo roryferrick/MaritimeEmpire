@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="60" viewBox="0 0 180 60">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M9.0,4.0 L138.0,4.0 Q170.0,5.0 177,30.0 Q170.0,55.0 138.0,56.0 L9.0,56.0 Q4,56.0 4,51.0 L4,9.0 Q4,4.0 9.0,4.0 Z" fill="none" stroke="#3c3c3c" stroke-width="6"/>
+<path d="M9.0,4.0 L138.0,4.0 Q170.0,5.0 177,30.0 Q170.0,55.0 138.0,56.0 L9.0,56.0 Q4,56.0 4,51.0 L4,9.0 Q4,4.0 9.0,4.0 Z" fill="none" stroke="#a7adb4" stroke-width="2" opacity="0.9"/>
+<rect x="6.0" y="7.0" width="104.0" height="46.0" rx="3.0" fill="#8e9399" stroke="none" stroke-width="0.0" opacity="0.6" />
+<rect x="10.0" y="10.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M16.0,11.0 L16.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M22.0,11.0 L22.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M11.0,16.0 L27.0,16.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M11.0,22.0 L27.0,22.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="19.0" cy="19.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="10.0" y="31.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M16.0,32.0 L16.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M22.0,32.0 L22.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M11.0,37.0 L27.0,37.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M11.0,43.0 L27.0,43.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="19.0" cy="40.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="34.0" y="10.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M40.0,11.0 L40.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M46.0,11.0 L46.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M35.0,16.0 L51.0,16.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M35.0,22.0 L51.0,22.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="43.0" cy="19.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="34.0" y="31.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M40.0,32.0 L40.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M46.0,32.0 L46.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M35.0,37.0 L51.0,37.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M35.0,43.0 L51.0,43.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="43.0" cy="40.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="58.0" y="10.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M64.0,11.0 L64.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M70.0,11.0 L70.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M59.0,16.0 L75.0,16.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M59.0,22.0 L75.0,22.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="67.0" cy="19.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="58.0" y="31.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M64.0,32.0 L64.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M70.0,32.0 L70.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M59.0,37.0 L75.0,37.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M59.0,43.0 L75.0,43.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="67.0" cy="40.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="82.0" y="10.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M88.0,11.0 L88.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M94.0,11.0 L94.0,27.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M83.0,16.0 L99.0,16.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M83.0,22.0 L99.0,22.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="91.0" cy="19.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="82.0" y="31.0" width="18.0" height="18.0" rx="1.2" fill="#2e3338" stroke="#5a5f66" stroke-width="2.2" />
+<path d="M88.0,32.0 L88.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M94.0,32.0 L94.0,48.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M83.0,37.0 L99.0,37.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<path d="M83.0,43.0 L99.0,43.0" stroke="#9aa3ab" stroke-width="1.0" stroke-linecap="round" fill="none" />
+<circle cx="91.0" cy="40.0" r="3.6" fill="none" stroke="#e2a33a" stroke-width="1.5"/>
+<rect x="112.0" y="9.0" width="36.0" height="42.0" rx="4.0" fill="#f1efe8" stroke="#1a1a1a" stroke-width="1.2" />
+<rect x="140.0" y="13.0" width="6.0" height="34.0" rx="1.0" fill="#2f4a63" stroke="none" stroke-width="0.0" />
+<rect x="116.0" y="26.0" width="8.0" height="8.0" rx="1.5" fill="#d6d9dc" stroke="#1a1a1a" stroke-width="0.8" />
+<path d="M116.0,30.0 L50.0,18.0" stroke="#e0b030" stroke-width="3.0" stroke-linecap="round" fill="none" />
+<circle cx="116.0" cy="30.0" r="4.0" fill="#e0b030" stroke="#1a1a1a" stroke-width="0.8"/>
+<circle cx="110.0" cy="8.5" r="2.8" fill="#c43c2c" stroke="#1a1a1a" stroke-width="0.8"/>
+<circle cx="110.0" cy="51.5" r="2.8" fill="#c43c2c" stroke="#1a1a1a" stroke-width="0.8"/>
+<path d="M152.0,30.0 L174.0,30.0" stroke="#c9ced3" stroke-width="1.0" stroke-linecap="round" fill="none" />
+</svg>

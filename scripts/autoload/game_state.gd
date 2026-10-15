@@ -57,6 +57,8 @@ signal hub_leveled(hub: Hub, level: int)
 signal hub_built(hub: Hub)
 ## A market region was unlocked (this player's, or a company's in multiplayer).
 signal regions_changed
+## A company took another company type (this player's, or a company's in multiplayer).
+signal company_types_changed
 ## A model got its mega upgrade.
 signal mega_upgraded(model_id: String)
 ## A port grew or shrank into a new size band (see PortSizes).
@@ -612,6 +614,8 @@ var _tug_discount_key := []
 func buy_error(model_id: String) -> String:
 	var model := GameData.get_ship_model(model_id)
 	var level := company_level()
+	if Progression.unlock_level(model) == Progression.LOCKED:
+		return locked_type_note(Progression.type_of_model(model))
 	if level < Progression.unlock_level(model):
 		return "Unlocks at company level %d." % Progression.unlock_level(model)
 	if model.get("tug", false):
@@ -1071,6 +1075,69 @@ func is_region_unlocked(region_id: String) -> bool:
 	return region_id.is_empty() or regions.has(region_id)
 
 
+## Company types a company (this player's if null) can still take: one more
+## every few company levels (Progression.type_slots()). None for a company
+## from before types, which has them all.
+func company_types_available(of: Company = null) -> int:
+	var who := of if of != null else company
+	if who.all_types():
+		return 0
+	return maxi(Progression.type_slots(who.level()) - who.company_types.size(), 0)
+
+
+func choose_company_type_error(type_id: String, of: Company = null) -> String:
+	var who := of if of != null else company
+	if Progression.company_type(type_id).is_empty():
+		return "There's no such company type."
+	if who.has_type(type_id):
+		return "Your company already has it."
+	if company_types_available(who) <= 0:
+		return "A new company type comes every %d company levels." % Progression.type_pick_every()
+	return ""
+
+
+## Takes another company type, for good: its lines' first tier opens now and
+## the rest follow (Progression.unlock_level()). Returns why it couldn't, or "".
+func choose_company_type(type_id: String) -> String:
+	var error := choose_company_type_error(type_id)
+	if not error.is_empty():
+		return error
+	if Net.command(&"choose_company_type", [type_id]):
+		return ""
+	take_company_type(company, type_id)
+	ActivityLog.add("Your company is now in %s too: its %s open now, the bigger ships as you level up." % [
+		Progression.type_name(type_id), _first_tier_names(type_id, company)], ActivityLog.Kind.GOOD)
+	save_game()
+	return ""
+
+
+## Gives a company a type at its current level (RivalAI picks this way too).
+func take_company_type(who: Company, type_id: String) -> void:
+	who.company_types[type_id] = who.level()
+	company_types_changed.emit()
+	ships_changed.emit()
+
+
+## "Mini Bulker and Scooter 20": the type's ships open now for a company.
+func _first_tier_names(type_id: String, who: Company) -> String:
+	var names := PackedStringArray()
+	for model: Dictionary in GameData.ship_models:
+		if Progression.type_of_model(model) == type_id and Progression.unlock_level(model, who) <= who.level():
+			names.append(str(model.name))
+	return " and ".join(names) if names.size() <= 2 else ", ".join(names.slice(0, names.size() - 1)) + " and " + names[-1]
+
+
+## Why a model of a type the company lacks can't be bought.
+func locked_type_note(type_id: String, of: Company = null) -> String:
+	var who := of if of != null else company
+	var next := Progression.next_type_level(who.level())
+	if company_types_available(who) > 0:
+		return "Comes with the %s company type: choose a new type to unlock it." % Progression.type_name(type_id)
+	if next < 0:
+		return "Comes with the %s company type." % Progression.type_name(type_id)
+	return "Comes with the %s company type: you can choose a new type at company level %d." % [Progression.type_name(type_id), next]
+
+
 ## Regions the company can still unlock (one every few company levels: see
 ## Progression.region_slots()).
 func regions_available() -> int:
@@ -1344,7 +1411,8 @@ func recovery_boats_at(port_id: String, of: Company = null) -> Array:
 
 ## XP a hub needs for its next level (0 at the max level).
 func hub_level_cost(hub: Hub, of: Company = null) -> float:
-	return Progression.hub_level_cost(hub.level, (of if of != null else company).level()) if hub.level < Hub.max_level() else 0.0
+	var who := of if of != null else company
+	return Progression.hub_level_cost(hub.level, who.level(), who) if hub.level < Hub.max_level() else 0.0
 
 
 func _gain_hub_xp(hub: Hub, amount: float, of: Company = null) -> void:
@@ -2605,7 +2673,7 @@ func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0, company_multipl
 	if who == company:
 		company_xp_changed.emit(company_xp)
 		for level in range(company_before + 1, company_level() + 1):
-			company_leveled.emit(level, Progression.unlocks_at(level))
+			company_leveled.emit(level, Progression.unlocks_at(level, who))
 	if ship.level() > ship_before:
 		ship_leveled.emit(ship, ship.level())
 		ship_changed.emit(ship)
@@ -3943,12 +4011,13 @@ func found_company_error(new_name: String, new_home_port: String, new_color := "
 
 
 ## Founds a company in this game (a joining player's), with the starting money,
-## its HQ at its home port and the CEO they made (Characters.clean(): a
-## random one if it won't do). Returns its place in companies.
-func found_company(new_name: String, new_color: String, new_home_port: String, new_ceo := {}) -> int:
+## its HQ at its home port, the company type they chose and the CEO they made
+## (Characters.clean(): a random one if it won't do). Returns its place in companies.
+func found_company(new_name: String, new_color: String, new_home_port: String, new_ceo := {}, new_type := "cargo") -> int:
 	new_color = free_color(new_color)  # (Never a color another company has.)
 	var founded := Company.new(new_name.strip_edges().left(MAX_COMPANY_NAME_LENGTH), new_color, new_home_port)
 	founded.money = int(GameData.config.get("starting_money", 10000))
+	founded.company_types = {new_type if not Progression.company_type(new_type).is_empty() else "cargo": 1}
 	founded.ceo = Characters.clean(new_ceo)
 	if founded.ceo.is_empty():
 		founded.ceo = Company.random_ceo()
@@ -4079,7 +4148,11 @@ func save_summary(slot: int, online := multiplayer_save) -> Dictionary:
 		money = int(mine.get("money", 0)),
 		date = calendar_time_at(float(data.get("play_time", 0.0))),
 		companies = maxi(list.size(), 1),
+		start_type = "",  # (Its first company type; "" for a save from before types: every type.)
 	}
+	var types: Variant = mine.get("company_types", {})
+	if types is Dictionary and not (types as Dictionary).is_empty():
+		summary.start_type = str((types as Dictionary).keys()[0])
 	if int(data.get("version", 0)) != SAVE_VERSION:
 		summary.error = "Old save, can't be loaded"
 	return summary
@@ -4103,6 +4176,7 @@ func _migrate_legacy_save() -> void:
 func new_game(new_company_name: String, new_home_port: String, new_color := "purple", options := {}) -> void:
 	company = Company.new(new_company_name.strip_edges(), new_color, new_home_port)
 	company.money = int(GameData.config.get("starting_money", 10000))
+	company.company_types = {str(options.get("company_type", "cargo")): 1}
 	company.tutorials = bool(options.get("tutorials", false))
 	company.ceo = options.get("ceo", {}) if not (options.get("ceo", {}) as Dictionary).is_empty() else Company.random_ceo()
 	company.hubs.assign([Hub.new(new_home_port, true)])

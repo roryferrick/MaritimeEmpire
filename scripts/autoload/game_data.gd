@@ -15,6 +15,7 @@ const WORLD_MAP_PATH := "res://data/world_map.res"
 const CANALS_PATH := "res://data/canals.json"
 const MARKETS_PATH := "res://data/markets.json"
 const STARTS_PATH := "res://data/starts.json"
+const TYPE_STARTS_PATH := "res://data/type_starts.json"
 const WONDERS_PATH := "res://data/wonders.json"
 const TRENCHES_PATH := "res://data/trenches.json"
 ## MapView.FeatureKind.TRENCH (the map's feature labels are written by the map tool; trenches are added at load).
@@ -40,6 +41,9 @@ var commodities: Array[Dictionary] = []
 ## Recommended HQ ports from data/starts.json: {excellent: [{port, note}],
 ## great, fair, hard: [...], great_lakes: {note, ports}}.
 var starts: Dictionary = {}
+## The other company types' recommended HQ ports (data/type_starts.json):
+## {type id: {excellent, great, fair, hard}}; Cargo & Ore's are starts'.
+var type_starts: Dictionary = {}
 ## The wonders of the world on the map (data/wonders.json): {id, name, kind
 ## (natural, man_made or ancient), country, lon, lat, tier, when, fact}.
 var wonders: Array[Dictionary] = []
@@ -164,6 +168,7 @@ func _ready() -> void:
 	_load_canals()
 	_load_markets()
 	starts = _load_json(STARTS_PATH)
+	type_starts = _load_json(TYPE_STARTS_PATH) if FileAccess.file_exists(TYPE_STARTS_PATH) else {}
 	for item: Dictionary in _load_json(WONDERS_PATH).get("wonders", []):
 		wonders.append(item)
 		_wonders_by_id[item.id] = item
@@ -226,11 +231,19 @@ func ports_by_name() -> Array[Dictionary]:
 	return sorted
 
 
-## A port's place in data/starts.json: {kind (one of START_KINDS or
+## A kind of recommended start's ports for a company type: [{port, note}]
+## (type_starts' for the types it ranks, starts' for Cargo & Ore).
+func start_list(kind: String, type_id := "cargo") -> Array:
+	if type_starts.has(type_id):
+		return type_starts[type_id].get(kind, [])
+	return starts.get(kind, [])
+
+
+## A port's place among a company type's starts: {kind (one of START_KINDS or
 ## "great_lakes"), note}, or {} if it isn't a recommended or lake HQ.
-func start_info(port_id: String) -> Dictionary:
+func start_info(port_id: String, type_id := "cargo") -> Dictionary:
 	for kind: String in START_KINDS:
-		for entry: Dictionary in starts.get(kind, []):
+		for entry: Dictionary in start_list(kind, type_id):
 			if entry.port == port_id:
 				return {kind = kind, note = entry.get("note", "")}
 	var lakes: Dictionary = starts.get("great_lakes", {})

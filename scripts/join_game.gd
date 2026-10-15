@@ -37,6 +37,11 @@ var _color := "red"
 var _taken_colors: Array[String] = []
 ## The home port picked on the globe, its name and what kind of start it is.
 var _home_port := ""
+## The new company's type (game_config company_types; see _type_choices()).
+var _company_type := "cargo"
+## The globe the HQ is picked on, and the ports companies have already.
+var _map: MapView = null
+var _taken_ports: Array = []
 var _port_name := Label.new()
 var _start_note := Label.new()
 var _company_name := LineEdit.new()
@@ -273,16 +278,20 @@ func _show_choice(info: Dictionary) -> void:
 	grid.add_child(_company_name)
 	grid.add_child(_dim("Color", false))
 	grid.add_child(_swatches())
+	grid.add_child(_dim("Type", false))
+	grid.add_child(_type_choices())
 	_page.add_child(grid)
 	# The home port (its HQ), picked on the globe like a new game's: the
 	# recommended starts and the Great Lakes ports no company has.
 	_page.add_child(_dim("Click your HQ's port on the globe (drag to turn it, scroll to zoom):"))
-	var choices := NewCompany.start_choices(info.get("taken_ports", []))
+	_taken_ports = info.get("taken_ports", [])
+	var choices := NewCompany.start_choices(_taken_ports, _company_type)
 	var map := MapView.new()
+	_map = map
 	map.custom_minimum_size = MAP_SIZE
 	_page.add_child(map)
 	map.selectable_ports = choices
-	map.shining_ports = NewCompany.shining_choices()
+	map.shining_ports = NewCompany.shining_choices(_company_type)
 	map.opens_whole_globe = true
 	_home_port = ""
 	for port_id: String in choices:  # Start on the best recommended start no one has (they come best first).
@@ -300,7 +309,7 @@ func _show_choice(info: Dictionary) -> void:
 	found.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	found.disabled = _home_port.is_empty()
 	found.pressed.connect(func() -> void:
-		_show_ceo_step({name = _company_name.text.strip_edges(), color = _color, home_port = _home_port}))
+		_show_ceo_step({name = _company_name.text.strip_edges(), color = _color, home_port = _home_port, company_type = _company_type}))
 	map.port_clicked.connect(func(port_id: String) -> void:
 		_pick_port(map, port_id)
 		found.disabled = false)
@@ -366,5 +375,41 @@ func _pick_port(map: MapView, port_id: String) -> void:
 		return
 	var port := GameData.get_port(port_id)
 	_port_name.text = "%s, %s" % [port.name, port.get("country", "")]
-	_start_note.text = NewCompany.start_note(port_id)
-	_start_note.add_theme_color_override(&"font_color", NewCompany.start_note_color(port_id))
+	_start_note.text = NewCompany.start_note(port_id, _company_type)
+	_start_note.add_theme_color_override(&"font_color", NewCompany.start_note_color(port_id, _company_type))
+
+
+## A button per company type (in its color, its blurb as the tooltip) for the
+## new company's type, the chosen one held down.
+func _type_choices() -> HFlowContainer:
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override(&"h_separation", 6)
+	var group := ButtonGroup.new()
+	for type: Dictionary in Progression.company_types():
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = group
+		button.text = str(type.name)
+		button.tooltip_text = str(type.get("blurb", ""))
+		button.add_theme_color_override(&"font_color", CompanyTypeIcon.type_color(type.id))
+		button.button_pressed = type.id == _company_type
+		button.pressed.connect(_pick_type.bind(str(type.id)))
+		row.add_child(button)
+	return row
+
+
+## A company type picked: the globe offers its recommended starts, the HQ
+## moving to its best free one if the port picked isn't one of them.
+func _pick_type(type_id: String) -> void:
+	_company_type = type_id
+	if _map == null or not is_instance_valid(_map):
+		return
+	_map.selectable_ports = NewCompany.start_choices(_taken_ports, type_id)
+	_map.shining_ports = NewCompany.shining_choices(type_id)
+	var port := _home_port
+	if not _map.selectable_ports.has(port):
+		port = ""
+		for port_id: String in _map.selectable_ports:  # (Best first.)
+			port = port_id
+			break
+	_pick_port(_map, port)

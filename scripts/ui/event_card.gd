@@ -54,6 +54,8 @@ func _ready() -> void:
 ## A company level reached: "Level 12" and what it unlocked.
 func show_level(level: int, unlocks: Array[String]) -> void:
 	var body := "Unlocked: %s" % ", ".join(unlocks) if not unlocks.is_empty() else "Keep trading to unlock more ships, ports and upgrades."
+	if unlocks.has("a new company type to choose"):
+		body += "\n\nBranch out: choose your new company type with the Choose a company type button on the World map or in the Shop."
 	_enqueue({kicker = "COMPANY LEVEL UP", title = "Level %d" % level, body = body, color = LEVEL_COLOR})
 
 

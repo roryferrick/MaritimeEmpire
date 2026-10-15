@@ -118,11 +118,10 @@ func _finish() -> void:
 func _tips_list() -> Array[Dictionary]:
 	var seen := func(id: String) -> bool: return GameState.tutorial_done.has(id)
 	var always := func() -> bool: return true
-	var first_model: Dictionary = GameData.ship_models[0] if not GameData.ship_models.is_empty() else {}
 	var breakdown_level := int(GameData.config.get("breakdowns", {}).get("min_company_level", 6))
 	return [
 		{id = "welcome", who = "dick", title = "Welcome to %s" % GameState.company_name, show = always,
-			text = func() -> String: return "Welcome aboard. I'm Captain Mo B. Dick, and this is your shipping company. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive.\n\nYour headquarters is %s: the port with a ring in your color. Sonny, Marissa, Joe and I will chip in as you go; switch us off any time with the Tutorial switch in Settings (press Esc)." % GameData.port_name(GameState.home_port)},
+			text = func() -> String: return "Welcome aboard. I'm Captain Mo B. Dick, and this is your shipping company. %s\n\nYour headquarters is %s: the port with a ring in your color. Sonny, Marissa, Joe and I will chip in as you go; switch us off any time with the Tutorial switch in Settings (press Esc)." % [_type_welcome(), GameData.port_name(GameState.home_port)]},
 		{id = "map", who = "sonny", title = "Getting around", show = func() -> bool: return seen.call("welcome"),
 			text = func() -> String: return "Drag the globe to turn it and scroll to zoom. Click a port to see its prices, or a ship to see what it's doing.\n\nThe buttons at the top right of the screen set the game speed: pause, or speed up to 8x (F steps through them)."},
 		# Shown over the Route Assignment map, so it comes before the tip that opens it.
@@ -131,17 +130,17 @@ func _tips_list() -> Array[Dictionary]:
 			done = _any_route_assigned,
 			text = func() -> String: return "Click ports in the order to visit them; the ship loops round them. Gray ports are out of range.\n\nGreen under a leg is the cargo and about what it makes; red means it sails empty. Two or three ports with green both ways make a good first loop. Then press Accept."},
 		{id = "buy_ship", who = "sonny", title = "Buy your first ship",
-			show = func() -> bool: return seen.call("map") and _cargo_ships().is_empty(),
-			done = func() -> bool: return not _cargo_ships().is_empty(),
-			text = func() -> String: return "Open the Shop tab at the bottom of the screen and buy a ship. The %s is cheap and a good place to start. You'll give it a name, and it's launched at %s." % [
-				first_model.get("name", "first ship"), GameData.port_name(GameState.home_port)]},
+			show = func() -> bool: return seen.call("map") and _cargo_ships().is_empty() and _fishing_boats().is_empty(),
+			done = func() -> bool: return not _cargo_ships().is_empty() or not _fishing_boats().is_empty(),
+			text = func() -> String: return "Open the Shop tab at the bottom of the screen and buy a ship. %s You'll give it a name, and it's launched at %s." % [
+				_first_ship_advice(), GameData.port_name(GameState.home_port)]},
 		{id = "assign_route", who = "sonny", title = "Give it a route",
 			show = func() -> bool: return seen.call("map") and not _cargo_ships().is_empty() and not _any_route_assigned(),
 			done = _any_route_assigned,
 			text = func() -> String: return "A new ship waits in port until it has a route. Click it on the map (or in the Ships tab) and press Assign Route."},
 		{id = "trading", who = "sonny", title = "Trading runs itself",
-			show = func() -> bool: return _any_route_assigned() and not _route_screen_open(),
-			text = func() -> String: return "At each stop your ship sells its cargo, then buys the most profitable cargo it can carry to the next port, refuels and repairs, and sets off again.\n\nEvery sale shows up in the Activity list on the left, and your money is at the top left."},
+			show = func() -> bool: return (_any_route_assigned() or not _fishing_boats().is_empty()) and not _route_screen_open(),
+			text = func() -> String: return "At each stop your ship sells its cargo, then buys the most profitable cargo it can carry to the next port, refuels and repairs, and sets off again.\n\nEvery sale shows up in the Activity list on the left, and your money is at the top left." if _any_route_assigned() else "Your boat runs itself: based at a port (Fishing base in its popup), it picks what's in season on the grounds nearby, goes out for a few days and sells the catch when it comes home.\n\nEvery sale shows up in the Activity list on the left, and your money is at the top left."},
 		{id = "upkeep", who = "marissa", title = "Fuel and wear",
 			show = func() -> bool: return seen.call("trading") and _has_sold(),
 			text = func() -> String: return "Ships burn fuel and wear down at sea, and the more worn they are, the slower they go. The Refuel and Repair switches in a ship's popup top them up at every stop.\n\nA ship that can't make its next leg waits in port, and the Ships tab gets a red dot whenever a ship needs you; hover it to see why."},
@@ -151,7 +150,7 @@ func _tips_list() -> Array[Dictionary]:
 			text = func() -> String: return "More ships, more profit. The Shop tab gets a red dot when you can afford another. Give each one its own route, or send several round a good loop.\n\nThe Finances tab shows where your money comes from and where it goes, and which ships earn the most."},
 		{id = "levels", who = "marissa", title = "Company levels",
 			show = func() -> bool: return seen.call("map") and GameState.company_level() >= 2,
-			text = func() -> String: return "Every delivery earns your company XP. New levels unlock bigger ships and let you own more of each.\n\nClick your level at the top left to see what's coming next."},
+			text = func() -> String: return "Every delivery earns your company XP. New levels unlock bigger ships and let you own more of each. At level %d you branch out into another company type, and again every %d levels.\n\nClick your level at the top left to see what's coming next." % [Progression.type_pick_every(), Progression.type_pick_every()]},
 		{id = "ship_upgrades", who = "joe", title = "Ship upgrades",
 			show = func() -> bool: return seen.call("map") and _cargo_ships().any(func(ship: Ship) -> bool: return ship.skill_points() > 0),
 			text = func() -> String: return "Ships level up from their own deliveries, and each level gives an upgrade point. Spend them on speed, durability or gas efficiency with Upgrades in the ship's popup, or Upgrade all in the Ships tab. Each upgrade costs money too."},
@@ -186,11 +185,15 @@ func _tips_list() -> Array[Dictionary]:
 			show = func() -> bool: return seen.call("birds_follow") and _flocked_ship() != null,
 			text = func() -> String: return "A whole flock is riding on %s now: more than one species, nesting in the rigging and roosting on the hatches. Some skippers would clear them off. Don't: every species aboard adds its boost to the ship, up to a cap, and a flock that's settled stays with the ship port to port.\n\nThe only birds that cost you anything are frigatebirds in a Divine Actions game, and even they shelter the ship from storms." % _flocked_ship().name},
 		{id = "fishing", who = "joe", title = "Fishing and crabbing",
-			show = func() -> bool: return seen.call("trading"),
-			text = func() -> String: return "The Shop sells fishing and crabbing boats as well: a Sport Fisher 24 that trolls for salmon, tuna and the odd giant marlin, and a Crab Skiff 24 that sets pots for Dungeness and blue crab. Base one at any port in its popup and it works the grounds near there, out for a few days at a time, and sells its catch when it comes home.\n\nLeave its Target on 'Most timely and profitable' and it picks what's in season each trip. Later come 60-footers that run nets, Bering Sea crabbers that stay out all winter for king crab, and Reefers to carry the catch to Tokyo and Seattle, where it fetches most."},
+			show = func() -> bool: return seen.call("trading") and GameState.company.has_type("seafood"),
+			text = func() -> String: return "The Shop's Seafood tab has fishing and crabbing boats: a Sport Fisher 24 that trolls for salmon, tuna and the odd giant marlin, and a Crab Skiff 24 that sets pots for Dungeness and blue crab. Base one at any port in its popup and it works the grounds near there, out for a few days at a time, and sells its catch when it comes home.\n\nLeave its Target on 'Most timely and profitable' and it picks what's in season each trip. Later come 60-footers that run nets, Bering Sea crabbers that stay out all winter for king crab, and Reefers to carry the catch to Tokyo and Seattle, where it fetches most."},
 		{id = "finance", who = "marissa", title = "Your first payday",
 			show = func() -> bool: return seen.call("upkeep") and GameState.wage_period >= 1,
 			text = func() -> String: return "Marissa here, from head office. Every two weeks the crews are paid: a captain and some hands on every ship that worked. It's in the Activity list each payday, and the Finances tab adds it up with the fuel, the repairs, the port fees and the tolls.\n\nWatch the profit per ship there, not just the sales: a ship that sails empty half the time is the one to re-route."},
+		{id = "company_type", who = "dick", title = "Time to branch out",
+			show = func() -> bool: return seen.call("map") and GameState.company_types_available() > 0,
+			done = func() -> bool: return GameState.company_types_available() <= 0,
+			text = func() -> String: return "We've grown enough to go into a second trade. Press Choose a company type at the top right of the map (or on a locked tab in the Shop) and pick one: its smallest ships open straight away and the bigger ones follow as we level up.\n\nIt's for good, so look at what each carries and which ports near our hubs trade it. Another choice comes every %d levels." % Progression.type_pick_every()},
 		{id = "achievements", who = "marissa", title = "A milestone",
 			show = func() -> bool: return seen.call("map") and Achievements.score(GameState.company).x > 0,
 			text = func() -> String: return "You've earned your first achievement star. The trophy button at the top right of the map keeps them all: stars for cargo delivered of each kind, for the fleet, the company level, the bank, the field guide, and badges for the rest.\n\nThey're the big milestones. Each one takes real work, so keep at it; the next is always listed with how far along we are."},
@@ -219,6 +222,43 @@ func _cargo_ships() -> Array[Ship]:
 		if not ship.is_service():
 			out.append(ship)
 	return out
+
+
+func _fishing_boats() -> Array[Ship]:
+	var out: Array[Ship] = []
+	for ship in GameState.fleet():
+		if ship.is_fishing():
+			out.append(ship)
+	return out
+
+
+## What the company does, by the type it started as (the welcome's first lines).
+static func _type_welcome() -> String:
+	match GameState.company.start_type():
+		"cargo":
+			return "We're in Cargo & Ore: container ships with toys, clothing, furniture and coffee, and bulk carriers with iron ore, coal and gold. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
+		"vehicles":
+			return "We're in Vehicles: car carriers taking cars, trucks and boats from the factories to the showrooms. Buy ships, give them routes between ports, and they'll buy vehicles where they're cheap and sell them where they're dear."
+		"agriculture":
+			return "We're in Agriculture: grain carriers with wheat, corn, soybeans, rice and barley, and livestock carriers with cattle, sheep and pigs. Buy ships, give them routes between ports, and they'll buy where the harvest is cheap and sell where it's wanted."
+		"tankers":
+			return "We're in Tankers: oil and gas. Buy tankers, give them routes between ports, and they'll fill up where oil is cheap and sell it where it's dear."
+		"seafood":
+			return "We're in Seafood: fishing and crabbing boats that work the grounds near their port and sell the catch, and fish tenders and reefers that carry seafood between ports."
+	return "Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
+
+
+## Which ship to buy first: the company's first type's smallest ships.
+static func _first_ship_advice() -> String:
+	if GameState.company.start_type() == "seafood":
+		return "A Sport Fisher 24 or a Crab Skiff 24 is the cheapest way in: base it at a port and it fishes on its own. A Fish Tender 40 trades seafood between ports like any cargo ship."
+	var names := PackedStringArray()
+	for model: Dictionary in GameData.ship_models:
+		if Progression.type_of_model(model) == GameState.company.start_type() and int(model.get("tier", 1)) == 1:
+			names.append(str(model.name))
+	if names.is_empty():
+		return "The cheapest is a good place to start."
+	return "The %s %s cheap and a good place to start." % [" or the ".join(names), "is" if names.size() == 1 else "are each"]
 
 
 func _any_route_assigned() -> bool:

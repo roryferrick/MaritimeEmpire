@@ -1,11 +1,12 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
-## Lists purchasable ship models from data/ship_models.json, in tabs (TABS:
-## cargo and bulk, food, tankers, seafood, service) of sections by category,
-## laid out in rows with the sections of a row side by side,
-## each as wide as its models (up to 6 cards a row): container ships; ore and
-## grain carriers; livestock carriers and tankers; vehicle carriers and recovery
-## boats; icebreakers and tugs. A row too wide for the screen stacks its
+## Lists purchasable ship models from data/ship_models.json, in tabs (a tab per
+## company type, TYPE_ROWS, then Service) of sections by category, laid out in
+## rows with the sections of a row side by side, each as wide as its models (up
+## to 5 cards a row). A type the company lacks has a lock on its tab, its cards
+## faded, and a note over them saying when it can be chosen (with a Choose
+## button while a type can be: CompanyTypeDialog); the Shop opens on the
+## company's first type. A row too wide for the screen stacks its
 ## sections. Each section title runs through its models' map colors, smallest
 ## ship first, and each card's name is in its model's map color, above a
 ## picture of the ship as it looks on the map (see ShipPicture). Each card
@@ -19,17 +20,17 @@ extends Control
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
 	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"]]
-## The Shop's tabs: [title, rows], each row its sections side by side (by
-## category). Lines that belong together share a tab: the container, vehicle and
-## ore carriers, the food carriers (grain and livestock), the tankers,
-## everything to do with seafood, the service boats.
-const TABS := [
-	["Cargo & bulk", [["container"], ["vehicles", "ore"]]],
-	["Food", [["grain", "livestock"]]],
-	["Tankers", [["tanker"]]],
-	["Seafood", [["fishing", "crabbing"], ["seafood"]]],
-	["Service", [["recovery", "tug"], ["icebreaker"]]],
-]
+## Each company type's tab (game_config company_types: tab is its title): its
+## rows, each row its sections side by side (by category). The service boats
+## have the last tab, SERVICE_ROWS.
+const TYPE_ROWS := {
+	cargo = [["container"], ["ore"]],
+	vehicles = [["vehicles"]],
+	agriculture = [["grain"], ["livestock"]],
+	tankers = [["tanker"]],
+	seafood = [["fishing"], ["crabbing"], ["seafood"]],
+}
+const SERVICE_ROWS := [["recovery", "tug"], ["icebreaker"]]
 ## Cards a section shows across, fewer if they don't fit. Six fit across a row
 ## beside the open activity log at the default window size: cards are
 ## CARD_WIDTH wide (plus padding), and long ship names and Buy button texts wrap.
@@ -68,6 +69,13 @@ var _hint_label := Label.new()
 var _hovered := ""
 ## Money, the fleet or the level changed since the cards were last updated.
 var _dirty := false
+var _tabs: TabContainer = null
+## Per company type: its tab's index, its rows of sections, and the note over
+## them while the company lacks it ([panel, label, Choose button]).
+var _type_tabs := {}
+var _type_rows := {}
+var _type_banners := {}
+var _lock_icon: Texture2D = null
 
 
 func _ready() -> void:
@@ -77,14 +85,23 @@ func _ready() -> void:
 	var tabs := TabContainer.new()
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	%Items.add_child(tabs)
-	var row_tabs := []  # [row's categories, its tab's box]
-	for tab: Array in TABS:
+	_tabs = tabs
+	var tab_list := []  # [title, rows, company type id ("" for Service)]
+	for type: Dictionary in Progression.company_types():
+		tab_list.append([str(type.get("tab", type.name)), TYPE_ROWS.get(type.id, [type.categories]), str(type.id)])
+	tab_list.append(["Service", SERVICE_ROWS, ""])
+	var row_tabs := []  # [row's categories, its tab's box, its company type id]
+	for tab: Array in tab_list:
 		var page := VBoxContainer.new()
 		page.name = tab[0]
 		page.add_theme_constant_override(&"separation", SECTION_GAP)
 		tabs.add_child(page)
+		if not str(tab[2]).is_empty():
+			_type_tabs[tab[2]] = tabs.get_tab_count() - 1
+			_type_rows[tab[2]] = []
+			page.add_child(_type_banner(tab[2]))
 		for row_categories: Array in tab[1]:
-			row_tabs.append([row_categories, page])
+			row_tabs.append([row_categories, page, tab[2]])
 	for pair: Array in row_tabs:
 		var row_categories: Array = pair[0]
 		var row := GridContainer.new()
@@ -92,6 +109,8 @@ func _ready() -> void:
 		row.add_theme_constant_override(&"h_separation", SECTION_GAP)
 		row.add_theme_constant_override(&"v_separation", SECTION_GAP)
 		(pair[1] as Control).add_child(row)
+		if _type_rows.has(pair[2]):
+			(_type_rows[pair[2]] as Array).append(row)
 		var row_grids: Array[GridContainer] = []
 		for category: String in row_categories:
 			var box := _section_box(category, row)
@@ -120,6 +139,9 @@ func _ready() -> void:
 	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
 	GameState.ships_changed.connect(func() -> void: _dirty = true)
 	GameState.company_leveled.connect(func(_level: int, _unlocks: Array[String]) -> void: _dirty = true)
+	GameState.company_types_changed.connect(func() -> void: _dirty = true)
+	if _type_tabs.has(GameState.company.start_type()):
+		tabs.current_tab = _type_tabs[GameState.company.start_type()]
 	visibility_changed.connect(func() -> void:
 		_dirty = true
 		_fit_columns.call_deferred())
@@ -357,7 +379,9 @@ func _update_cards() -> void:
 		elif slots < max_owned and level >= Progression.unlock_level(model):
 			_owned_labels[model_id].text += " (max %d)" % max_owned
 		var button: Button = _buy_buttons[model_id]
-		if level < Progression.unlock_level(model):
+		if next == Progression.LOCKED:
+			button.text = "Comes with %s" % Progression.type_name(Progression.type_of_model(model))
+		elif level < Progression.unlock_level(model):
 			button.text = "Unlocks at level %d" % next
 		elif owned < slots:
 			button.text = "Buy"
@@ -367,12 +391,77 @@ func _update_cards() -> void:
 		button.disabled = not error.is_empty()
 		_buy_alerts[model_id].visible = error.is_empty()
 		button.tooltip_text = "" if _short_of_money(model_id) > 0 else error
+	_update_types()
 	var tugs := GameState.tugs_to_buy()
-	_buy_all_tugs.text = "Buy all tugs (%d)" % tugs if tugs > 0 else "Buy all tugs"
+	_buy_all_tugs.text ="Buy all tugs (%d)" % tugs if tugs > 0 else "Buy all tugs"
 	_buy_all_tugs.disabled = tugs == 0
 	var tug := GameState.tug_model_id()
 	_buy_all_tugs.tooltip_text = "Fills every free tug slot your money allows, each named for you and based where it's needed." if tugs > 0 else (GameState.buy_error(tug) if not tug.is_empty() and not GameState.buy_error(tug).is_empty() else "Every tug slot is full.")
 	_update_hint()
+
+
+## The note over a company type's sections while the company lacks it: its
+## icon, when it can be chosen, and a Choose button while it can.
+func _type_banner(type_id: String) -> Control:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(CompanyTypeIcon.type_color(type_id), 0.12)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(10)
+	panel.add_theme_stylebox_override(&"panel", style)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 12)
+	panel.add_child(row)
+	var icon := CompanyTypeIcon.new(type_id)
+	icon.custom_minimum_size = Vector2(30, 30)
+	row.add_child(icon)
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	var choose := Button.new()
+	choose.text = "Choose a company type"
+	choose.pressed.connect(func() -> void: CompanyTypeDialog.open(self))
+	row.add_child(choose)
+	_type_banners[type_id] = [panel, label, choose]
+	return panel
+
+
+## Each type's tab: a lock and faded cards under its note while the company
+## lacks the type; plain once it has it.
+func _update_types() -> void:
+	var available := GameState.company_types_available()
+	var next := Progression.next_type_level(GameState.company_level())
+	for type_id: String in _type_tabs:
+		var has := GameState.company.has_type(type_id)
+		var banner: Array = _type_banners[type_id]
+		(banner[0] as Control).visible = not has
+		var name := Progression.type_name(type_id)
+		if available > 0:
+			(banner[1] as Label).text = "Your company isn't in %s. You can choose a new company type now: choose %s to open its ships." % [name, name]
+		elif next > 0:
+			(banner[1] as Label).text = "Your company isn't in %s. You can choose a new company type at company level %d." % [name, next]
+		else:
+			(banner[1] as Label).text = "Your company isn't in %s." % name
+		(banner[2] as Button).visible = available > 0
+		for row: Control in _type_rows[type_id]:
+			row.modulate.a = 1.0 if has else 0.5
+		_tabs.set_tab_icon(_type_tabs[type_id], null if has else _lock())
+
+
+## A small padlock for a locked type's tab.
+func _lock() -> Texture2D:
+	if _lock_icon == null:
+		var image := Image.create_empty(16, 16, false, Image.FORMAT_RGBA8)
+		var color := Color(0.85, 0.87, 0.9)
+		for y in 16:
+			for x in 16:
+				var shackle := Vector2(x + 0.5, y + 0.5).distance_to(Vector2(8, 7))
+				if (y >= 7 and y <= 14 and x >= 3 and x <= 12) or (y < 7 and shackle >= 3.0 and shackle <= 4.6):
+					image.set_pixel(x, y, color)
+		_lock_icon = ImageTexture.create_from_image(image)
+	return _lock_icon
 
 
 func _on_buy_pressed(model_id: String) -> void:

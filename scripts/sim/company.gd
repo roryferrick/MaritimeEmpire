@@ -35,6 +35,10 @@ var mega_upgrades: Array[String] = []
 var hidden_gems: Array[String] = []
 ## Total company XP from deliveries; see Progression for levels.
 var xp := 0.0
+## Its company types (game_config company_types), in the order taken: type id
+## -> the company level it was taken at (1 for the type it was founded as).
+## Empty for a company from before types, which has every type (all_types()).
+var company_types := {}
 ## Money cargo purchases leave in the bank (set on the Finances screen).
 var bank_reserve := 0
 ## Money borrowed on the Finances screen and not yet paid back (see
@@ -90,6 +94,7 @@ var activity_collapsed := false
 ## level(), and the XP it was worked out for.
 var _level := 1
 var _level_xp := -1.0
+var _level_types := 0
 ## GameState.fuel_reserve() for this company, and when it was worked out.
 var fuel_reserve := 0.0
 var fuel_reserve_time := -1.0
@@ -109,10 +114,31 @@ func is_ai() -> bool:
 ## Its company level, worked out again only when its XP changes (it walks
 ## the level costs, and the sim asks often).
 func level() -> int:
-	if xp != _level_xp:
+	if xp != _level_xp or _level_types != company_types.size():
+		_level_types = company_types.size()  # (Level costs follow the types: see Progression.company_level_cost().)
 		_level_xp = xp
-		_level = int(Progression.company_level(xp).level)
+		_level = int(Progression.company_level(xp, self).level)
 	return _level
+
+
+## True for a company from before company types: every type is open.
+func all_types() -> bool:
+	return company_types.is_empty()
+
+
+## The type it was founded as ("" for a company from before types).
+func start_type() -> String:
+	return "" if company_types.is_empty() else str(company_types.keys()[0])
+
+
+## True if it has this company type (every type, for a company from before types).
+func has_type(type_id: String) -> bool:
+	return company_types.is_empty() or company_types.has(type_id)
+
+
+## The company level it took a type at (-1 if it hasn't).
+func type_level(type_id: String) -> int:
+	return int(company_types.get(type_id, -1))
 
 
 func hub_at(port_id: String) -> Hub:
@@ -139,6 +165,7 @@ func to_dict() -> Dictionary:
 		"home_port": home_port,
 		"money": money,
 		"company_xp": xp,
+		"company_types": company_types,
 		"delivered": delivered,
 		"earlier_containers": earlier_containers,
 		"first_prices_used": first_prices_used,
@@ -172,6 +199,10 @@ static func from_dict(data: Dictionary) -> Company:
 	company.ai = str(data.get("ai", ""))
 	company.money = int(data.get("money", 0))
 	company.xp = float(data.get("company_xp", 0.0))
+	var types: Variant = data.get("company_types", {})  # (Saves from before types have none: every type open.)
+	if types is Dictionary:
+		for type_id: String in types:
+			company.company_types[type_id] = int(types[type_id])
 	for commodity_id: String in data.get("delivered", {}):
 		var now := GameData.current_commodity(commodity_id)
 		company.delivered[now] = int(company.delivered.get(now, 0)) + int(data.delivered[commodity_id])
@@ -231,6 +262,10 @@ func apply_update(data: Dictionary, keep_prefs := false) -> void:
 				color = value
 			"company_xp":
 				xp = value
+			"company_types":
+				company_types = {}
+				for type_id: String in value:
+					company_types[type_id] = int(value[type_id])
 			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models", "regions", "discovered":
 				(get(key) as Array).assign(value)
 			"hubs":

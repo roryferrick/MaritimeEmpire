@@ -8,8 +8,9 @@ class_name Progression
 ## levels don't rush by when bigger ships unlock. Ship levels cost 5% more
 ## each, starting from each model's xp_first_level.
 
-## XP to go from each company level to the next, index 0 = level 1 -> 2.
-static var _company_costs: Array[int] = []
+## XP to go from each company level to the next, index 0 = level 1 -> 2, per
+## kind of company (_cost_key()): companies with the same types share a table.
+static var _company_costs := {}
 
 
 static func xp_for_delivery(capacity: int, distance_nm: float) -> float:
@@ -32,42 +33,131 @@ static func max_company_level() -> int:
 	return int(GameData.config.get("max_company_level", 100))
 
 
-## XP needed to go from this company level to the next (0 at the max level).
-static func company_level_cost(level: int) -> int:
-	if _company_costs.is_empty():
-		_build_company_costs()
-	return _company_costs[level - 1] if level < max_company_level() else 0
+## XP needed to go from this company level to the next (0 at the max level),
+## for a company (this player's if null): its own table, from the lines its
+## company types give it (see _build_company_costs()).
+static func company_level_cost(level: int, company: Company = null) -> int:
+	if level >= max_company_level():
+		return 0
+	var key := _cost_key(_company_or_mine(company))
+	if not _company_costs.has(key):
+		_company_costs[key] = _build_company_costs(_company_or_mine(company))
+	return int(_company_costs[key][level - 1])
 
 
 ## Level reached with this much total XP: {level, xp (into the level), cost (of the level)}.
-static func company_level(total_xp: float) -> Dictionary:
+static func company_level(total_xp: float, company: Company = null) -> Dictionary:
 	var level := 1
 	var left := total_xp
-	while level < max_company_level() and left >= company_level_cost(level):
-		left -= company_level_cost(level)
+	while level < max_company_level() and left >= company_level_cost(level, company):
+		left -= company_level_cost(level, company)
 		level += 1
-	return {level = level, xp = left, cost = company_level_cost(level)}
+	return {level = level, xp = left, cost = company_level_cost(level, company)}
+
+
+# --- Company types -------------------------------------------------------------
+
+## The company types (game_config company_types types): {id, name, tab, categories, color, blurb}.
+static func company_types() -> Array:
+	return GameData.config.get("company_types", {}).get("types", [])
+
+
+static func company_type(type_id: String) -> Dictionary:
+	for each: Dictionary in company_types():
+		if each.id == type_id:
+			return each
+	return {}
+
+
+## A type's name ("All" for a company from before types, "" for an unknown type).
+static func type_name(type_id: String) -> String:
+	return "All" if type_id.is_empty() else str(company_type(type_id).get("name", ""))
+
+
+## The company type a ship category belongs to ("" for recovery boats, tugs and icebreakers).
+static func type_of_category(category: String) -> String:
+	if _category_types.is_empty():
+		for each: Dictionary in company_types():
+			for each_category: String in each.categories:
+				_category_types[each_category] = each.id
+		_category_types[""] = ""
+	return str(_category_types.get(category, ""))
+static var _category_types := {}
+
+
+static func type_of_model(model: Dictionary) -> String:
+	return type_of_category(str(model.get("category", "")))
+
+
+## Levels between taking a type and its tiers unlocking (tier 1 first).
+static func tier_offset(model: Dictionary) -> int:
+	var offsets: Array = GameData.config.get("company_types", {}).get("tier_levels", [0, 3, 8, 15, 24])
+	return int(offsets[clampi(int(model.get("tier", 1)), 1, offsets.size()) - 1])
+
+
+## How often (in company levels) a company picks another type.
+static func type_pick_every() -> int:
+	return int(GameData.config.get("company_types", {}).get("pick_every", 15))
+
+
+## How many types a company may have at a level: its first, plus one every
+## type_pick_every() levels, up to all of them.
+static func type_slots(level: int) -> int:
+	return mini(1 + floori(float(level) / type_pick_every()), company_types().size())
+
+
+## The company level of the next type pick after this level (-1 once all are taken).
+static func next_type_level(level: int) -> int:
+	if type_slots(level) >= company_types().size():
+		return -1
+	return (floori(float(level) / type_pick_every()) + 1) * type_pick_every()
+
+
+## The level a model unlocks at for a company (this player's if null): its
+## company type's level plus its tier's offset, or LOCKED if the company
+## doesn't have that type. Models outside the types, and every model for a
+## company from before types, unlock at their ship_models.json unlock_level.
+static func unlock_level(model: Dictionary, company: Company = null) -> int:
+	var type_id := type_of_model(model)
+	company = _company_or_mine(company)
+	if type_id.is_empty() or company == null or company.all_types():
+		return int(model.get("unlock_level", 1))
+	if not company.company_types.has(type_id):
+		return LOCKED
+	return company.type_level(type_id) + tier_offset(model)
+const LOCKED := 1000000
+
+
+static func _company_or_mine(company: Company) -> Company:
+	return company if company != null else GameState.company
 
 
 ## How many of a model the company can own at a level: none before it
 ## unlocks, then ship_slots' start, one more every few levels, up to max_owned.
-static func model_slots(model: Dictionary, level: int) -> int:
-	var unlock := unlock_level(model)
-	if level < unlock or model.get("tug", false):
+static func model_slots(model: Dictionary, level: int, company: Company = null) -> int:
+	if model.get("tug", false):
 		return 0  # Tugs come with the ports on the routes instead (GameState.tug_slots()).
+	return _slots_from(model, unlock_level(model, company), level)
+
+
+static func _slots_from(model: Dictionary, unlock: int, level: int) -> int:
+	if level < unlock:
+		return 0
 	var growth := _slot_growth(model)
 	return mini(int(growth[0]) + floori(float(level - unlock) / int(growth[1])), int(model.get("max_owned", 10)))
 
 
-## The company level that gives this model its next slot, or -1 if it's at its max.
-static func next_slot_level(model: Dictionary, level: int) -> int:
-	if level < unlock_level(model):
-		return unlock_level(model)
-	if model.get("tug", false) or model_slots(model, level) >= int(model.get("max_owned", 10)):
+## The company level that gives this model its next slot (LOCKED while the
+## company lacks its type), or -1 if it's at its max.
+static func next_slot_level(model: Dictionary, level: int, company: Company = null) -> int:
+	var unlock := unlock_level(model, company)
+	if level < unlock:
+		return unlock
+	if model.get("tug", false) or model_slots(model, level, company) >= int(model.get("max_owned", 10)):
 		return -1
 	var growth := _slot_growth(model)
 	var every := int(growth[1])
-	return level + every - (level - unlock_level(model)) % every
+	return level + every - (level - unlock) % every
 
 
 ## [start, every] from game_config ship_slots, for cargo ships or service ships
@@ -79,21 +169,21 @@ static func _slot_growth(model: Dictionary) -> Array:
 	return [growth[0], int(model.get("slot_every", growth[1]))]
 
 
-static func unlock_level(model: Dictionary) -> int:
-	return int(model.get("unlock_level", 1))
-
-
-## What reaching this company level unlocks, e.g. ["Feeder 100", "+1 slot: Scooter 20"].
-static func unlocks_at(level: int) -> Array[String]:
+## What reaching this company level unlocks for a company (this player's if
+## null), e.g. ["Feeder 100", "+1 slot: Scooter 20", "a new company type to choose"].
+static func unlocks_at(level: int, company: Company = null) -> Array[String]:
+	company = _company_or_mine(company)
 	var unlocked: Array[String] = []
 	var more_slots := PackedStringArray()
 	for model: Dictionary in GameData.ship_models:
-		if level > 1 and unlock_level(model) == level:
+		if level > 1 and unlock_level(model, company) == level:
 			unlocked.append(String(model.get("name", model.id)))
-		elif model_slots(model, level) > model_slots(model, level - 1):
+		elif model_slots(model, level, company) > model_slots(model, level - 1, company):
 			more_slots.append(String(model.get("name", model.id)))
 	if not more_slots.is_empty():
 		unlocked.append("+1 slot: %s" % ", ".join(more_slots))
+	if company != null and not company.all_types() and type_slots(level) > type_slots(level - 1):
+		unlocked.append("a new company type to choose")
 	if hub_slots(level) > hub_slots(level - 1):
 		unlocked.append("a new hub")
 	if region_slots(level) > region_slots(level - 1) and region_slots(level) <= GameData.markets.get("regions", []).size():
@@ -133,28 +223,72 @@ static func skill_step(skill: String) -> float:
 	return float(GameData.config.get("skills", {}).get(skill, 0.0))
 
 
+## Which table of level costs a company uses: "all" for a company from before
+## types (or none), else its types and the levels it took them at.
+static func _cost_key(company: Company) -> String:
+	if company == null or company.all_types():
+		return "all"
+	var parts := PackedStringArray()
+	for type_id: String in company.company_types:
+		parts.append("%s@%d" % [type_id, company.type_level(type_id)])
+	return ",".join(parts)
+
+
 ## Company level L costs (a + b x (L - 1)) minutes of a full fleet's XP at L,
-## rounded to 2 significant figures.
-static func _build_company_costs() -> void:
+## rounded to 2 significant figures: the fleet the company's types give it.
+static func _build_company_costs(company: Company) -> Array[int]:
+	var costs: Array[int] = []
 	var minutes: Array = GameData.config.get("company_level_minutes", [3, 0.45])
 	for level in range(1, max_company_level()):
-		var cost := (float(minutes[0]) + float(minutes[1]) * (level - 1)) * _full_fleet_xp_per_minute(level)
-		_company_costs.append(_round_to_2_figures(maxf(cost, 100.0)))
-	_company_costs.append(0)
+		var cost := (float(minutes[0]) + float(minutes[1]) * (level - 1)) * _full_fleet_xp_per_minute(level, company)
+		costs.append(_round_to_2_figures(maxf(cost, 100.0)))
+	costs.append(0)
+	return costs
 
 
 ## XP per minute from every unlocked cargo model with all its slots filled
-## at this level, at sea at_sea_share of the time.
-static func _full_fleet_xp_per_minute(level: int) -> float:
+## at this level, at sea at_sea_share of the time. A company from before types
+## counts every model but the new_tier ones (so its levels stay as they were).
+## One with types counts its types' models; for each type pick it has reached
+## but not made yet, the average of the types it could still take (taken at
+## that pick's level).
+static func _full_fleet_xp_per_minute(level: int, company: Company = null) -> float:
+	company = _company_or_mine(company)
 	var rate := 0.0
-	for model: Dictionary in GameData.ship_models:
-		if not model.get("recovery", false):
-			rate += model_slots(model, level) * _xp_per_minute(model)
+	if company == null or company.all_types():
+		for model: Dictionary in GameData.ship_models:
+			if not model.get("recovery", false) and not model.get("new_tier", false):
+				rate += _slots_from(model, int(model.get("unlock_level", 1)), level) * _xp_per_minute(model)
+		return rate * float(GameData.config.get("at_sea_share", 0.75))
+	for type_id: String in company.company_types:
+		rate += _type_rate(type_id, company.type_level(type_id), level)
+	var untaken := company_types().filter(func(each: Dictionary) -> bool: return not company.company_types.has(each.id))
+	for pick in range(company.company_types.size(), type_slots(level)):
+		var at := pick * type_pick_every()
+		var sum := 0.0
+		for each: Dictionary in untaken:
+			sum += _type_rate(each.id, at, level)
+		rate += sum / maxf(untaken.size(), 1.0)
 	return rate * float(GameData.config.get("at_sea_share", 0.75))
 
 
-## A model's XP per minute at sea with a full hold of its average cargo.
+## XP per minute of a company type's full fleet at a level, the type taken at taken_at.
+static func _type_rate(type_id: String, taken_at: int, level: int) -> float:
+	var categories: Array = company_type(type_id).get("categories", [])
+	var rate := 0.0
+	for model: Dictionary in GameData.ship_models:
+		if categories.has(model.get("category", "")):
+			rate += _slots_from(model, taken_at + tier_offset(model), level) * _xp_per_minute(model)
+	return rate
+
+
+## A model's XP per minute at sea with a full hold of its average cargo. A
+## fishing or crabbing boat's is a typical trip's: its catch (a full hold, or
+## its rate for the working share of its days), landed from grounds a quarter
+## of its range away, over the trip.
 static func _xp_per_minute(model: Dictionary) -> float:
+	if model.has("fishing"):
+		return _fishing_xp_per_minute(model)
 	var cargo: Array = model.get("cargo", [])
 	if cargo.is_empty():
 		return 0.0
@@ -163,6 +297,32 @@ static func _xp_per_minute(model: Dictionary) -> float:
 		weight += _value_weight(commodity_id)
 	weight /= cargo.size()
 	return xp_for_delivery(int(model.get("capacity", 0)), float(model.get("speed_nm_per_s", 0)) * 60.0) * weight
+
+
+static func _fishing_xp_per_minute(model: Dictionary) -> float:
+	var fishing: Dictionary = model.fishing
+	var days: Array = fishing.get("trip_days", [3, 7])
+	var mean_days := (float(days[0]) + float(days[1])) / 2.0
+	var day_minutes := 86400.0 / (float(GameData.config.get("calendar", {}).get("minutes_per_second", 20)) * 60.0) / 60.0
+	var crates := minf(float(model.get("capacity", 0)), float(fishing.get("rate", 0)) * mean_days * 0.6)
+	var crabs: bool = (fishing.get("gear", []) as Array).has("trap")
+	var weight := 0.0
+	var count := 0
+	for commodity_id: String in _seafood_commodities():
+		if (commodity_id.contains("crab") or commodity_id == "crayfish") == crabs:
+			weight += _value_weight(commodity_id)
+			count += 1
+	weight /= maxf(count, 1.0)
+	var miles := 2.0 * float(model.get("range_nm", 0)) * 0.25
+	return xp_for_delivery(roundi(crates), miles) * weight / maxf(mean_days * day_minutes, 0.1)
+
+
+## What the seafood carriers carry (the catch's commodities).
+static func _seafood_commodities() -> Array:
+	for model: Dictionary in GameData.ship_models:
+		if model.get("category", "") == "seafood":
+			return model.get("cargo", [])
+	return []
 
 
 static func _round_to_2_figures(value: float) -> int:
@@ -186,8 +346,8 @@ static func region_slots(level: int) -> int:
 ## XP a hub needs to go from `level` to the next, at the company's current
 ## level: (level_minutes[0] + level_minutes[1] x level) minutes of traffic_share
 ## of a full fleet's XP.
-static func hub_level_cost(level: int, company_level: int) -> float:
+static func hub_level_cost(level: int, company_level: int, company: Company = null) -> float:
 	var settings: Dictionary = GameData.config.get("hubs", {})
 	var minutes: Array = settings.get("level_minutes", [10, 1.4])
-	var per_minute := _full_fleet_xp_per_minute(company_level) * float(settings.get("traffic_share", 0.25))
+	var per_minute := _full_fleet_xp_per_minute(company_level, company) * float(settings.get("traffic_share", 0.25))
 	return maxf((float(minutes[0]) + float(minutes[1]) * level) * per_minute, 50.0)

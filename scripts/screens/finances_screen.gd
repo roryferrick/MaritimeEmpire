@@ -40,8 +40,10 @@ const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head o
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0
 ## The Compare companies table's columns, and how big (px) each company's CEO's face is in it.
-const COMPARE_COLUMNS: Array[String] = ["#", "Company", "Level", "Money", "Ships", "Hubs", "Profit, last 10 min", "Profit, all time ▼", "Delivered"]
+const COMPARE_COLUMNS: Array[String] = ["#", "Company", "Type", "Level", "Money", "Ships", "Hubs", "Profit, last 10 min", "Profit, all time ▼", "Delivered"]
 const CEO_FACE_SIZE := 34.0
+## How big (px) the company type's icon is in the Type column (CompanyTypeIcon).
+const TYPE_ICON_SIZE := 24.0
 ## Choices for "Keep in the bank" (0 = spend everything on cargo).
 const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000]
 
@@ -398,7 +400,8 @@ func _show_page(compare: bool) -> void:
 
 ## A row per company, ranked by operating profit all time (the most first),
 ## numbered: its CEO's face (their name on hover) and
-## its name (in its color; this player's marked), level, money, ships, hubs,
+## its name (in its color; this player's marked), the company type it started
+## as (icon and name; every type it has on hover), level, money, ships, hubs,
 ## operating profit over the last 10 minutes and all time, and units
 ## delivered.
 func _fill_comparison() -> void:
@@ -424,6 +427,7 @@ func _fill_comparison() -> void:
 		var name := _add_label(cell, each.name + ("  (you)" if each == GameState.company else "  (AI · %s)" % RivalAI.LEVEL_NAMES.get(each.ai, "") if each.is_ai() else ""))
 		name.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		name.add_theme_color_override(&"font_color", GameState.company_color_value(each.color))
+		_compare_grid.add_child(_type_cell(each))
 		_add_label(_compare_grid, str(each.level()))
 		_add_label(_compare_grid, Fmt.money(each.money))
 		_add_label(_compare_grid, str(GameState.fleet(each).size()))
@@ -435,6 +439,27 @@ func _fill_comparison() -> void:
 		for commodity: String in each.delivered:
 			units += int(each.delivered[commodity])
 		_add_label(_compare_grid, Fmt.short(units + each.earlier_containers))
+
+
+## A company's starting type in the comparison: its icon and name, with every
+## type it has (and the level it took each at) on hover.
+func _type_cell(each: Company) -> Control:
+	var cell := HBoxContainer.new()
+	cell.add_theme_constant_override(&"separation", 6)
+	cell.mouse_filter = Control.MOUSE_FILTER_PASS
+	var icon := CompanyTypeIcon.new(each.start_type())
+	icon.custom_minimum_size = Vector2.ONE * TYPE_ICON_SIZE
+	cell.add_child(icon)
+	var label := _add_label(cell, Progression.type_name(each.start_type()))
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	label.add_theme_color_override(&"font_color", CompanyTypeIcon.type_color(each.start_type()))
+	var lines := PackedStringArray()
+	for type_id: String in each.company_types:
+		lines.append("%s (from level %d)" % [Progression.type_name(type_id), each.type_level(type_id)])
+	cell.tooltip_text = "Every company type" if each.all_types() else "Company types: " + ", ".join(lines)
+	label.mouse_filter = Control.MOUSE_FILTER_PASS
+	label.tooltip_text = cell.tooltip_text
+	return cell
 
 
 ## "Keep in the bank: [amount]" above the totals, with a note on what it does.

@@ -10,6 +10,8 @@ extends RefCounted
 ##   least useful ship; it pays its loans back once it can spare the money;
 ## - unlocks market regions (the one nearest its hubs) and founds hubs (the
 ##   port its best ship would earn most from) as its level allows;
+## - starts as a company type picked at random, and picks another type it
+##   lacks at random each time its level allows (Progression.type_slots());
 ## - buys ships: the cargo model that pays for itself soonest on the best loop
 ##   it can find from one of its hubs (2 or 3 ports, by the same prices, fuel,
 ##   repairs and wages a ship of its pays), keeping back the money its ships
@@ -106,11 +108,13 @@ func add_rivals(count: int, level: String) -> void:
 	if not SETTINGS.has(level):
 		level = "normal"
 	for i in clampi(count, 0, MAX_RIVALS):
-		var port := _pick_home_port(level)
+		var type_id := str(Progression.company_types().pick_random().id)  # (Any type, repeats and all.)
+		var port := _pick_home_port(level, type_id)
 		if port.is_empty():
 			return
 		var rival := Company.new(_pick_name(), _pick_color(), port)
 		rival.ai = level
+		rival.company_types = {type_id: 1}
 		rival.money = int(GameData.config.get("starting_money", 10000))
 		rival.ceo = Company.random_ceo()
 		rival.hubs.assign([Hub.new(port, true)])
@@ -317,6 +321,13 @@ func _keep_afloat(rival: Company, settings: Dictionary) -> void:
 ## the port its best cargo model would earn most from) when its level allows.
 func _grow(rival: Company) -> Array:
 	var news := []
+	if _state.company_types_available(rival) > 0:
+		var choices := Progression.company_types().filter(func(each: Dictionary) -> bool: return not rival.has_type(each.id))
+		if not choices.is_empty():
+			var type_id := str(choices.pick_random().id)
+			_state.take_company_type(rival, type_id)
+			_forget_fleet(rival)
+			news.append("branched out into %s" % Progression.type_name(type_id))
 	if _state.regions_available() > 0:
 		var region := _nearest_region(rival)
 		if not region.is_empty() and _state.unlock_region(region).is_empty():
@@ -360,7 +371,7 @@ func _buy_ships(rival: Company, settings: Dictionary) -> Array:
 		# to 3x that, to save up for.
 		var budget := rival.money - _needs(rival, settings) + (step if bool(settings.borrow) and rival.loan < _borrow_limit(rival) else 0)
 		for model: Dictionary in GameData.ship_models:
-			if _is_service_model(model) or Progression.unlock_level(model) > level or int(counts.get(model.id, 0)) >= Progression.model_slots(model, level):
+			if _is_service_model(model) or Progression.unlock_level(model, rival) > level or int(counts.get(model.id, 0)) >= Progression.model_slots(model, level, rival):
 				continue
 			var price: int = _state.ship_price(model.id)
 			if price > maxi(budget, 0) * 3:
@@ -403,7 +414,7 @@ func _buy_ships(rival: Company, settings: Dictionary) -> Array:
 		route.assign(_pick(best.loops, settings)[1])
 		_state.assign_route(ship, route)
 		(_minds[rival] as Dictionary).erase("sailing")  # (Its loops have changed.)
-		if first and Progression.unlock_level(model) > 1:
+		if first and Progression.unlock_level(model, rival) > 1:
 			news.append("launched its first %s" % model.get("name", model.id))
 	return news
 
@@ -777,7 +788,7 @@ func _best_hub_port(rival: Company) -> String:
 	if not mind.has("hub_search"):
 		var model := {}
 		for each: Dictionary in GameData.ship_models:
-			if not _is_service_model(each) and Progression.unlock_level(each) <= rival.level() and int(each.get("price", 0)) > int(model.get("price", -1)):
+			if not _is_service_model(each) and Progression.unlock_level(each, rival) <= rival.level() and int(each.get("price", 0)) > int(model.get("price", -1)):
 				model = each
 		if model.is_empty():
 			return ""
@@ -816,9 +827,10 @@ func _industry_choice(rival: Company, hub: Hub) -> String:
 	return best
 
 
-## A home port for a new rival: a recommended start of its difficulty's kinds
-## that no company has, in a market region no company is in if there is one.
-func _pick_home_port(level: String) -> String:
+## A home port for a new rival: a recommended start for its company type, of
+## its difficulty's kinds, that no company has, in a market region no company
+## is in if there is one.
+func _pick_home_port(level: String, type_id := "cargo") -> String:
 	var taken := {}
 	var regions := {}
 	for each: Company in _state.all_companies():
@@ -826,12 +838,12 @@ func _pick_home_port(level: String) -> String:
 		regions[str(GameData.port_region(each.home_port).get("id", ""))] = true
 	var choices := []
 	for kind: String in SETTINGS[level].starts:
-		for entry: Dictionary in GameData.starts.get(kind, []):
+		for entry: Dictionary in GameData.start_list(kind, type_id):
 			if not taken.has(entry.port):
 				choices.append(entry.port)
 	if choices.is_empty():
 		for kind: String in GameData.START_KINDS:
-			for entry: Dictionary in GameData.starts.get(kind, []):
+			for entry: Dictionary in GameData.start_list(kind, type_id):
 				if not taken.has(entry.port):
 					choices.append(entry.port)
 	var fresh := choices.filter(func(port: String) -> bool: return not regions.has(str(GameData.port_region(port).get("id", ""))))

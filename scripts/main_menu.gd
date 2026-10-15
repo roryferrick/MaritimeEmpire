@@ -10,6 +10,8 @@ extends Control
 const GAME_SCENE := "res://scenes/game.tscn"
 const NEW_COMPANY_SCENE := "res://scenes/new_company.tscn"
 const SLOT_BUTTON_SIZE := Vector2(420, 92)
+## The company type's icon left of a slot's button (CompanyTypeIcon).
+const SLOT_ICON_SIZE := 40.0
 const DELETE_BUTTON_SIZE := Vector2(96, 92)
 const MODE_BUTTON_SIZE := Vector2(420, 64)
 const MODES := {false: "Single Player", true: "Multiplayer"}
@@ -115,13 +117,18 @@ func _show_slots(online: bool) -> void:
 	%Slots.add_child(back)
 
 
-## A slot's button (its company; home port, money and date; storms, seasonal
+## A slot's button (its company and its company type, the type's icon to its
+## left; home port, money and date; storms, seasonal
 ## closures and fastest game speed; or New Game when empty) and, when it holds
 ## a save, a Delete button.
 func _slot_row(slot: int) -> HBoxContainer:
 	var summary := GameState.save_summary(slot)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
+	var badge := Control.new()  # (Its company type's icon, for a saved game; empty slots keep the space.)
+	badge.custom_minimum_size = Vector2(SLOT_ICON_SIZE, SLOT_ICON_SIZE)
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(badge)
 	var button := Button.new()
 	button.custom_minimum_size = SLOT_BUTTON_SIZE
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -142,7 +149,13 @@ func _slot_row(slot: int) -> HBoxContainer:
 			button.text = button.text.replace("Slot %d  ·  " % slot, "Slot %d  ·  Host  ·  " % slot)
 			if int(summary.get("companies", 1)) > 1:
 				button.text += "  ·  %d companies" % int(summary.companies)
+		button.text = button.text.replace("%s
+" % summary.company_name, "%s  ·  %s
+" % [summary.company_name, Progression.type_name(summary.start_type)])
 		GameState.apply_company_text_color(button, summary.company_color)
+		var icon := CompanyTypeIcon.new(str(summary.start_type))
+		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		badge.add_child(icon)
 		button.pressed.connect(_ask_host.bind(_continue.bind(slot)) if GameState.multiplayer_save else _continue.bind(slot))
 	var delete := Button.new()
 	delete.custom_minimum_size = DELETE_BUTTON_SIZE

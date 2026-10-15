@@ -146,8 +146,10 @@ func _update_shop_alert() -> void:
 	for model: Dictionary in GameData.ship_models:
 		if GameState.buy_error(model.id).is_empty():
 			buyable.append(model.get("name", model.id))
-	_shop_alert.visible = not buyable.is_empty()
+	_shop_alert.visible = not buyable.is_empty() or GameState.company_types_available() > 0
 	%ShopButton.tooltip_text = "You can buy: %s" % ", ".join(buyable) if not buyable.is_empty() else ""
+	if GameState.company_types_available() > 0:  # (A new company type to choose: on a locked tab.)
+		%ShopButton.tooltip_text = ("You can choose a new company type. " + %ShopButton.tooltip_text).strip_edges()
 	MapView._prof("alerts.shop", t_a)
 
 func _update_ships_alert() -> void:

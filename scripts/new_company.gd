@@ -9,6 +9,8 @@ extends Control
 ## harsh), how many AI rivals (and how well they play: see RivalAI), and
 ## whether to have seasonal closures and the tutorial; then make
 ## the CEO: their name and looks (Characters), part by part or at random.
+## Before all that, the company type (CompanyTypeCards: game_config
+## company_types), which sets the ships it starts with.
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -32,6 +34,10 @@ var _rivals := 0
 var _rival_level := "normal"
 ## The CEO's page (see _add_ceo_page()).
 var _ceo_page := CeoEditor.new()
+## The company type (the first page: see _add_type_page()).
+var _company_type := "cargo"
+var _type_page := Control.new()
+var _type_label := Label.new()
 
 
 func _ready() -> void:
@@ -46,8 +52,8 @@ func _ready() -> void:
 	%StartButton.pressed.connect(_start)
 	%StartButton.text = "Next: Your CEO"
 	_add_ceo_page()
-	%BackButton.pressed.connect(func() -> void: get_tree().change_scene_to_file(MAIN_MENU_SCENE))
-	%NameEdit.grab_focus()
+	%BackButton.pressed.connect(_show_type_page)
+	_add_type_page()
 	_validate()
 
 
@@ -56,8 +62,8 @@ func _ready() -> void:
 ## (START_COLORS); every other port is a faint dot that can't be picked.
 func _add_ports() -> void:
 	var map: MapView = %MapView
-	map.selectable_ports = start_choices()
-	map.shining_ports = shining_choices()
+	map.selectable_ports = start_choices([], _company_type)
+	map.shining_ports = shining_choices(_company_type)
 	map.opens_at_port = DEFAULT_HOME_PORT
 	map.opens_whole_globe = true
 	map.port_clicked.connect(_pick_port)
@@ -79,16 +85,16 @@ func _selected_port() -> String:
 
 ## What kind of start the chosen port is, and why.
 func _show_start_note() -> void:
-	%StartNote.text = start_note(_selected_port())
-	%StartNote.add_theme_color_override(&"font_color", start_note_color(_selected_port()))
+	%StartNote.text = start_note(_selected_port(), _company_type)
+	%StartNote.add_theme_color_override(&"font_color", start_note_color(_selected_port(), _company_type))
 
 
 ## The ports a company can start at, each in its kind of start's color
-## (START_COLORS: MapView.selectable_ports), leaving out `taken` ones.
-static func start_choices(taken: Array = []) -> Dictionary:
+## (START_COLORS: MapView.selectable_ports) for a company type, leaving out `taken` ones.
+static func start_choices(taken: Array = [], type_id := "cargo") -> Dictionary:
 	var choices := {}
 	for kind: String in GameData.START_KINDS:
-		for entry: Dictionary in GameData.starts.get(kind, []):
+		for entry: Dictionary in GameData.start_list(kind, type_id):
 			choices[entry.port] = START_COLORS[kind]
 	for port_id: String in GameData.starts.get("great_lakes", {}).get("ports", []):
 		choices[port_id] = START_COLORS.great_lakes
@@ -97,25 +103,25 @@ static func start_choices(taken: Array = []) -> Dictionary:
 	return choices
 
 
-## The excellent starts, which shine on the map (MapView.shining_ports).
-static func shining_choices() -> Dictionary:
+## A company type's excellent starts, which shine on the map (MapView.shining_ports).
+static func shining_choices(type_id := "cargo") -> Dictionary:
 	var shining := {}
-	for entry: Dictionary in GameData.starts.get("excellent", []):
+	for entry: Dictionary in GameData.start_list("excellent", type_id):
 		shining[entry.port] = true
 	return shining
 
 
 ## "Great start: ..." (what kind of start a port is, and why), or "".
-static func start_note(port_id: String) -> String:
-	var info := GameData.start_info(port_id)
+static func start_note(port_id: String, type_id := "cargo") -> String:
+	var info := GameData.start_info(port_id, type_id)
 	if info.is_empty():
 		return ""
 	return "%s: %s" % [START_TITLES.get(info.kind, ""), info.note]
 
 
 ## The color of a port's start note: its kind's, lightened to read on the card.
-static func start_note_color(port_id: String) -> Color:
-	var kind: String = GameData.start_info(port_id).get("kind", "")
+static func start_note_color(port_id: String, type_id := "cargo") -> Color:
+	var kind: String = GameData.start_info(port_id, type_id).get("kind", "")
 	return (START_COLORS[kind] as Color).lerp(Color.WHITE, 0.25) if START_COLORS.has(kind) else Color(0.75, 0.78, 0.82)
 
 
@@ -270,8 +276,85 @@ func _found() -> void:
 		rival_level = _rival_level,
 		seasons = %SeasonsToggle.button_pressed,
 		divine = %DivineToggle.button_pressed,
+		company_type = _company_type,
 		ceo = _ceo_page.ceo.duplicate(true),
 	})
 	if GameState.multiplayer_save:
 		Net.host_error = Net.host(MainMenu.host_settings)  # Friends can join it; the game says if it couldn't.
 	LoadingScreen.open_game(get_tree())
+
+
+# --- The company type -------------------------------------------------------------
+
+## The first page: the company types as cards (CompanyTypeCards), one picked
+## to start with; Next goes on to the headquarters and the rest, whose Back
+## returns here (and this page's Back to the main menu). The pick shows on the
+## next page's card.
+func _add_type_page() -> void:
+	_type_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_type_page)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_type_page.add_child(center)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override(&"separation", 16)
+	center.add_child(content)
+	var title := Label.new()
+	title.theme_type_variation = &"TitleLabel"
+	title.text = "Choose your company type"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	content.add_child(title)
+	var note := Label.new()
+	note.theme_type_variation = &"DimLabel"
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 900
+	var every := Progression.type_pick_every()
+	note.text = "Your company starts in one trade. Its ships open quickly as you level up: the smallest now, the next at levels 4, 9, 16 and 25. At level %d, and every %d levels after, you branch out into another type of your choice." % [every, every]
+	content.add_child(note)
+	var cards := CompanyTypeCards.new()
+	cards.selected.connect(_pick_type)
+	content.add_child(cards)
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override(&"separation", 16)
+	content.add_child(buttons)
+	var back := Button.new()
+	back.text = "Back"
+	back.custom_minimum_size = Vector2(160, 44)
+	back.pressed.connect(func() -> void: get_tree().change_scene_to_file(MAIN_MENU_SCENE))
+	buttons.add_child(back)
+	var next := Button.new()
+	next.text = "Next: Headquarters"
+	next.custom_minimum_size = Vector2(220, 44)
+	next.pressed.connect(func() -> void:
+		_type_page.visible = false
+		$Row.visible = true
+		%NameEdit.grab_focus())
+	buttons.add_child(next)
+	_type_label.theme_type_variation = &"DimLabel"
+	$Row/Side/Card/Content/Title.add_sibling(_type_label)
+	cards.select.call_deferred(_company_type)
+	_show_type_page()
+
+
+func _show_type_page() -> void:
+	$Row.visible = false
+	_ceo_page.visible = false
+	_type_page.visible = true
+
+
+func _pick_type(type_id: String) -> void:
+	_company_type = type_id
+	# Its own recommended starts: the HQ moves to its best if the one picked isn't one.
+	var map: MapView = %MapView
+	map.selectable_ports = start_choices([], type_id)
+	map.shining_ports = shining_choices(type_id)
+	if not map.selectable_ports.has(_home_port):
+		var best: Array = GameData.start_list("excellent", type_id)
+		if not best.is_empty():
+			_pick_port(str(best[0].port))
+			map.focus_port(_home_port)
+	_show_start_note()
+	_type_label.text = "Company type: %s" % Progression.type_name(type_id)
+	_type_label.add_theme_color_override(&"font_color", CompanyTypeIcon.type_color(type_id))
