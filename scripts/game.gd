@@ -1,43 +1,48 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name GameRoot
 extends Control
-## Root of an active game: top bar, activity log, the six main screens, the
-## bottom nav, the full-screen Route Assignment screen, and the Esc menu;
-## Space pauses and T opens the chat.
+## Root of an active game: top bar, activity log, the main screens (World,
+## Ships, Finances, Shop) with the bottom nav, the pages over the map
+## (Markets, Hubs, Farms, Makers, Energy: see open_page()), the full-screen Route
+## Assignment screen, and the Esc menu; Space pauses and T opens the chat.
 
-enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
 const ALERT_CHECK_SECONDS := 2.0  # (A look over every ship and model: a few ms.)
 ## Ships named per reason in the Ships tab's tooltip before "and 3 more".
 const ALERT_NAMES_SHOWN := 3
+## The pages over the map (MapPage), opened by the buttons down its top left
+## (WorldScreen.page_buttons): page id -> its Screen.
+const PAGE_SCREENS := {markets = Screen.MARKETS, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY}
 
 var _current_screen := Screen.WORLD
 
 @onready var _screens := {
 	Screen.WORLD: %WorldScreen,
 	Screen.SHIPS: %ShipsScreen,
-	Screen.MARKETS: %MarketsScreen,
 	Screen.FINANCES: %FinancesScreen,
-	Screen.HUBS: %HubsScreen,
 	Screen.SHOP: %ShopScreen,
 }
 @onready var _nav_buttons := {
 	Screen.WORLD: %WorldButton,
 	Screen.SHIPS: %ShipsButton,
-	Screen.MARKETS: %MarketsButton,
 	Screen.FINANCES: %FinancesButton,
-	Screen.HUBS: %HubsButton,
 	Screen.SHOP: %ShopButton,
 }
 @onready var _popup_host: PopupHost = %PopupHost
-## The Farms screen and its tab (made here: shown for Agriculture companies only, see _update_farms_tab()).
+## The pages' screens, kept (hidden, with the main screens) while their page
+## is shut, so they keep their state: page id -> Control. The Farms and Makers
+## screens are made here (shown for Agriculture and Vehicles companies).
+@onready var _pages := {markets = %MarketsScreen, hubs = %HubsScreen}
 var _farms_screen := FarmsScreen.new()
-var _farms_button := Button.new()
-## The Makers screen and its tab (shown for Vehicles companies only, see _update_farms_tab()).
 var _makers_screen := MakersScreen.new()
-var _makers_button := Button.new()
+var _energy_screen := EnergyScreen.new()
+## The page open over the map, or null.
+var _page: MapPage = null
+## Where the pages' screens are kept while shut (with the main screens).
+var _page_home: Node = null
 
 ## Shown on the Ships tab while any ship needs the player (see
 ## Ship.attention_reason()), and on the Shop tab while any ship can be bought.
@@ -45,8 +50,9 @@ var _makers_button := Button.new()
 var event_card := EventCard.new()
 var _ships_alert := AlertDot.new()
 var _shop_alert := AlertDot.new()
-## On the Hubs tab while a hub has upgrade points to spend or can be founded.
+## On the map's Hubs button while a hub has upgrade points to spend or can be founded.
 var _hubs_alert := AlertDot.new()
+var _hubs_tip := ""  # (The Hubs button's own tooltip, with the alert's notes added under it.)
 ## On the World tab while a market region can be unlocked (on the map).
 var _world_alert := AlertDot.new()
 var _alert_clock := 0.0
@@ -60,32 +66,16 @@ static func find(from: Node) -> GameRoot:
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	_farms_screen.name = "FarmsScreen"
-	_farms_screen.visible = false
-	_farms_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	%MarketsScreen.add_sibling(_farms_screen)
-	_farms_button.name = "FarmsButton"
-	_farms_button.text = "Farms"
-	_farms_button.custom_minimum_size = Vector2(0, 48)
-	_farms_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	%ShopButton.add_sibling(_farms_button)
-	%ShopButton.get_parent().move_child(_farms_button, %ShopButton.get_index())
-	_screens[Screen.FARMS] = _farms_screen
-	_nav_buttons[Screen.FARMS] = _farms_button
-	_makers_screen.name = "MakersScreen"
-	_makers_screen.visible = false
-	_makers_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	%MarketsScreen.add_sibling(_makers_screen)
-	_makers_button.name = "MakersButton"
-	_makers_button.text = "Makers"
-	_makers_button.custom_minimum_size = Vector2(0, 48)
-	_makers_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	%ShopButton.add_sibling(_makers_button)
-	%ShopButton.get_parent().move_child(_makers_button, %ShopButton.get_index())
-	_screens[Screen.MAKERS] = _makers_screen
-	_nav_buttons[Screen.MAKERS] = _makers_button
-	GameState.company_types_changed.connect(_update_farms_tab)
-	_update_farms_tab()
+	for each: Control in [_farms_screen, _makers_screen, _energy_screen]:
+		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen"}.get(each, "EnergyScreen")
+		each.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		%MarketsScreen.add_sibling(each)
+	_pages.farms = _farms_screen
+	_pages.makers = _makers_screen
+	_pages.energy = _energy_screen
+	_page_home = %MarketsScreen.get_parent()
+	for id: String in _pages:
+		(_pages[id] as Control).visible = false
 	var group := ButtonGroup.new()
 	for screen: Screen in _nav_buttons:
 		var button: Button = _nav_buttons[screen]
@@ -114,7 +104,8 @@ func _ready() -> void:
 	GameState.ship_leveled.connect(_on_ship_leveled)
 	%ShipsButton.add_child(_ships_alert)
 	%ShopButton.add_child(_shop_alert)
-	%HubsButton.add_child(_hubs_alert)
+	(%WorldScreen.page_buttons.hubs as Button).add_child(_hubs_alert)
+	_hubs_tip = (%WorldScreen.page_buttons.hubs as Button).tooltip_text
 	%WorldButton.add_child(_world_alert)
 	GameState.hub_leveled.connect(_on_hub_leveled)
 	GameState.hub_built.connect(_on_hub_built)
@@ -170,7 +161,9 @@ func _update_alerts(phase: int) -> void:
 	_hubs_alert.visible = not hub_notes.is_empty()
 	_world_alert.visible = GameState.regions_available() > 0
 	%WorldButton.tooltip_text = "A new region can be unlocked: Unlock a region, on the map" if _world_alert.visible else ""
-	%HubsButton.tooltip_text = "; ".join(hub_notes)
+	var hubs_button: Button = %WorldScreen.page_buttons.hubs
+	hubs_button.tooltip_text = _hubs_tip + ("
+" + "; ".join(hub_notes) if not hub_notes.is_empty() else "")
 	MapView._prof("alerts.hubs", t_a)
 
 func _update_shop_alert() -> void:
@@ -206,24 +199,48 @@ func _update_ships_alert() -> void:
 	%ShipsButton.tooltip_text = "Ships needing you: %s" % ", ".join(parts) if not reasons.is_empty() else ""
 
 
-## The Farms tab shows for companies that can farm (Agriculture: see
-## Farms.can_farm()), the Makers tab for those that deal with the vehicle and
-## boat makers (Vehicles: see Manufacturers.can_deal()).
-func _update_farms_tab() -> void:
-	_farms_button.visible = Farms.can_farm(GameState.company)
-	_makers_button.visible = Manufacturers.can_deal(GameState.company)
+## Opens a page over the World map (Markets, Hubs, Farms or Makers, by id:
+## see PAGE_SCREENS), shutting any other first; its screen goes into the
+## page and comes back out, hidden, when it's shut.
+func open_page(id: String) -> void:
+	if not _pages.has(id):
+		return
+	show_screen(Screen.WORLD)  # (Shuts any page open.)
+	var screen: Control = _pages[id]
+	_page = MapPage.new(screen)
+	_page.closed.connect(func(back: Control) -> void:
+		back.visible = false
+		back.reparent(_page_home, false)
+		back.size_flags_horizontal = Control.SIZE_FILL
+		back.size_flags_vertical = Control.SIZE_FILL
+		back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_page = null)
+	%WorldScreen.add_child(_page)
 
 
-## Opens the Farms screen at a farm port (the port popup's Farms button).
+## Shuts the page open over the map, if one is.
+func close_page() -> void:
+	if is_instance_valid(_page):
+		_page.close()
+
+
+## Opens the Farms page at a farm port (the port popup's Farms button).
 func show_farm(port_id: String) -> void:
 	_farms_screen.show_port(port_id)
-	show_screen(Screen.FARMS)
+	open_page("farms")
 
 
-## Opens the Makers screen at a maker (the port popup's Makers button).
+## Opens the Energy page at a port's buildings or a field (the port popup's
+## Energy button, the map's rigs).
+func show_energy(place: String) -> void:
+	_energy_screen.show_place(place)
+	open_page("energy")
+
+
+## Opens the Makers page at a maker (the port popup's Makers button).
 func show_maker(maker_id: String) -> void:
 	_makers_screen.show_maker(maker_id)
-	show_screen(Screen.MAKERS)
+	open_page("makers")
 
 
 ## Switches to the World map, centered on a port.
@@ -250,6 +267,11 @@ func followed_ship() -> Ship:
 
 
 func show_screen(screen: Screen) -> void:
+	for id: String in PAGE_SCREENS:
+		if PAGE_SCREENS[id] == screen:
+			open_page(id)  # (A page over the map, not a screen of its own.)
+			return
+	close_page()
 	_current_screen = screen
 	_popup_host.close()
 	for s: Screen in _screens:

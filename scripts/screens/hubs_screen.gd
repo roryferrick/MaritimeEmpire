@@ -16,6 +16,7 @@ func _ready() -> void:
 	GameState.hubs_changed.connect(_rebuild)
 	GameState.company_leveled.connect(_rebuild.unbind(2))
 	visibility_changed.connect(_rebuild)
+	resized.connect(_fit_columns)
 	_rebuild()
 
 
@@ -56,6 +57,17 @@ func _rebuild() -> void:
 	if next > 0:
 		%Cards.add_child(_note_card("Next hub", "Unlocks at company level %d." % next, false))
 	_update_live()
+	_fit_columns()
+
+
+## Two cards across where two fit (the page over the map is narrower than
+## the screen was), else one.
+func _fit_columns() -> void:
+	var widest := 0.0
+	for child: Control in %Cards.get_children():
+		widest = maxf(widest, child.get_combined_minimum_size().x)
+	var room: float = $Scroll.size.x - 48.0 - 12.0  # (Its margins, and room for the scroll bar.)
+	%Cards.columns = 2 if widest * 2.0 + float(%Cards.get_theme_constant(&"h_separation")) <= room else 1
 
 
 func _hub_card(hub: Hub) -> Control:

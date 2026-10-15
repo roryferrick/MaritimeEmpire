@@ -228,26 +228,12 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Ships"
 
-[node name="MarketsButton" type="Button" parent="Layout/BottomNav/Buttons"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Markets"
-
 [node name="FinancesButton" type="Button" parent="Layout/BottomNav/Buttons"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Finances"
-
-[node name="HubsButton" type="Button" parent="Layout/BottomNav/Buttons"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Hubs"
 
 [node name="ShopButton" type="Button" parent="Layout/BottomNav/Buttons"]
 unique_name_in_owner = true

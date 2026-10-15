@@ -145,7 +145,7 @@ func _tips_list() -> Array[Dictionary]:
 			show = func() -> bool: return seen.call("trading") and _has_sold(),
 			text = func() -> String: return "Ships burn fuel and wear down at sea, and the more worn they are, the slower they go. The Refuel and Repair switches in a ship's popup top them up at every stop.\n\nA ship that can't make its next leg waits in port, and the Ships tab gets a red dot whenever a ship needs you; hover it to see why."},
 		{id = "prices", who = "marissa", title = "Finding better trades", show = func() -> bool: return seen.call("upkeep"),
-			text = func() -> String: return "The Prices picker in the top right of the map colors every port by a commodity's price: green where it's cheap to buy, red where it sells high.\n\nThe Markets tab lists the best trades, anywhere and close by, and a port's popup shows all its prices."},
+			text = func() -> String: return "The Prices picker in the top right of the map colors every port by a commodity's price: green where it's cheap to buy, red where it sells high.\n\nThe Markets button at the top left of the map lists the best trades, anywhere and close by, and a port's popup shows all its prices."},
 		{id = "grow", who = "sonny", title = "Grow your fleet", show = func() -> bool: return seen.call("prices"),
 			text = func() -> String: return "More ships, more profit. The Shop tab gets a red dot when you can afford another. Give each one its own route, or send several round a good loop.\n\nThe Finances tab shows where your money comes from and where it goes, and which ships earn the most."},
 		{id = "levels", who = "marissa", title = "Company levels",
@@ -197,7 +197,7 @@ func _tips_list() -> Array[Dictionary]:
 		{id = "farms", who = "sonny", title = "Our own farms",
 			show = func() -> bool: return seen.call("trading") and Farms.can_farm(GameState.company) and GameState.company.level() >= 3,
 			done = func() -> bool: return not GameState.farms.owned_by(GameState.company).is_empty(),
-			text = func() -> String: return "The Farms tab, down at the bottom: the world's farm ports, each with a few plots of land for sale. Buy one, plant a crop that suits the climate (or graze a herd), and the harvest comes in by the season to our farm store at that port, where our own ships load it free.
+			text = func() -> String: return "The Farms button at the top left of the map: the world's farm ports, each with a few plots of land for sale. Buy one, plant a crop that suits the climate (or graze a herd), and the harvest comes in by the season to our farm store at that port, where our own ships load it free.
 
 Grain carriers take the dry crops, Fresh produce carriers the fruit and vegetables (they lose a little value every day, so don't let them sit), livestock carriers the young stock. Watch the almanac: a drought or a frost can take most of a year's harvest."},
 		{id = "cruise_plan", who = "dick", title = "Plan a cruise",
@@ -251,7 +251,7 @@ static func _type_welcome() -> String:
 		"cargo":
 			return "We're in Cargo & Ore: container ships with toys, clothing and furniture, and bulk carriers with iron ore, coal and gold. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
 		"vehicles":
-			return "We're in Vehicles: car carriers and boat carriers shipping for 44 carmakers and boatbuilders, from the factories to the showrooms. Buy ships, give them routes between ports, and they'll buy vehicles where they're cheap (at the makers' factories) and sell them where they're expensive. The makers don't trust us yet: every load we carry for one wins it over, and once it likes us 70/100 we can build a factory for it (the Makers tab)."
+			return "We're in Vehicles: car carriers and boat carriers shipping for 44 carmakers and boatbuilders, from the factories to the showrooms. Buy ships, give them routes between ports, and they'll buy vehicles where they're cheap (at the makers' factories) and sell them where they're expensive. The makers don't trust us yet: every load we carry for one wins it over, and once it likes us 70/100 we can build a factory for it (the Makers button at the top left of the map)."
 		"agriculture":
 			return "We're in Agriculture: farms at the world's farm ports, grain carriers with grain, coffee, cocoa, sugar and spices, Fresh produce carriers with fruit and vegetables, and livestock carriers with cattle, sheep, pigs and horses. Buy ships, give them routes between ports, and they'll buy where the harvest is cheap and sell where it's wanted."
 		"tankers":

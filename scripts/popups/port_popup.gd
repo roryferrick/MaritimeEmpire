@@ -364,7 +364,7 @@ func _refresh_market() -> void:
 	for title: String in ["", "Buy", "Sell", "", "Buy", "Sell"]:
 		_add_market_cell(title, &"DimLabel")
 	# The plain goods, then the makers with a factory here (theirs or a company's:
-	# their goods are cheapest here); the other makers' are on the Markets tab.
+	# their goods are cheapest here); the other makers' are on the Markets page.
 	var listed: Array = GameData.commodities.filter(func(commodity: Dictionary) -> bool: return not commodity.get("maker", false) and not commodity.get("legacy", false))
 	for id in GameState.makers.makers_at(port_id):
 		listed.append(GameData.commodity(id))

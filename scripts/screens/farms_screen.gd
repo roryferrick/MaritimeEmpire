@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name FarmsScreen
 extends Control
-## The Farms screen (the bottom bar's Farms tab, for Agriculture companies):
+## The Farms screen (the Farms page over the map, for Agriculture companies):
 ## the farm ports down the left (all of them, the company's own, or those with
 ## plots for sale), and the one picked on the right: its climate, what it's
 ## known for and the weather this year and next; a card for each plot (who

@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name MakersScreen
 extends Control
-## The Makers screen (the bottom bar's Makers tab, for Vehicles companies):
+## The Makers screen (the Makers page over the map, for Vehicles companies):
 ## the vehicle and boat makers down the left (all, the car makers, the boat
 ## builders, or those the company has factories for), and the one picked on
 ## the right: what it makes and where, the company's likeness with it and the

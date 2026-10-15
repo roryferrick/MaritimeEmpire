@@ -1,7 +1,8 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
 ## The main map: ports, ships, canal locks, storms and sea animals, with their
-## popups, and the price picker in the top right (a ship line's prices over the
+## popups, the page buttons down its top left (Markets, Hubs, Farms, Makers:
+## GameRoot.open_page()), and the price picker in the top right (a ship line's prices over the
 ## ports), with Choose a company type (CompanyTypeDialog) and Unlock a region
 ## buttons over it while a type can be chosen or a market region unlocked (see
 ## _add_region_choice()). The Routes and Tutorial switches are on
@@ -68,9 +69,11 @@ func _ready() -> void:
 	if GameState.divine.on:
 		_add_divine_button()
 	_map.divine_target.connect(_on_divine_target)
-	if _map.ambience != null:  # The bird that's calling, top left (see SoundTracker).
+	_add_page_buttons()
+	if _map.ambience != null:  # The bird that's calling, top left (see SoundTracker), beside the page buttons.
 		var tracker := SoundTracker.new(_map)
 		add_child(tracker)
+		tracker.offset_left = _page_column.offset_left + FIELD_GUIDE_BUTTON + 12.0
 		_map.ambience.call_started.connect(tracker.show_call)
 
 
@@ -532,6 +535,48 @@ func _add_side_buttons() -> void:
 
 func _place_side_buttons() -> void:
 	_side_buttons.offset_top = $RoutesPanel.offset_top + $RoutesPanel.size.y + 10.0
+
+## The page buttons down the map's top left, each opening its page over the
+## map (GameRoot.open_page()): Markets, Hubs, and for the company types that
+## have them Farms (Agriculture), Makers (Vehicles) and Energy (Tankers). By id ("markets"...),
+## for GameRoot's alert dot on Hubs.
+var page_buttons := {}
+var _page_column := VBoxContainer.new()
+const PAGES := [["markets", "Markets: the cheapest ports to buy each good and the best to sell"], ["hubs", "Hubs: your HQ and hubs, their upgrades and industry"],
+	["farms", "Farms: your plots at the farm ports and the farm store"], ["makers", "Makers: the car and boat makers, how much they like you, and your factories"],
+	["energy", "Energy: the oil and gas fields, your rigs and platforms, and your refineries"]]
+
+
+func _add_page_buttons() -> void:
+	_page_column.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_page_column.offset_left = 12.0
+	_page_column.offset_top = 12.0
+	_page_column.add_theme_constant_override(&"separation", 8)
+	add_child(_page_column)
+	for entry: Array in PAGES:
+		var id: String = entry[0]
+		var button := Button.new()
+		button.tooltip_text = entry[1]
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2.ONE * FIELD_GUIDE_BUTTON
+		var icon := PageIcon.new(id)
+		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 7)
+		button.add_child(icon)
+		button.pressed.connect(func() -> void:
+			PopupHost.find(self).close()
+			GameRoot.find(self).open_page(id))
+		_page_column.add_child(button)
+		page_buttons[id] = button
+	_update_page_buttons()
+	GameState.company_types_changed.connect(_update_page_buttons)
+
+
+## Farms, Makers and Energy show only for the types that have them.
+func _update_page_buttons() -> void:
+	page_buttons.farms.visible = Farms.can_farm(GameState.company)
+	page_buttons.makers.visible = Manufacturers.can_deal(GameState.company)
+	page_buttons.energy.visible = Energy.can_drill(GameState.company)
+
 
 ## The field guide's square paw button at the map's top right, first in the
 ## column under the Routes panel (see FieldGuide).

@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name IndustryPanel
 extends VBoxContainer
-## A hub's industry (on the Hubs tab, and in the popup from clicking its
+## A hub's industry (on the Hubs page, and in the popup from clicking its
 ## plots on the map): its Hub.INDUSTRY_SLOTS plots beside the marina, each
 ## closed (opening at a hub level), empty (Build: pick one of the commodities'
 ## buildings, see IndustryPicker) or built (its building, what it does here,

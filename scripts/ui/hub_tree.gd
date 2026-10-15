@@ -3,7 +3,7 @@ class_name HubTree
 extends GridContainer
 ## An HQ's or hub's upgrade tree: one row per path with its name, point pips,
 ## the bonus so far and a button to buy the next point (showing its price).
-## Rebuilds itself when hubs change. Used by the port popup and the Hubs screen.
+## Rebuilds itself when hubs change. Used by the port popup and the Hubs page.
 
 const PIP_SIZE := Vector2(6, 10)
 
