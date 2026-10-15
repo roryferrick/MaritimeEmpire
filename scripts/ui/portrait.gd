@@ -110,6 +110,12 @@ func _part(key: String) -> int:
 	return clampi(int(_look.get(key, 0)), 0, Characters.option_count(key) - 1)
 
 
+## A part's colour: its option's, or the look's own "<key>_tint" (a story
+## character's, such as 1st Mate Sonny's navy suit).
+func _tint(key: String, color: Color) -> Color:
+	return Color(str(_look[key + "_tint"])) if _look.has(key + "_tint") else color
+
+
 ## The body's measures from the look (see the top).
 func _frame() -> void:
 	_female = _part("body") == 1
@@ -330,7 +336,7 @@ func _draw_hands(skin: Color) -> void:
 func _draw_bottoms() -> void:
 	var bottoms: Array = BOTTOMS[_part("bottoms")]
 	var style: String = bottoms[0]
-	var color: Color = bottoms[1]
+	var color: Color = _tint("bottoms", bottoms[1])
 	if _draw_pack_bottoms(style, color):
 		return
 	var hem := _ankle_y - 1.5
@@ -669,7 +675,7 @@ func _vneck(color: Color, depth := 9.0, half := 6.0) -> void:
 func _draw_top(skin: Color) -> void:
 	var top: Array = TOPS[_part("top")]
 	var style: String = top[0]
-	var color: Color = top[1]
+	var color: Color = _tint("top", top[1])
 	var sleeves: String = top[2]
 	match style:
 		"captain":

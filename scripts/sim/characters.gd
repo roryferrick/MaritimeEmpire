@@ -11,14 +11,15 @@ extends RefCounted
 
 ## The story's people (the tutorial's voices: TutorialCard): Captain Mo B. Dick,
 ## a big white-bearded captain in his dress whites who does the welcome and
-## knows the birds; Sailor Sonny, strong, sharp and able, on shipping;
-## HQ Marissa (slim, tanned, Italian, long brown hair, green eyes and a lovely smile) on the money and the achievements; and Deckhand Joe on sailing
-## and the odd things about ships. Each is a character ({name, look}) drawn by Portrait.
+## knows the birds; 1st Mate Sonny, strong, sharp and able, in a full navy
+## suit, on shipping; HQ Marissa (slim, tanned, Italian, long brown hair, green eyes and a lovely smile) on the money and the achievements; and Deckhand Joe,
+## in work clothes, on sailing and the odd things about ships. Each is a character ({name, look}) drawn by Portrait;
+## a look's "top_tint"/"bottoms_tint" recolour its clothes (Sonny's navy suit).
 const STORY := {
 	dick = {name = "Captain Mo B. Dick", role = "Captain", look = {body = 0, skin = 1, eye_shape = 0, eye_color = 4, nose = 6, mouth = 0, hair = 2, hair_color = 10, facial_hair = 4, top = 5, bottoms = 0, shoes = 1, eyewear = 0, headwear = 1, height = 88, build = 100}},
-	sonny = {name = "Sailor Sonny", role = "Sailor", look = {body = 0, skin = 5, eye_shape = 1, eye_color = 0, nose = 2, mouth = 1, hair = 1, hair_color = 0, facial_hair = 1, top = 1, bottoms = 1, shoes = 0, eyewear = 0, headwear = 5, height = 70, build = 95}},
+	sonny = {name = "1st Mate Sonny", role = "1st Mate", look = {body = 0, skin = 2, eye_shape = 1, eye_color = 0, nose = 2, mouth = 1, hair = 1, hair_color = 0, facial_hair = 1, top = 15, top_tint = "#1f2b4d", bottoms = 7, bottoms_tint = "#1f2b4d", shoes = 7, eyewear = 0, headwear = 0, height = 70, build = 95}},
 	marissa = {name = "HQ Marissa", role = "Head office", look = {body = 1, skin = 5, eye_shape = 1, eye_color = 6, nose = 5, mouth = 0, hair = 5, hair_color = 2, facial_hair = 0, top = 15, bottoms = 10, shoes = 7, eyewear = 0, headwear = 0, height = 60, build = 18}},
-	joe = {name = "Deckhand Joe", role = "Deckhand", look = {body = 0, skin = 2, eye_shape = 4, eye_color = 6, nose = 7, mouth = 3, hair = 8, hair_color = 4, facial_hair = 2, top = 3, bottoms = 2, shoes = 2, eyewear = 0, headwear = 6, height = 45, build = 60}},
+	joe = {name = "Deckhand Joe", role = "Deckhand", look = {body = 0, skin = 5, eye_shape = 4, eye_color = 6, nose = 7, mouth = 3, hair = 8, hair_color = 4, facial_hair = 2, top = 17, bottoms = 8, shoes = 5, eyewear = 0, headwear = 11, height = 45, build = 60}},
 }
 
 ## The longest a character's name can be (the CEO editor's name box too).

@@ -4,7 +4,7 @@ extends PanelContainer
 ## The tutorial: tips on the basics, one at a time, in a card in the bottom left
 ## of the main screens (over the Route Assignment map too), each spoken by one
 ## of the story's people (Characters.STORY: Captain Mo B. Dick does the
-## welcome and the birds, Sailor Sonny shipping, HQ Marissa the money and the
+## welcome and the birds, 1st Mate Sonny shipping, HQ Marissa the money and the
 ## achievements, Deckhand Joe sailing and the odd things about ships), their
 ## portrait beside it, and at least TIP_GAP_S of play between one tip and the
 ## next so they come at a digestible pace. Only in saves
