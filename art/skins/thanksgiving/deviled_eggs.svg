@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="64" viewBox="0 0 180 64">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M8,6 L138,4 Q178,8 178,32 Q178,56 138,60 L8,58 Q2,58 2,52 L2,12 Q2,6 8,6 Z" fill="#f6f2e8" stroke="#1a1410" stroke-width="2" stroke-linejoin="round"/>
+<path d="M11,11 L137,9 Q171,13 171,32 Q171,51 137,55 L11,53 Q7,53 7,49 L7,15 Q7,11 11,11 Z" fill="none" stroke="#3a6aa8" stroke-width="2.2" stroke-dasharray="5 3"/>
+<path d="M11,11 L137,9 Q171,13 171,32 Q171,51 137,55 L11,53 Q7,53 7,49 L7,15 Q7,11 11,11 Z" fill="none" stroke="#8fb0d8" stroke-width="0.8"/>
+<g stroke="#1a1410" stroke-width="1.4">
+<ellipse cx="34" cy="32" rx="16" ry="12.5" fill="#fbfaf4"/>
+<ellipse cx="68" cy="32" rx="16" ry="12.5" fill="#fbfaf4"/>
+<ellipse cx="102" cy="32" rx="16" ry="12.5" fill="#fbfaf4"/>
+<ellipse cx="136" cy="32" rx="14" ry="11" fill="#fbfaf4"/>
+</g>
+<g fill="#f2c434" stroke="#c89418" stroke-width="1">
+<circle cx="34" cy="32" r="8"/>
+<circle cx="68" cy="32" r="8"/>
+<circle cx="102" cy="32" r="8"/>
+<circle cx="136" cy="32" r="7"/>
+</g>
+<g fill="none" stroke="#e0a820" stroke-width="1.1">
+<path d="M29,32 Q34,26 39,32 Q34,37 31,33"/>
+<path d="M63,32 Q68,26 73,32 Q68,37 65,33"/>
+<path d="M97,32 Q102,26 107,32 Q102,37 99,33"/>
+<path d="M131.5,32 Q136,27 140.5,32 Q136,36 133.5,33"/>
+</g>
+<g fill="#c8401e">
+<circle cx="32" cy="29" r="1.1"/><circle cx="37" cy="34" r="1"/><circle cx="35" cy="30" r="0.8"/>
+<circle cx="66" cy="34" r="1.1"/><circle cx="71" cy="29" r="1"/><circle cx="68" cy="31" r="0.8"/>
+<circle cx="100" cy="29" r="1.1"/><circle cx="105" cy="34" r="1"/><circle cx="103" cy="31" r="0.8"/>
+<circle cx="134" cy="33" r="1"/><circle cx="138" cy="30" r="0.9"/>
+</g>
+<g fill="#4a8a32">
+<path d="M48,20 l3,-2 l1,3 z"/><path d="M84,44 l3,1 l-2,3 z"/><path d="M118,19 l3,-1 l0,3 z"/><path d="M52,45 l2,2 l-3,1 z"/>
+</g>
+<g fill="#ffffff" opacity="0.65">
+<ellipse cx="27" cy="25" rx="5" ry="2"/><ellipse cx="61" cy="25" rx="5" ry="2"/><ellipse cx="95" cy="25" rx="5" ry="2"/><ellipse cx="130" cy="26" rx="4" ry="1.8"/>
+</g>
+</svg>

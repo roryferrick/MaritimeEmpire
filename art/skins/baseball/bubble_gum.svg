@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="64" viewBox="0 0 180 64">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<path d="M40,12 L160,12 Q176,12 176,32 Q176,52 160,52 L40,52 Z" fill="#f48fb8" stroke="#1a1410" stroke-width="2" stroke-linejoin="round"/>
+<g stroke="#e06a9a" stroke-width="1" fill="none"><path d="M44,18 L170,18 M44,46 L170,46"/></g>
+<path d="M4,10 L42,10 L42,54 L4,54 Q2,54 2,52 L2,12 Q2,10 4,10 Z" fill="#f8f6f0" stroke="#1a1410" stroke-width="2"/>
+<g fill="#1d3a6e"><rect x="2" y="10" width="40" height="8"/><rect x="2" y="46" width="40" height="8"/></g>
+<rect x="9" y="22" width="26" height="20" rx="3" fill="#d8262a" stroke="#1a1410" stroke-width="1.2"/>
+<g fill="#f8f6f0"><path d="M14,32 l2,-4.5 l2,4.5 l-4.5,-2.8 l5,0 z"/><path d="M25,32 l2,-4.5 l2,4.5 l-4.5,-2.8 l5,0 z"/></g>
+<path d="M2,10 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l2,2" fill="none" stroke="#1a1410" stroke-width="1"/>
+<path d="M2,54 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l3,-2 l3,2 l2,-2" fill="none" stroke="#1a1410" stroke-width="1"/>
+<g stroke="#1a1410" stroke-width="1.5">
+<circle cx="64" cy="32" r="17" fill="#f7a8c8"/>
+<circle cx="98" cy="32" r="17" fill="#f7a8c8"/>
+<circle cx="132" cy="32" r="17" fill="#f7a8c8"/>
+<circle cx="162" cy="32" r="11" fill="#f7a8c8"/>
+</g>
+<g fill="none" stroke="#fbd0e2" stroke-width="2.4" stroke-linecap="round">
+<path d="M54,26 Q58,19 66,18"/><path d="M88,26 Q92,19 100,18"/><path d="M122,26 Q126,19 134,18"/><path d="M156,28 Q158,23 163,22"/>
+</g>
+<g fill="#ffffff"><circle cx="71" cy="24" r="2.5"/><circle cx="105" cy="24" r="2.5"/><circle cx="139" cy="24" r="2.5"/><circle cx="166" cy="27" r="1.8"/></g>
+<g fill="none" stroke="#e06a9a" stroke-width="1"><path d="M58,43 Q64,47 70,43"/><path d="M92,43 Q98,47 104,43"/><path d="M126,43 Q132,47 138,43"/></g>
+</svg>
