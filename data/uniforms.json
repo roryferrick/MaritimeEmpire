@@ -12,6 +12,7 @@
 	"lines": [
 		{"id": "container", "title": "Container ships", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Navy"}},
 		{"id": "ore", "title": "Ore carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Brick", "trousers": "Brick"}},
+		{"id": "breakbulk", "title": "Breakbulk carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Charcoal"}},
 		{"id": "grain", "title": "Grain carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Black"}, "crew": {"hat": "Watch cap", "shirt": "Royal blue", "trousers": "Royal blue"}},
 		{"id": "livestock", "title": "Livestock carriers", "captain": {"hat": "Captain's cap", "shirt": "Khaki", "trousers": "Brown"}, "crew": {"hat": "Cowboy hat", "shirt": "Brick", "trousers": "Denim"}},
 		{"id": "produce", "title": "Fresh produce carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Baseball cap", "shirt": "Forest green", "trousers": "Khaki"}},

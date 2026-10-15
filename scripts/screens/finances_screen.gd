@@ -29,12 +29,12 @@ const TOTAL_ROWS := [
 	["Canal tolls", "tolls", true], ["Port fees", "port_fees", true], ["Crew wages", "wages", true], ["Loan interest", "interest", true],
 	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true], ["Logo changes", "logo", true], ["Cruise supplies", "supplies", true],
 	["Farm land bought", "land", true], ["Farm land sold", "land_sold", false], ["Farm costs (planting, herds, wages, upgrades)", "farms", true], ["Farm store sales", "farm_sales", false],
-	["Factories (building, upkeep)", "factories", true], ["Factory stock sales", "factory_sales", false],
+	["Factories (building, upkeep)", "factories", true], ["Factory stock sales", "factory_sales", false], ["Industry (building, upkeep, inputs)", "industry", true], ["Industry stock sales", "industry_sales", false],
 	["Rigs, refineries and pipelines built", "energy_built", true], ["Rigs and refineries sold", "energy_sold", false], ["Energy costs (crews, workers, repairs)", "energy", true], ["Energy tank sales", "energy_sales", false],
 	["Research contracts", "research_pay", false], ["Research gear", "research_gear", true], ["Contract penalties", "research_penalty", true],
 ]
 ## Ship table groups, in shop order: [title, ship_models.json category].
-const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
+const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Breakbulk carriers", "breakbulk"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"], ["Survey vessels", "survey"], ["Deep-sea motherships", "mothership"]]
 ## Money columns summed in each group's total row.
 const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "wages", "profit", "recent"]

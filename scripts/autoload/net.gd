@@ -92,6 +92,7 @@ const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing
 	&"rename_ship", &"set_prefs", &"unlock_region", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act",
 	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item",
 	&"build_factory", &"close_factory", &"sell_factory_stock",
+	&"build_site", &"close_site", &"sell_site_stock", &"list_site", &"buy_listed_site",
 	&"set_rig_run", &"send_rig_tug", &"buy_rig", &"sell_rig", &"list_rig", &"buy_listed_rig", &"upgrade_rig", &"lay_pipeline",
 	&"build_plant", &"demolish_plant", &"upgrade_plant", &"set_plant_mode", &"sell_energy_item",
 	&"send_expedition", &"recall_expedition", &"move_research_ship", &"fit_gear", &"remove_gear", &"accept_contract", &"abandon_contract"]
@@ -669,6 +670,7 @@ func _collect() -> Dictionary:
 		weather = GameState.weather.to_dict(false).duplicate(true), market = GameState.market.to_dict().duplicate(true),
 		divine = GameState.divine.to_dict().duplicate(true), ports = GameState.port_sizes.to_dict().duplicate(true),
 		farms = GameState.farms.to_dict().duplicate(true),
+		industry = GameState.industry.to_dict().duplicate(true),
 		energy = GameState.energy.to_dict().duplicate(true),
 		research = GameState.research.to_dict().duplicate(true),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
@@ -685,6 +687,7 @@ func _state_of(world: Dictionary) -> Dictionary:
 		t = float(world.get("play_time", 0.0)), speed = 1,
 		weather = world.get("weather", {}), market = world.get("market", {}), divine = world.get("divine", {}),
 		farms = world.get("farms", {}),
+		industry = world.get("industry", {}),
 		energy = world.get("energy", {}),
 		research = world.get("research", {}),
 		ports = world.get("port_sizes", {}),
@@ -721,6 +724,10 @@ func _broadcast() -> void:
 	if farms != _sent.get("farms", {}):
 		update.farms = farms
 		_sent.farms = farms.duplicate(true)
+	var industry := GameState.industry.to_dict()
+	if industry != _sent.get("industry", {}):
+		update.industry = industry
+		_sent.industry = industry.duplicate(true)
 	var energy := GameState.energy.to_dict()
 	if energy != _sent.get("energy", {}):
 		update.energy = energy
@@ -840,6 +847,9 @@ func _sync(packed: Array) -> void:
 	if update.has("farms"):
 		GameState.farms.from_dict(update.farms)
 		GameState.farms_changed.emit()
+	if update.has("industry"):
+		GameState.industry.from_dict(update.industry)
+		GameState.industry_changed.emit()
 	if update.has("energy"):
 		GameState.energy.from_dict(update.energy)
 		GameState.energy_changed.emit()

@@ -22,7 +22,7 @@ func _ready() -> void:
 	content.add_child(header)
 	var title := Label.new()
 	title.theme_type_variation = &"HeaderLabel"
-	title.text = "%s industry" % hub.title()
+	title.text = "%s warehouses" % hub.title()
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	var close := Button.new()

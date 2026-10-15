@@ -3,6 +3,7 @@
 	"container": {"h": 52, "door": [32, 26], "bridge": [[27, 7], [27, 45]], "bow": [[160, 22], [160, 30]], "stern": [[5, 12], [5, 40]],
 		"walk": [[32, 5.5, 118, 3], [32, 43.5, 118, 3], [150, 16, 13, 20], [3, 11, 6, 30]]},
 	"ore": {"like": "container"},
+	"breakbulk": {"like": "container"},
 	"grain": {"like": "container"},
 	"livestock": {"like": "container"},
 	"produce": {"like": "container"},

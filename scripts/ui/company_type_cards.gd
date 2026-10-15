@@ -14,7 +14,7 @@ signal selected(type_id: String)
 signal chosen(type_id: String)
 
 ## What each ship line is called on the cards.
-const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
+const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", breakbulk = "Breakbulk carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
 	tanker = "Tankers", gas = "Gas carriers", vehicles = "Car carriers", boat_carriers = "Boat carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers", survey = "Survey vessels", mothership = "Deep-sea motherships"}
 const CARD_WIDTH := 196.0  # (Six across within the 1280 px screen.)
 const ICON_SIZE := 40.0

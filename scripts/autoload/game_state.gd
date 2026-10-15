@@ -91,7 +91,7 @@ const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales", "energy_built", "energy_sold", "energy", "energy_sales", "research_pay", "research_gear", "research_penalty"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales", "energy_built", "energy_sold", "energy", "energy_sales", "industry", "industry_sales", "research_pay", "research_gear", "research_penalty"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
@@ -117,15 +117,12 @@ const HIDDEN_GEMS := {
 		Vector2(-150.1, 62.3), Vector2(-150.0, 61.75), Vector2(-148.9, 61.65), Vector2(-147.3, 61.8), Vector2(-146.4, 62.2),
 		Vector2(-146.8, 62.7), Vector2(-148.0, 63.0), Vector2(-149.4, 62.75)]},
 }
-## Each commodity's industry building, built on a hub's plots (see
-## build_industry(); its art is art/industry/<commodity>.svg).
-const INDUSTRY_NAMES := {
-	toys = "Toy factory", clothing = "Textile mill", furniture = "Furniture works", coffee = "Coffee roastery",
-	oil = "Oil terminal", gas = "Gas terminal", iron = "Steel mill", coal = "Coal power station", gold = "Gold refinery",
-	wheat = "Flour mill", corn = "Corn mill", soybeans = "Soybean crushing plant", rice = "Rice mill", barley = "Malting house",
-	cows = "Cattle ranch", sheep = "Wool mill", pigs = "Pig farm",
-	cars = "Car plant", trucks = "Truck plant", boats = "Boatyard",
-}
+## A hub's warehouse for a commodity, built on its plots (see build_industry();
+## until 2026-10-15 these were industry buildings, a toy factory or a steel
+## mill): what it's called, by the commodity's unit or kind: stockyards for
+## livestock, cold stores for seafood and fresh produce, terminals for oil and
+## gas, warehouses for the rest.
+const WAREHOUSE_KINDS := {head = "stockyard", crate = "cold store", pallet = "cold store", oil = "terminal", gas = "terminal"}
 ## How often (game seconds) a ship waiting in port for a full load looks again
 ## (it also looks as soon as the money reaches what it needed).
 const LOAD_RECHECK_S := 2.0
@@ -346,6 +343,10 @@ signal energy_changed
 var makers := Manufacturers.new(self)
 ## A factory was built, closed or sold from, or a day's output came in (see Manufacturers).
 signal makers_changed
+## The Cargo & Ore mines, plants and factories (see Industry), saved with the world.
+var industry := Industry.new(self)
+## A site was built, closed, sold or sold from, or a day's output came in (see Industry).
+signal industry_changed
 ## Each step's ships, natively where the native library's there (ShipStepper:
 ## see native/README.md), and whether to use it (tests compare the two).
 var _ship_stepper: Object = null
@@ -433,6 +434,7 @@ func _step(delta: float) -> void:
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
+	industry.step(delta)
 	energy.step(delta)
 	research.step(delta)
 	MapView._prof("sim.farms", t_s)
@@ -1485,7 +1487,9 @@ func demolish_industry(hub: Hub, slot: int) -> void:
 
 ## A commodity's industry building's name ("Coffee roastery").
 static func industry_name(commodity_id: String) -> String:
-	return str(INDUSTRY_NAMES.get(commodity_id, "%s works" % GameData.commodity(commodity_id).get("name", commodity_id)))
+	var item := GameData.commodity(commodity_id)
+	var kind := str(WAREHOUSE_KINDS.get(GameData.family_of(commodity_id), WAREHOUSE_KINDS.get(str(item.get("unit", "")), "warehouse")))
+	return "%s %s" % [item.get("name", commodity_id), kind]
 
 
 ## A commodity's price for a company at a port: the market's, less (buying)
@@ -2756,10 +2760,19 @@ func _sell_cargo(ship: Ship) -> void:
 		ship.cargo_payment -= stolen
 		if who == company and ai_acting == null:
 			ActivityLog.add("The frigatebirds following %s made off with %s of its sale at %s." % [ship.name, Fmt.money(stolen), GameData.port_name(ship.docked_at)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
+	# What its company's sites at the port take as inputs goes into their store, at
+	# the port's buy price (what they'd have paid for it there): see Industry.
+	var into_sites := industry.take_delivery(ship)
+	var site_value := int(into_sites[1])
+	if int(into_sites[0]) > 0:
+		ship.cargo_payment = roundi(ship.cargo_payment * (1.0 - float(into_sites[0]) / ship.cargo_qty)) + site_value
 	ship.stop_sale = ship.cargo_payment
 	ship.stop_cost = ship.cargo_cost
 	_add_money(who, ship.cargo_payment)
 	_record(ship, "income", ship.cargo_payment)
+	if site_value > 0:
+		_add_money(who, -site_value)
+		_record(null, "industry", site_value, who)
 	if ship.cargo_cut > 0.0:  # From its factory: the maker's cut of the sale, as the cargo's cost (see Manufacturers.load_ship()).
 		var cut := roundi(ship.cargo_payment * ship.cargo_cut)
 		_add_money(who, -cut)
@@ -2770,7 +2783,7 @@ func _sell_cargo(ship: Ship) -> void:
 	makers.on_trade(who, ship.cargo_id, ship.cargo_payment, false)
 	_tally_port_trade(who, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_payment, true)
 	var t_s := Time.get_ticks_usec()
-	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
+	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment - site_value, false)
 	MapView._prof("sell.trade", t_s)
 	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
 	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
@@ -2793,10 +2806,10 @@ func _sell_cargo(ship: Ship) -> void:
 			var stats: Dictionary = who.canal_stats.get_or_add(canal_id, {crossings = 0, tolls = 0.0, xp = 0.0})
 			stats.xp = float(stats.xp) + xp * bonus
 	ship.delivery_canals.clear()
-	var industry := industry_xp_bonus(ship.cargo_id, ship.cargo_from, ship.docked_at, who)
-	industry += divine.xp_bonus(ship.docked_at)  # (The omens: cherry blossom.)
-	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus + industry,
-		1.0 + (hub.company_xp_bonus() if hub else 0.0) + canal_bonus + industry)
+	var building_xp := industry_xp_bonus(ship.cargo_id, ship.cargo_from, ship.docked_at, who)
+	building_xp += divine.xp_bonus(ship.docked_at)  # (The omens: cherry blossom.)
+	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus + building_xp,
+		1.0 + (hub.company_xp_bonus() if hub else 0.0) + canal_bonus + building_xp)
 	if hub:
 		hub.deliveries += 1
 		hub.income += ship.cargo_payment
@@ -2840,6 +2853,9 @@ func _load_cargo(ship: Ship, to: String) -> String:
 		var stored := energy.load_ship(ship, to)
 		if not stored.is_empty():
 			return stored[0]
+	var mined := industry.load_ship(ship, to)  # (Its mines', plants' and factories' output, free: see Industry.load_ship().)
+	if not mined.is_empty():
+		return mined[0]
 	var who := owner_of(ship)
 	var t_b := Time.get_ticks_usec()
 	var feed := energy.feed_for(ship, to) if not who.plants.is_empty() else ""
@@ -4155,14 +4171,14 @@ func port_trade_summary(port: String, of: Company = null) -> Dictionary:
 	var here: Dictionary = who.port_trade.get(port, {})
 	var days := maxf(play_time - float(here.get("since", play_time)), 0.0) * calendar_seconds_per_second() / 86400.0
 	var hub := who.hub_at(port)
-	var industry := Hub.industry_settings()
+	var warehouse := Hub.industry_settings()
 	var boost := float(Hub.settings().get("hq_multiplier", 1.5)) if hub != null and hub.is_hq else 1.0
 	var per_month := TRADE_MONTH_DAYS / maxf(days, 1.0)
 	var rows := []
 	for id: String in here.get("goods", {}):
 		var tally: Array = here.goods[id]
 		var built := hub != null and hub.has_industry(id)
-		var worth := (float(tally[1]) * float(industry.get("buy_discount", 0.2)) + float(tally[3]) * float(industry.get("sell_bonus", 0.2))) * boost
+		var worth := (float(tally[1]) * float(warehouse.get("buy_discount", 0.2)) + float(tally[3]) * float(warehouse.get("sell_bonus", 0.2))) * boost
 		rows.append({id = id, bought = int(tally[0]), spent = float(tally[1]), sold = int(tally[2]), earned = float(tally[3]),
 			industry = worth * per_month, built = built})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.industry) > float(b.industry))
@@ -4436,6 +4452,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	farms.reset()
 	energy.reset()
 	research.reset()
+	industry.reset()
 	rivals.reset()
 	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
@@ -4488,6 +4505,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	farms.from_dict(data.get("farms", {}))
 	energy.from_dict(data.get("energy", {}))
 	research.from_dict(data.get("research", {}))
+	industry.from_dict(data.get("industry", {}))
 	next_ship_id = int(data.get("next_ship_id", 1))
 	for ship_data: Dictionary in data.get("ships", []):
 		var ship := Ship.from_dict(ship_data)
@@ -4585,6 +4603,7 @@ func world_dict() -> Dictionary:
 		"farms": farms.to_dict(),
 		"energy": energy.to_dict(),
 		"research": research.to_dict(),
+		"industry": industry.to_dict(),
 		"market": market.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
@@ -5791,6 +5810,51 @@ func sell_energy_item(port_id: String, commodity: String) -> void:
 	var value := energy.sell_item(company, port_id, commodity)
 	if value > 0 and ai_acting == null:
 		ActivityLog.add("Sold the %s in your tanks at %s for %s." % [Energy.good_word(commodity), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
+
+
+# --- Industry (see Industry): this player's actions ---------------------------------------------
+
+## Builds a mine, camp, plant or factory at a port (Industry.build_error() says why it can't).
+func build_site(building_id: String, port_id: String) -> void:
+	if Net.command(&"build_site", [building_id, port_id]):
+		return
+	var key := industry.build(company, building_id, port_id)
+	if not key.is_empty() and ai_acting == null:
+		ActivityLog.add("Built a %s at %s for %s. It makes about %s %s of %s a month." % [str(Industry.building(building_id).name).to_lower(), GameData.port_name(port_id),
+			Fmt.money(Industry.cost(building_id)), Fmt.thousands(roundi(Industry.output_a_month(building_id))),
+			GameData.commodity(str(Industry.building(building_id).makes)).get("units", "units"), str(GameData.commodity(str(Industry.building(building_id).makes)).get("name", "")).to_lower()], ActivityLog.Kind.GOOD)
+
+
+## Closes this player's site, for a quarter of its price back.
+func close_site(key: String) -> void:
+	if Net.command(&"close_site", [key]):
+		return
+	var refund := industry.close(company, key)
+	if refund > 0 and ai_acting == null:
+		ActivityLog.add("Closed your %s at %s: %s back." % [str(Industry.building(Industry.building_of(key)).get("name", "")).to_lower(), GameData.port_name(Industry.port_of(key)), Fmt.money(refund)], ActivityLog.Kind.INFO)
+
+
+## Sells a site's stockpile where it is, at the port's price.
+func sell_site_stock(key: String) -> void:
+	if Net.command(&"sell_site_stock", [key]):
+		return
+	var value := industry.sell_stock(company, key)
+	if value > 0 and ai_acting == null:
+		ActivityLog.add("Sold the stock of your %s at %s for %s." % [str(Industry.building(Industry.building_of(key)).get("name", "")).to_lower(), GameData.port_name(Industry.port_of(key)), Fmt.money(value)], ActivityLog.Kind.GOOD)
+
+
+## Lists a site for other Cargo & Ore companies at an asking price (0 takes it off the list).
+func list_site(key: String, price: int) -> void:
+	if Net.command(&"list_site", [key, price]):
+		return
+	industry.list(company, key, price)
+
+
+## Buys another company's listed site at its asking price.
+func buy_listed_site(key: String) -> void:
+	if Net.command(&"buy_listed_site", [key]):
+		return
+	industry.buy_listing(company, key)
 
 
 # --- Research (see Research) ----------------------------------------------------------

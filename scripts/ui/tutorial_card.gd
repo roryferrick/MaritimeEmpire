@@ -267,7 +267,7 @@ func _fishing_boats() -> Array[Ship]:
 static func _type_welcome() -> String:
 	match GameState.company.start_type():
 		"cargo":
-			return "We're in Cargo & Ore: container ships with toys, clothing and furniture, and bulk carriers with iron ore, coal and gold. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
+			return "We're in Cargo & Ore: ore carriers with iron, coal, copper and ten more ores, breakbulk carriers with steel, metals and timber, and container ships with toys, electronics and eleven more kinds of goods. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive. Later, build mines, smelters and factories of our own (the Industry button at the top left of the map), and ship between them."
 		"vehicles":
 			return "We're in Vehicles: car carriers and boat carriers shipping for 44 carmakers and boatbuilders, from the factories to the showrooms. Buy ships, give them routes between ports, and they'll buy vehicles where they're cheap (at the makers' factories) and sell them where they're expensive. The makers don't trust us yet: every load we carry for one wins it over, and once it likes us 70/100 we can build a factory for it (the Makers button at the top left of the map)."
 		"agriculture":

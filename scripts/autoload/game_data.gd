@@ -801,6 +801,9 @@ const CARGO_SUMMARIES := {
 	produce = "Fruit, Berries and Vegetables: 21 kinds, fresh",
 	vehicles = "Cars and trucks from 22 makers, budget to luxury",
 	boat_carriers = "Boats from 22 makers, jet skis to superyachts",
+	container = "Toys, Clothing, Furniture, Electronics, Appliances, Machine parts, Batteries, Solar panels, Tools, Sporting goods, Footwear, Cosmetics and Medicine",
+	ore = "Iron, Coal, Gold, Copper, Bauxite, Nickel, Zinc, Tin, Lithium, Silver, Phosphate, Manganese and Rare earth ores",
+	breakbulk = "Steel, Aluminium, Copper, Nickel, Zinc, Tin, Lithium, Gold and silver bars, Ferromanganese, Rare earths, Fertilizer, Plastics and Timber",
 	tanker = "Crude oil, Diesel, Premium gasoline and Jet fuel",
 	survey = "No cargo: research gear (sonar, ROV, dive team...)",
 	mothership = "No cargo: research gear (ROV, crewed submersible...)",
@@ -1067,7 +1070,11 @@ func _load_markets() -> void:
 			_port_regions[port_id] = region
 	# Each vehicle and boat maker's goods (Manufacturers), with their prices:
 	# cheapest at its factories, then its home region.
-	for entry: Array in Manufacturers.market_goods():
+	# Then the Cargo & Ore industry's new goods (Industry), cheapest where
+	# they're mined or made.
+	var added := Manufacturers.market_goods()
+	added.append_array(Industry.market_goods())
+	for entry: Array in added:
 		var item: Dictionary = entry[0]
 		commodities.append(item)
 		_commodities_by_id[item.id] = item

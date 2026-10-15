@@ -11,7 +11,7 @@
 	"packs": [
 		{
 			"id": "thanksgiving_2026", "title": "2026 Thanksgiving Pack", "on_sale": false, "coming_soon": true, "folder": "thanksgiving",
-			"blurb": "The whole table, afloat: a roast turkey, corn on the cob, candied yams, green bean casserole, cranberry sauce, stuffing, a gravy boat, drumsticks, dinner rolls, pumpkin pie, mashed potatoes, cornbread, a slice of pecan pie, a harvest basket, a butternut squash, a platter of deviled eggs, a cornucopia and the Mayflower. Pilgrim, colonial and 1620 deckhand outfits for your CEO and captains, and the crew in capotains, coifs, Monmouth caps or a turkey hat.",
+			"blurb": "The whole table, afloat: a roast turkey, corn on the cob, candied yams, green bean casserole, cranberry sauce, stuffing, a gravy boat, drumsticks, dinner rolls, pumpkin pie, mashed potatoes, cornbread, a slice of pecan pie, a harvest basket, a butternut squash, a platter of deviled eggs, a stick of butter, a cornucopia and the Mayflower. Pilgrim, colonial and 1620 deckhand outfits for your CEO and captains, and the crew in capotains, coifs, Monmouth caps or a turkey hat.",
 			"ships": {
 				"model_11": "turkey", "model_12": "turkey", "model_13": "turkey",
 				"model_34": "corn", "model_35": "corn", "model_8": "corn", "model_9": "corn", "model_10": "corn",
@@ -33,9 +33,10 @@
 				"model_66": "butternut", "model_67": "butternut", "model_68": "butternut", "model_69": "butternut", "model_70": "butternut",
 				"model_71": "deviled_eggs", "model_72": "deviled_eggs", "model_73": "deviled_eggs", "model_74": "deviled_eggs", "model_75": "deviled_eggs",
 				"model_86": "gravy", "model_87": "gravy", "model_88": "gravy", "model_89": "gravy", "model_90": "gravy",
-				"model_91": "cornucopia", "model_92": "cornucopia", "model_93": "cornucopia", "model_94": "cornucopia", "model_95": "cornucopia"
+				"model_91": "cornucopia", "model_92": "cornucopia", "model_93": "cornucopia", "model_94": "cornucopia", "model_95": "cornucopia",
+				"model_81": "butter", "model_82": "butter", "model_83": "butter", "model_84": "butter", "model_85": "butter"
 			},
-			"ship_names": {"turkey": "Roast turkey", "corn": "Corn on the cob", "yams": "Candied yams", "beans": "Green bean casserole", "cranberry": "Cranberry sauce", "stuffing": "Stuffing", "gravy": "Gravy boat", "drumstick": "Turkey drumstick", "roll": "Dinner roll", "pie": "Pumpkin pie", "mayflower": "The Mayflower", "cornucopia": "Cornucopia", "mash": "Mashed potatoes", "cornbread": "Cornbread", "harvest_basket": "Harvest basket", "pecan_pie": "Pecan pie", "butternut": "Butternut squash", "deviled_eggs": "Deviled eggs"},
+			"ship_names": {"turkey": "Roast turkey", "corn": "Corn on the cob", "yams": "Candied yams", "beans": "Green bean casserole", "cranberry": "Cranberry sauce", "stuffing": "Stuffing", "gravy": "Gravy boat", "drumstick": "Turkey drumstick", "roll": "Dinner roll", "pie": "Pumpkin pie", "mayflower": "The Mayflower", "cornucopia": "Cornucopia", "mash": "Mashed potatoes", "cornbread": "Cornbread", "harvest_basket": "Harvest basket", "pecan_pie": "Pecan pie", "butternut": "Butternut squash", "deviled_eggs": "Deviled eggs", "butter": "Stick of butter"},
 			"outfits": [
 				{"id": "pilgrim", "name": "Pilgrim", "top": ["Pilgrim doublet"], "bottoms": ["Black breeches"], "shoes": ["Buckle shoes"], "headwear": ["Capotain"], "crew_hats": ["Capotain"], "shirts": [["Pilgrim black", "#1f1d1f"]], "trousers": [["Breeches brown", "#5a3c22"]]},
 				{"id": "goodwife", "name": "Goodwife", "top": ["Goodwife's gown"], "shoes": ["Buckle shoes"], "headwear": ["Coif"], "crew_hats": ["Coif"], "shirts": [["Gown grey-blue", "#6b7489"]]},
@@ -47,7 +48,7 @@
 		},
 		{
 			"id": "baseball_2026", "title": "2026 Baseball Pack", "on_sale": true, "folder": "baseball",
-			"blurb": "Ballpark fare for the fleet: five hot dogs from the mini dog to the foot-long with everything, bats in ash, black and royal blue, peanuts, popcorn, a soda cup, a softball, two baseballs, a pretzel, a catcher's mitt, a batting helmet, home plate, a baseball, a giant foam finger, a scoreboard, cotton candy, a ballpark lemonade, a dugout canoe, a stick of bubble gum, a ballpark and a team pennant. Home pinstripes, road greys, catcher's gear, an umpire, a hot dog vendor and 1920s flannels for your CEO and captains; ball caps, helmets and masks for the crew.",
+			"blurb": "Ballpark fare for the fleet: five hot dogs from the mini dog to the foot-long with everything, bats in ash, black and royal blue, peanuts, popcorn, a soda cup, a softball, two baseballs, a pretzel, a catcher's mitt, a batting helmet, home plate, a baseball, a giant foam finger, a scoreboard, cotton candy, a ballpark lemonade, a dugout canoe, a stick of bubble gum, a boat of nachos, a ballpark and a team pennant. Home pinstripes, road greys, catcher's gear, an umpire, a hot dog vendor and 1920s flannels for your CEO and captains; ball caps, helmets and masks for the crew.",
 			"ships": {
 				"model_1": "hotdog_mini", "model_2": "hotdog_ketchup", "model_3": "hotdog_chicago", "model_4": "hotdog_chili", "model_5": "hotdog_everything",
 				"model_34": "bat_wood", "model_35": "bat_wood", "model_8": "bat_wood", "model_9": "bat_wood", "model_10": "bat_wood",
@@ -69,9 +70,10 @@
 				"model_66": "dugout", "model_67": "dugout", "model_68": "dugout", "model_69": "dugout", "model_70": "dugout",
 				"model_71": "bubble_gum", "model_72": "bubble_gum", "model_73": "bubble_gum", "model_74": "bubble_gum", "model_75": "bubble_gum",
 				"model_86": "glove", "model_87": "glove", "model_88": "glove", "model_89": "glove", "model_90": "glove",
-				"model_91": "helmet", "model_92": "helmet", "model_93": "helmet", "model_94": "helmet", "model_95": "helmet"
+				"model_91": "helmet", "model_92": "helmet", "model_93": "helmet", "model_94": "helmet", "model_95": "helmet",
+				"model_81": "nachos", "model_82": "nachos", "model_83": "nachos", "model_84": "nachos", "model_85": "nachos"
 			},
-			"ship_names": {"hotdog_mini": "Mini dog", "hotdog_ketchup": "Ketchup and mustard dog", "hotdog_chicago": "Chicago dog", "hotdog_chili": "Chili cheese dog", "hotdog_everything": "Foot-long with everything", "bat_wood": "Ash bat", "bat_black": "Black bat", "bat_blue": "Royal blue bat", "peanuts": "Bag of peanuts", "popcorn": "Popcorn box", "soda": "Soda cup", "softball": "Softball", "two_balls": "Two baseballs", "pretzel": "Soft pretzel", "glove": "Catcher's mitt", "helmet": "Batting helmet", "home_plate": "Home plate", "baseball": "Baseball", "foam_finger": "Foam finger", "scoreboard": "Scoreboard", "cotton_candy": "Cotton candy", "ballpark": "Ballpark", "lemonade": "Ballpark lemonade", "pennant": "Team pennant", "dugout": "Dugout canoe", "bubble_gum": "Bubble gum"},
+			"ship_names": {"hotdog_mini": "Mini dog", "hotdog_ketchup": "Ketchup and mustard dog", "hotdog_chicago": "Chicago dog", "hotdog_chili": "Chili cheese dog", "hotdog_everything": "Foot-long with everything", "bat_wood": "Ash bat", "bat_black": "Black bat", "bat_blue": "Royal blue bat", "peanuts": "Bag of peanuts", "popcorn": "Popcorn box", "soda": "Soda cup", "softball": "Softball", "two_balls": "Two baseballs", "pretzel": "Soft pretzel", "glove": "Catcher's mitt", "helmet": "Batting helmet", "home_plate": "Home plate", "baseball": "Baseball", "foam_finger": "Foam finger", "scoreboard": "Scoreboard", "cotton_candy": "Cotton candy", "ballpark": "Ballpark", "lemonade": "Ballpark lemonade", "pennant": "Team pennant", "dugout": "Dugout canoe", "bubble_gum": "Bubble gum", "nachos": "Nachos"},
 			"outfits": [
 				{"id": "pinstripes", "name": "Home pinstripes", "top": ["Home pinstripes"], "bottoms": ["Pinstripe pants"], "shoes": ["Cleats"], "headwear": ["Navy ball cap"], "crew_hats": ["Navy ball cap"], "shirts": [["Pinstripe white", "#f6f6f6"]], "trousers": [["Baseball pants white", "#f2f2f2"]]},
 				{"id": "road_greys", "name": "Road greys", "top": ["Road greys"], "bottoms": ["Grey baseball pants"], "shoes": ["Cleats"], "headwear": ["Red ball cap"], "crew_hats": ["Red ball cap"], "shirts": [["Road grey", "#a9adb3"]], "trousers": [["Baseball pants grey", "#a9adb3"]]},
@@ -84,7 +86,7 @@
 		},
 		{
 			"id": "halloween_2026", "title": "2026 Halloween Pack", "on_sale": true, "folder": "halloween",
-			"blurb": "A fleet to haunt the harbours: five coffins (wood, black, a vampire's, a mummy's sarcophagus and one chained shut), a witch's broomstick, a black cat, a skeleton, a caramel apple, a spellbook, a vampire bat, a jack-o'-lantern, a bubbling cauldron, a sheet ghost, candy corn, a skull, a witch's hat, a black widow, a ghost ship, a haunted house, Frankenstein's monster, a pumpkin vine, a ribcage, a platter of eyeballs, a candy bar and a spooky candle. A witch, a vampire, a skeleton, a mummy, a scarecrow, Frankenstein's monster and a jack-o'-lantern head for your CEO and captains; witch hats, skull masks, mummy wraps, scarecrow hats, flat tops and pumpkins for the crew.",
+			"blurb": "A fleet to haunt the harbours: five coffins (wood, black, a vampire's, a mummy's sarcophagus and one chained shut), a witch's broomstick, a black cat, a skeleton, a caramel apple, a spellbook, a vampire bat, a jack-o'-lantern, a bubbling cauldron, a sheet ghost, candy corn, a skull, a witch's hat, a black widow, a ghost ship, a haunted house, Frankenstein's monster, a pumpkin vine, a ribcage, a platter of eyeballs, a mummy, a candy bar and a spooky candle. A witch, a vampire, a skeleton, a mummy, a scarecrow, Frankenstein's monster and a jack-o'-lantern head for your CEO and captains; witch hats, skull masks, mummy wraps, scarecrow hats, flat tops and pumpkins for the crew.",
 			"ships": {
 				"model_1": "coffin_wood", "model_2": "coffin_black", "model_3": "coffin_vampire", "model_4": "sarcophagus", "model_5": "coffin_chained",
 				"model_34": "broom", "model_35": "broom", "model_8": "broom", "model_9": "broom", "model_10": "broom",
@@ -106,9 +108,10 @@
 				"model_66": "ribcage", "model_67": "ribcage", "model_68": "ribcage", "model_69": "ribcage", "model_70": "ribcage",
 				"model_71": "eyeballs", "model_72": "eyeballs", "model_73": "eyeballs", "model_74": "eyeballs", "model_75": "eyeballs",
 				"model_86": "ghost_ship", "model_87": "ghost_ship", "model_88": "ghost_ship", "model_89": "ghost_ship", "model_90": "ghost_ship",
-				"model_91": "cauldron", "model_92": "cauldron", "model_93": "cauldron", "model_94": "cauldron", "model_95": "cauldron"
+				"model_91": "cauldron", "model_92": "cauldron", "model_93": "cauldron", "model_94": "cauldron", "model_95": "cauldron",
+				"model_81": "mummy", "model_82": "mummy", "model_83": "mummy", "model_84": "mummy", "model_85": "mummy"
 			},
-			"ship_names": {"coffin_wood": "Wooden coffin", "coffin_black": "Black coffin", "coffin_vampire": "Vampire's coffin", "sarcophagus": "Mummy's sarcophagus", "coffin_chained": "Chained coffin", "broom": "Witch's broomstick", "black_cat": "Black cat", "skeleton": "Skeleton", "caramel_apple": "Caramel apple", "spellbook": "Spellbook", "bat": "Vampire bat", "jack_o_lantern": "Jack-o'-lantern", "cauldron": "Witch's cauldron", "ghost": "Sheet ghost", "candy_corn": "Candy corn", "skull": "Skull", "witch_hat": "Witch's hat", "spider": "Black widow", "ghost_ship": "Ghost ship", "haunted_house": "Haunted house", "monster": "Frankenstein's monster", "candy_bar": "Candy bar", "pumpkin_vine": "Pumpkin vine", "candle": "Spooky candle", "ribcage": "Ribcage", "eyeballs": "Eyeballs"},
+			"ship_names": {"coffin_wood": "Wooden coffin", "coffin_black": "Black coffin", "coffin_vampire": "Vampire's coffin", "sarcophagus": "Mummy's sarcophagus", "coffin_chained": "Chained coffin", "broom": "Witch's broomstick", "black_cat": "Black cat", "skeleton": "Skeleton", "caramel_apple": "Caramel apple", "spellbook": "Spellbook", "bat": "Vampire bat", "jack_o_lantern": "Jack-o'-lantern", "cauldron": "Witch's cauldron", "ghost": "Sheet ghost", "candy_corn": "Candy corn", "skull": "Skull", "witch_hat": "Witch's hat", "spider": "Black widow", "ghost_ship": "Ghost ship", "haunted_house": "Haunted house", "monster": "Frankenstein's monster", "candy_bar": "Candy bar", "pumpkin_vine": "Pumpkin vine", "candle": "Spooky candle", "ribcage": "Ribcage", "eyeballs": "Eyeballs", "mummy": "Mummy"},
 			"outfits": [
 				{"id": "witch", "name": "Witch", "top": ["Witch's gown"], "shoes": ["Witch's boots"], "headwear": ["Witch hat"], "crew_hats": ["Witch hat"], "shirts": [["Witch purple", "#4a2a6a"]]},
 				{"id": "vampire", "name": "Vampire", "top": ["Vampire's cape"], "bottoms": ["Tuxedo trousers"], "shirts": [["Vampire black", "#141216"]]},
@@ -121,7 +124,7 @@
 		},
 		{
 			"id": "christmas_2026", "title": "2026 Christmas Pack", "on_sale": false, "coming_soon": true, "folder": "christmas",
-			"blurb": "The fleet wrapped for the holidays: five presents, a candy cane, a yule log, a gingerbread man, a tin of cookies, a nutcracker, a string of lights, baubles, a snowman, a stocking, a boiled sweet, a gingerbread house, a toboggan, Santa's sleigh and sack, a Christmas tree, a fruitcake, an elf's shoe, a tray of mince pies, a Christmas cracker and an ice skate. Santa and Mrs Claus, an elf, a reindeer, an ugly sweater, a nutcracker and a carol singer for your CEO and captains, with Santa's beard; Santa hats, elf hats, antlers, earmuffs and holly top hats for the crew.",
+			"blurb": "The fleet wrapped for the holidays: five presents, a candy cane, a yule log, a gingerbread man, a tin of cookies, a nutcracker, a string of lights, baubles, a snowman, a stocking, a boiled sweet, a gingerbread house, a toboggan, Santa's sleigh and sack, a Christmas tree, a fruitcake, an elf's shoe, a tray of mince pies, a toy train, a Christmas cracker and an ice skate. Santa and Mrs Claus, an elf, a reindeer, an ugly sweater, a nutcracker and a carol singer for your CEO and captains, with Santa's beard; Santa hats, elf hats, antlers, earmuffs and holly top hats for the crew.",
 			"ships": {
 				"model_1": "present_mini", "model_2": "present_stripes", "model_3": "present_gold", "model_4": "present_snow", "model_5": "present_candy",
 				"model_34": "candy_cane", "model_35": "candy_cane", "model_8": "candy_cane", "model_9": "candy_cane", "model_10": "candy_cane",
@@ -143,9 +146,10 @@
 				"model_66": "elf_shoe", "model_67": "elf_shoe", "model_68": "elf_shoe", "model_69": "elf_shoe", "model_70": "elf_shoe",
 				"model_71": "mince_pies", "model_72": "mince_pies", "model_73": "mince_pies", "model_74": "mince_pies", "model_75": "mince_pies",
 				"model_86": "sled", "model_87": "sled", "model_88": "sled", "model_89": "sled", "model_90": "sled",
-				"model_91": "sleigh", "model_92": "sleigh", "model_93": "sleigh", "model_94": "sleigh", "model_95": "sleigh"
+				"model_91": "sleigh", "model_92": "sleigh", "model_93": "sleigh", "model_94": "sleigh", "model_95": "sleigh",
+				"model_81": "toy_train", "model_82": "toy_train", "model_83": "toy_train", "model_84": "toy_train", "model_85": "toy_train"
 			},
-			"ship_names": {"present_mini": "Present, red with dots", "present_stripes": "Present, green stripes", "present_gold": "Present, gold paper", "present_snow": "Present, snowflakes", "present_candy": "Present, candy-cane paper", "candy_cane": "Candy cane", "yule_log": "Yule log", "gingerbread_man": "Gingerbread man", "cookie_tin": "Tin of cookies", "nutcracker": "Nutcracker", "lights": "String of lights", "bauble": "Red bauble", "frosted": "Frosted bauble", "snowman": "Snowman", "stocking": "Stocking", "candy": "Boiled sweet", "gingerbread_house": "Gingerbread house", "sled": "Toboggan", "sleigh": "Santa's sleigh", "sack": "Santa's sack", "tree": "Christmas tree", "cracker": "Christmas cracker", "fruitcake": "Fruitcake", "ice_skate": "Ice skate", "elf_shoe": "Elf's shoe", "mince_pies": "Mince pies"},
+			"ship_names": {"present_mini": "Present, red with dots", "present_stripes": "Present, green stripes", "present_gold": "Present, gold paper", "present_snow": "Present, snowflakes", "present_candy": "Present, candy-cane paper", "candy_cane": "Candy cane", "yule_log": "Yule log", "gingerbread_man": "Gingerbread man", "cookie_tin": "Tin of cookies", "nutcracker": "Nutcracker", "lights": "String of lights", "bauble": "Red bauble", "frosted": "Frosted bauble", "snowman": "Snowman", "stocking": "Stocking", "candy": "Boiled sweet", "gingerbread_house": "Gingerbread house", "sled": "Toboggan", "sleigh": "Santa's sleigh", "sack": "Santa's sack", "tree": "Christmas tree", "cracker": "Christmas cracker", "fruitcake": "Fruitcake", "ice_skate": "Ice skate", "elf_shoe": "Elf's shoe", "mince_pies": "Mince pies", "toy_train": "Toy train"},
 			"outfits": [
 				{"id": "santa", "name": "Santa", "top": ["Santa suit"], "bottoms": ["Santa trousers"], "headwear": ["Santa hat"], "facial_hair": ["Santa's beard"], "crew_hats": ["Santa hat"], "shirts": [["Santa red", "#c8232e"]], "trousers": [["Santa red", "#c8232e"]]},
 				{"id": "mrs_claus", "name": "Mrs Claus", "top": ["Mrs Claus's gown"], "headwear": ["Santa hat"], "crew_hats": ["Santa hat"]},

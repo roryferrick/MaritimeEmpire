@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="64" viewBox="0 0 180 64">
+<!-- Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire. -->
+<defs><clipPath id="tray"><path d="M6,32 Q18,6 60,5 L140,5 Q174,8 178,32 Q174,56 140,59 L60,59 Q18,58 6,32 Z"/></clipPath></defs>
+<path d="M6,32 Q18,6 60,5 L140,5 Q174,8 178,32 Q174,56 140,59 L60,59 Q18,58 6,32 Z" fill="#f6f3ee"/>
+<g clip-path="url(#tray)" fill="#d8262a">
+<rect x="0" y="0" width="8" height="64"/>
+<rect x="16" y="0" width="8" height="64"/>
+<rect x="32" y="0" width="8" height="64"/>
+<rect x="48" y="0" width="8" height="64"/>
+<rect x="64" y="0" width="8" height="64"/>
+<rect x="80" y="0" width="8" height="64"/>
+<rect x="96" y="0" width="8" height="64"/>
+<rect x="112" y="0" width="8" height="64"/>
+<rect x="128" y="0" width="8" height="64"/>
+<rect x="144" y="0" width="8" height="64"/>
+<rect x="160" y="0" width="8" height="64"/>
+</g>
+<path d="M6,32 Q18,6 60,5 L140,5 Q174,8 178,32 Q174,56 140,59 L60,59 Q18,58 6,32 Z" fill="none" stroke="#1a1410" stroke-width="2"/>
+<path d="M18,32 Q28,13 62,12 L138,12 Q166,15 168,32 Q166,49 138,52 L62,52 Q28,51 18,32 Z" fill="#e8b84a" stroke="#1a1410" stroke-width="1"/>
+<g fill="#f2c45a" stroke="#a8781e" stroke-width="0.8">
+<path d="M30,22 L42,25 L33,33 Z"/>
+<path d="M46,16 L58,19 L49,27 Z"/>
+<path d="M40,36 L52,39 L43,47 Z"/>
+<path d="M58,26 L70,29 L61,37 Z"/>
+<path d="M62,42 L74,45 L65,53 Z"/>
+<path d="M76,18 L88,21 L79,29 Z"/>
+<path d="M80,34 L92,37 L83,45 Z"/>
+<path d="M96,24 L108,27 L99,35 Z"/>
+<path d="M94,42 L106,45 L97,53 Z"/>
+<path d="M112,16 L124,19 L115,27 Z"/>
+<path d="M114,32 L126,35 L117,43 Z"/>
+<path d="M128,24 L140,27 L131,35 Z"/>
+<path d="M130,42 L142,45 L133,53 Z"/>
+<path d="M146,30 L158,33 L149,41 Z"/>
+<path d="M154,22 L166,25 L157,33 Z"/>
+</g>
+<path d="M28,30 Q50,22 70,32 Q90,42 110,30 Q130,20 156,32" fill="none" stroke="#ffb31a" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+<path d="M34,40 Q60,46 84,38 Q108,30 140,40" fill="none" stroke="#ffb31a" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+<g fill="#3e8a2a" stroke="#1f4a14" stroke-width="0.6">
+<circle cx="52" cy="30" r="3"/>
+<circle cx="88" cy="22" r="3"/>
+<circle cx="100" cy="40" r="3"/>
+<circle cx="134" cy="30" r="3"/>
+<circle cx="70" cy="44" r="3"/>
+</g>
+<g fill="#d8f0b0">
+<circle cx="52" cy="30" r="1"/>
+<circle cx="88" cy="22" r="1"/>
+<circle cx="100" cy="40" r="1"/>
+<circle cx="134" cy="30" r="1"/>
+<circle cx="70" cy="44" r="1"/>
+</g>
+</svg>

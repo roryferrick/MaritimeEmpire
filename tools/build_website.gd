@@ -29,7 +29,7 @@ const TOPICS := [
 	["playing", "Playing the game", "Starting a company, the screens and popups, the tutorial and the settings.", "found_company",
 		["Screens", "Tutorial", "Popups", "Activity log", "Look", "Settings page sliders"]],
 	["business", "Business and trading", "Company types, ratings and logos, money, cargo, farms and markets: how a shipping company makes (and loses) its fortune.", "types",
-		["Company types", "Company ratings", "Company logos", "Economy & time", "Trading", "Farms", "Vehicle makers and factories", "Market regions", "Headquarters and hubs", "Company and ship levels (XP)", "Achievements", "Divine Actions", "Skin packs, Sand Dollars and the Shop"]],
+		["Company types", "Company ratings", "Company logos", "Economy & time", "Trading", "Farms", "Vehicle makers and factories", "Cargo & Ore industry", "Market regions", "Headquarters and hubs", "Company and ship levels (XP)", "Achievements", "Divine Actions", "Skin packs, Sand Dollars and the Shop"]],
 	["ships", "Ships and crews", "Every model, the cruise lines, fuel and repairs, tugs, icebreakers, recovery boats and the people on deck.", "fleet",
 		["Ship models", "Cruise lines", "Fuel, maintenance and port stops", "Refuel stops", "Lost ships and recovery boats", "Tugs", "Tugs working a ship in",
 			"Icebreakers", "Long-term moorings", "People on deck", "Wakes", "Fishing and crabbing", "Choosing a fishing base"]],

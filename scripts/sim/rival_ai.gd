@@ -271,6 +271,9 @@ func _think(rival: Company, mind: Dictionary) -> void:
 		# Its factories for makers that like it enough, simply (see Manufacturers.run_rival()).
 		news.append_array((_state.makers as Manufacturers).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
 		(_state.makers as Manufacturers).sell_rival_stock(rival)
+		# Its mines, plants and factories, simply (see Industry.run_rival()).
+		news.append_array((_state.industry as Industry).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
+		(_state.industry as Industry).sell_rival_stock(rival)
 		# Its rigs, rig runs and a refinery, simply (see Energy.run_rival()).
 		news.append_array((_state.energy as Energy).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
 		# Its research ships, contracts and expeditions, simply (see Research.run_rival()).

@@ -25,7 +25,7 @@ func _ready() -> void:
 	add_child(content)
 	var title := Label.new()
 	title.theme_type_variation = &"HeaderLabel"
-	title.text = "Build at %s (%s)" % [hub.title(), Fmt.money(GameState.industry_price())]
+	title.text = "Build a warehouse at %s (%s)" % [hub.title(), Fmt.money(GameState.industry_price())]
 	content.add_child(title)
 	var grid := GridContainer.new()
 	grid.columns = COLUMNS

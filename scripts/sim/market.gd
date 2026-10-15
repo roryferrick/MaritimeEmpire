@@ -123,14 +123,14 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 		var buy: float
 		var bonus: float
 		if memo == null:
-			sell = _state.company_sell_price(to_port, commodity_id, of)
+			sell = maxf(_state.company_sell_price(to_port, commodity_id, of), _state.industry.input_value(of if of != null else _state.company, to_port, commodity_id))
 			buy = _state.company_buy_price(from_port, commodity_id, of)
 			bonus = _state.trade_bonus(from_port, to_port, sell - buy, model_id, of)
 		else:
 			var kept: Dictionary = memo
 			var sell_key := "s" + to_port + "/" + commodity_id
 			if not kept.has(sell_key):
-				kept[sell_key] = _state.company_sell_price(to_port, commodity_id, of)
+				kept[sell_key] = maxf(_state.company_sell_price(to_port, commodity_id, of), _state.industry.input_value(of if of != null else _state.company, to_port, commodity_id))  # (Or what its own site there would pay: Industry.)
 			sell = kept[sell_key]
 			var buy_key := "b" + from_port + "/" + commodity_id
 			if not kept.has(buy_key):

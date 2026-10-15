@@ -32,7 +32,7 @@ func _rebuild() -> void:
 		remove_child(child)
 		child.queue_free()
 	var title := Label.new()
-	title.text = "Industry"
+	title.text = "Warehouses"
 	add_child(title)
 	add_child(_text("Room for %d buildings beside the marina, one more at hub levels %s. Each is one commodity's: here it's %s to buy, %s to sell, and deliveries of it to or from here earn %s XP." % [
 		Hub.INDUSTRY_SLOTS, _levels_text(), _percent(-_bonus("buy")), _percent(_bonus("sell")), _percent(_bonus("xp"))]))

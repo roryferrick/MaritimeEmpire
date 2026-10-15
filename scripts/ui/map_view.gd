@@ -265,7 +265,7 @@ const INDUSTRY_ART_DIR := "res://art/industry/"
 const SHIP_ART_WIDTH := 180.0
 ## Where the cargo sits along the art (x from the stern, in art units). It
 ## fills from the stern forward in CARGO_STEPS steps, so part loads show.
-const CARGO_ZONES := {container = Vector2(34.0, 138.0), vehicles = Vector2(12.0, 147.4), boat_carriers = Vector2(14.0, 140.0), livestock = Vector2(34.0, 138.0), produce = Vector2(34.0, 138.0)}
+const CARGO_ZONES := {container = Vector2(34.0, 138.0), breakbulk = Vector2(36.0, 148.0), vehicles = Vector2(12.0, 147.4), boat_carriers = Vector2(14.0, 140.0), livestock = Vector2(34.0, 138.0), produce = Vector2(34.0, 138.0)}
 const CARGO_STEPS := 4
 ## Bulk carriers' hatch covers (art units, as their <category>_details.svg draws
 ## them shut; <category>_details_open.svg is the same without them): where
@@ -4912,7 +4912,8 @@ func _draw_industry(port_id: String, layout: Dictionary) -> void:
 				for i in 4:
 					_dashed_line(corners[i], corners[i + 1], Color(1, 1, 1, 0.55), maxf(0.12 * scale, 1.0), maxf(0.5 * scale, 3.0))
 			continue
-		var texture := _industry_texture(commodity)
+		# A warehouse for its good (since 2026-10-15), a band in the good's colour along its side.
+		var texture := _industry_texture("warehouse")
 		if texture == null:
 			continue
 		var shadow := _marina_polygon(port_id, _rect_points(plot.grow(-plot.size.x * 0.04)))
@@ -4922,7 +4923,19 @@ func _draw_industry(port_id: String, layout: Dictionary) -> void:
 		_canvas.draw_colored_polygon(shadow, Color(0, 0, 0, 0.22))
 		_canvas.draw_set_transform(_dock_point(port_id, plot.get_center()), turn, Vector2(scale, scale * flip))
 		_canvas.draw_texture_rect(texture, Rect2(-plot.size / 2.0, plot.size), false)
+		_canvas.draw_rect(Rect2(-plot.size.x * 0.44, -plot.size.y * 0.38, plot.size.x * 0.88, plot.size.y * 0.1), _good_color(commodity))
 		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+## A good's colour for the map's marks (a warehouse's band, an industry site):
+## its hold colour, its industry or crop colour, a maker's colour, else one
+## made up from its id.
+static func _good_color(good_id: String) -> Color:
+	var text := str(HOLD_COLORS.get(good_id, Industry.color_of(good_id)))
+	if text.is_empty():
+		text = str(Farms.crop(good_id).get("color", Manufacturers.maker(good_id).get("color", "")))
+	if text.is_empty():
+		return Color.from_hsv(GameData._hash01(good_id), 0.55, 0.85)
+	return Color.from_string(text, Color.WHITE)
 
 ## A dashed line between two screen points.
 func _dashed_line(from: Vector2, to: Vector2, color: Color, width: float, dash: float) -> void:
@@ -7214,6 +7227,15 @@ func _draw_factories(area: Rect2) -> void:
 		for factory: Dictionary in who.factories:
 			(at_ports.get_or_add(str(factory.port), []) as Array).append([Color.from_string(str(Manufacturers.maker(str(factory.maker)).get("color", "#ffffff")), Color.WHITE),
 				GameState.company_color_value(who.color)])
+	# The Cargo & Ore industry's sites (Industry): a mine's headframe, a camp's tree,
+	# a plant's or factory's works, in its good's colour, outlined in its company's.
+	var all := GameState.all_companies()
+	for key: String in GameState.industry.sites:
+		var site: Dictionary = GameState.industry.sites[key]
+		var owner := int(site.get("owner", -1))
+		var building := Industry.building(Industry.building_of(key))
+		(at_ports.get_or_add(Industry.port_of(key), []) as Array).append([_good_color(str(building.get("makes", ""))),
+			GameState.company_color_value(all[owner].color) if owner >= 0 and owner < all.size() else Color.WHITE, str(building.get("kind", ""))])
 	for port_id: String in at_ports:
 		var pos := port_screen_position(port_id)
 		if not area.has_point(pos):
@@ -7221,17 +7243,34 @@ func _draw_factories(area: Rect2) -> void:
 		var radius := _port_radius(port_id)
 		var corner := pos + Vector2(-radius - FACTORY_PX * 1.1, radius * 0.4)
 		for entry: Array in at_ports[port_id]:
-			_draw_factory_icon(corner, entry[0], entry[1])
+			_draw_factory_icon(corner, entry[0], entry[1], str(entry[2]) if entry.size() > 2 else "")
 			corner.x -= FACTORY_PX + 2.0
 
-## A little works FACTORY_PX across, its bottom left at `at`: a saw-tooth roof and a chimney.
-func _draw_factory_icon(at: Vector2, fill: Color, outline: Color) -> void:
+## A little works FACTORY_PX across, its bottom left at `at`: a saw-tooth roof and
+## a chimney; for an industry site's kind a mine's headframe (a trestle and its
+## wheel) or a logging camp's tree.
+func _draw_factory_icon(at: Vector2, fill: Color, outline: Color, kind := "") -> void:
 	var s := FACTORY_PX
+	var width := 1.5 if outline.v > 0.2 else 1.0
+	if kind == "mine":
+		var frame := PackedVector2Array([at, at + Vector2(s * 0.35, -s), at + Vector2(s * 0.65, -s), at + Vector2(s, 0.0)])
+		_canvas.draw_colored_polygon(frame, fill)
+		frame.append(at)
+		_canvas.draw_polyline(frame, outline, width, true)
+		_canvas.draw_arc(at + Vector2(s * 0.5, -s), s * 0.24, 0.0, TAU, 12, outline, width, true)
+		return
+	if kind == "camp":
+		var tree := PackedVector2Array([at + Vector2(s * 0.5, -s), at + Vector2(s, -s * 0.2), at + Vector2(0.0, -s * 0.2)])
+		_canvas.draw_rect(Rect2(at + Vector2(s * 0.4, -s * 0.22), Vector2(s * 0.2, s * 0.22)), outline)
+		_canvas.draw_colored_polygon(tree, fill)
+		tree.append(tree[0])
+		_canvas.draw_polyline(tree, outline, width, true)
+		return
 	var shape := PackedVector2Array([at, at + Vector2(s, 0.0), at + Vector2(s, -s * 0.55), at + Vector2(s * 0.84, -s * 0.55), at + Vector2(s * 0.84, -s), at + Vector2(s * 0.68, -s),
 		at + Vector2(s * 0.68, -s * 0.55), at + Vector2(s * 0.5, -s * 0.8), at + Vector2(s * 0.5, -s * 0.55), at + Vector2(s * 0.25, -s * 0.8), at + Vector2(s * 0.25, -s * 0.55), at + Vector2(0.0, -s * 0.8)])
 	_canvas.draw_colored_polygon(shape, fill)
 	shape.append(at)
-	_canvas.draw_polyline(shape, outline, 1.5 if outline.v > 0.2 else 1.0, true)
+	_canvas.draw_polyline(shape, outline, width, true)
 
 # --- Oil and gas (Energy) on the map ------------------------------------------------------
 
@@ -9037,7 +9076,7 @@ const DECK_HAT_CELL := 7
 ## Dock workers on the quay beside a ship in port: line handlers at the
 ## bollards as it comes alongside and pulls out, and a gang working its cargo
 ## through its stop (DOCK_GANGS: [at least, more a tier] by its line).
-const DOCK_GANGS := {container = [2, 2], ore = [2, 1], grain = [2, 1], livestock = [2, 1], produce = [2, 1], tanker = [2, 0], gas = [2, 0], vehicles = [3, 1], boat_carriers = [2, 1],
+const DOCK_GANGS := {container = [2, 2], ore = [2, 1], breakbulk = [2, 2], grain = [2, 1], livestock = [2, 1], produce = [2, 1], tanker = [2, 0], gas = [2, 0], vehicles = [3, 1], boat_carriers = [2, 1],
 	seafood = [3, 1], fishing = [1, 0], crabbing = [1, 1]}
 ## How far in from the quay's edge (dock units) the line handlers stand, and
 ## the band the gang works in: on the near half of a pier (PIER_WIDTH), its
@@ -9387,7 +9426,7 @@ static func _hatch_open(ship: Ship) -> float:
 func _draw_hatches(ship: Ship, hatches: Dictionary, rect: Rect2, open: float, fade: Color) -> void:
 	var to_rect := rect.size / Vector2(SHIP_ART_WIDTH, 52.0)
 	var place := func(box: Rect2) -> Rect2: return Rect2(rect.position + box.position * to_rect, box.size * to_rect)
-	var cargo := Color.from_string(str(HOLD_COLORS.get(ship.cargo_id, Farms.crop(ship.cargo_id).get("color", ""))), EMPTY_HOLD)  # (The farm crops in their own colours: data/farms.json.)
+	var cargo := Color.from_string(str(HOLD_COLORS.get(ship.cargo_id, Industry.color_of(ship.cargo_id) if not Industry.color_of(ship.cargo_id).is_empty() else Farms.crop(ship.cargo_id).get("color", ""))), EMPTY_HOLD)  # (The farm crops in their own colours: data/farms.json.)
 	var hold := EMPTY_HOLD.lerp(cargo, clampf(ship.cargo_level() * 1.4, 0.0, 1.0)) * fade
 	var fill := Color.from_string(str(hatches.fill), Color.GRAY) * fade
 	var edge := Color.from_string(str(hatches.edge), Color.BLACK) * fade

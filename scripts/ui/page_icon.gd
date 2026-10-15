@@ -76,3 +76,12 @@ func _draw() -> void:
 			for k in 3:
 				draw_arc(at.call(0.5, 0.42), side * (0.14 + 0.13 * k), PI * 0.3, PI * 0.7, 10, color, line * 0.5, true)
 			draw_polyline(PackedVector2Array([at.call(0.04, 0.94), at.call(0.24, 0.86), at.call(0.42, 0.92), at.call(0.62, 0.84), at.call(0.8, 0.9), at.call(0.96, 0.84)]), color, line * 0.6, true)
+		"industry":
+			# A mine cart heaped with ore, on its rails.
+			draw_colored_polygon(PackedVector2Array([at.call(0.18, 0.18), at.call(0.38, 0.06), at.call(0.55, 0.14), at.call(0.72, 0.05), at.call(0.86, 0.2), at.call(0.18, 0.3)]), color)
+			draw_colored_polygon(PackedVector2Array([at.call(0.08, 0.3), at.call(0.92, 0.3), at.call(0.8, 0.7), at.call(0.2, 0.7)]), color)
+			draw_line(at.call(0.14, 0.42), at.call(0.86, 0.42), Color(0.12, 0.16, 0.24), line * 0.5, true)
+			for x: float in [0.3, 0.7]:
+				draw_circle(at.call(x, 0.78), side * 0.1, color)
+				draw_circle(at.call(x, 0.78), side * 0.04, Color(0.12, 0.16, 0.24))
+			draw_line(at.call(0.02, 0.92), at.call(0.98, 0.92), color, line * 0.7, true)

@@ -308,7 +308,7 @@ static func _type_rate(type_id: String, taken_at: int, level: int) -> float:
 	var categories: Array = company_type(type_id).get("categories", [])
 	var rate := 0.0
 	for model: Dictionary in GameData.ship_models:
-		if categories.has(model.get("category", "")) and not model.get("farm_line", false) and not model.get("boat_line", false) and not model.get("gas_line", false):  # (Not the Fresh produce carriers, the boat carriers or the gas carriers: added with the farms, the makers and the rigs, so companies keep their levels.)
+		if categories.has(model.get("category", "")) and not model.get("farm_line", false) and not model.get("boat_line", false) and not model.get("extra_line", false) and not model.get("gas_line", false):  # (Not the Fresh produce carriers, the boat carriers or the gas carriers: added with the farms, the makers and the rigs, so companies keep their levels.)
 			rate += _slots_from(model, taken_at + tier_offset(model), level) * _xp_per_minute(model)
 	return rate
 

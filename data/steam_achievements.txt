@@ -8,15 +8,33 @@ DELIVER_CLOTHING_3,Clothing ★★★,"5,000,000 containers delivered",0
 DELIVER_FURNITURE_1,Furniture ★,"2,000 containers delivered",0
 DELIVER_FURNITURE_2,Furniture ★★,"250,000 containers delivered",0
 DELIVER_FURNITURE_3,Furniture ★★★,"5,000,000 containers delivered",0
-DELIVER_COFFEE_1,Coffee ★,"2,000 containers delivered",0
-DELIVER_COFFEE_2,Coffee ★★,"250,000 containers delivered",0
-DELIVER_COFFEE_3,Coffee ★★★,"5,000,000 containers delivered",0
-DELIVER_OIL_1,Oil ★,"50,000 tons delivered",0
-DELIVER_OIL_2,Oil ★★,"10,000,000 tons delivered",0
-DELIVER_OIL_3,Oil ★★★,"100,000,000 tons delivered",0
-DELIVER_GAS_1,Gas ★,"50,000 tons delivered",0
-DELIVER_GAS_2,Gas ★★,"10,000,000 tons delivered",0
-DELIVER_GAS_3,Gas ★★★,"100,000,000 tons delivered",0
+DELIVER_COFFEE_1,Coffee ★,"50,000 tons delivered",0
+DELIVER_COFFEE_2,Coffee ★★,"10,000,000 tons delivered",0
+DELIVER_COFFEE_3,Coffee ★★★,"100,000,000 tons delivered",0
+DELIVER_OIL_1,Crude oil ★,"50,000 tons delivered",0
+DELIVER_OIL_2,Crude oil ★★,"10,000,000 tons delivered",0
+DELIVER_OIL_3,Crude oil ★★★,"100,000,000 tons delivered",0
+DELIVER_GAS_1,LNG ★,"50,000 tons delivered",0
+DELIVER_GAS_2,LNG ★★,"10,000,000 tons delivered",0
+DELIVER_GAS_3,LNG ★★★,"100,000,000 tons delivered",0
+DELIVER_DIESEL_1,Diesel ★,"50,000 tons delivered",0
+DELIVER_DIESEL_2,Diesel ★★,"10,000,000 tons delivered",0
+DELIVER_DIESEL_3,Diesel ★★★,"100,000,000 tons delivered",0
+DELIVER_GASOLINE_1,Premium gasoline ★,"50,000 tons delivered",0
+DELIVER_GASOLINE_2,Premium gasoline ★★,"10,000,000 tons delivered",0
+DELIVER_GASOLINE_3,Premium gasoline ★★★,"100,000,000 tons delivered",0
+DELIVER_JET_FUEL_1,Jet fuel ★,"50,000 tons delivered",0
+DELIVER_JET_FUEL_2,Jet fuel ★★,"10,000,000 tons delivered",0
+DELIVER_JET_FUEL_3,Jet fuel ★★★,"100,000,000 tons delivered",0
+DELIVER_LPG_1,LPG ★,"50,000 tons delivered",0
+DELIVER_LPG_2,LPG ★★,"10,000,000 tons delivered",0
+DELIVER_LPG_3,LPG ★★★,"100,000,000 tons delivered",0
+DELIVER_AMMONIA_1,Ammonia ★,"50,000 tons delivered",0
+DELIVER_AMMONIA_2,Ammonia ★★,"10,000,000 tons delivered",0
+DELIVER_AMMONIA_3,Ammonia ★★★,"100,000,000 tons delivered",0
+DELIVER_HYDROGEN_1,Hydrogen ★,"50,000 tons delivered",0
+DELIVER_HYDROGEN_2,Hydrogen ★★,"10,000,000 tons delivered",0
+DELIVER_HYDROGEN_3,Hydrogen ★★★,"100,000,000 tons delivered",0
 DELIVER_IRON_1,Iron ore ★,"50,000 tons delivered",0
 DELIVER_IRON_2,Iron ore ★★,"10,000,000 tons delivered",0
 DELIVER_IRON_3,Iron ore ★★★,"100,000,000 tons delivered",0
@@ -110,6 +128,207 @@ DELIVER_MACKEREL_3,Mackerel ★★★,"2,000,000 crates delivered",0
 DELIVER_GAME_FISH_1,"Snapper, mahi & reef fish ★","1,000 crates delivered",0
 DELIVER_GAME_FISH_2,"Snapper, mahi & reef fish ★★","100,000 crates delivered",0
 DELIVER_GAME_FISH_3,"Snapper, mahi & reef fish ★★★","2,000,000 crates delivered",0
+DELIVER_COCOA_1,Cocoa ★,"50,000 tons delivered",0
+DELIVER_COCOA_2,Cocoa ★★,"10,000,000 tons delivered",0
+DELIVER_COCOA_3,Cocoa ★★★,"100,000,000 tons delivered",0
+DELIVER_TEA_1,Tea ★,"50,000 tons delivered",0
+DELIVER_TEA_2,Tea ★★,"10,000,000 tons delivered",0
+DELIVER_TEA_3,Tea ★★★,"100,000,000 tons delivered",0
+DELIVER_SUGARCANE_1,Sugarcane ★,"50,000 tons delivered",0
+DELIVER_SUGARCANE_2,Sugarcane ★★,"10,000,000 tons delivered",0
+DELIVER_SUGARCANE_3,Sugarcane ★★★,"100,000,000 tons delivered",0
+DELIVER_PEPPER_1,Pepper ★,"50,000 tons delivered",0
+DELIVER_PEPPER_2,Pepper ★★,"10,000,000 tons delivered",0
+DELIVER_PEPPER_3,Pepper ★★★,"100,000,000 tons delivered",0
+DELIVER_VANILLA_1,Vanilla ★,"50,000 tons delivered",0
+DELIVER_VANILLA_2,Vanilla ★★,"10,000,000 tons delivered",0
+DELIVER_VANILLA_3,Vanilla ★★★,"100,000,000 tons delivered",0
+DELIVER_CINNAMON_1,Cinnamon ★,"50,000 tons delivered",0
+DELIVER_CINNAMON_2,Cinnamon ★★,"10,000,000 tons delivered",0
+DELIVER_CINNAMON_3,Cinnamon ★★★,"100,000,000 tons delivered",0
+DELIVER_ALMONDS_1,Almonds ★,"50,000 tons delivered",0
+DELIVER_ALMONDS_2,Almonds ★★,"10,000,000 tons delivered",0
+DELIVER_ALMONDS_3,Almonds ★★★,"100,000,000 tons delivered",0
+DELIVER_OLIVES_1,Olives ★,"50,000 tons delivered",0
+DELIVER_OLIVES_2,Olives ★★,"10,000,000 tons delivered",0
+DELIVER_OLIVES_3,Olives ★★★,"100,000,000 tons delivered",0
+DELIVER_DATES_1,Dates ★,"50,000 tons delivered",0
+DELIVER_DATES_2,Dates ★★,"10,000,000 tons delivered",0
+DELIVER_DATES_3,Dates ★★★,"100,000,000 tons delivered",0
+DELIVER_COTTON_1,Cotton ★,"50,000 tons delivered",0
+DELIVER_COTTON_2,Cotton ★★,"10,000,000 tons delivered",0
+DELIVER_COTTON_3,Cotton ★★★,"100,000,000 tons delivered",0
+DELIVER_RUBBER_1,Rubber ★,"50,000 tons delivered",0
+DELIVER_RUBBER_2,Rubber ★★,"10,000,000 tons delivered",0
+DELIVER_RUBBER_3,Rubber ★★★,"100,000,000 tons delivered",0
+DELIVER_APPLES_1,Apples ★,"1,000 pallets delivered",0
+DELIVER_APPLES_2,Apples ★★,"150,000 pallets delivered",0
+DELIVER_APPLES_3,Apples ★★★,"3,000,000 pallets delivered",0
+DELIVER_PEARS_1,Pears ★,"1,000 pallets delivered",0
+DELIVER_PEARS_2,Pears ★★,"150,000 pallets delivered",0
+DELIVER_PEARS_3,Pears ★★★,"3,000,000 pallets delivered",0
+DELIVER_CHERRIES_1,Cherries ★,"1,000 pallets delivered",0
+DELIVER_CHERRIES_2,Cherries ★★,"150,000 pallets delivered",0
+DELIVER_CHERRIES_3,Cherries ★★★,"3,000,000 pallets delivered",0
+DELIVER_PEACHES_1,Peaches ★,"1,000 pallets delivered",0
+DELIVER_PEACHES_2,Peaches ★★,"150,000 pallets delivered",0
+DELIVER_PEACHES_3,Peaches ★★★,"3,000,000 pallets delivered",0
+DELIVER_STRAWBERRIES_1,Strawberries ★,"1,000 pallets delivered",0
+DELIVER_STRAWBERRIES_2,Strawberries ★★,"150,000 pallets delivered",0
+DELIVER_STRAWBERRIES_3,Strawberries ★★★,"3,000,000 pallets delivered",0
+DELIVER_BLUEBERRIES_1,Blueberries ★,"1,000 pallets delivered",0
+DELIVER_BLUEBERRIES_2,Blueberries ★★,"150,000 pallets delivered",0
+DELIVER_BLUEBERRIES_3,Blueberries ★★★,"3,000,000 pallets delivered",0
+DELIVER_RASPBERRIES_1,Raspberries ★,"1,000 pallets delivered",0
+DELIVER_RASPBERRIES_2,Raspberries ★★,"150,000 pallets delivered",0
+DELIVER_RASPBERRIES_3,Raspberries ★★★,"3,000,000 pallets delivered",0
+DELIVER_BLACKBERRIES_1,Blackberries ★,"1,000 pallets delivered",0
+DELIVER_BLACKBERRIES_2,Blackberries ★★,"150,000 pallets delivered",0
+DELIVER_BLACKBERRIES_3,Blackberries ★★★,"3,000,000 pallets delivered",0
+DELIVER_CRANBERRIES_1,Cranberries ★,"1,000 pallets delivered",0
+DELIVER_CRANBERRIES_2,Cranberries ★★,"150,000 pallets delivered",0
+DELIVER_CRANBERRIES_3,Cranberries ★★★,"3,000,000 pallets delivered",0
+DELIVER_ORANGES_1,Oranges ★,"1,000 pallets delivered",0
+DELIVER_ORANGES_2,Oranges ★★,"150,000 pallets delivered",0
+DELIVER_ORANGES_3,Oranges ★★★,"3,000,000 pallets delivered",0
+DELIVER_LEMONS_1,Lemons ★,"1,000 pallets delivered",0
+DELIVER_LEMONS_2,Lemons ★★,"150,000 pallets delivered",0
+DELIVER_LEMONS_3,Lemons ★★★,"3,000,000 pallets delivered",0
+DELIVER_BANANAS_1,Bananas ★,"1,000 pallets delivered",0
+DELIVER_BANANAS_2,Bananas ★★,"150,000 pallets delivered",0
+DELIVER_BANANAS_3,Bananas ★★★,"3,000,000 pallets delivered",0
+DELIVER_MANGOES_1,Mangoes ★,"1,000 pallets delivered",0
+DELIVER_MANGOES_2,Mangoes ★★,"150,000 pallets delivered",0
+DELIVER_MANGOES_3,Mangoes ★★★,"3,000,000 pallets delivered",0
+DELIVER_PINEAPPLES_1,Pineapples ★,"1,000 pallets delivered",0
+DELIVER_PINEAPPLES_2,Pineapples ★★,"150,000 pallets delivered",0
+DELIVER_PINEAPPLES_3,Pineapples ★★★,"3,000,000 pallets delivered",0
+DELIVER_AVOCADOS_1,Avocados ★,"1,000 pallets delivered",0
+DELIVER_AVOCADOS_2,Avocados ★★,"150,000 pallets delivered",0
+DELIVER_AVOCADOS_3,Avocados ★★★,"3,000,000 pallets delivered",0
+DELIVER_GRAPES_1,Grapes ★,"1,000 pallets delivered",0
+DELIVER_GRAPES_2,Grapes ★★,"150,000 pallets delivered",0
+DELIVER_GRAPES_3,Grapes ★★★,"3,000,000 pallets delivered",0
+DELIVER_POTATOES_1,Potatoes ★,"1,000 pallets delivered",0
+DELIVER_POTATOES_2,Potatoes ★★,"150,000 pallets delivered",0
+DELIVER_POTATOES_3,Potatoes ★★★,"3,000,000 pallets delivered",0
+DELIVER_TOMATOES_1,Tomatoes ★,"1,000 pallets delivered",0
+DELIVER_TOMATOES_2,Tomatoes ★★,"150,000 pallets delivered",0
+DELIVER_TOMATOES_3,Tomatoes ★★★,"3,000,000 pallets delivered",0
+DELIVER_ONIONS_1,Onions ★,"1,000 pallets delivered",0
+DELIVER_ONIONS_2,Onions ★★,"150,000 pallets delivered",0
+DELIVER_ONIONS_3,Onions ★★★,"3,000,000 pallets delivered",0
+DELIVER_LETTUCE_1,Lettuce ★,"1,000 pallets delivered",0
+DELIVER_LETTUCE_2,Lettuce ★★,"150,000 pallets delivered",0
+DELIVER_LETTUCE_3,Lettuce ★★★,"3,000,000 pallets delivered",0
+DELIVER_PEPPERS_1,Peppers ★,"1,000 pallets delivered",0
+DELIVER_PEPPERS_2,Peppers ★★,"150,000 pallets delivered",0
+DELIVER_PEPPERS_3,Peppers ★★★,"3,000,000 pallets delivered",0
+DELIVER_HORSES_1,Horses ★,"5,000 head delivered",0
+DELIVER_HORSES_2,Horses ★★,"1,000,000 head delivered",0
+DELIVER_HORSES_3,Horses ★★★,"10,000,000 head delivered",0
+DELIVER_ELECTRONICS_1,Electronics ★,"2,000 containers delivered",0
+DELIVER_ELECTRONICS_2,Electronics ★★,"250,000 containers delivered",0
+DELIVER_ELECTRONICS_3,Electronics ★★★,"5,000,000 containers delivered",0
+DELIVER_APPLIANCES_1,Home appliances ★,"2,000 containers delivered",0
+DELIVER_APPLIANCES_2,Home appliances ★★,"250,000 containers delivered",0
+DELIVER_APPLIANCES_3,Home appliances ★★★,"5,000,000 containers delivered",0
+DELIVER_MACHINE_PARTS_1,Machine parts ★,"2,000 containers delivered",0
+DELIVER_MACHINE_PARTS_2,Machine parts ★★,"250,000 containers delivered",0
+DELIVER_MACHINE_PARTS_3,Machine parts ★★★,"5,000,000 containers delivered",0
+DELIVER_BATTERIES_1,Batteries ★,"2,000 containers delivered",0
+DELIVER_BATTERIES_2,Batteries ★★,"250,000 containers delivered",0
+DELIVER_BATTERIES_3,Batteries ★★★,"5,000,000 containers delivered",0
+DELIVER_SOLAR_PANELS_1,Solar panels ★,"2,000 containers delivered",0
+DELIVER_SOLAR_PANELS_2,Solar panels ★★,"250,000 containers delivered",0
+DELIVER_SOLAR_PANELS_3,Solar panels ★★★,"5,000,000 containers delivered",0
+DELIVER_TOOLS_1,Tools & hardware ★,"2,000 containers delivered",0
+DELIVER_TOOLS_2,Tools & hardware ★★,"250,000 containers delivered",0
+DELIVER_TOOLS_3,Tools & hardware ★★★,"5,000,000 containers delivered",0
+DELIVER_SPORTING_GOODS_1,Sporting goods ★,"2,000 containers delivered",0
+DELIVER_SPORTING_GOODS_2,Sporting goods ★★,"250,000 containers delivered",0
+DELIVER_SPORTING_GOODS_3,Sporting goods ★★★,"5,000,000 containers delivered",0
+DELIVER_FOOTWEAR_1,Footwear ★,"2,000 containers delivered",0
+DELIVER_FOOTWEAR_2,Footwear ★★,"250,000 containers delivered",0
+DELIVER_FOOTWEAR_3,Footwear ★★★,"5,000,000 containers delivered",0
+DELIVER_COSMETICS_1,Cosmetics ★,"2,000 containers delivered",0
+DELIVER_COSMETICS_2,Cosmetics ★★,"250,000 containers delivered",0
+DELIVER_COSMETICS_3,Cosmetics ★★★,"5,000,000 containers delivered",0
+DELIVER_MEDICINE_1,Medicine ★,"2,000 containers delivered",0
+DELIVER_MEDICINE_2,Medicine ★★,"250,000 containers delivered",0
+DELIVER_MEDICINE_3,Medicine ★★★,"5,000,000 containers delivered",0
+DELIVER_COPPER_ORE_1,Copper ore ★,"50,000 tons delivered",0
+DELIVER_COPPER_ORE_2,Copper ore ★★,"10,000,000 tons delivered",0
+DELIVER_COPPER_ORE_3,Copper ore ★★★,"100,000,000 tons delivered",0
+DELIVER_BAUXITE_1,Bauxite ★,"50,000 tons delivered",0
+DELIVER_BAUXITE_2,Bauxite ★★,"10,000,000 tons delivered",0
+DELIVER_BAUXITE_3,Bauxite ★★★,"100,000,000 tons delivered",0
+DELIVER_NICKEL_ORE_1,Nickel ore ★,"50,000 tons delivered",0
+DELIVER_NICKEL_ORE_2,Nickel ore ★★,"10,000,000 tons delivered",0
+DELIVER_NICKEL_ORE_3,Nickel ore ★★★,"100,000,000 tons delivered",0
+DELIVER_ZINC_ORE_1,Zinc ore ★,"50,000 tons delivered",0
+DELIVER_ZINC_ORE_2,Zinc ore ★★,"10,000,000 tons delivered",0
+DELIVER_ZINC_ORE_3,Zinc ore ★★★,"100,000,000 tons delivered",0
+DELIVER_TIN_ORE_1,Tin ore ★,"50,000 tons delivered",0
+DELIVER_TIN_ORE_2,Tin ore ★★,"10,000,000 tons delivered",0
+DELIVER_TIN_ORE_3,Tin ore ★★★,"100,000,000 tons delivered",0
+DELIVER_LITHIUM_ORE_1,Lithium ore ★,"50,000 tons delivered",0
+DELIVER_LITHIUM_ORE_2,Lithium ore ★★,"10,000,000 tons delivered",0
+DELIVER_LITHIUM_ORE_3,Lithium ore ★★★,"100,000,000 tons delivered",0
+DELIVER_SILVER_ORE_1,Silver ore ★,"50,000 tons delivered",0
+DELIVER_SILVER_ORE_2,Silver ore ★★,"10,000,000 tons delivered",0
+DELIVER_SILVER_ORE_3,Silver ore ★★★,"100,000,000 tons delivered",0
+DELIVER_PHOSPHATE_1,Phosphate rock ★,"50,000 tons delivered",0
+DELIVER_PHOSPHATE_2,Phosphate rock ★★,"10,000,000 tons delivered",0
+DELIVER_PHOSPHATE_3,Phosphate rock ★★★,"100,000,000 tons delivered",0
+DELIVER_MANGANESE_ORE_1,Manganese ore ★,"50,000 tons delivered",0
+DELIVER_MANGANESE_ORE_2,Manganese ore ★★,"10,000,000 tons delivered",0
+DELIVER_MANGANESE_ORE_3,Manganese ore ★★★,"100,000,000 tons delivered",0
+DELIVER_RARE_EARTH_ORE_1,Rare earth ore ★,"50,000 tons delivered",0
+DELIVER_RARE_EARTH_ORE_2,Rare earth ore ★★,"10,000,000 tons delivered",0
+DELIVER_RARE_EARTH_ORE_3,Rare earth ore ★★★,"100,000,000 tons delivered",0
+DELIVER_STEEL_1,Steel ★,"50,000 tons delivered",0
+DELIVER_STEEL_2,Steel ★★,"10,000,000 tons delivered",0
+DELIVER_STEEL_3,Steel ★★★,"100,000,000 tons delivered",0
+DELIVER_ALUMINIUM_1,Aluminium ★,"50,000 tons delivered",0
+DELIVER_ALUMINIUM_2,Aluminium ★★,"10,000,000 tons delivered",0
+DELIVER_ALUMINIUM_3,Aluminium ★★★,"100,000,000 tons delivered",0
+DELIVER_COPPER_1,Copper ★,"50,000 tons delivered",0
+DELIVER_COPPER_2,Copper ★★,"10,000,000 tons delivered",0
+DELIVER_COPPER_3,Copper ★★★,"100,000,000 tons delivered",0
+DELIVER_NICKEL_1,Nickel ★,"50,000 tons delivered",0
+DELIVER_NICKEL_2,Nickel ★★,"10,000,000 tons delivered",0
+DELIVER_NICKEL_3,Nickel ★★★,"100,000,000 tons delivered",0
+DELIVER_ZINC_1,Zinc ★,"50,000 tons delivered",0
+DELIVER_ZINC_2,Zinc ★★,"10,000,000 tons delivered",0
+DELIVER_ZINC_3,Zinc ★★★,"100,000,000 tons delivered",0
+DELIVER_TIN_1,Tin ★,"50,000 tons delivered",0
+DELIVER_TIN_2,Tin ★★,"10,000,000 tons delivered",0
+DELIVER_TIN_3,Tin ★★★,"100,000,000 tons delivered",0
+DELIVER_LITHIUM_1,Lithium ★,"50,000 tons delivered",0
+DELIVER_LITHIUM_2,Lithium ★★,"10,000,000 tons delivered",0
+DELIVER_LITHIUM_3,Lithium ★★★,"100,000,000 tons delivered",0
+DELIVER_GOLD_BARS_1,Gold bars ★,"50,000 tons delivered",0
+DELIVER_GOLD_BARS_2,Gold bars ★★,"10,000,000 tons delivered",0
+DELIVER_GOLD_BARS_3,Gold bars ★★★,"100,000,000 tons delivered",0
+DELIVER_SILVER_BARS_1,Silver bars ★,"50,000 tons delivered",0
+DELIVER_SILVER_BARS_2,Silver bars ★★,"10,000,000 tons delivered",0
+DELIVER_SILVER_BARS_3,Silver bars ★★★,"100,000,000 tons delivered",0
+DELIVER_FERROMANGANESE_1,Ferromanganese ★,"50,000 tons delivered",0
+DELIVER_FERROMANGANESE_2,Ferromanganese ★★,"10,000,000 tons delivered",0
+DELIVER_FERROMANGANESE_3,Ferromanganese ★★★,"100,000,000 tons delivered",0
+DELIVER_RARE_EARTHS_1,Rare earths ★,"50,000 tons delivered",0
+DELIVER_RARE_EARTHS_2,Rare earths ★★,"10,000,000 tons delivered",0
+DELIVER_RARE_EARTHS_3,Rare earths ★★★,"100,000,000 tons delivered",0
+DELIVER_FERTILIZER_1,Fertilizer ★,"50,000 tons delivered",0
+DELIVER_FERTILIZER_2,Fertilizer ★★,"10,000,000 tons delivered",0
+DELIVER_FERTILIZER_3,Fertilizer ★★★,"100,000,000 tons delivered",0
+DELIVER_PLASTICS_1,Plastics ★,"50,000 tons delivered",0
+DELIVER_PLASTICS_2,Plastics ★★,"10,000,000 tons delivered",0
+DELIVER_PLASTICS_3,Plastics ★★★,"100,000,000 tons delivered",0
+DELIVER_TIMBER_1,Timber ★,"50,000 tons delivered",0
+DELIVER_TIMBER_2,Timber ★★,"10,000,000 tons delivered",0
+DELIVER_TIMBER_3,Timber ★★★,"100,000,000 tons delivered",0
 FLEET_1,Fleet ★,10 ships owned (not tugs),0
 FLEET_2,Fleet ★★,50 ships owned (not tugs),0
 FLEET_3,Fleet ★★★,200 ships owned (not tugs),0
@@ -128,6 +347,12 @@ WONDERS_3,Wonders of the world ★★★,49 wonders seen,0
 HIDDEN_GEMS_1,Hidden gems ★,Find a hidden gem,1
 HIDDEN_GEMS_2,Hidden gems ★★,Find two hidden gems,1
 HIDDEN_GEMS_3,Hidden gems ★★★,Find all three hidden gems,1
+ATLAS_1,Atlas of the deep ★,10 research sites surveyed,0
+ATLAS_2,Atlas of the deep ★★,60 research sites surveyed,0
+ATLAS_3,Atlas of the deep ★★★,215 research sites surveyed,0
+FIRST_DISCOVERIES_1,First to discover ★,1 sites surveyed before any other company,0
+FIRST_DISCOVERIES_2,First to discover ★★,25 sites surveyed before any other company,0
+FIRST_DISCOVERIES_3,First to discover ★★★,100 sites surveyed before any other company,0
 FIRST_DELIVERY,Maiden voyage,Deliver a cargo,0
 FIRST_HUB,Branching out,Build a hub,0
 FIVE_HUBS,Network,Have 5 hubs,0
@@ -141,6 +366,16 @@ ALL_CANALS,Lock keeper,Cross every canal,0
 LOAN,Borrowed time,Take out a loan,0
 DEBT_FREE,Debt free,Pay a loan back in full,0
 MEGA,Mega,Give a ship model its mega upgrade,0
+ATLAS_TRENCH,Hadal zone,Survey every trench and deep,0
+ATLAS_WRECK,Wreck hunter,Survey every shipwreck,0
+ATLAS_VENT,Black smokers,Survey every vent and seep,0
+ATLAS_SEAMOUNT,Mountains under the sea,Survey every seamount and ridge,0
+ATLAS_REEF,Reef keeper,Survey every reef and kelp forest,0
+ATLAS_RUINS,Atlantis found,Survey every sunken city,0
+ATLAS_RELIC,Lest we forget,Survey every aircraft and war relic,0
+ATLAS_CANYON,Into the blue,"Survey every canyon, cave and blue hole",0
+ATLAS_WILDLIFE,Leviathan,Survey every wildlife site and mystery,0
+CHALLENGER,Full ocean depth,Survey the Challenger Deep,0
 HERE_WE_GO_AGAIN,Here we go again,Found your second company,0
 THE_GAME_STARTS_NOW,The game starts now,Buy your first Trans Atlantic,0
 TOP_OF_THE_LINE,Top of the line,Buy a Dominator,0

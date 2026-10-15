@@ -104,9 +104,63 @@ func _build_size() -> void:
 		%SizeBox.add_child(cold)
 	_add_farm_line()
 	_add_maker_line()
+	_add_industry_line()
 	_add_energy_line()
 	_update_birds()
 	_update_size()
+
+
+## The Cargo & Ore industry here (Industry): the sites (whose, and this
+## player's own stockpile) and the mine or camp claims still free, with a
+## button to the Industry page.
+func _add_industry_line() -> void:
+	var industry := GameState.industry
+	var parts := PackedStringArray()
+	var first := ""
+	var held := {}  # Building id -> sites here.
+	for key: String in industry.sites_at(port_id):
+		var id := Industry.building_of(key)
+		(held.get_or_add(id, []) as Array).append(key)
+	for each: Dictionary in Industry.buildings():
+		var id := str(each.id)
+		var total := Industry.claims(id, port_id) if Industry.on_claims(id) else 0
+		var here: Array = held.get(id, [])
+		if total == 0 and here.is_empty():
+			continue
+		if first.is_empty():
+			first = id
+		var text := str(each.name)
+		if total > 0:
+			text += " (%d of %d claims free)" % [total - here.size(), total]
+		var owners := PackedStringArray()
+		for key: String in here:
+			var owner := industry.owner_of(key)
+			if owner == GameState.company:
+				owners.append("yours, %s %s waiting" % [Fmt.thousands(floori(float(industry.site(key).get("stock", 0.0)))), GameData.commodity(str(each.makes)).get("units", "units")])
+			elif owner != null:
+				owners.append(owner.name)
+		if not owners.is_empty():
+			text += ": " + ", ".join(owners)
+		parts.append(text)
+	if parts.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.add_theme_color_override(&"font_color", Color(0.9, 0.72, 0.5))
+	label.text = "Industry: %s" % " · ".join(parts)
+	row.add_child(label)
+	if Industry.can_build(GameState.company):
+		var open := Button.new()
+		open.text = "Industry"
+		open.size_flags_vertical = SIZE_SHRINK_CENTER
+		open.pressed.connect(func() -> void:
+			GameRoot.find(self).show_industry(first)
+			queue_free())
+		row.add_child(open)
+	%SizeBox.add_child(row)
 
 
 ## The vehicle and boat makers with a factory here (their own, or a company's
@@ -466,16 +520,16 @@ func _refresh_trade() -> void:
 	var settings := Hub.industry_settings()
 	var hub := GameState.hub_at(port_id)
 	var boost := float(Hub.settings().get("hq_multiplier", 1.5)) if hub != null and hub.is_hq else 1.0
-	var terms := "An industry building here makes its commodity %d%% cheaper to buy and %d%% more expensive to sell here, and its deliveries earn %d%% more XP" % [
-		roundi(float(settings.get("buy_discount", 0.2)) * boost * 100.0), roundi(float(settings.get("sell_bonus", 0.2)) * boost * 100.0), roundi(float(settings.get("xp_bonus", 0.5)) * boost * 100.0)]
+	var terms := "A warehouse here makes its commodity %d%% cheaper to buy and %d%% more expensive to sell here" % [
+		roundi(float(settings.get("buy_discount", 0.2)) * boost * 100.0), roundi(float(settings.get("sell_bonus", 0.2)) * boost * 100.0)]
 	var where := " (built at your HQ or a hub)." if hub == null else "."
 	if rows.is_empty():
 		_trade_note.text = "Your ships haven't bought or sold anything here yet. %s%s" % [terms, where]
 		reset_size.call_deferred()
 		return
-	_trade_note.text = "Your trade here over the last %s. %s%s The last column is what a building for each would have saved and added, a month." % [
+	_trade_note.text = "Your trade here over the last %s. %s%s The last column is what a warehouse for each would have saved and added, a month." % [
 		("%d days" % roundi(float(summary.days))) if float(summary.days) >= 1.5 else "day", terms, where]
-	for title: String in ["", "Bought here", "Sold here", "Industry a month"]:
+	for title: String in ["", "Bought here", "Sold here", "Warehouse a month"]:
 		_add_trade_cell(title, &"DimLabel")
 	for row: Dictionary in rows:
 		var commodity := GameData.commodity(str(row.id))

@@ -6,7 +6,7 @@ extends Control
 ## (Markets, Hubs, Farms, Makers, Energy: see open_page()), the full-screen Route
 ## Assignment screen, and the Esc menu; Space pauses and T opens the chat.
 
-enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY, RESEARCH }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY, INDUSTRY, RESEARCH }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -15,7 +15,7 @@ const ALERT_CHECK_SECONDS := 2.0  # (A look over every ship and model: a few ms.
 const ALERT_NAMES_SHOWN := 3
 ## The pages over the map (MapPage), opened by the buttons down its top left
 ## (WorldScreen.page_buttons): page id -> its Screen.
-const PAGE_SCREENS := {markets = Screen.MARKETS, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY, research = Screen.RESEARCH}
+const PAGE_SCREENS := {markets = Screen.MARKETS, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY, industry = Screen.INDUSTRY, research = Screen.RESEARCH}
 
 var _current_screen := Screen.WORLD
 
@@ -39,6 +39,7 @@ var _current_screen := Screen.WORLD
 var _farms_screen := FarmsScreen.new()
 var _makers_screen := MakersScreen.new()
 var _energy_screen := EnergyScreen.new()
+var _industry_screen := IndustryScreen.new()
 var _research_screen := ResearchScreen.new()
 ## The page open over the map, or null.
 var _page: MapPage = null
@@ -67,13 +68,14 @@ static func find(from: Node) -> GameRoot:
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	for each: Control in [_farms_screen, _makers_screen, _energy_screen, _research_screen]:
-		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen", _research_screen: "ResearchScreen"}.get(each, "EnergyScreen")
+	for each: Control in [_farms_screen, _makers_screen, _energy_screen, _industry_screen, _research_screen]:
+		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen", _industry_screen: "IndustryScreen", _research_screen: "ResearchScreen"}.get(each, "EnergyScreen")
 		each.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		%MarketsScreen.add_sibling(each)
 	_pages.farms = _farms_screen
 	_pages.makers = _makers_screen
 	_pages.energy = _energy_screen
+	_pages.industry = _industry_screen
 	_pages.research = _research_screen
 	_page_home = %MarketsScreen.get_parent()
 	for id: String in _pages:
@@ -263,6 +265,12 @@ func show_research_site(site_id: String) -> void:
 func show_energy(place: String) -> void:
 	_energy_screen.show_place(place)
 	open_page("energy")
+
+
+## Opens the Industry page at a building (the port popup's Industry button).
+func show_industry(building_id: String) -> void:
+	_industry_screen.show_building(building_id)
+	open_page("industry")
 
 
 ## Opens the Makers page at a maker (the port popup's Makers button).

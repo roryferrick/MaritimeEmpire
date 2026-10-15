@@ -17,14 +17,14 @@ extends Control
 ## The Tugs section has Buy All Tugs (filling every free slot money allows).
 
 ## [title, ship_models.json category]
-const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
+const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Breakbulk carriers", "breakbulk"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
 	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"], ["Ocean cruisers", "cruise_ocean"], ["Expedition cruisers", "cruise_expedition"], ["Survey vessels", "survey"], ["Deep-sea motherships", "mothership"]]
 ## Each company type's tab (game_config company_types: tab is its title): its
 ## rows, each row its sections side by side (by category). The service boats
 ## have the last tab, SERVICE_ROWS.
 const TYPE_ROWS := {
-	cargo = [["container"], ["ore"]],
+	cargo = [["container"], ["ore"], ["breakbulk"]],
 	vehicles = [["vehicles"], ["boat_carriers"]],
 	agriculture = [["grain"], ["livestock"], ["produce"]],
 	tankers = [["tanker"], ["gas"]],

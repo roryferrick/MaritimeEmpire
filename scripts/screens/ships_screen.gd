@@ -37,7 +37,7 @@ const HEADER_FONT_SIZE := 15
 const UPGRADE_ALL_GAP := 16.0
 ## The service ships' lines (the Service tab) and every line's heading.
 const SERVICE_LINES := ["recovery", "tug", "icebreaker"]
-const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
+const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", breakbulk = "Breakbulk carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
 	tanker = "Tankers", gas = "Gas carriers", vehicles = "Car carriers", boat_carriers = "Boat carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers",
 	recovery = "Recovery boats", tug = "Tugs", icebreaker = "Icebreakers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers", survey = "Survey vessels", mothership = "Deep-sea motherships"}
 ## The tabs' place under the header, and where the list starts below them (px).

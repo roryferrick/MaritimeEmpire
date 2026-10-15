@@ -15,7 +15,7 @@ const FIELD_GUIDE_BUTTON := 44.0
 ## the dark panel.
 const LINE_MIN_LUMINANCE := 0.5
 ## The price picker's ship lines: [name, ship_models.json category].
-const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
+const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Breakbulk carriers", "breakbulk"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Seafood carriers", "seafood"]]
 ## The box (px) a seafood family's picture is fitted in, in the price picker
 ## (see _catch_icon()); and the family whose picture marks the seafood line.
@@ -117,20 +117,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## The Factories switch in the map panel (Vehicles companies: on to start
-## with): the makers' factories marked by their ports (MapView.show_factories).
+## The Industry switch in the map panel (Vehicles and Cargo & Ore companies:
+## on to start with): the makers' factories and the Cargo & Ore mines, camps,
+## plants and factories marked by their ports (MapView.show_factories).
 func _add_factories_switch() -> void:
+	var shown := func() -> bool: return Manufacturers.can_deal(GameState.company) or Industry.can_build(GameState.company)
 	var switch := CheckButton.new()
-	switch.text = "Factories"
-	switch.tooltip_text = "Mark where the vehicle and boat makers build: their own factories, and companies' factories for them (outlined in the company's colour)."
-	switch.button_pressed = Manufacturers.can_deal(GameState.company)
+	switch.text = "Industry"
+	switch.tooltip_text = "Mark the mines, logging camps, plants and factories by their ports: the vehicle and boat makers' own, and companies' (outlined in the company's colour)."
+	switch.button_pressed = shown.call()
 	_map.show_factories = switch.button_pressed
 	switch.toggled.connect(func(on: bool) -> void: _map.show_factories = on)
-	switch.visible = Manufacturers.can_deal(GameState.company)
-	GameState.company_types_changed.connect(func() -> void: switch.visible = Manufacturers.can_deal(GameState.company))
-	GameState.makers_changed.connect(func() -> void:
+	switch.visible = shown.call()
+	GameState.company_types_changed.connect(func() -> void: switch.visible = shown.call())
+	var redraw := func() -> void:
 		if _map.show_factories:
-			_map.show_factories = true)  # (Drawn again: a factory built or closed.)
+			_map.show_factories = true  # (Drawn again: a factory or site built or closed.)
+	GameState.makers_changed.connect(redraw)
+	GameState.industry_changed.connect(redraw)
 	%MapControls.add_child(switch)
 
 
@@ -575,9 +579,9 @@ func _place_side_buttons() -> void:
 ## for GameRoot's alert dot on Hubs.
 var page_buttons := {}
 var _page_column := VBoxContainer.new()
-const PAGES := [["markets", "Markets: the cheapest ports to buy each good and the best to sell"], ["hubs", "Hubs: your HQ and hubs, their upgrades and industry"],
+const PAGES := [["markets", "Markets: the cheapest ports to buy each good and the best to sell"], ["hubs", "Hubs: your HQ and hubs, their upgrades and warehouses"],
 	["farms", "Farms: your plots at the farm ports and the farm store"], ["makers", "Makers: the car and boat makers, how much they like you, and your factories"],
-	["energy", "Energy: the oil and gas fields, your rigs and platforms, and your refineries"],
+	["energy", "Energy: the oil and gas fields, your rigs and platforms, and your refineries"], ["industry", "Industry: your mines, plants and factories, and the claims at the resource ports"],
 	["research", "Research: the contracts board, your expeditions, the Atlas of the sites under the sea, and your ships' gear"]]
 
 
@@ -610,6 +614,7 @@ func _update_page_buttons() -> void:
 	page_buttons.farms.visible = Farms.can_farm(GameState.company)
 	page_buttons.makers.visible = Manufacturers.can_deal(GameState.company)
 	page_buttons.energy.visible = Energy.can_drill(GameState.company)
+	page_buttons.industry.visible = Industry.can_build(GameState.company)
 	page_buttons.research.visible = Research.can_research(GameState.company)
 
 
