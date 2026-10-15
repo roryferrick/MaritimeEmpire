@@ -8,8 +8,8 @@
 <g fill="#2a2a2a"><circle cx="30" cy="32" r="2.6"/><circle cx="42" cy="32" r="2.6"/><circle cx="54" cy="32" r="2.6"/><circle cx="86" cy="32" r="2.4"/><circle cx="96" cy="32" r="2.4"/></g>
 <path d="M112,20 Q118,32 112,44 Q124,36 124,32 Q124,28 112,20 Z" fill="#d8262a" stroke="#1a1410" stroke-width="1.0"/>
 <path d="M114,42 L108,56 L116,52 Z" fill="#d8262a" stroke="#1a1410" stroke-width="0.8"/>
-<circle cx="142" cy="24" r="2.2" fill="#1a1410"/><circle cx="142" cy="40" r="2.2" fill="#1a1410"/>
-<path d="M150,30 L172,32 L150,34 Z" fill="#e8822a" stroke="#1a1410" stroke-width="0.8"/>
-<g fill="#2a2a2a"><circle cx="146" cy="24" r="1.1"/><circle cx="148" cy="28" r="1.1"/><circle cx="148" cy="36" r="1.1"/><circle cx="146" cy="40" r="1.1"/></g>
+<circle cx="144" cy="26" r="2.4" fill="#1a1410"/><circle cx="144" cy="38" r="2.4" fill="#1a1410"/>
+<g fill="#2a2a2a"><circle cx="131.5" cy="24.5" r="1.2"/><circle cx="129" cy="28.5" r="1.2"/><circle cx="128" cy="33" r="1.2"/><circle cx="129" cy="37.5" r="1.2"/><circle cx="131.5" cy="41.5" r="1.2"/></g>
+<path d="M140.5,30 L135.5,31 L135,50 Z" fill="#e8822a" stroke="#1a1410" stroke-width="0.8" stroke-linejoin="round"/>
 <ellipse cx="32" cy="24" rx="7" ry="4" fill="#ffffff" opacity="0.6"/>
 </svg>

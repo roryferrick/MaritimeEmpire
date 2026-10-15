@@ -7,9 +7,13 @@
 <path d="M78,14 L112,14 M78,38 L112,38" stroke="#f2c233" stroke-width="2.2"/>
 <rect x="72" y="8" width="10" height="36" rx="2" fill="#f2c233" stroke="#1a1410" stroke-width="0.9"/>
 <circle cx="130" cy="26" r="13" fill="#f0c29c" stroke="#1a1410" stroke-width="1.5"/>
-<path d="M117,26 Q122,44 134,38 Q142,34 140,26 Q134,36 117,26 Z" fill="#f8f6f0" stroke="#1a1410" stroke-width="0.9"/>
-<circle cx="133" cy="19" r="2" fill="#1a1410"/><circle cx="133" cy="33" r="2" fill="#1a1410"/><path d="M138,22 L142,26 L138,30" fill="#e8a040" stroke="#1a1410" stroke-width="0.8"/>
-<circle cx="124" cy="19" r="3" fill="#e86a80" opacity="0.6"/>
+<g fill="#e86a80" opacity="0.6"><circle cx="131" cy="16.5" r="2.4"/><circle cx="131" cy="35.5" r="2.4"/></g>
+<path d="M129,14 Q119,12 113,26 Q119,40 129,38 Q123,33 123,26 Q123,19 129,14 Z" fill="#f8f6f0" stroke="#1a1410" stroke-width="0.9"/>
+<rect x="122.5" y="22" width="4.5" height="8" rx="1" fill="#f8f6f0" stroke="#1a1410" stroke-width="0.8"/><path d="M124.75,22 L124.75,30 M122.5,26 L127,26" stroke="#1a1410" stroke-width="0.5"/>
+<path d="M128,26 Q129,19 125.5,16.5 Q131,18 130,26 Q131,34 125.5,35.5 Q129,33 128,26 Z" fill="#f8f6f0" stroke="#1a1410" stroke-width="0.7"/>
+<circle cx="131" cy="26" r="2.2" fill="#e8a8a0" stroke="#1a1410" stroke-width="0.6"/>
+<circle cx="135" cy="21" r="1.9" fill="#1a1410"/><circle cx="135" cy="31" r="1.9" fill="#1a1410"/>
+<path d="M138.5,18 L138,23.5 M138,28.5 L138.5,34" stroke="#1a1410" stroke-width="1.4" stroke-linecap="round"/>
 <path d="M142,8 L172,8 Q178,8 178,14 L178,38 Q178,44 172,44 L142,44 Z" fill="#1a1a1e" stroke="#1a1410" stroke-width="1.6"/>
 <rect x="142" y="21" width="36" height="8" fill="#f2c233"/>
 <path d="M170,8 Q168,2 176,2 Q180,4 176,8" fill="#2f7a3a" stroke="#1a1410" stroke-width="0.8"/>
