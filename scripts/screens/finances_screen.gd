@@ -1,7 +1,8 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
-## Two pages (tabs at the top): Compare companies (every company in the game
-## side by side), and Your company: the "Keep in the bank" setting (money cargo purchases leave alone), company
+## Pages (tabs at the top): Company (the whole company), a page for each of its
+## company types (only its ships and its own money: see TYPE_KINDS), and Compare
+## companies (every company in the game side by side). The Company page: the "Keep in the bank" setting (money cargo purchases leave alone), company
 ## totals (last 10 minutes and all time), everything the fleet has delivered
 ## (by unit and commodity), a card for the canals the fleet has used
 ## (crossings, tolls and bonus XP), and a sortable table of each ship's
@@ -33,6 +34,13 @@ const TOTAL_ROWS := [
 	["Rigs, refineries and pipelines built", "energy_built", true], ["Rigs and refineries sold", "energy_sold", false], ["Energy costs (crews, workers, repairs)", "energy", true], ["Energy tank sales", "energy_sales", false],
 	["Research contracts", "research_pay", false], ["Research gear", "research_gear", true], ["Contract penalties", "research_penalty", true],
 ]
+## A company type's own money kinds (beside its ships'): what its page's totals
+## add under the ships' rows.
+const TYPE_KINDS := {cargo = ["industry", "industry_sales"], vehicles = ["factories", "factory_sales"], agriculture = ["land", "land_sold", "farms", "farm_sales"],
+	tankers = ["energy_built", "energy_sold", "energy", "energy_sales"], cruises = ["supplies"], research = ["research_pay", "research_gear", "research_penalty"]}
+## A type page's rows from its ships' own ledgers: [title, money kinds, is a cost].
+const SHIP_ROWS := [["Cargo sales", ["income"], false], ["Cargo bought", ["cargo"], true], ["Fuel", ["fuel"], true], ["Repairs", ["repair"], true],
+	["Tolls and port fees", ["tolls", "port_fees"], true], ["Crew wages", ["wages"], true]]
 ## Ship table groups, in shop order: [title, ship_models.json category].
 const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Breakbulk carriers", "breakbulk"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"], ["Survey vessels", "survey"], ["Deep-sea motherships", "mothership"]]
@@ -69,6 +77,11 @@ var _repay_button := Button.new()
 var _compare_card := PanelContainer.new()
 var _compare_grid := GridContainer.new()
 var _comparing := false
+## The page showing: "" the whole company, a company type's id, or "compare";
+## the tab row, and the rows only the Company page has (bank, loan, logo, canals).
+var _page := ""
+var _tabs := HFlowContainer.new()
+var _company_only: Array[Control] = []
 ## Per ship line in the table: [its total row's first label, its last ship's
 ## first label, the line's color], for the tinted band drawn behind its rows.
 var _bands: Array = []
@@ -93,6 +106,7 @@ func _ready() -> void:
 	_delivered_card.add_child(_delivered_grid)
 	row.add_child(_delivered_card)
 	row.add_sibling(_canal_card)
+	_company_only.append(_canal_card)
 	_add_bank_row()
 	_add_loan_row()
 	_add_logo_row()
@@ -124,12 +138,15 @@ func _refresh() -> void:
 	if _comparing:
 		_fill_comparison()
 		return
-	_show_bank_reserve()
-	_show_loan()
 	var recent := GameState.recent_finances()
-	_fill_totals(recent.fleet)
+	if _page.is_empty():
+		_show_bank_reserve()
+		_show_loan()
+		_fill_totals(recent.fleet)
+		_fill_canals()
+	else:
+		_fill_type_totals(_page)
 	_fill_delivered()
-	_fill_canals()
 	_fill_ship_table(recent.ships)
 
 
@@ -146,6 +163,71 @@ func _fill_totals(recent: Dictionary) -> void:
 	for source: Dictionary in [recent, GameState.totals]:
 		var profit := _operating_profit(source)
 		_add_label(%Totals, Fmt.money(roundi(profit)), &"GainLabel" if profit >= 0.0 else &"ErrorLabel")
+
+
+## A company type's page's totals: its ships' money (from their own ledgers, all
+## time, and their share of the last 10 minutes), their operating profit, then
+## the type's own money (TYPE_KINDS: farms, factories, industry, rigs and
+## refineries, cruise supplies, research) and the type's total.
+func _fill_type_totals(type_id: String) -> void:
+	_clear(%Totals)
+	for title: String in ["", "Last 10 min", "All time"]:
+		_add_label(%Totals, title, &"DimLabel")
+	var ships := _type_ships(type_id)
+	var all_time := {}
+	var names := {}
+	for ship in ships:
+		names[ship.name] = true
+		for kind: String in ship.ledger:
+			all_time[kind] = float(all_time.get(kind, 0.0)) + float(ship.ledger[kind])
+	var recent := {}
+	for bucket: Dictionary in GameState.company.finance_window:
+		if bucket.start < GameState.play_time - GameState.WINDOW_SECONDS:
+			continue
+		for ship_name: String in bucket.ships:
+			if names.has(ship_name):
+				for kind: String in bucket.ships[ship_name]:
+					recent[kind] = float(recent.get(kind, 0.0)) + float(bucket.ships[ship_name][kind])
+		for kind: String in TYPE_KINDS.get(type_id, []):
+			recent[kind] = float(recent.get(kind, 0.0)) + float(bucket.fleet.get(kind, 0.0))
+	for kind: String in TYPE_KINDS.get(type_id, []):
+		all_time[kind] = float(GameState.totals.get(kind, 0.0))
+	var net := [0.0, 0.0]
+	for row: Array in SHIP_ROWS:
+		_add_label(%Totals, row[0])
+		var sign := -1.0 if row[2] else 1.0
+		for i in 2:
+			var amount := 0.0
+			for kind: String in row[1]:
+				amount += float([recent, all_time][i].get(kind, 0.0))
+			net[i] += sign * amount
+			_add_label(%Totals, Fmt.money(roundi(sign * amount)))
+	_add_label(%Totals, "Ships' operating profit", &"HeaderLabel")
+	for i in 2:
+		_add_label(%Totals, Fmt.money(roundi(net[i])), &"GainLabel" if net[i] >= 0.0 else &"ErrorLabel")
+	var own: Array = TOTAL_ROWS.filter(func(row: Array) -> bool: return (TYPE_KINDS.get(type_id, []) as Array).has(row[1]))
+	if own.is_empty():
+		return
+	for row: Array in own:
+		_add_label(%Totals, row[0])
+		var sign := -1.0 if row[2] else 1.0
+		for i in 2:
+			var amount := sign * float([recent, all_time][i].get(row[1], 0.0))
+			net[i] += amount
+			_add_label(%Totals, Fmt.money(roundi(amount)))
+	_add_label(%Totals, "%s in all" % Progression.company_type(type_id).get("name", type_id), &"HeaderLabel")
+	for i in 2:
+		_add_label(%Totals, Fmt.money(roundi(net[i])), &"GainLabel" if net[i] >= 0.0 else &"ErrorLabel")
+
+
+## The company's ships of a company type (its categories).
+static func _type_ships(type_id: String) -> Array[Ship]:
+	var categories: Array = Progression.company_type(type_id).get("categories", [])
+	var out: Array[Ship] = []
+	for ship in GameState.fleet():
+		if categories.has(ship.model().get("category", "")):
+			out.append(ship)
+	return out
 
 
 ## Cargo sales minus cargo bought, fuel, repairs, canal tolls, port fees, crew wages and loan interest (not buying or
@@ -166,10 +248,12 @@ func _fill_delivered() -> void:
 	_add_label(_delivered_grid, "")
 	var groups := {}  # unit -> [[commodity name, units], ...], in markets.json order
 	for commodity: Dictionary in GameData.commodities:
+		if not _page.is_empty() and _type_of_good(str(commodity.id)) != _page:
+			continue  # (A type's page: only its goods.)
 		var units := int(GameState.delivered.get(commodity.id, 0))
 		if units > 0:
 			groups.get_or_add(commodity.unit, []).append([commodity.name, units])
-	if GameState.earlier_containers > 0:
+	if GameState.earlier_containers > 0 and (_page.is_empty() or _page == "cargo"):
 		groups.get_or_add("container", []).append(["Earlier, not split by cargo", GameState.earlier_containers])
 	if groups.is_empty():
 		_add_label(_delivered_grid, "Nothing yet")
@@ -186,6 +270,17 @@ func _fill_delivered() -> void:
 		for entry: Array in groups[unit]:
 			_add_label(_delivered_grid, "    %s" % entry[0], &"DimLabel")
 			_add_label(_delivered_grid, Fmt.thousands(int(entry[1])), &"DimLabel").horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+
+## The company type whose ships carry a good: a legacy good (plain Cars, Trucks
+## and Boats, no longer carried) goes by the goods of its kind (the makers').
+static func _type_of_good(id: String) -> String:
+	var type_id := Progression.type_of_commodity(id)
+	if type_id.is_empty():
+		for commodity: Dictionary in GameData.commodities:
+			if str(commodity.get("family", "")) == id:
+				return Progression.type_of_commodity(str(commodity.id))
+	return type_id
 
 
 ## Crossings, tolls and bonus XP for each canal the fleet has been through.
@@ -230,20 +325,24 @@ func _fill_ship_table(recent_profit: Dictionary) -> void:
 			recent = float(recent_profit.get(ship.name, 0.0)),
 		})
 	rows.sort_custom(_row_before)
+	var shown := 0
 	for category: Array in CATEGORIES:
+		if not _page.is_empty() and not (Progression.company_type(_page).get("categories", []) as Array).has(category[1]):
+			continue  # (A type's page: only its lines.)
 		var group := rows.filter(func(row: Dictionary) -> bool: return row.ship.model().get("category", "") == category[1])
 		if group.is_empty():
 			continue
 		var total := {name = category[0], model = "%d ship%s" % [group.size(), "" if group.size() == 1 else "s"]}
 		for key: String in MONEY_COLUMNS:
 			total[key] = group.reduce(func(sum: float, row: Dictionary) -> float: return sum + float(row[key]), 0.0)
+		shown += group.size()
 		var color := GameData.category_color(category[1])
 		var first: Label = _add_row(total, color)[0]
 		var last := first
 		for row: Dictionary in group:
 			last = _add_row(row)[0]
 		_bands.append([first, last, color])
-	%EmptyLabel.visible = rows.is_empty()
+	%EmptyLabel.visible = shown == 0
 	%ShipTable.queue_redraw()
 
 
@@ -356,24 +455,44 @@ static func _clear(parent: Node) -> void:
 		child.queue_free()
 
 
-## Two pages, picked by tabs at the top: Your company (everything below) and
-## Compare companies (a table of every company in the game).
+## The pages, picked by tabs at the top: Company (everything below), a tab for
+## each of the company's types (its ships and its own money only), and Compare
+## companies (a table of every company in the game). Made again when the
+## company takes another type.
 func _add_tabs() -> void:
 	var content: Control = $Scroll/Margin/Content
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override(&"separation", 6)
+	_tabs.add_theme_constant_override(&"h_separation", 6)
+	_tabs.add_theme_constant_override(&"v_separation", 6)
+	content.add_child(_tabs)
+	content.move_child(_tabs, 0)
+	_fill_tabs()
+	GameState.company_types_changed.connect(_fill_tabs)
+	_add_compare_card()
+
+
+func _fill_tabs() -> void:
+	_clear(_tabs)
+	var pages := [["Company", ""]]
+	for each: Dictionary in Progression.company_types():
+		if GameState.company.has_type(str(each.id)):
+			pages.append([str(each.get("tab", each.name)), str(each.id)])
+	pages.append(["Compare companies", "compare"])
+	if not pages.any(func(page: Array) -> bool: return page[1] == _page):
+		_page = ""
 	var group := ButtonGroup.new()
-	for page: Array in [["Your company", false], ["Compare companies", true]]:
+	for page: Array in pages:
 		var tab := Button.new()
 		tab.text = page[0]
 		tab.toggle_mode = true
 		tab.button_group = group
-		tab.button_pressed = not page[1]
+		tab.button_pressed = page[1] == ("compare" if _comparing else _page)
 		tab.focus_mode = Control.FOCUS_NONE
 		tab.pressed.connect(_show_page.bind(page[1]))
-		tabs.add_child(tab)
-	content.add_child(tabs)
-	content.move_child(tabs, 0)
+		_tabs.add_child(tab)
+
+
+func _add_compare_card() -> void:
+	var content: Control = $Scroll/Margin/Content
 	_compare_card.theme_type_variation = &"CardPanel"
 	_compare_card.visible = false
 	var box := VBoxContainer.new()
@@ -396,12 +515,18 @@ func _add_tabs() -> void:
 	content.add_child(_compare_card)
 
 
-func _show_page(compare: bool) -> void:
-	_comparing = compare
+## Shows a page: "" the whole company, a company type's id, or "compare". A
+## type's page leaves out the rows only the whole company has (bank, loan,
+## logo, canals).
+func _show_page(page: String) -> void:
+	_comparing = page == "compare"
+	if not _comparing:
+		_page = page
 	for child: Control in $Scroll/Margin/Content.get_children():
-		if child != _compare_card and child.get_index() > 0:
-			child.visible = not compare
-	_compare_card.visible = compare
+		if child != _compare_card and child != _tabs:
+			child.visible = not _comparing and (_page.is_empty() or not _company_only.has(child))
+	_compare_card.visible = _comparing
+	(find_child("ShipsTitle", true, false) as Label).text = "Profit by ship" if _page.is_empty() else "Profit by ship: %s" % Progression.company_type(_page).get("name", _page)
 	_refresh()
 
 
@@ -516,6 +641,7 @@ func _add_bank_row() -> void:
 	row.add_child(hint)
 	$Scroll/Margin/Content.add_child(row)
 	$Scroll/Margin/Content.move_child(row, 0)
+	_company_only.append(row)
 
 
 ## Shows the current setting (a saved amount not in the list is added to it).
@@ -558,6 +684,7 @@ func _add_loan_row() -> void:
 	row.add_child(hint)
 	$Scroll/Margin/Content.add_child(row)
 	$Scroll/Margin/Content.move_child(row, 1)
+	_company_only.append(row)
 
 
 func _show_loan() -> void:
@@ -600,3 +727,4 @@ func _add_logo_row() -> void:
 		logo.queue_redraw())
 	$Scroll/Margin/Content.add_child(row)
 	$Scroll/Margin/Content.move_child(row, 2)
+	_company_only.append(row)

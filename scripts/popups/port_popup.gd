@@ -448,34 +448,101 @@ func _open_ship(ship: Ship) -> void:
 	PopupHost.find(self).show_ship(ship, follow)
 
 
+## The market's ship lines, in the Shop's order: [title, ship_models.json category].
+## Each line's goods are listed under its heading (see _refresh_market()).
+const MARKET_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Breakbulk carriers", "breakbulk"], ["Grain carriers", "grain"],
+	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"],
+	["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Seafood carriers", "seafood"]]
+## Each line opened or folded in the market (category -> open), kept between
+## popups; a line not here is open if the company's fleet sails it (or, with
+## no fleet yet, if its company types have it).
+static var _market_open := {}
+## Commodity id -> the market line it's listed under (worked out once).
+static var _market_line_of := {}
+var _market_box := VBoxContainer.new()
+
+
 ## Each commodity's buy and sell price here, colored against its world average,
-## in two columns of commodities.
+## grouped by the ship line that carries it: a heading per line (its colour,
+## how many goods; click to open or fold it), then its goods in two columns.
+## The makers' goods are only those with a factory here (the rest are on the
+## Markets page).
 func _refresh_market() -> void:
-	for child in %MarketGrid.get_children():
-		%MarketGrid.remove_child(child)
+	if _market_box.get_parent() == null:
+		%MarketGrid.visible = false
+		_market_box.add_theme_constant_override(&"separation", 2)
+		%MarketGrid.add_sibling(_market_box)
+	for child in _market_box.get_children():
+		_market_box.remove_child(child)
 		child.queue_free()
-	for title: String in ["", "Buy", "Sell", "", "Buy", "Sell"]:
-		_add_market_cell(title, &"DimLabel")
-	# The plain goods, then the makers with a factory here (theirs or a company's:
-	# their goods are cheapest here); the other makers' are on the Markets page.
-	var listed: Array = GameData.commodities.filter(func(commodity: Dictionary) -> bool: return not commodity.get("maker", false) and not commodity.get("legacy", false))
-	for id in GameState.makers.makers_at(port_id):
-		listed.append(GameData.commodity(id))
-	for commodity: Dictionary in listed:
-		var sell := GameState.market.sell_price(port_id, commodity.id)
-		var ratio := sell / GameData.world_price(commodity.id)
-		var variation := &"GainLabel" if ratio < MARKET_CHEAP else (&"ErrorLabel" if ratio > MARKET_EXPENSIVE else &"")
-		_add_market_cell(commodity.name, &"")
-		_add_market_cell(Fmt.money(roundi(GameState.market.buy_price(port_id, commodity.id))), variation)
-		_add_market_cell(Fmt.money(roundi(sell)), variation)
+	var here := {}  # Category -> [commodity, ...]
+	var makers_here := GameState.makers.makers_at(port_id)
+	for commodity: Dictionary in GameData.commodities:
+		if commodity.get("legacy", false) or commodity.get("maker", false) and not makers_here.has(str(commodity.id)):
+			continue
+		(here.get_or_add(_market_line(str(commodity.id)), []) as Array).append(commodity)
+	var sailed := {}
+	for ship in GameState.fleet():
+		sailed[str(ship.model().get("category", ""))] = true
+	for line: Array in MARKET_LINES + [["Other goods", ""]]:
+		var goods: Array = here.get(line[1], [])
+		if goods.is_empty():
+			continue
+		var category: String = line[1]
+		var type_id := Progression.type_of_category(category)
+		var open := bool(_market_open.get(category, sailed.has(category) if not sailed.is_empty() else (not type_id.is_empty() and GameState.company.has_type(type_id))))
+		var heading := Button.new()
+		heading.flat = true
+		heading.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		heading.focus_mode = Control.FOCUS_NONE
+		heading.text = "%s %s · %d" % ["▾" if open else "▸", line[0], goods.size()]
+		heading.add_theme_font_size_override(&"font_size", MARKET_FONT_SIZE)
+		var tint := GameData.category_color(category) if not category.is_empty() else Color(0.8, 0.8, 0.8)
+		for state: StringName in [&"font_color", &"font_hover_color", &"font_pressed_color"]:
+			heading.add_theme_color_override(state, tint)
+		heading.tooltip_text = "Fold this line away" if open else "Show this line's prices"
+		heading.pressed.connect(func() -> void:
+			_market_open[category] = not open
+			_refresh_market())
+		_market_box.add_child(heading)
+		if not open:
+			continue
+		var grid := GridContainer.new()
+		grid.columns = 6
+		grid.add_theme_constant_override(&"h_separation", 10)
+		grid.add_theme_constant_override(&"v_separation", 0)
+		for title: String in (["", "Buy", "Sell", "", "Buy", "Sell"] if goods.size() > 1 else ["", "Buy", "Sell"]):
+			_add_market_cell(grid, title, &"DimLabel")
+		for commodity: Dictionary in goods:
+			var sell := GameState.market.sell_price(port_id, commodity.id)
+			var ratio := sell / GameData.world_price(commodity.id)
+			var variation := &"GainLabel" if ratio < MARKET_CHEAP else (&"ErrorLabel" if ratio > MARKET_EXPENSIVE else &"")
+			_add_market_cell(grid, commodity.name, &"")
+			_add_market_cell(grid, Fmt.money(roundi(GameState.market.buy_price(port_id, commodity.id))), variation)
+			_add_market_cell(grid, Fmt.money(roundi(sell)), variation)
+		_market_box.add_child(grid)
 
 
-func _add_market_cell(text: String, variation: StringName) -> void:
+## The market line a commodity is listed under: the first of MARKET_LINES
+## with a model carrying it ("" if none does).
+static func _market_line(commodity_id: String) -> String:
+	if _market_line_of.is_empty():
+		for line: Array in MARKET_LINES:
+			for model: Dictionary in GameData.ship_models:
+				if model.get("category", "") != line[1]:
+					continue
+				for each: String in model.get("cargo", []):
+					if not _market_line_of.has(each):
+						_market_line_of[each] = line[1]
+	return str(_market_line_of.get(commodity_id, ""))
+
+
+func _add_market_cell(grid: GridContainer, text: String, variation: StringName) -> void:
 	var label := Label.new()
 	label.text = text
 	label.theme_type_variation = variation
 	label.add_theme_font_size_override(&"font_size", MARKET_FONT_SIZE)
-	%MarketGrid.add_child(label)
+	grid.add_child(label)
 
 
 ## "Gulls: Herring Gull (16), Yellow-legged Gull (8)": the gulls living at the
