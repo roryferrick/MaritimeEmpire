@@ -5433,7 +5433,7 @@ func _deliver_to_plants(ship: Ship) -> void:
 		_gain_hub_xp(hub, xp, who)
 	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + taken
 	if who == company and ai_acting == null:
-		ActivityLog.add("%s unloaded %s tons of %s into your tanks at %s." % [ship.name, Fmt.thousands(taken), str(GameData.commodity(ship.cargo_id).get("name", ship.cargo_id)).to_lower(),
+		ActivityLog.add("%s unloaded %s tons of %s into your tanks at %s." % [ship.name, Fmt.thousands(taken), Energy.good_word(ship.cargo_id),
 			GameData.port_name(ship.docked_at)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 	ship.cargo_qty -= taken
 	ship.cargo_payment = roundi(ship.cargo_payment * left)
@@ -5772,4 +5772,4 @@ func sell_energy_item(port_id: String, commodity: String) -> void:
 		return
 	var value := energy.sell_item(company, port_id, commodity)
 	if value > 0 and ai_acting == null:
-		ActivityLog.add("Sold the %s in your tanks at %s for %s." % [str(GameData.commodity(commodity).get("name", commodity)).to_lower(), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
+		ActivityLog.add("Sold the %s in your tanks at %s for %s." % [Energy.good_word(commodity), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
