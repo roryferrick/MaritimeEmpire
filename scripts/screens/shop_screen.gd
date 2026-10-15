@@ -19,7 +19,7 @@ extends Control
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
-	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"]]
+	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"], ["Ocean cruisers", "cruise_ocean"], ["Expedition cruisers", "cruise_expedition"]]
 ## Each company type's tab (game_config company_types: tab is its title): its
 ## rows, each row its sections side by side (by category). The service boats
 ## have the last tab, SERVICE_ROWS.
@@ -52,6 +52,11 @@ const MIN_TEXT_LUMINANCE := 0.5
 ## padding inside.
 const SECTION_TINT := 0.08
 const SECTION_PADDING := 10
+
+## What each ice class lets an Expedition cruiser reach (ship_models.json cruise ice).
+const ICE_TEXT := {polar_light = "The Antarctic stations and icebound Arctic ports in their open season",
+	polar = "Those, and the Arctic routes in their open season without an icebreaker",
+	polar_long = "Those, with the longest polar season (3 weeks earlier and later)"}
 
 const NamePopupScene := preload("res://scenes/popups/name_popup.tscn")
 
@@ -86,9 +91,11 @@ func _ready() -> void:
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	%Items.add_child(tabs)
 	_tabs = tabs
-	var tab_list := []  # [title, rows, company type id ("" for Service)]
+	var tab_list := []  # [title, rows, company type id ("" for Service), and a coming-soon type's id]
 	for type: Dictionary in Progression.company_types():
 		tab_list.append([str(type.get("tab", type.name)), TYPE_ROWS.get(type.id, [type.categories]), str(type.id)])
+	for type: Dictionary in Progression.upcoming_types():  # (Its ships to look at, not to buy yet.)
+		tab_list.append(["%s (coming soon)" % type.get("tab", type.name), (type.categories as Array).map(func(category: String) -> Array: return [category]), "", type.id])
 	tab_list.append(["Service", SERVICE_ROWS, ""])
 	var row_tabs := []  # [row's categories, its tab's box, its company type id]
 	for tab: Array in tab_list:
@@ -100,6 +107,8 @@ func _ready() -> void:
 			_type_tabs[tab[2]] = tabs.get_tab_count() - 1
 			_type_rows[tab[2]] = []
 			page.add_child(_type_banner(tab[2]))
+		elif tab.size() > 3:
+			page.add_child(_coming_banner(tab[3]))
 		for row_categories: Array in tab[1]:
 			row_tabs.append([row_categories, page, tab[2]])
 	for pair: Array in row_tabs:
@@ -129,9 +138,9 @@ func _ready() -> void:
 			_grids.append(grid)
 			row_grids.append(grid)
 			box.add_child(grid)
-			for model: Dictionary in GameData.ship_models:
+			for model: Dictionary in GameData.ship_models + GameData.upcoming_models:
 				if model.get("category", "container") == category:
-					grid.add_child(_make_card(model))
+					grid.add_child(_make_card(model, model.get("coming_soon", false)))
 			grid.columns = clampi(grid.get_child_count(), 1, MAX_COLUMNS)
 		_rows.append([row, row_grids])
 	# Money changes many times a second while ships refuel; the cards catch up
@@ -206,7 +215,7 @@ func _section_box(category: String, row: Control) -> VBoxContainer:
 ## category's models, from the smallest ship's (first letter) to the biggest's
 ## (last letter).
 func _section_title(text: String, category: String) -> Control:
-	var models := GameData.ship_models.filter(func(model: Dictionary) -> bool: return model.get("category", "container") == category)
+	var models := (GameData.ship_models + GameData.upcoming_models).filter(func(model: Dictionary) -> bool: return model.get("category", "container") == category)
 	models.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return float(a.get("map_size", [0])[0]) < float(b.get("map_size", [0])[0]))
 	var gradient := Gradient.new()
@@ -262,7 +271,9 @@ static func _map_length(model: Dictionary) -> float:
 	return float(dims[0]) + float(dims[1]) * MapView.BOW_LENGTH_FACTOR
 
 
-func _make_card(model: Dictionary) -> Control:
+## A model's card; a coming-soon model's (coming) shows its price and a
+## greyed Coming soon in place of Buy, and isn't counted by _update_cards().
+func _make_card(model: Dictionary, coming := false) -> Control:
 	var card := PanelContainer.new()
 	card.theme_type_variation = &"ShopCard"
 	card.custom_minimum_size = Vector2(CARD_WIDTH, 0)
@@ -291,7 +302,13 @@ func _make_card(model: Dictionary) -> Control:
 		["Price", ""],
 		["Owned", ""],
 	]
-	if model.get("recovery", false):
+	if model.has("cruise"):
+		var cruise: Dictionary = model.cruise
+		rows[1] = ["Guests", "%s (a balanced cabin mix)" % Fmt.thousands(int(cruise.get("guests", 0)))]
+		rows[2] = ["Decks", "%d amenity slots%s" % [int(cruise.get("deck_slots", 0)), " and a helipad" if cruise.get("helipad", false) else ""]]
+		if not str(cruise.get("ice", "")).is_empty():
+			rows.insert(3, ["Ice", ICE_TEXT.get(str(cruise.ice), "")])
+	elif model.get("recovery", false):
 		rows[1] = ["Carries", GameData.carries_text(model)]
 		rows[2] = ["Job", "Recovers lost ships"]
 		rows.remove_at(3)
@@ -335,15 +352,26 @@ func _make_card(model: Dictionary) -> Control:
 		value_label.text = row[1]
 		line.add_child(value_label)
 		if row[0] == "Price":
-			_price_labels[model.id] = value_label
+			if coming:
+				value_label.text = _price_text(int(model.get("price", 0)))
+			else:
+				_price_labels[model.id] = value_label
 		if row[0] == "Owned":
-			_owned_labels[model.id] = value_label
+			if coming:
+				line.visible = false
+			else:
+				_owned_labels[model.id] = value_label
 
 	var buy := Button.new()
 	buy.theme_type_variation = &"ShopCardButton"
 	buy.custom_minimum_size = Vector2(0, 34)
 	buy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	buy.size_flags_vertical = Control.SIZE_SHRINK_END | Control.SIZE_EXPAND
+	if coming:
+		buy.text = "Coming soon"
+		buy.disabled = true
+		box.add_child(buy)
+		return card
 	buy.pressed.connect(_on_buy_pressed.bind(model.id))
 	buy.mouse_entered.connect(_on_buy_hovered.bind(model.id))
 	buy.mouse_exited.connect(_on_buy_hovered.bind(""))
@@ -448,6 +476,28 @@ func _update_types() -> void:
 		for row: Control in _type_rows[type_id]:
 			row.modulate.a = 1.0 if has else 0.5
 		_tabs.set_tab_icon(_type_tabs[type_id], null if has else _lock())
+
+
+## The note over a coming-soon type's ships (Cruises, until its voyages are built).
+func _coming_banner(type_id: String) -> Control:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(CompanyTypeIcon.type_color(type_id), 0.12)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(10)
+	panel.add_theme_stylebox_override(&"panel", style)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 12)
+	panel.add_child(row)
+	var icon := CompanyTypeIcon.new(type_id)
+	icon.custom_minimum_size = Vector2(30, 30)
+	row.add_child(icon)
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.text = "%s are coming soon: here are the ships. %s" % [Progression.type_name(type_id), Progression.company_type(type_id).get("blurb", "")]
+	row.add_child(label)
+	return panel
 
 
 ## A small padlock for a locked type's tab.

@@ -792,8 +792,12 @@ static func crew_of(model: Dictionary) -> Array:
 		var officers := 1 if hands <= 6 else (2 if hands <= 25 else 4)
 		return [officers, hands - officers]
 	var tier := clampi(int(model.get("tier", 1)), 1, 5) - 1
-	return [int(settings.get("captains", [1])[mini(tier, settings.get("captains", [1]).size() - 1)]),
-		int(settings.get("crew", [2])[mini(tier, settings.get("crew", [2]).size() - 1)])]
+	var captains := int(settings.get("captains", [1])[mini(tier, settings.get("captains", [1]).size() - 1)])
+	if model.has("cruise"):  # A cruise ship: its tier's officers, and a hand for every CRUISE_GUESTS_PER_HAND guests.
+		return [captains, ceili(float(model.cruise.get("guests", 0)) / CRUISE_GUESTS_PER_HAND)]
+	return [captains, int(settings.get("crew", [2])[mini(tier, settings.get("crew", [2]).size() - 1)])]
+## A cruise ship's crew: one hand for every this many guests (before its Crew service level).
+const CRUISE_GUESTS_PER_HAND := 3.0
 
 
 ## What a model's captains and crew are paid each period (game_config crew).
@@ -1089,6 +1093,8 @@ func choose_company_type_error(type_id: String, of: Company = null) -> String:
 	var who := of if of != null else company
 	if Progression.company_type(type_id).is_empty():
 		return "There's no such company type."
+	if Progression.company_type(type_id).get("coming_soon", false):
+		return "%s is coming soon." % Progression.type_name(type_id)
 	if who.has_type(type_id):
 		return "Your company already has it."
 	if company_types_available(who) <= 0:
@@ -4017,7 +4023,8 @@ func found_company(new_name: String, new_color: String, new_home_port: String, n
 	new_color = free_color(new_color)  # (Never a color another company has.)
 	var founded := Company.new(new_name.strip_edges().left(MAX_COMPANY_NAME_LENGTH), new_color, new_home_port)
 	founded.money = int(GameData.config.get("starting_money", 10000))
-	founded.company_types = {new_type if not Progression.company_type(new_type).is_empty() else "cargo": 1}
+	var playable: bool = not Progression.company_type(new_type).is_empty() and not Progression.company_type(new_type).get("coming_soon", false)
+	founded.company_types = {new_type if playable else "cargo": 1}
 	founded.ceo = Characters.clean(new_ceo)
 	if founded.ceo.is_empty():
 		founded.ceo = Company.random_ceo()

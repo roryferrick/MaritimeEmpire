@@ -57,13 +57,19 @@ static func company_level(total_xp: float, company: Company = null) -> Dictionar
 
 # --- Company types -------------------------------------------------------------
 
+## (Not the coming_soon ones: see upcoming_types().)
 ## The company types (game_config company_types types): {id, name, tab, categories, color, blurb}.
 static func company_types() -> Array:
-	return GameData.config.get("company_types", {}).get("types", [])
+	return GameData.config.get("company_types", {}).get("types", []).filter(func(each: Dictionary) -> bool: return not each.get("coming_soon", false))
+
+
+## The company types not playable yet (game_config company_types coming_soon: Cruises).
+static func upcoming_types() -> Array:
+	return GameData.config.get("company_types", {}).get("types", []).filter(func(each: Dictionary) -> bool: return each.get("coming_soon", false))
 
 
 static func company_type(type_id: String) -> Dictionary:
-	for each: Dictionary in company_types():
+	for each: Dictionary in GameData.config.get("company_types", {}).get("types", []):  # (Coming-soon ones too.)
 		if each.id == type_id:
 			return each
 	return {}

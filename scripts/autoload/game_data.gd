@@ -27,6 +27,9 @@ const _NO_LANE := 1 << 30
 var config: Dictionary = {}
 var ports: Array[Dictionary] = []
 var ship_models: Array[Dictionary] = []
+## Models not in play yet (ship_models.json coming_soon: the cruise ships), shown
+## on the Shop's coming-soon tab only.
+var upcoming_models: Array[Dictionary] = []
 ## Word lists ("first", "second") combined to suggest names for new ships.
 var ship_names: Dictionary = {}
 var world_map: WorldMapData
@@ -159,6 +162,9 @@ func _ready() -> void:
 		_ports_by_id[port.id] = port
 		_port_positions[port.id] = Geo.project(Vector2(port.lon, port.lat))
 	for model: Dictionary in _load_json(SHIP_MODELS_PATH).get("models", []):
+		if model.get("coming_soon", false):
+			upcoming_models.append(model)  # (Shown in the Shop, not in play yet.)
+			continue
 		ship_models.append(model)
 		_models_by_id[model.id] = model
 	ship_names = _load_json(SHIP_NAMES_PATH)
@@ -255,7 +261,7 @@ func start_info(port_id: String, type_id := "cargo") -> Dictionary:
 ## A ship line's color (e.g. "container"): the map color of its middle-sized
 ## model, brightened to at least min_luminance so it reads on dark panels.
 func category_color(category: String, min_luminance := 0.5) -> Color:
-	var line := ship_models.filter(func(model: Dictionary) -> bool: return model.get("category", "") == category)
+	var line := (ship_models + upcoming_models).filter(func(model: Dictionary) -> bool: return model.get("category", "") == category)
 	if line.is_empty():
 		return Color.WHITE
 	var color := Color.from_string(line[line.size() / 2].get("map_color", "#ffffff"), Color.WHITE)

@@ -73,6 +73,15 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([at.call(0.68, 0.5), at.call(0.96, 0.26), at.call(0.96, 0.74)]), color)
 			draw_circle(at.call(0.24, 0.44), side * 0.05, dark)
 			draw_arc(at.call(0.36, 0.5), side * 0.12, -PI * 0.4, PI * 0.4, 6, dark, maxf(side * 0.035, 1.0), true)
+		"cruises":
+			# A cruise ship side on: the hull, three tiers of decks with their windows, a funnel.
+			draw_colored_polygon(PackedVector2Array([at.call(0.02, 0.6), at.call(0.98, 0.6), at.call(0.86, 0.84), at.call(0.12, 0.84)]), color)
+			for deck: Array in [[0.12, 0.47, 0.76], [0.2, 0.35, 0.58], [0.3, 0.24, 0.38]]:
+				draw_rect(Rect2(at.call(deck[0], deck[1]), Vector2(deck[2], 0.13) * side), color)
+				for k in int(float(deck[2]) / 0.09):
+					draw_rect(Rect2(at.call(float(deck[0]) + 0.04 + k * 0.09, float(deck[1]) + 0.045), Vector2(0.045, 0.045) * side), dark)
+			draw_colored_polygon(PackedVector2Array([at.call(0.6, 0.24), at.call(0.62, 0.08), at.call(0.74, 0.08), at.call(0.72, 0.24)]), color)
+			draw_rect(Rect2(at.call(0.62, 0.08), Vector2(0.12, 0.04) * side), dark)
 		_:
 			# A compass star: every type.
 			var star := PackedVector2Array()
