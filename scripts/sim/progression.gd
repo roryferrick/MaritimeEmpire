@@ -30,7 +30,7 @@ static func _value_weight(commodity_id: String) -> float:
 
 
 static func max_company_level() -> int:
-	return int(GameData.config.get("max_company_level", 100))
+	return int(GameData.config.get("max_company_level", 140))
 
 
 ## XP needed to go from this company level to the next (0 at the max level),
