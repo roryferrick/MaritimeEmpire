@@ -707,6 +707,8 @@ static var _land_cells := {}
 ## The same land test natively (LandTest), when the library's there (see _on_land()).
 static var _land_test: Object = null
 static var _land_task := -1
+## The lakes' triangles by cell, as [group, index] pairs (see _dry()), sorted with the land's.
+static var _wet_lake_cells := {}
 ## The fleet's lanes (see _active_lanes()), and when (ms) they were worked out.
 var _active_lanes_cache := []
 var _active_lanes_epoch := 0  # (Up each time they change: see _draw_active_lanes().)
@@ -1361,6 +1363,7 @@ func _process_timed(delta: float) -> void:
 	if _marinas_pending:
 		_update_marinas()  # (The marinas that waited their turn.)
 	_warm_towns()
+	_warm_combs()
 	t0 = Time.get_ticks_usec()
 	Wildlife.shared().step(delta)
 	_prof("process.wildlife", t0)
@@ -4639,6 +4642,7 @@ func _update_marinas() -> void:
 			if not keep and not view.grow(reach).has_point(root):
 				continue
 			shown[port_id] = true
+			_check_stranded(port_id)
 			var item := _marina_item(port_id, i)
 			var key := [_dock_flips.get(port_id, 1.0), _hq_look(port_id), _land_cells.is_empty(), _shadow_key()]  # (The town needs the land; the shadows the sun.)
 			var pivot := item.get_parent() as Node2D  # (Moved and turned, not the item: a Control turned draws again.)
@@ -7540,6 +7544,25 @@ static func _on_land(lon_lat: Vector2) -> bool:
 			return true
 	return false
 
+## True where a (lon, lat) point is dry: on the land (see _on_land()) and not
+## on a lake drawn over it. The land test counts the lakes as land; the
+## moorings and their ways go by this, so a port on a lake (Chicago's, say)
+## has its moorings on the lake's water.
+static func _dry(lon_lat: Vector2) -> bool:
+	if not _on_land(lon_lat):
+		return false
+	var p := Geo.project(Vector2(wrapf(lon_lat.x, -180.0, 180.0), lon_lat.y))
+	var pairs: PackedInt32Array = _wet_lake_cells.get(Vector2i(floori(p.x / LAND_CELL_DEG), floori(p.y / LAND_CELL_DEG)), PackedInt32Array())
+	if pairs.is_empty():
+		return true
+	var groups: Array = GameData.world_map.lake_triangles
+	for k in range(0, pairs.size(), 2):
+		var tris: PackedVector2Array = groups[pairs[k]]
+		var i := pairs[k + 1]
+		if Geometry2D.point_is_inside_triangle(p, tris[i], tris[i + 1], tris[i + 2]):
+			return false
+	return true
+
 ## Starts sorting the land's triangles into cells (see _on_land()) off the
 ## main thread, once (it takes a moment: there are some 180,000).
 static func _start_land_cells() -> void:
@@ -7547,6 +7570,20 @@ static func _start_land_cells() -> void:
 		_land_task = WorkerThreadPool.add_task(_build_land_cells, false, "Land cells")
 
 static func _build_land_cells() -> void:
+	var lakes := {}  # (First: once the land's cells are in, so are the lakes'.)
+	var groups: Array = GameData.world_map.lake_triangles
+	for g in groups.size():
+		var lake_tris: PackedVector2Array = groups[g]
+		for i in range(0, lake_tris.size(), 3):
+			var lake_box := Rect2(lake_tris[i], Vector2.ZERO).expand(lake_tris[i + 1]).expand(lake_tris[i + 2])
+			for x in range(floori(lake_box.position.x / LAND_CELL_DEG), floori(lake_box.end.x / LAND_CELL_DEG) + 1):
+				for y in range(floori(lake_box.position.y / LAND_CELL_DEG), floori(lake_box.end.y / LAND_CELL_DEG) + 1):
+					var lake_cell := Vector2i(x, y)
+					if not lakes.has(lake_cell):
+						lakes[lake_cell] = PackedInt32Array()
+					lakes[lake_cell].append(g)
+					lakes[lake_cell].append(i)
+	_wet_lake_cells = lakes
 	if ClassDB.class_exists(&"LandTest"):
 		var mask: Object = ClassDB.instantiate(&"LandTest")
 		mask.build(GameData.world_map.land_triangles, LAND_CELL_DEG)
@@ -12915,7 +12952,7 @@ func _lay_moorings(port_id: String, layout: Dictionary, roads: Array) -> Diction
 	var kept_roads := []
 	var lines := []  # [a, b, priority]
 	var water := func(p: Vector2) -> bool:
-		return not _marina_ground(layout, p) and not _on_land(_dock_lon_lat(port_id, p))
+		return not _marina_ground(layout, p) and not _dry(_dock_lon_lat(port_id, p))
 	for road: Array in roads:
 		var rect: Rect2 = road[0]
 		var kind: String = road[1]
@@ -13038,6 +13075,8 @@ func _lay_moorings(port_id: String, layout: Dictionary, roads: Array) -> Diction
 				slips.append([middle, (-side).angle(), length, roots[i - 1][1], roots[i][1]])
 		if slips.size() < MOOR_MIN_SLIPS:
 			continue
+		if _moorings_on_other_marina(port_id, a, b, slips, finger):
+			continue  # (Over a neighbour's marina, Shenzhen's under Hong Kong's: none there.)
 		# Only the fingers that bound a slip are built.
 		var used := {}
 		for slip: Array in slips:
@@ -13051,7 +13090,332 @@ func _lay_moorings(port_id: String, layout: Dictionary, roads: Array) -> Diction
 		footprints.append(footprint)
 		if line.size() > 4:
 			side_rows[float(line[3])] = maxi(int(side_rows.get(float(line[3]), 0)), int(line[4]) + 1)
+	# A port left with none gets a comb beside its entrance (see _lay_comb()), looked for off the main thread.
+	if moorings.is_empty():
+		_want_comb(port_id)
 	return {roads = kept_roads, pontoons = pontoons, moorings = moorings}
+
+
+## True if a pontoon (from a to b) or any of its slips (see _lay_moorings():
+## [middle, facing, length, root, root]) and their fingers lies on a
+## neighbouring port's marina (its quay or harbour: see _on_other_marina()).
+func _moorings_on_other_marina(port_id: String, a: Vector2, b: Vector2, slips: Array, finger: float) -> bool:
+	var points: Array[Vector2] = []
+	var span := a.distance_to(b)
+	var s := 0.0
+	while s <= span:
+		points.append(a.lerp(b, s / maxf(span, 0.001)))
+		s += 1.0
+	points.append(b)
+	for slip: Array in slips:
+		var out := -Vector2.from_angle(float(slip[1]))  # (From the pontoon out along the slip.)
+		var middle: Vector2 = slip[0]
+		points.append(middle)
+		points.append(middle + out * float(slip[2]) / 2.0)
+		for root: Vector2 in [slip[3], slip[4]]:
+			points.append(root + out * finger)
+	for p: Vector2 in points:
+		if _on_other_marina(port_id, p):
+			return true
+	return false
+
+## The comb (see _lay_comb()): its slips, how far beyond the way round the
+## jetty its nearest finger may stand at most, and the search's step (dock units).
+const MOOR_COMB_SLIPS := 4
+const MOOR_COMB_REACH := 30.0
+const MOOR_COMB_STEP := 2.0
+## How much a comb out in the water with no shore behind it counts against it (dock units).
+const MOOR_COMB_LOOSE := 15.0
+## Where it fits nowhere beside the jetty (a port at the head of a narrow bay
+## or up a river: Melbourne's, Hamburg's), the wider search: anywhere from
+## this far either side of the line straight out of the entrance (the ships'
+## way in and out, kept clear) and this far out to sea beyond the jetty
+## (and in a narrow channel, the comb along its shore: see _lay_comb()).
+const MOOR_COMB_CORRIDOR := 6.0
+const MOOR_COMB_SEAWARD := 40.0
+
+## A port with no moorings of its own (none of its streets on the water, or
+## all of them over a neighbour's marina) gets a comb: one pontoon to the left
+## or right of the entrance, beyond the way ships round the jetty (out of the
+## way of the routes, which leave straight out to sea), with MOOR_COMB_SLIPS
+## slips on one side only, its fingers (the comb's teeth) pointing out to the
+## open water and the ships lying between them bow in, the slips open to it.
+## Of every place it fits (all of it in the water, clear of the marina and its
+## neighbours', the way in to it by water), the nearest the entrance with the
+## shore behind it. Looking takes a while (tens of ms a port), so it's done off
+## the main thread (see _warm_combs()), from a copy of what it needs (see
+## _comb_job()); till then the port's ships lie at anchor. Returns {pontoon:
+## [a, b, fingers], moorings: [[middle, facing, length]...]}, or {} where it
+## fits nowhere. `mode`: 0 beside the jetty, its teeth pointing out to sea; 1
+## the wider search (see MOOR_COMB_CORRIDOR); 2 (a narrow inlet or channel:
+## Anchorage's, Baltimore's) along the shore either side of the way in, its
+## teeth pointing in to the open water of the channel.
+static func _lay_comb(job: Dictionary, mode: int) -> Dictionary:
+	var layout: Dictionary = job.layout
+	var length := _longest_ship()
+	var finger := length + MOOR_FINGER_EXTRA
+	var pitch := _widest_any_ship() + MOOR_SLIP_GAP + MOOR_FINGER_WIDTH
+	var radius := float(layout.radius)
+	var near := maxf(radius + 1.0, radius * JETTY_ROUND + MOOR_LANE_MARGIN)
+	var half := MOOR_PONTOON_WIDTH / 2.0
+	var ahead := half + 0.3 + length + 1.5  # (From the walkway to just past a slip's mouth.)
+	var first: float = [near, MOOR_COMB_CORRIDOR + _widest_any_ship(), MOOR_COMB_CORRIDOR + ahead][mode]
+	var best := {}
+	var best_score := INF
+	for side: float in [-1.0, 1.0]:
+		# The comb's frame: the teeth's way (out to the water), and the way along the walkway.
+		var teeth := Vector2(1.0, 0.0) if mode < 2 else Vector2(0.0, -side)
+		var along := Vector2(0.0, side) if mode < 2 else Vector2(1.0, 0.0)
+		var off: float = first
+		while off <= first + MOOR_COMB_REACH and off - first < best_score:
+			var x := -float(layout.depth) - 4.0
+			while x <= radius + (MOOR_COMB_SEAWARD if mode > 0 else 0.0):
+				var start := Vector2(x, side * off)
+				# The slips first (the likeliest on land), then the fingers and the walkway.
+				var points: Array[Vector2] = []
+				for k in MOOR_COMB_SLIPS:
+					var middle := start + teeth * (half + 0.3 + length / 2.0) + along * (k + 0.5) * pitch
+					points.append(middle)
+					points.append(middle + teeth * (length / 2.0 + 1.5))
+					points.append(middle - teeth * (length / 2.0))
+				for k in MOOR_COMB_SLIPS + 1:
+					var root := start + along * k * pitch
+					points.append(root + teeth * (half + finger))
+					points.append(root + teeth * (half + finger / 2.0))
+					points.append(root)
+				var fits := true
+				for p: Vector2 in points:
+					if not _comb_clear(job, p):
+						fits = false
+						break
+				if fits:
+					# And ships can sail there: the water off its first and last slips is
+					# water a ship reaches from outside the entrance (not a lagoon behind the coast).
+					for k: int in [0, MOOR_COMB_SLIPS - 1]:
+						if not _comb_reaches(job, start + teeth * (half + 0.3 + length * 1.5 + 2.0) + along * (k + 0.5) * pitch):
+							fits = false
+							break
+				if fits:
+					var attached := false
+					for k in MOOR_COMB_SLIPS + 1:
+						if not _comb_water(job, start + along * k * pitch - teeth * (half + 1.5)):
+							attached = true
+							break
+					var score := (off - first) + absf(x) * 0.5 + (0.0 if attached else MOOR_COMB_LOOSE)
+					if score < best_score:
+						best_score = score
+						var fingers := []
+						for k in MOOR_COMB_SLIPS + 1:
+							var root := start + along * k * pitch + teeth * half
+							fingers.append([root, root + teeth * finger])
+						var moorings := []
+						for k in MOOR_COMB_SLIPS:
+							moorings.append([start + teeth * (half + 0.3 + length / 2.0) + along * (k + 0.5) * pitch, (-teeth).angle(), length])
+						best = {pontoon = [start, start + along * MOOR_COMB_SLIPS * pitch, fingers], moorings = moorings}
+					if mode < 2:
+						break  # (The most landward place at this distance out: the next distance.)
+				x += MOOR_COMB_STEP
+			off += MOOR_COMB_STEP
+	return best
+
+## Everything a comb's search needs about a port (see _lay_comb()), copied so
+## it can run off the main thread: the port's layout and frame (where its dock
+## units are on the globe: as _dock_lon_lat()), its neighbours' marinas (their
+## layouts and frames, each with a disc in this port's dock units where it
+## might be: only there is a point looked at against it), and the search's
+## own notes (see _comb_clear() and _comb_reaches()).
+func _comb_job(port_id: String) -> Dictionary:
+	_on_other_marina(port_id, Vector2.ZERO)  # (Fills _marina_neighbours for it.)
+	var discs := []
+	for other: String in _marina_neighbours[port_id]:
+		var info := GameData.get_port(other)
+		var their := _port_layout(other)
+		var centre := _local_of(port_id, Vector2(float(info.get("lon", 0.0)), float(info.get("lat", 0.0))))
+		discs.append([centre, Vector2(_quay_inland(their), float(their.radius) + JETTY_WIDTH + 2.0).length() + 2.0, _comb_frame(other)])
+	var job := _comb_frame(port_id)
+	job.merge({port = port_id, town_key = _towns.get(port_id, {}).get("key", []), discs = discs, wet = {}, reached = {}, dead = {}, result = {}})
+	return job
+
+## A port's layout and frame (see _comb_job()).
+func _comb_frame(port_id: String) -> Dictionary:
+	var port := GameData.get_port(port_id)
+	return {layout = _port_layout(port_id).duplicate(), lon = float(port.get("lon", 0.0)), lat = float(port.get("lat", 0.0)),
+		angle = _port_sea_angle(port_id), flip = float(_dock_flips.get(port_id, 1.0))}
+
+## A point of a port's dock units on the globe (lon, lat), by its frame (as _dock_lon_lat()).
+static func _frame_lon_lat(frame: Dictionary, local: Vector2) -> Vector2:
+	var off := Vector2(local.x, local.y * float(frame.flip)).rotated(float(frame.angle)) / SHIP_WORLD_ZOOM
+	var lat := float(frame.lat)
+	return Vector2(float(frame.lon) + off.x / maxf(cos(deg_to_rad(lat)), 0.05), lat - off.y)
+
+## A point on the globe (lon, lat) in a port's dock units, by its frame (as _local_of()).
+static func _frame_local(frame: Dictionary, lon_lat: Vector2) -> Vector2:
+	var lat := float(frame.lat)
+	var ground := Vector2(wrapf(lon_lat.x - float(frame.lon), -180.0, 180.0) * cos(deg_to_rad(lat)), -(lon_lat.y - lat)) * SHIP_WORLD_ZOOM
+	var local := ground.rotated(-float(frame.angle))
+	local.y *= float(frame.flip)
+	return local
+
+## True where a comb's port has water (see _comb_job()): not its marina's ground, not dry land.
+static func _comb_water(job: Dictionary, p: Vector2) -> bool:
+	return not _marina_ground(job.layout, p) and not _dry(_frame_lon_lat(job, p))
+
+## True where a comb may stand (see _lay_comb()): in the port's water, clear
+## of its own marina and its neighbours'; each half-unit cell asked once a
+## search (the search tries the same points over and over as it slides along).
+static func _comb_clear(job: Dictionary, p: Vector2) -> bool:
+	var key := Vector2i(roundi(p.x * 2.0), roundi(p.y * 2.0))
+	var wet: Dictionary = job.wet
+	if wet.has(key):
+		return wet[key]
+	p = Vector2(key) / 2.0
+	var clear := _comb_water(job, p)
+	if clear:
+		for disc: Array in job.discs:
+			if p.distance_to(disc[0]) <= float(disc[1]):
+				var frame: Dictionary = disc[2]
+				if _marina_ground(frame.layout, _frame_local(frame, _frame_lon_lat(job, p))):
+					clear = false
+					break
+	wet[key] = clear
+	return clear
+
+## True if a ship reaches a point (dock units) by water from just outside the
+## port's entrance (see _lay_comb()): a search outward from the point over
+## cells MOOR_REACH_CELL across till it comes beside the entrance (at most
+## MOOR_REACH_CELLS of them); every cell it saw on the way is remembered as
+## reached or not, so the next search stops as soon as it meets one.
+const MOOR_REACH_CELL := 2.0
+const MOOR_REACH_CELLS := 6000
+static func _comb_reaches(job: Dictionary, from: Vector2) -> bool:
+	var reached: Dictionary = job.reached
+	var dead: Dictionary = job.dead
+	var start := Vector2i((from / MOOR_REACH_CELL).round())
+	if reached.has(start):
+		return true
+	if dead.has(start) or not _comb_clear(job, Vector2(start) * MOOR_REACH_CELL):
+		return false
+	if not job.has("goal"):
+		var layout: Dictionary = job.layout
+		var radius := float(layout.radius)
+		job.goal = Vector2i(-99999, -99999)
+		for spot: Vector2 in [layout.mouth, Vector2(radius * 1.5, 0.0), Vector2(radius * 2.0, 0.0), Vector2(radius * 3.0, 0.0)]:
+			if _comb_clear(job, spot):
+				job.goal = Vector2i((spot / MOOR_REACH_CELL).round())
+				break
+	var goal: Vector2i = job.goal
+	var seen := {start: true}
+	var queue: Array[Vector2i] = [start]
+	var head := 0
+	var found := false
+	while head < queue.size() and head < MOOR_REACH_CELLS:
+		var cell := queue[head]
+		head += 1
+		if reached.has(cell) or (absi(cell.x - goal.x) <= 1 and absi(cell.y - goal.y) <= 1):
+			found = true
+			break
+		for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var next := cell + step
+			if seen.has(next) or dead.has(next):
+				continue
+			seen[next] = true
+			if _comb_clear(job, Vector2(next) * MOOR_REACH_CELL):
+				queue.append(next)
+	for cell: Vector2i in seen:
+		if found:
+			reached[cell] = true
+		elif head >= queue.size():
+			dead[cell] = true  # (A closed pocket of water: none of it reaches the entrance.)
+	return found
+
+## Looks for a comb (see _lay_comb()) beside the jetty, then wider, then
+## along a channel's shore; on a worker thread (see _warm_combs()).
+static func _run_comb_job(job: Dictionary) -> void:
+	for mode in 3:
+		job.result = _lay_comb(job, mode)
+		if not (job.result as Dictionary).is_empty():
+			return
+
+## The ports waiting for a comb (see _lay_comb()), and the searches running:
+## [task id, job]. At most COMB_TASKS at once.
+const COMB_TASKS := 4
+var _comb_queue := {}
+var _comb_tasks := []
+
+## A port wants a comb: looked for off the main thread (see _warm_combs()).
+func _want_comb(port_id: String) -> void:
+	_comb_queue[port_id] = true
+
+## True while combs are still being looked for (see _warm_combs()).
+func combs_pending() -> bool:
+	return not _comb_queue.is_empty() or not _comb_tasks.is_empty()
+
+## Each frame: the combs found are put in their ports' towns (see
+## _set_pontoons()), and searches started for the ports waiting, COMB_TASKS
+## at a time, once the land's cells are in and the port's town is laid.
+func _warm_combs() -> void:
+	if _comb_queue.is_empty() and _comb_tasks.is_empty():
+		return
+	var running := []
+	for task: Array in _comb_tasks:
+		if not WorkerThreadPool.is_task_completed(task[0]):
+			running.append(task)
+			continue
+		WorkerThreadPool.wait_for_task_completion(task[0])
+		var job: Dictionary = task[1]
+		var town: Dictionary = _towns.get(job.port, {})
+		if town.is_empty() or town.get("key", []) != job.town_key:
+			continue  # (Laid again since: it asks again if it still needs one.)
+		var comb: Dictionary = job.result
+		if not comb.is_empty():
+			_set_pontoons(job.port, [comb.pontoon], comb.moorings)
+	_comb_tasks = running
+	if _land_cells.is_empty():
+		return
+	for port_id: String in _comb_queue.keys():
+		if _comb_tasks.size() >= COMB_TASKS:
+			break
+		if not _towns.has(port_id):
+			continue
+		_comb_queue.erase(port_id)
+		var job := _comb_job(port_id)
+		_comb_tasks.append([WorkerThreadPool.add_task(_run_comb_job.bind(job), false, "Comb"), job])
+
+## Puts a port's pontoons and moorings in its town (a comb found, or stranded
+## moorings taken away: see _comb_if_stranded()), the lamps at the pontoons'
+## ends with them, and draws its marina again; its moorings' ways are worked
+## out afresh.
+func _set_pontoons(port_id: String, pontoons: Array, moorings: Array) -> void:
+	var town: Dictionary = _towns.get(port_id, {})
+	if town.is_empty():
+		return
+	var ends := {}
+	for pontoon: Array in town.pontoons:
+		ends[pontoon[0]] = true
+		ends[pontoon[1]] = true
+	var lights := PackedVector2Array()
+	for light: Vector2 in town.lights:
+		if not ends.has(light):
+			lights.append(light)
+	for pontoon: Array in pontoons:
+		lights.append(pontoon[0])
+		lights.append(pontoon[1])
+	var segments := PackedVector2Array()
+	for light: Vector2 in lights:
+		segments.append(light - Vector2(0.11, 0.0))
+		segments.append(light + Vector2(0.11, 0.0))
+	town.pontoons = pontoons
+	town.moorings = moorings
+	town.lights = lights
+	town.segments = segments
+	town.erase("reached")
+	_moorings_warm.erase(port_id)
+	if _marina_items.has(port_id):
+		(_marina_items[port_id] as Control).set_meta(&"key", [])  # (Drawn again with them.)
+		_marinas_pending = true
+
+
+
 
 
 ## A point of a port's marina (dock units) as another port's dock units.
@@ -13410,8 +13774,41 @@ func _warm_moorings() -> void:
 					_warm_moorings_at = (_warm_moorings_at + n) % ships.size()
 					return
 		if all_known:
+			if _comb_if_stranded(port):
+				continue  # (Its comb's ways are still to work out.)
 			_moorings_warm[port] = [moorings.size(), layout.radius]
 	_warm_moorings_at = (_warm_moorings_at + MOORING_WARM_SHIPS) % ships.size()
+
+## Looks at a port's moorings' ways once they're all known (a marina on
+## screen: see _update_marinas(); _warm_moorings() does the ports the ships
+## are bound for), for _comb_if_stranded(); once one is found reachable, never again.
+func _check_stranded(port_id: String) -> void:
+	var town: Dictionary = _towns.get(port_id, {})
+	if town.is_empty() or town.get("combed", false) or town.get("reached", false):
+		return
+	for mooring: Array in town.moorings:
+		if not _mooring_way_known(port_id, mooring):
+			return
+		if not _mooring_way(port_id, mooring).is_empty():
+			town.reached = true
+			return
+	_comb_if_stranded(port_id)
+
+## A port whose moorings all turn out to have no way to them by water (its
+## town's streets on water behind it that no ship can reach: New York's,
+## Istanbul's, Auckland's) has them taken away and gets a comb instead (see
+## _lay_comb()), once the ways are known; once only (true when it does).
+func _comb_if_stranded(port_id: String) -> bool:
+	var town: Dictionary = _towns.get(port_id, {})
+	if town.is_empty() or town.get("combed", false):
+		return false
+	for mooring: Array in town.moorings:
+		if not _mooring_way(port_id, mooring).is_empty():
+			return false
+	town.combed = true
+	_set_pontoons(port_id, [], [])
+	_want_comb(port_id)
+	return true
 
 ## A port's long-term moorings (see _lay_moorings()), or [] until its town is laid.
 func _moorings(port_id: String) -> Array:
@@ -13467,7 +13864,7 @@ func _mooring_way_fresh(port_id: String, mooring: Array) -> Variant:
 	# the mooring's side if that's water, else straight out from the entrance.
 	var start: Vector2 = poses[0][0]
 	for spot: Vector2 in [poses[0][0], layout.mouth, Vector2(radius * 1.5, 0.0), Vector2(radius * 2.0, 0.0)]:
-		if not _on_land(_dock_lon_lat(port_id, spot)):
+		if not _dry(_dock_lon_lat(port_id, spot)):
 			start = spot
 			break
 	if _port_water_grid(port_id).is_empty():
@@ -13486,7 +13883,7 @@ func _mooring_way_fresh(port_id: String, mooring: Array) -> Variant:
 func _water_leg(port_id: String, a: Vector2, b: Vector2) -> bool:
 	var steps := maxi(ceili(a.distance_to(b) / 0.8), 1)
 	for s in range(1, steps):
-		if _on_land(_dock_lon_lat(port_id, a.lerp(b, float(s) / steps))):
+		if _dry(_dock_lon_lat(port_id, a.lerp(b, float(s) / steps))):
 			return false
 	return true
 
@@ -13588,7 +13985,7 @@ static func _map_water(job: Dictionary) -> void:
 				solid[y * n + x] = 1
 				continue
 			var off := Vector2(p.x, p.y * flip).rotated(angle) / SHIP_WORLD_ZOOM
-			if _on_land(Vector2(lon + off.x / stretch, lat - off.y)):
+			if _dry(Vector2(lon + off.x / stretch, lat - off.y)):
 				solid[y * n + x] = 1
 	job.solid = solid
 
@@ -13602,7 +13999,7 @@ func _mooring_way_plain(port_id: String, mooring: Array) -> Array:
 	var away := -Vector2.from_angle(facing)
 	var mouth := middle + away * (float(mooring[2]) / 2.0 + 1.5)
 	var out := maxf(float(mooring[2]) * 0.8, 4.0)
-	while out > 1.0 and _on_land(_dock_lon_lat(port_id, mouth + away * out)):
+	while out > 1.0 and _dry(_dock_lon_lat(port_id, mouth + away * out)):
 		out -= 1.0
 	var stage := mouth + away * out
 	var side := 1.0 if stage.y >= 0.0 else -1.0
