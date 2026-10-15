@@ -15,7 +15,7 @@ const FIELD_GUIDE_BUTTON := 44.0
 const LINE_MIN_LUMINANCE := 0.5
 ## The price picker's ship lines: [name, ship_models.json category].
 const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Vehicle carriers", "vehicles"], ["Seafood carriers", "seafood"]]
+	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Seafood carriers", "seafood"]]
 ## The box (px) a seafood family's picture is fitted in, in the price picker
 ## (see _catch_icon()); and the family whose picture marks the seafood line.
 const CATCH_ICON_SIZE := Vector2i(30, 18)
@@ -58,6 +58,7 @@ func _ready() -> void:
 	_map.empty_clicked.connect(func() -> void: PopupHost.find(self).close())
 	Settings.changed.connect(func() -> void: _map.show_active_lanes = GameState.show_active_routes)  # (Routes, on the Settings page.)
 	_add_price_picker()
+	_add_factories_switch()
 	_add_region_choice()
 	_add_zoom_buttons()
 	_add_side_buttons()
@@ -104,6 +105,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _map.choosing_region and event.is_action_pressed(&"ui_cancel"):
 		_stop_choosing()
 		get_viewport().set_input_as_handled()
+
+
+## The Factories switch in the map panel (Vehicles companies: on to start
+## with): the makers' factories marked by their ports (MapView.show_factories).
+func _add_factories_switch() -> void:
+	var switch := CheckButton.new()
+	switch.text = "Factories"
+	switch.tooltip_text = "Mark where the vehicle and boat makers build: their own factories, and companies' factories for them (outlined in the company's colour)."
+	switch.button_pressed = Manufacturers.can_deal(GameState.company)
+	_map.show_factories = switch.button_pressed
+	switch.toggled.connect(func(on: bool) -> void: _map.show_factories = on)
+	switch.visible = Manufacturers.can_deal(GameState.company)
+	GameState.company_types_changed.connect(func() -> void: switch.visible = Manufacturers.can_deal(GameState.company))
+	GameState.makers_changed.connect(func() -> void:
+		if _map.show_factories:
+			_map.show_factories = true)  # (Drawn again: a factory built or closed.)
+	%MapControls.add_child(switch)
 
 
 ## The Unlock a region button (first in the map panel), the banner and the

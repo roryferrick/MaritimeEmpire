@@ -5,7 +5,7 @@ extends Control
 ## bottom nav, the full-screen Route Assignment screen, and the Esc menu;
 ## Space pauses and T opens the chat.
 
-enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -35,6 +35,9 @@ var _current_screen := Screen.WORLD
 ## The Farms screen and its tab (made here: shown for Agriculture companies only, see _update_farms_tab()).
 var _farms_screen := FarmsScreen.new()
 var _farms_button := Button.new()
+## The Makers screen and its tab (shown for Vehicles companies only, see _update_farms_tab()).
+var _makers_screen := MakersScreen.new()
+var _makers_button := Button.new()
 
 ## Shown on the Ships tab while any ship needs the player (see
 ## Ship.attention_reason()), and on the Shop tab while any ship can be bought.
@@ -69,6 +72,18 @@ func _ready() -> void:
 	%ShopButton.get_parent().move_child(_farms_button, %ShopButton.get_index())
 	_screens[Screen.FARMS] = _farms_screen
 	_nav_buttons[Screen.FARMS] = _farms_button
+	_makers_screen.name = "MakersScreen"
+	_makers_screen.visible = false
+	_makers_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	%MarketsScreen.add_sibling(_makers_screen)
+	_makers_button.name = "MakersButton"
+	_makers_button.text = "Makers"
+	_makers_button.custom_minimum_size = Vector2(0, 48)
+	_makers_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	%ShopButton.add_sibling(_makers_button)
+	%ShopButton.get_parent().move_child(_makers_button, %ShopButton.get_index())
+	_screens[Screen.MAKERS] = _makers_screen
+	_nav_buttons[Screen.MAKERS] = _makers_button
 	GameState.company_types_changed.connect(_update_farms_tab)
 	_update_farms_tab()
 	var group := ButtonGroup.new()
@@ -191,15 +206,24 @@ func _update_ships_alert() -> void:
 	%ShipsButton.tooltip_text = "Ships needing you: %s" % ", ".join(parts) if not reasons.is_empty() else ""
 
 
-## The Farms tab shows for companies that can farm (Agriculture: see Farms.can_farm()).
+## The Farms tab shows for companies that can farm (Agriculture: see
+## Farms.can_farm()), the Makers tab for those that deal with the vehicle and
+## boat makers (Vehicles: see Manufacturers.can_deal()).
 func _update_farms_tab() -> void:
 	_farms_button.visible = Farms.can_farm(GameState.company)
+	_makers_button.visible = Manufacturers.can_deal(GameState.company)
 
 
 ## Opens the Farms screen at a farm port (the port popup's Farms button).
 func show_farm(port_id: String) -> void:
 	_farms_screen.show_port(port_id)
 	show_screen(Screen.FARMS)
+
+
+## Opens the Makers screen at a maker (the port popup's Makers button).
+func show_maker(maker_id: String) -> void:
+	_makers_screen.show_maker(maker_id)
+	show_screen(Screen.MAKERS)
 
 
 ## Switches to the World map, centered on a port.

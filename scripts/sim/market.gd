@@ -10,6 +10,10 @@ extends RefCounted
 var _state: Node  # GameState
 ## "PORT/commodity" -> [impact (e.g. -0.01 for 1% cheaper), play_time it was set].
 var _impacts := {}
+## For the drift (see _drift()), worked out once: port id -> its (lon, lat) in
+## radians; commodity id -> its two waves' phases.
+var _places := {}
+var _phases := {}
 
 
 func _init(state: Node) -> void:
@@ -53,11 +57,19 @@ func _drift(port_id: String, commodity_id: String) -> float:
 	if amount <= 0.0:
 		return 1.0
 	var period := float(GameData.markets.get("drift_period_s", 1200))
-	var port := GameData.get_port(port_id)
-	var lon := deg_to_rad(float(port.get("lon", 0.0)))
-	var lat := deg_to_rad(float(port.get("lat", 0.0)))
-	var phase := GameData._hash01(commodity_id + "/a") * TAU + lon * 2.0 + lat * 1.5
-	var phase2 := GameData._hash01(commodity_id + "/b") * TAU + lon * 3.0 - lat * 2.5
+	var place: PackedFloat64Array = _places.get(port_id, PackedFloat64Array())  # (Kept: the sim asks often.)
+	if place.is_empty():
+		var port := GameData.get_port(port_id)
+		place = PackedFloat64Array([deg_to_rad(float(port.get("lon", 0.0))), deg_to_rad(float(port.get("lat", 0.0)))])
+		_places[port_id] = place
+	var phases: PackedFloat64Array = _phases.get(commodity_id, PackedFloat64Array())
+	if phases.is_empty():
+		phases = PackedFloat64Array([GameData._hash01(commodity_id + "/a") * TAU, GameData._hash01(commodity_id + "/b") * TAU])
+		_phases[commodity_id] = phases
+	var lon := place[0]
+	var lat := place[1]
+	var phase := phases[0] + lon * 2.0 + lat * 1.5
+	var phase2 := phases[1] + lon * 3.0 - lat * 2.5
 	var t: float = _state.play_time
 	var wave := 0.65 * sin(TAU * t / period + phase) + 0.35 * sin(TAU * t / (period * 0.37) + phase2)
 	return 1.0 + amount * wave
@@ -105,6 +117,8 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 	var factor := NAN  # (The leg's bonuses, from the memo: looked up once.)
 	var days := -1.0  # (The leg's calendar days at sea, for fresh cargo: worked out once if needed.)
 	for commodity_id: String in model.get("cargo", []):
+		if GameData.hold_of(commodity_id) > float(model.get("capacity", 0)):
+			continue  # (Doesn't fit at all: a superyacht on a Boat Barge.)
 		var sell: float
 		var buy: float
 		var bonus: float

@@ -787,6 +787,8 @@ func cargo_text(model: Dictionary) -> String:
 const CARGO_SUMMARIES := {
 	grain = "Wheat, Corn, Soybeans, Rice, Barley, Coffee, Cocoa, Tea, Sugarcane, Spices, Almonds, Olives, Dates, Cotton and Rubber",
 	produce = "Fruit, Berries and Vegetables: 21 kinds, fresh",
+	vehicles = "Cars and trucks from 22 makers, budget to luxury",
+	boat_carriers = "Boats from 22 makers, jet skis to superyachts",
 }
 
 ## "Toys, Clothing, Furniture": what a model can carry (a long list summed up: CARGO_SUMMARIES).
@@ -806,6 +808,19 @@ static func current_commodity(id: String) -> String:
 
 func commodity(id: String) -> Dictionary:
 	return _commodities_by_id.get(id, {})
+
+
+## The plain good a commodity is a kind of: a maker's vehicles their kind
+## (cars, trucks or boats: what hub industries, cargo art and the delivery
+## achievements go by), anything else itself.
+func family_of(id: String) -> String:
+	return str(commodity(id).get("family", id))
+
+
+## True for a commodity no ship loads any more (the plain Cars, Trucks and
+## Boats from before the makers): left out of the price lists.
+func is_legacy(id: String) -> bool:
+	return bool(commodity(id).get("legacy", false))
 
 
 ## How many units of a ship's hold one of a commodity takes (markets.json
@@ -837,45 +852,73 @@ func base_price(port_id: String, commodity_id: String) -> float:
 ## varying over a few sailing days) and any island_markets multipliers are applied.
 func _build_prices() -> void:
 	var sigma := float(markets.get("smoothing_nm", 700.0))
-	var weights := []  # Per port: [[other index, weight], ...]
+	# Each port's neighbours and their weights, flat (from[i] to from[i + 1]),
+	# and the weights' sum: the same for every commodity.
+	var others := PackedInt32Array()
+	var weights := PackedFloat64Array()
+	var from := PackedInt32Array([0])
+	var weight_sums := PackedFloat64Array()
 	for i in ports.size():
-		var row := []
+		var sum := 0.0
 		for j in ports.size():
 			var d := 0.0 if i == j else distance_nm(ports[i].id, ports[j].id)
 			if d < 3.0 * sigma:
-				row.append([j, exp(-(d * d) / (sigma * sigma))])
-		weights.append(row)
+				var w := exp(-(d * d) / (sigma * sigma))
+				others.append(j)
+				weights.append(w)
+				sum += w
+		from.append(others.size())
+		weight_sums.append(sum)
 	var variation := float(markets.get("local_variation", 0.0))
 	var coastal := float(markets.get("coastal_variation", 0.0))
 	var islands := {}  # Port id -> {commodity id: multiplier}, from island_markets.
 	for group: Dictionary in markets.get("island_markets", []):
 		islands.merge(group.prices)
+	# Each port's place for the variations, worked out once.
+	var lons := PackedFloat64Array()
+	var lats := PackedFloat64Array()
+	var points := PackedVector3Array()
+	var region_ids := PackedStringArray()
+	for port in ports:
+		var lon := deg_to_rad(float(port.lon))
+		var lat := deg_to_rad(float(port.lat))
+		lons.append(lon)
+		lats.append(lat)
+		points.append(Vector3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat)) * Geo.EARTH_RADIUS_NM)
+		region_ids.append(str(port_region(port.id).get("id", "")))
 	for item: Dictionary in commodities:
 		var raw := PackedFloat64Array()
-		for port in ports:
-			var region_id: String = port_region(port.id).get("id", "")
-			var multiplier := float(markets.region_prices.get(region_id, {}).get(item.id, 1.0))
-			raw.append(float(item.base) * float(markets.sources.get(item.id, {}).get(port.id, multiplier)))
+		var sources: Dictionary = markets.sources.get(item.id, {})
+		for k in ports.size():
+			var multiplier := float(markets.region_prices.get(region_ids[k], {}).get(item.id, 1.0))
+			raw.append(float(item.base) * float(sources.get(ports[k].id, multiplier)))
+		var smooth := _smooth_waves(item.id)
+		var waves := _coastal_waves(item.id)
 		for i in ports.size():
 			var total := 0.0
-			var weight := 0.0
-			for pair: Array in weights[i]:
-				total += raw[pair[0]] * pair[1]
-				weight += pair[1]
-			var local := 1.0 + variation * 0.5 * _smooth_noise(ports[i], item.id)
-			local *= 1.0 + coastal * _coastal_noise(ports[i], item.id)
+			for k in range(from[i], from[i + 1]):
+				total += raw[others[k]] * weights[k]
+			var local := 1.0 + variation * 0.5 * _smooth_at(lons[i], lats[i], smooth)
+			local *= 1.0 + coastal * _coastal_at(points[i], waves)
 			local *= float(islands.get(ports[i].id, {}).get(item.id, 1.0))
-			_base_prices["%s/%s" % [ports[i].id, item.id]] = total / weight * local
+			_base_prices["%s/%s" % [ports[i].id, item.id]] = total / weight_sums[i] * local
 	_world_prices.clear()
 
 
 ## A value in [-1, 1] that varies slowly across the map (over thousands of nm),
 ## differently for each commodity.
 func _smooth_noise(port: Dictionary, commodity_id: String) -> float:
-	var a := _hash01(commodity_id + "/x") * TAU
-	var b := _hash01(commodity_id + "/y") * TAU
-	var lon := deg_to_rad(float(port.lon))
-	var lat := deg_to_rad(float(port.lat))
+	return _smooth_at(deg_to_rad(float(port.lon)), deg_to_rad(float(port.lat)), _smooth_waves(commodity_id))
+
+
+## A commodity's phases for _smooth_at(): [a, b].
+static func _smooth_waves(commodity_id: String) -> PackedFloat64Array:
+	return PackedFloat64Array([_hash01(commodity_id + "/x") * TAU, _hash01(commodity_id + "/y") * TAU])
+
+
+static func _smooth_at(lon: float, lat: float, phases: PackedFloat64Array) -> float:
+	var a := phases[0]
+	var b := phases[1]
 	return 0.5 * sin(lon * 3.0 + a) * cos(lat * 2.0 + b) + 0.5 * sin(lon * 5.0 + lat * 4.0 + a + b)
 
 
@@ -885,20 +928,29 @@ func _smooth_noise(port: Dictionary, commodity_id: String) -> float:
 ## neighbouring coasts small price differences that grow with distance, so
 ## short runs can pay without very short hops paying more a minute.
 func _coastal_noise(port: Dictionary, commodity_id: String) -> float:
-	var wavelength := float(markets.get("coastal_wavelength_nm", 1600.0))
-	var waves := int(markets.get("coastal_waves", 6))
 	var lon := deg_to_rad(float(port.lon))
 	var lat := deg_to_rad(float(port.lat))
-	var point := Vector3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat)) * Geo.EARTH_RADIUS_NM
-	var total := 0.0
-	for i in waves:
+	return _coastal_at(Vector3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat)) * Geo.EARTH_RADIUS_NM, _coastal_waves(commodity_id))
+
+
+## A commodity's waves for _coastal_at(): [direction x TAU / wavelength, phase] each.
+func _coastal_waves(commodity_id: String) -> Array:
+	var wavelength := float(markets.get("coastal_wavelength_nm", 1600.0))
+	var out := []
+	for i in int(markets.get("coastal_waves", 6)):
 		var key := "%s/wave%d" % [commodity_id, i]
 		var z := _hash01(key + "z") * 2.0 - 1.0
 		var angle := _hash01(key + "a") * TAU
 		var r := sqrt(1.0 - z * z)
-		var direction := Vector3(r * cos(angle), r * sin(angle), z)
-		total += sin(point.dot(direction) * TAU / wavelength + _hash01(key + "p") * TAU)
-	return total / sqrt(waves / 2.0)
+		out.append([Vector3(r * cos(angle), r * sin(angle), z) * (TAU / wavelength), _hash01(key + "p") * TAU])
+	return out
+
+
+static func _coastal_at(point: Vector3, waves: Array) -> float:
+	var total := 0.0
+	for wave: Array in waves:
+		total += sin(point.dot(wave[0]) + float(wave[1]))
+	return total / sqrt(waves.size() / 2.0)
 
 
 ## A commodity's average steady price across all ports.
@@ -998,6 +1050,15 @@ func _load_markets() -> void:
 	for region: Dictionary in markets.get("regions", []):
 		for port_id: String in region.ports:
 			_port_regions[port_id] = region
+	# Each vehicle and boat maker's goods (Manufacturers), with their prices:
+	# cheapest at its factories, then its home region.
+	for entry: Array in Manufacturers.market_goods():
+		var item: Dictionary = entry[0]
+		commodities.append(item)
+		_commodities_by_id[item.id] = item
+		for region_id: String in entry[1]:
+			(markets.region_prices.get_or_add(region_id, {}) as Dictionary)[item.id] = entry[1][region_id]
+		markets.sources[item.id] = entry[2]
 
 
 func _load_json(path: String) -> Dictionary:

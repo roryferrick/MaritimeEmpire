@@ -103,8 +103,46 @@ func _build_size() -> void:
 		cold.text = "Your cold store: %s, for your seafood carriers" % ", ".join(parts)
 		%SizeBox.add_child(cold)
 	_add_farm_line()
+	_add_maker_line()
 	_update_birds()
 	_update_size()
+
+
+## The vehicle and boat makers with a factory here (their own, or a company's
+## for them): who they are, how much they like this player, its own factory's
+## stock here, and a button to them on the Makers screen.
+func _add_maker_line() -> void:
+	var here := GameState.makers.makers_at(port_id)
+	if here.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.add_theme_color_override(&"font_color", Color(0.62, 0.74, 0.98))
+	var parts := PackedStringArray()
+	for id in here:
+		var each := Manufacturers.maker(id)
+		var whose := "" if Manufacturers.is_factory_port(id, port_id) else " (%s)" % ", ".join(PackedStringArray(GameState.makers.factories_at(port_id).filter(func(pair: Array) -> bool: return pair[1].maker == id).map(func(pair: Array) -> String: return (pair[0] as Company).name)))
+		var text := "%s%s" % [each.name, whose]
+		if Manufacturers.can_deal(GameState.company):
+			text += " likes you %d" % floori(Manufacturers.likeness(GameState.company, id))
+		var mine := Manufacturers.factory(GameState.company, id, port_id)
+		if not mine.is_empty():
+			text += ", your factory holds %s %s" % [Fmt.thousands(floori(float(mine.get("stock", 0.0)))), GameData.commodity(id).get("units", "vehicles")]
+		parts.append(text)
+	label.text = "Factories: %s" % " · ".join(parts)
+	row.add_child(label)
+	if Manufacturers.can_deal(GameState.company):
+		var open := Button.new()
+		open.text = "Makers"
+		open.size_flags_vertical = SIZE_SHRINK_CENTER
+		open.pressed.connect(func() -> void:
+			GameRoot.find(self).show_maker(here[0])
+			queue_free())
+		row.add_child(open)
+	%SizeBox.add_child(row)
 
 
 ## A farm port's line: its climate, its plots, the company's farm there, and a
@@ -325,7 +363,12 @@ func _refresh_market() -> void:
 		child.queue_free()
 	for title: String in ["", "Buy", "Sell", "", "Buy", "Sell"]:
 		_add_market_cell(title, &"DimLabel")
-	for commodity: Dictionary in GameData.commodities:
+	# The plain goods, then the makers with a factory here (theirs or a company's:
+	# their goods are cheapest here); the other makers' are on the Markets tab.
+	var listed: Array = GameData.commodities.filter(func(commodity: Dictionary) -> bool: return not commodity.get("maker", false) and not commodity.get("legacy", false))
+	for id in GameState.makers.makers_at(port_id):
+		listed.append(GameData.commodity(id))
+	for commodity: Dictionary in listed:
 		var sell := GameState.market.sell_price(port_id, commodity.id)
 		var ratio := sell / GameData.world_price(commodity.id)
 		var variation := &"GainLabel" if ratio < MARKET_CHEAP else (&"ErrorLabel" if ratio > MARKET_EXPENSIVE else &"")

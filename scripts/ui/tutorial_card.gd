@@ -251,11 +251,11 @@ static func _type_welcome() -> String:
 		"cargo":
 			return "We're in Cargo & Ore: container ships with toys, clothing and furniture, and bulk carriers with iron ore, coal and gold. Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
 		"vehicles":
-			return "We're in Vehicles: car carriers taking cars, trucks and boats from the factories to the showrooms. Buy ships, give them routes between ports, and they'll buy vehicles where they're cheap and sell them where they're dear."
+			return "We're in Vehicles: car carriers and boat carriers shipping for 44 carmakers and boatbuilders, from the factories to the showrooms. Buy ships, give them routes between ports, and they'll buy vehicles where they're cheap (at the makers' factories) and sell them where they're expensive. The makers don't trust us yet: every load we carry for one wins it over, and once it likes us 70/100 we can build a factory for it (the Makers tab)."
 		"agriculture":
 			return "We're in Agriculture: farms at the world's farm ports, grain carriers with grain, coffee, cocoa, sugar and spices, Fresh produce carriers with fruit and vegetables, and livestock carriers with cattle, sheep, pigs and horses. Buy ships, give them routes between ports, and they'll buy where the harvest is cheap and sell where it's wanted."
 		"tankers":
-			return "We're in Tankers: oil and gas. Buy tankers, give them routes between ports, and they'll fill up where oil is cheap and sell it where it's dear."
+			return "We're in Tankers: oil and gas. Buy tankers, give them routes between ports, and they'll fill up where oil is cheap and sell it where it's expensive."
 		"seafood":
 			return "We're in Seafood: fishing and crabbing boats that work the grounds near their port and sell the catch, and fish tenders and reefers that carry seafood between ports."
 		"cruises":

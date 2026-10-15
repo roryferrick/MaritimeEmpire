@@ -164,6 +164,9 @@ var cargo_fresh := 1.0
 var cargo_since := 0.0
 ## True if the cargo aboard came from its company's farm store (Farms.load_ship()).
 var cargo_farm := false
+## Cargo from one of its company's factories (Manufacturers.load_ship()): the
+## share of its sale the maker takes (0 for anything else).
+var cargo_cut := 0.0
 var unloaded := true
 ## Rates (per second) that refill what was missing on arrival within one refill phase.
 var repair_rate := 0.0
@@ -1441,6 +1444,7 @@ func to_dict() -> Dictionary:
 		"cargo_fresh": cargo_fresh,
 		"cargo_since": cargo_since,
 		"cargo_farm": cargo_farm,
+		"cargo_cut": cargo_cut,
 		"unloaded": unloaded,
 		"repair_rate": repair_rate,
 		"refuel_rate": refuel_rate,
@@ -1544,6 +1548,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.cargo_fresh = float(data.get("cargo_fresh", 1.0))
 	ship.cargo_since = float(data.get("cargo_since", 0.0))
 	ship.cargo_farm = bool(data.get("cargo_farm", false))
+	ship.cargo_cut = float(data.get("cargo_cut", 0.0))
 	if ship.cargo_id == "coffee" and not (ship.model().get("cargo", []) as Array).has("coffee"):
 		ship.cargo_qty = roundi(ship.cargo_qty * 2250.0 / 160.0)  # (A save from before coffee was a farm crop by the ton: its containers as tons of the same worth.)
 	ship.unloaded = bool(data.get("unloaded", true))

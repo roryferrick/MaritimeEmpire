@@ -90,7 +90,8 @@ const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing
 	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve", &"level_skill", &"upgrade_all",
 	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
 	&"rename_ship", &"set_prefs", &"unlock_region", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act",
-	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item"]
+	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item",
+	&"build_factory", &"close_factory", &"sell_factory_stock"]
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its

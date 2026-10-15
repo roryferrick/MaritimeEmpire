@@ -41,7 +41,7 @@ const WONDER_STARS := [10, 25, 0]
 ## Hidden gems found for each star (GameState.HIDDEN_GEMS: three of them).
 const GEM_STARS := [1, 2, 3]
 ## The ship lines owning one of each counts for the Full house badge.
-const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "produce", "tanker", "vehicles", "seafood"]
+const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "produce", "tanker", "vehicles", "boat_carriers", "seafood"]
 ## Badges: [id, name, what it takes].
 const BADGES := [
 	["first_delivery", "Maiden voyage", "Deliver a cargo"],
@@ -65,6 +65,8 @@ const BADGES := [
 static func lines() -> Array:
 	var out := []
 	for commodity: Dictionary in GameData.commodities:
+		if commodity.get("maker", false):
+			continue  # (A maker's goods count towards their kind's line: Cars, Trucks or Boats.)
 		var stars: Array = STAR_UNITS.get(str(commodity.get("unit", "")), [])
 		if not stars.is_empty():
 			out.append({id = "deliver_" + str(commodity.id), name = str(commodity.name), unit = str(commodity.get("units", "units")) + " delivered", stars = stars})
@@ -80,7 +82,7 @@ static func lines() -> Array:
 ## How far a company has got along a line (in its unit).
 static func progress(company: Company, line_id: String) -> int:
 	if line_id.begins_with("deliver_"):
-		return int(company.delivered.get(line_id.trim_prefix("deliver_"), 0))
+		return delivered_of(company, line_id.trim_prefix("deliver_"))
 	match line_id:
 		"fleet":
 			var count := 0
@@ -116,7 +118,7 @@ static func badge_done(company: Company, badge_id: String) -> bool:
 			return company.regions.size() >= (GameData.markets.get("regions", []) as Array).size()
 		"every_cargo":
 			for commodity: Dictionary in GameData.commodities:
-				if int(company.delivered.get(commodity.id, 0)) <= 0:
+				if not commodity.get("maker", false) and delivered_of(company, commodity.id) <= 0:
 					return false
 			return true
 		"full_house":
@@ -232,3 +234,13 @@ static func wonders_seen(company: Company) -> int:
 		if key.begins_with("wonder:") and not GameData.wonder(key.trim_prefix("wonder:")).is_empty():
 			count += 1
 	return count
+
+
+## Units of a commodity a company has delivered: a plain kind (cars, trucks,
+## boats) with every maker's of that kind (Manufacturers) added in.
+static func delivered_of(company: Company, commodity_id: String) -> int:
+	var total := int(company.delivered.get(commodity_id, 0))
+	for id: String in company.delivered:
+		if id != commodity_id and GameData.family_of(id) == commodity_id:
+			total += int(company.delivered[id])
+	return total

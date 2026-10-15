@@ -268,6 +268,9 @@ func _think(rival: Company, mind: Dictionary) -> void:
 	news.append_array(_run_cruises(rival))
 	if int(mind.thinks) % FARM_EVERY == 0:  # (Its farms, simply: see Farms.run_rival().)
 		news.append_array((_state.farms as Farms).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
+		# Its factories for makers that like it enough, simply (see Manufacturers.run_rival()).
+		news.append_array((_state.makers as Manufacturers).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
+		(_state.makers as Manufacturers).sell_rival_stock(rival)
 	if float(settings.reroute_s) > 0.0 and float(mind.reroute) <= 0.0:
 		mind.reroute = float(settings.reroute_s)
 		_reroute_one(rival, settings)
@@ -824,9 +827,10 @@ func _industry_choice(rival: Company, hub: Hub) -> String:
 	for ship in _cargo_ships(rival):
 		if not ship.route.has(hub.port_id):
 			continue
-		for commodity: String in ship.model().get("cargo", []):
+		for each: String in ship.model().get("cargo", []):
+			var commodity := GameData.family_of(each)  # (A maker's goods: their kind's building.)
 			if not hub.has_industry(commodity):
-				counts[commodity] = float(counts.get(commodity, 0.0)) + (2.0 if ship.cargo_id == commodity else 0.1)
+				counts[commodity] = float(counts.get(commodity, 0.0)) + (2.0 if ship.cargo_id == each else 0.1)
 	var best := ""
 	for commodity: String in counts:
 		if best.is_empty() or float(counts[commodity]) > float(counts[best]):

@@ -244,6 +244,8 @@ const BOW_LENGTH_FACTOR := 0.6
 const SHIP_SIZE := 0.245
 ## How big (px) a company's logo sign is at its HQ and hubs on the map.
 const LOGO_SIGN_PX := 16.0
+## A maker's factory's little works by its port (see _draw_factories()), px across.
+const FACTORY_PX := 9.0
 ## Where a cruise ship's funnel (its logo) and its open decks are on its art, as shares of the art.
 const CRUISE_FUNNELS := {cruise_ocean = Rect2(40.0 / 180.0, 25.0 / 64.0, 14.0 / 180.0, 14.0 / 64.0),
 	cruise_expedition = Rect2(84.0 / 180.0, 28.0 / 68.0, 12.0 / 180.0, 12.0 / 68.0), cruise_expedition_heli = Rect2(84.0 / 180.0, 26.0 / 64.0, 12.0 / 180.0, 12.0 / 64.0)}
@@ -259,7 +261,7 @@ const INDUSTRY_ART_DIR := "res://art/industry/"
 const SHIP_ART_WIDTH := 180.0
 ## Where the cargo sits along the art (x from the stern, in art units). It
 ## fills from the stern forward in CARGO_STEPS steps, so part loads show.
-const CARGO_ZONES := {container = Vector2(34.0, 138.0), vehicles = Vector2(12.0, 147.4), livestock = Vector2(34.0, 138.0), produce = Vector2(34.0, 138.0)}
+const CARGO_ZONES := {container = Vector2(34.0, 138.0), vehicles = Vector2(12.0, 147.4), boat_carriers = Vector2(14.0, 140.0), livestock = Vector2(34.0, 138.0), produce = Vector2(34.0, 138.0)}
 const CARGO_STEPS := 4
 ## Bulk carriers' hatch covers (art units, as their <category>_details.svg draws
 ## them shut; <category>_details_open.svg is the same without them): where
@@ -547,6 +549,12 @@ const FALLBACK_COLORS := {
 var show_active_lanes := false:
 	set(value):
 		show_active_lanes = value
+		_static_layer.queue_redraw()
+## A small factory by each port where a vehicle or boat maker builds (its own,
+## or a company's for it: see _draw_factories()), on the World map's Factories switch.
+var show_factories := false:
+	set(value):
+		show_factories = value
 		_static_layer.queue_redraw()
 
 ## Port ids drawn as a looping route along its sea lanes, each stop numbered.
@@ -6739,6 +6747,9 @@ func _place_price_boxes(placed: Array[Rect2]) -> Array:
 		labels.append([port.id, label])
 	return [boxes, labels]
 
+## A car or boat carrier's price box lists only this many of its makers (those that matter most there).
+const PRICE_MAKER_ROWS := 5
+
 ## A port's price box for price_line, worked out once a PRICE_REFRESH_S:
 ## {rows: [[name, figure, color, figure width], ...], size, score (how much it
 ## matters, for placing)}, or null if it gets none (nothing pays there from
@@ -6753,9 +6764,13 @@ func _price_box(port_id: String, font: Font) -> Variant:
 	var from := price_origin
 	if from == port_id:
 		rows.append(["Buy here", "", Color.WHITE, 0.0])
-	for commodity_id: String in _price_cargo():
+	var cargo := _price_cargo()
+	var ranked := []  # [how much it matters, row]: a maker line's boxes keep the PRICE_MAKER_ROWS that matter most.
+	var makers_line: bool = not cargo.is_empty() and GameData.commodity(cargo[0]).get("maker", false)
+	for commodity_id: String in cargo:
 		var figure: String
 		var color: Color
+		var matters := 0.0
 		if from.is_empty() or from == port_id:
 			# Its price: what the port pays for it, or at the origin what it costs to buy there.
 			var price: float = GameState.market.sell_price(port_id, commodity_id) if from.is_empty() else GameState.company_buy_price(port_id, commodity_id, of)
@@ -6763,6 +6778,7 @@ func _price_box(port_id: String, font: Font) -> Variant:
 			figure = Fmt.money(roundi(price))
 			color = Color.WHITE.lerp(PRICE_CHEAP if t < 0.0 else PRICE_DEAR, absf(t))
 			score = maxf(score, absf(t))
+			matters = absf(t)
 		else:
 			var buy := GameState.company_buy_price(from, commodity_id, of)
 			var profit: float = GameState.market.unit_profit(commodity_id, from, port_id, model_id, of)
@@ -6775,8 +6791,14 @@ func _price_box(port_id: String, font: Font) -> Variant:
 			color = PRICE_LOSS if profit <= 0.0 else Color.WHITE.lerp(PRICE_PROFIT, clampf(0.35 + share / PRICE_GOOD_MARGIN, 0.0, 1.0))
 			if profit > 0.0:
 				score = maxf(score, share)
+			matters = profit
 		var name: String = GameData.commodity(commodity_id).get("name", commodity_id)
-		rows.append([name, figure, color, font.get_string_size(figure, HORIZONTAL_ALIGNMENT_LEFT, -1, PRICE_FONT_SIZE).x])
+		ranked.append([matters, [name, figure, color, font.get_string_size(figure, HORIZONTAL_ALIGNMENT_LEFT, -1, PRICE_FONT_SIZE).x]])
+	if makers_line and ranked.size() > PRICE_MAKER_ROWS:
+		ranked.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
+		ranked = ranked.slice(0, PRICE_MAKER_ROWS)
+	for entry: Array in ranked:
+		rows.append(entry[1])
 	if score == -INF:
 		_price_rows[port_id] = null
 		return null
@@ -7146,6 +7168,8 @@ func _draw_ports(labels: Array) -> void:
 			if not gray_mode:
 				_draw_logo_sign(entry[2], sign + Vector2(LOGO_SIGN_PX * 0.6, -LOGO_SIGN_PX * 0.6))
 			sign.x += LOGO_SIGN_PX + 2.0
+	if show_factories and selectable_ports.is_empty():
+		_draw_factories(visible_area)
 	var bounds := Rect2(Vector2.ZERO, size)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
@@ -7157,6 +7181,37 @@ func _draw_ports(labels: Array) -> void:
 		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
 		_canvas.draw_string(port_font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 		_canvas.draw_string(port_font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
+
+## The makers' factories (Manufacturers), each a little works in the maker's
+## colour down and left of its port, one beside another: the maker's own
+## outlined dark, a company's for it in the company's colour.
+func _draw_factories(area: Rect2) -> void:
+	var at_ports := {}  # Port id -> [[maker colour, outline colour], ...]
+	for each: Dictionary in Manufacturers.makers():
+		for port_id: String in each.get("factories", []):
+			(at_ports.get_or_add(port_id, []) as Array).append([Color.from_string(str(each.color), Color.WHITE), Color(0.08, 0.08, 0.1)])
+	for who: Company in GameState.all_companies():
+		for factory: Dictionary in who.factories:
+			(at_ports.get_or_add(str(factory.port), []) as Array).append([Color.from_string(str(Manufacturers.maker(str(factory.maker)).get("color", "#ffffff")), Color.WHITE),
+				GameState.company_color_value(who.color)])
+	for port_id: String in at_ports:
+		var pos := port_screen_position(port_id)
+		if not area.has_point(pos):
+			continue
+		var radius := _port_radius(port_id)
+		var corner := pos + Vector2(-radius - FACTORY_PX * 1.1, radius * 0.4)
+		for entry: Array in at_ports[port_id]:
+			_draw_factory_icon(corner, entry[0], entry[1])
+			corner.x -= FACTORY_PX + 2.0
+
+## A little works FACTORY_PX across, its bottom left at `at`: a saw-tooth roof and a chimney.
+func _draw_factory_icon(at: Vector2, fill: Color, outline: Color) -> void:
+	var s := FACTORY_PX
+	var shape := PackedVector2Array([at, at + Vector2(s, 0.0), at + Vector2(s, -s * 0.55), at + Vector2(s * 0.84, -s * 0.55), at + Vector2(s * 0.84, -s), at + Vector2(s * 0.68, -s),
+		at + Vector2(s * 0.68, -s * 0.55), at + Vector2(s * 0.5, -s * 0.8), at + Vector2(s * 0.5, -s * 0.55), at + Vector2(s * 0.25, -s * 0.8), at + Vector2(s * 0.25, -s * 0.55), at + Vector2(0.0, -s * 0.8)])
+	_canvas.draw_colored_polygon(shape, fill)
+	shape.append(at)
+	_canvas.draw_polyline(shape, outline, 1.5 if outline.v > 0.2 else 1.0, true)
 
 ## A company's logo as a small sign (CompanyLogo) centred on a screen point,
 ## on a dark backing so it reads on the map.
@@ -8831,7 +8886,7 @@ const DECK_HAT_CELL := 7
 ## Dock workers on the quay beside a ship in port: line handlers at the
 ## bollards as it comes alongside and pulls out, and a gang working its cargo
 ## through its stop (DOCK_GANGS: [at least, more a tier] by its line).
-const DOCK_GANGS := {container = [2, 2], ore = [2, 1], grain = [2, 1], livestock = [2, 1], produce = [2, 1], tanker = [2, 0], vehicles = [3, 1],
+const DOCK_GANGS := {container = [2, 2], ore = [2, 1], grain = [2, 1], livestock = [2, 1], produce = [2, 1], tanker = [2, 0], vehicles = [3, 1], boat_carriers = [2, 1],
 	seafood = [3, 1], fishing = [1, 0], crabbing = [1, 1]}
 ## How far in from the quay's edge (dock units) the line handlers stand, and
 ## the band the gang works in: on the near half of a pier (PIER_WIDTH), its
@@ -9115,7 +9170,7 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 		var zone: Vector2 = art.zone
 		var fill := ceilf(level * CARGO_STEPS) / CARGO_STEPS
 		var share := (zone.x + fill * (zone.y - zone.x)) / SHIP_ART_WIDTH
-		var texture: Texture2D = (art.get("skins", {}) as Dictionary).get(ship.cargo_id, art.cargo)  # What it carries, shown.
+		var texture: Texture2D = (art.get("skins", {}) as Dictionary).get(GameData.family_of(ship.cargo_id), art.cargo)  # What it carries, shown (a maker's by its kind: cars, trucks or boats).
 		_canvas.draw_texture_rect_region(texture, Rect2(rect.position, Vector2(rect.size.x * share, rect.size.y)),
 			Rect2(Vector2.ZERO, Vector2(texture.get_width() * share, texture.get_height())), fade)
 	var open := _hatch_open(ship) if art.has("hatches") else 0.0
@@ -9249,9 +9304,12 @@ static func load_ship_art(category: String) -> Dictionary:
 		for model: Dictionary in GameData.ship_models:
 			if model.get("category", "") == category:
 				for commodity: String in model.get("cargo", []):
-					var skin := SHIP_ART_DIR + "%s_cargo_%s.svg" % [category, commodity]
+					var look := GameData.family_of(commodity)  # (A maker's goods show its kind's.)
+					if art.skins.has(look):
+						continue
+					var skin := SHIP_ART_DIR + "%s_cargo_%s.svg" % [category, look]
 					if ResourceLoader.exists(skin):
-						art.skins[commodity] = load(skin)
+						art.skins[look] = load(skin)
 	return art
 
 ## A white circle image for docked-ship dots: filled (ring_width 0) or just its

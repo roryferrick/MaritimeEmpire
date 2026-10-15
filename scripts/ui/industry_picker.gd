@@ -33,6 +33,8 @@ func _ready() -> void:
 	grid.add_theme_constant_override(&"v_separation", 6)
 	content.add_child(grid)
 	for commodity: Dictionary in GameData.commodities:
+		if commodity.get("maker", false):
+			continue  # (A maker's goods use their kind's building: Cars, Trucks or Boats.)
 		var id: String = commodity.id
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(BUTTON_WIDTH, ICON_SIZE + 12.0)

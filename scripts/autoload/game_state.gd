@@ -91,7 +91,7 @@ const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
@@ -333,6 +333,10 @@ var cruises := Cruises.new(self)
 var farms := Farms.new(self)
 ## A farm changed hands, was planted or stocked, or a day's harvest came in (see Farms).
 signal farms_changed
+## The vehicle and boat makers, likeness and the companies' factories for them (see Manufacturers).
+var makers := Manufacturers.new(self)
+## A factory was built, closed or sold from, or a day's output came in (see Manufacturers).
+signal makers_changed
 ## Each step's ships, natively where the native library's there (ShipStepper:
 ## see native/README.md), and whether to use it (tests compare the two).
 var _ship_stepper: Object = null
@@ -418,6 +422,7 @@ func _step(delta: float) -> void:
 	ratings.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
+	makers.step(delta)
 	MapView._prof("sim.farms", t_s)
 	t_s = Time.get_ticks_usec()
 	_storm_warning_clock += delta
@@ -1417,6 +1422,8 @@ func build_industry_error(hub: Hub, slot: int, commodity_id: String) -> String:
 		return "Something's built there already."
 	if GameData.commodity(commodity_id).is_empty():
 		return "No such commodity."
+	if GameData.commodity(commodity_id).get("maker", false):
+		return "Build for its kind (cars, trucks or boats)."
 	if hub.has_industry(commodity_id):
 		return "This hub has a %s building already." % GameData.commodity(commodity_id).get("name", commodity_id)
 	var price := industry_price()
@@ -1470,15 +1477,18 @@ static func industry_name(commodity_id: String) -> String:
 
 ## A commodity's price for a company at a port: the market's, less (buying)
 ## or more (selling) by its building for it there, if it has a hub there with
-## one (see Hub.industry_bonus()).
+## one (see Hub.industry_bonus(): a maker's goods go by their kind's), and
+## buying a maker's goods at its own factories less once it likes the company
+## enough (Manufacturers.buy_factor()).
 func company_buy_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
-	return market.buy_price(port_id, commodity_id) * (1.0 - (hub.industry_bonus(commodity_id, "buy") if hub else 0.0)) * divine.price_factor(port_id, false)
+	return market.buy_price(port_id, commodity_id) * (1.0 - (hub.industry_bonus(GameData.family_of(commodity_id), "buy") if hub else 0.0)) * divine.price_factor(port_id, false) \
+		* Manufacturers.buy_factor(of if of != null else company, port_id, commodity_id)
 
 
 func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
-	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(commodity_id, "sell") if hub else 0.0)) * divine.price_factor(port_id, true) \
+	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(GameData.family_of(commodity_id), "sell") if hub else 0.0)) * divine.price_factor(port_id, true) \
 		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price")  # (The type's stars: see Ratings.)
 
 
@@ -1489,7 +1499,7 @@ func industry_xp_bonus(commodity_id: String, from_port: String, to_port: String,
 	for port_id in [from_port, to_port]:
 		var hub := hub_at(port_id, of) if not port_id.is_empty() else null
 		if hub:
-			bonus += hub.industry_bonus(commodity_id, "xp")
+			bonus += hub.industry_bonus(GameData.family_of(commodity_id), "xp")
 	return bonus
 
 
@@ -2424,6 +2434,7 @@ func _lose(ship: Ship, reason: String) -> void:
 	ship.lost_reason = reason
 	ship.lost_order = roundi(play_time * 1000.0)
 	ship.at_risk = false
+	makers.on_mishap(ship, true)  # (A maker whose goods are aboard isn't pleased.)
 	ship_lost.emit(ship)
 	ship_changed.emit(ship)
 
@@ -2470,6 +2481,8 @@ func _roll_breakdowns(delta: float) -> void:
 				continue  # (A fishing boat breaks down like a cargo ship, and is towed in like one.)
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
 			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
+			if ship.maintenance > 0.0:
+				makers.on_mishap(ship, false)  # (Lost, it's counted in _lose().)
 			ship_broke_down.emit(ship)
 			if ship.maintenance <= 0.0:
 				_lose(ship, "broken down")
@@ -2711,6 +2724,14 @@ func _sell_cargo(ship: Ship) -> void:
 	ship.stop_cost = ship.cargo_cost
 	_add_money(who, ship.cargo_payment)
 	_record(ship, "income", ship.cargo_payment)
+	if ship.cargo_cut > 0.0:  # From its factory: the maker's cut of the sale, as the cargo's cost (see Manufacturers.load_ship()).
+		var cut := roundi(ship.cargo_payment * ship.cargo_cut)
+		_add_money(who, -cut)
+		_record(ship, "cargo", cut)
+		ship.stop_cost = cut
+		ship.cargo_cost = cut
+		ship.cargo_cut = 0.0
+	makers.on_trade(who, ship.cargo_id, ship.cargo_payment, false)
 	_tally_port_trade(who, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_payment, true)
 	var t_s := Time.get_ticks_usec()
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment, false)
@@ -2774,6 +2795,11 @@ func _load_cargo(ship: Ship, to: String) -> String:
 		var farmed := farms.load_ship(ship, to)
 		if not farmed.is_empty():
 			return farmed[0]
+	ship.cargo_cut = 0.0
+	if not owner_of(ship).factories.is_empty():  # (Its factory's output, free: see Manufacturers.load_ship().)
+		var made := makers.load_ship(ship, to)
+		if not made.is_empty():
+			return made[0]
 	var who := owner_of(ship)
 	var t_b := Time.get_ticks_usec()
 	var best := market.best_cargo(ship.model(), ship.docked_at, to, who)
@@ -2797,7 +2823,9 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	_tally_port_trade(who, ship.docked_at, best[0], quantity, cost, false)
 	MapView._prof("load.money", t_m)
 	t_m = Time.get_ticks_usec()
-	market.trade(ship.docked_at, best[0], cost, true)
+	if not Manufacturers.first_pick(who, ship.docked_at, best[0]):  # (A maker that likes it enough holds the price for it.)
+		market.trade(ship.docked_at, best[0], cost, true)
+	makers.on_trade(who, best[0], cost, true)
 	port_sizes.add_traffic(ship.docked_at, cost)
 	MapView._prof("load.trade", t_m)
 	ship.cargo_id = best[0]
@@ -4417,6 +4445,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 			ship.id = next_ship_id
 			next_ship_id += 1
 		next_ship_id = maxi(next_ship_id, ship.id + 1)
+		Manufacturers.convert_old_cargo(ship)  # (Saves from before the makers: their cars and trucks aboard become a maker's.)
 		ships.append(ship)
 	Ship.link_rescues(ships)
 	for ship in ships:
@@ -5314,3 +5343,36 @@ func sell_farm_item(port_id: String, item: String) -> void:
 	if value > 0 and ai_acting == null:
 		ActivityLog.add("Sold the %s in your farm store at %s for %s." % [Farms.item_name(item).to_lower(), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
 
+
+# --- Makers (see Manufacturers): this player's actions ------------------------------------------
+
+## Builds a factory for a maker at a port (Manufacturers.build_error() says why it can't).
+func build_factory(maker_id: String, port_id: String) -> void:
+	if Net.command(&"build_factory", [maker_id, port_id]):
+		return
+	if not makers.build_error(company, maker_id, port_id).is_empty():
+		return
+	makers.build(company, maker_id, port_id)
+	if ai_acting == null:
+		ActivityLog.add("Built a %s factory at %s for %s. It makes about %s %s a month." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id),
+			Fmt.money(Manufacturers.factory_cost(maker_id)), Fmt.thousands(roundi(Manufacturers.output_a_day(maker_id) * 365.25 / 12.0)),
+			GameData.commodity(maker_id).get("units", "vehicles")], ActivityLog.Kind.GOOD)
+
+
+## Closes this player's factory for a maker at a port: the maker buys it back for a quarter of its price.
+func close_factory(maker_id: String, port_id: String) -> void:
+	if Net.command(&"close_factory", [maker_id, port_id]):
+		return
+	var refund := makers.close(company, maker_id, port_id)
+	if refund > 0 and ai_acting == null:
+		ActivityLog.add("Closed your %s factory at %s: %s bought it back for %s." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id),
+			Manufacturers.maker(maker_id).name, Fmt.money(refund)], ActivityLog.Kind.INFO)
+
+
+## Sells a factory's stockpile where it is, at the port's price less the maker's cut.
+func sell_factory_stock(maker_id: String, port_id: String) -> void:
+	if Net.command(&"sell_factory_stock", [maker_id, port_id]):
+		return
+	var value := makers.sell_stock(company, maker_id, port_id)
+	if value > 0 and ai_acting == null:
+		ActivityLog.add("Sold your %s factory's stock at %s for %s, after the maker's cut." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)

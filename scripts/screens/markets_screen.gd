@@ -37,9 +37,18 @@ func _ready() -> void:
 	title.theme_type_variation = &"HeaderLabel"
 	title.text = "Markets"
 	header.add_child(title)
+	# The plain goods, then the makers' (car makers, then boat builders), each
+	# under a heading with what they make.
 	for commodity: Dictionary in GameData.commodities:
+		if commodity.get("maker", false) or commodity.get("legacy", false):
+			continue
 		_picker.add_item("%s (per %s)" % [commodity.name, commodity.unit])
 		_picker.set_item_metadata(_picker.item_count - 1, commodity.id)
+	for line: Array in [["cars", "Car makers (per vehicle)"], ["boats", "Boat builders (per boat)"]]:
+		_picker.add_separator(line[1])
+		for each: Dictionary in Manufacturers.makers_of(line[0]):
+			_picker.add_item("%s: %s" % [each.name, Manufacturers.describe(each.id).to_lower()])
+			_picker.set_item_metadata(_picker.item_count - 1, each.id)
 	_picker.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_picker.item_selected.connect(_refresh.unbind(1))
 	header.add_child(_picker)
