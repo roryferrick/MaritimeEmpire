@@ -1,7 +1,7 @@
 {
 	"_comment": "The skin packs sold in the Shop (title screen; on_sale: sold now; coming_soon: shown in the Shop but not sold yet; scripts/ui/skin_shop.gd) for Sand Dollars, the in-game currency bought with Steam money (scripts/autoload/cosmetics.gd): one Sand Dollar is one cent. prices: any one skin, every ship skin of a pack, every outfit of a pack, or a whole pack (Sand Dollars; a bundle never charges for skins already owned). A pack: its ship skins (ships: model id -> art/skins/<folder>/<name>.svg, drawn in place of the model's art, untinted; names with a _small/_mid/_big fit are one skin; ship_names: the skin's name in the Shop) and its outfits (each a human skin: the CEO and captain options it unlocks by name in Characters.PARTS (top, bottoms, shoes, headwear, facial_hair, drawn by Portrait), the crew hats it adds (headwear names, in the deck atlas) and the uniform colours (CrewLooks)). Bundles: the Sand Dollar bundles on the Sand Dollars page, each a Steam Inventory item definition (steam_itemdef: set up on the Steamworks partner site with its price; usd here is what's shown).",
 	"currency": {"name": "Sand Dollars", "singular": "Sand Dollar", "cents_each": 1},
-	"prices": {"skin": 100, "all_ships": 500, "all_humans": 500, "pack": 1000},
+	"prices": {"skin": 100, "all_ships": 700, "all_humans": 500, "pack": 1000},
 	"bundles": [
 		{"id": "sd_500", "sand_dollars": 500, "usd": 5.00, "steam_itemdef": 1001},
 		{"id": "sd_1000", "sand_dollars": 1000, "usd": 10.00, "steam_itemdef": 1002},
