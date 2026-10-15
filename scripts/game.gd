@@ -6,7 +6,7 @@ extends Control
 ## (Markets, Hubs, Farms, Makers, Energy: see open_page()), the full-screen Route
 ## Assignment screen, and the Esc menu; Space pauses and T opens the chat.
 
-enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY, RESEARCH }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -15,7 +15,7 @@ const ALERT_CHECK_SECONDS := 2.0  # (A look over every ship and model: a few ms.
 const ALERT_NAMES_SHOWN := 3
 ## The pages over the map (MapPage), opened by the buttons down its top left
 ## (WorldScreen.page_buttons): page id -> its Screen.
-const PAGE_SCREENS := {markets = Screen.MARKETS, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY}
+const PAGE_SCREENS := {markets = Screen.MARKETS, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY, research = Screen.RESEARCH}
 
 var _current_screen := Screen.WORLD
 
@@ -39,6 +39,7 @@ var _current_screen := Screen.WORLD
 var _farms_screen := FarmsScreen.new()
 var _makers_screen := MakersScreen.new()
 var _energy_screen := EnergyScreen.new()
+var _research_screen := ResearchScreen.new()
 ## The page open over the map, or null.
 var _page: MapPage = null
 ## Where the pages' screens are kept while shut (with the main screens).
@@ -66,13 +67,14 @@ static func find(from: Node) -> GameRoot:
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	for each: Control in [_farms_screen, _makers_screen, _energy_screen]:
-		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen"}.get(each, "EnergyScreen")
+	for each: Control in [_farms_screen, _makers_screen, _energy_screen, _research_screen]:
+		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen", _research_screen: "ResearchScreen"}.get(each, "EnergyScreen")
 		each.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		%MarketsScreen.add_sibling(each)
 	_pages.farms = _farms_screen
 	_pages.makers = _makers_screen
 	_pages.energy = _energy_screen
+	_pages.research = _research_screen
 	_page_home = %MarketsScreen.get_parent()
 	for id: String in _pages:
 		(_pages[id] as Control).visible = false
@@ -111,6 +113,14 @@ func _ready() -> void:
 	GameState.hub_built.connect(_on_hub_built)
 	GameState.mega_upgraded.connect(_on_mega_upgraded)
 	GameState.port_band_changed.connect(_on_port_band_changed)
+	GameState.research_discovered.connect(_on_research_discovered)
+	GameState.research_mishap.connect(func(ship: Ship, what: String) -> void:
+		if GameState.is_mine(ship):
+			ActivityLog.add("%s %s at %s." % [ship.name, what, Research.target_name(ship.research_target)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship)))
+	GameState.research.contract_finished.connect(_on_contract_finished)
+	GameState.research.revealed.connect(func(who: Company, site_ids: Array) -> void:
+		if who == GameState.company and not site_ids.is_empty():
+			ActivityLog.add("New research site%s found nearby: %s. Look for %s on the map." % ["s" if site_ids.size() > 1 else "", ", ".join(PackedStringArray(site_ids.map(func(id: String) -> String: return str(Research.site(id).get("name", id))))), "them" if site_ids.size() > 1 else "it"], ActivityLog.Kind.GOOD))
 	_alert_phase = 0  # (Worked out over the next frames: see _process().)
 	Net.left.connect(_on_left_game)
 	if not Net.host_error.is_empty():
@@ -228,6 +238,24 @@ func close_page() -> void:
 func show_farm(port_id: String) -> void:
 	_farms_screen.show_port(port_id)
 	open_page("farms")
+
+
+## Shuts any page and turns the World map to a place (lon, lat).
+func show_on_map(lon_lat: Vector2) -> void:
+	show_screen(Screen.WORLD)
+	%WorldScreen.look_at_lon_lat(lon_lat)
+
+
+## Opens the Research page at one of this player's research ships (the ship popup's Expeditions button).
+func show_research_ship(ship_id: int) -> void:
+	_research_screen.show_ship(ship_id)
+	open_page("research")
+
+
+## Opens the Research page at a site's card (the map's site markers).
+func show_research_site(site_id: String) -> void:
+	_research_screen.show_site(site_id)
+	open_page("research")
 
 
 ## Opens the Energy page at a port's buildings or a field (the port popup's
@@ -578,3 +606,23 @@ func _tell(text: String, title: String, then := Callable()) -> void:
 		dialog.confirmed.connect(then)
 		dialog.canceled.connect(then)
 	dialog.popup_centered()
+
+
+## One of this player's research ships finished a site (see Research): the log and its card.
+func _on_research_discovered(ship: Ship, site_id: String, first: bool, xp: float) -> void:
+	if not GameState.is_mine(ship):
+		return
+	var site := Research.site(site_id)
+	ActivityLog.add("%s surveyed %s%s (+%s XP)." % [ship.name, site.get("name", site_id), ", the first company ever" if first else "", Fmt.thousands(roundi(xp))],
+		ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
+	event_card.show_discovery(site_id, first, ship.name, xp)
+
+
+## A contract of this player's done (paid) or failed (its penalty).
+func _on_contract_finished(who: Company, offer: Dictionary, ok: bool, paid: int) -> void:
+	if who != GameState.company:
+		return
+	if ok:
+		ActivityLog.add("Contract done: %s for %s, %s." % [offer.get("title", ""), offer.get("client", ""), Fmt.money(paid)], ActivityLog.Kind.GOOD)
+	else:
+		ActivityLog.add("Contract failed: %s (%s penalty)." % [offer.get("title", ""), Fmt.money(paid)], ActivityLog.Kind.BAD)

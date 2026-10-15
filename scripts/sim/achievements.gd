@@ -57,7 +57,20 @@ const BADGES := [
 	["loan", "Borrowed time", "Take out a loan"],
 	["debt_free", "Debt free", "Pay a loan back in full"],
 	["mega", "Mega", "Give a ship model its mega upgrade"],
+	["atlas_trench", "Hadal zone", "Survey every trench and deep"],
+	["atlas_wreck", "Wreck hunter", "Survey every shipwreck"],
+	["atlas_vent", "Black smokers", "Survey every vent and seep"],
+	["atlas_seamount", "Mountains under the sea", "Survey every seamount and ridge"],
+	["atlas_reef", "Reef keeper", "Survey every reef and kelp forest"],
+	["atlas_ruins", "Atlantis found", "Survey every sunken city"],
+	["atlas_relic", "Lest we forget", "Survey every aircraft and war relic"],
+	["atlas_canyon", "Into the blue", "Survey every canyon, cave and blue hole"],
+	["atlas_wildlife", "Leviathan", "Survey every wildlife site and mystery"],
+	["challenger", "Full ocean depth", "Survey the Challenger Deep"],
 ]
+## Research sites surveyed for each star (0: all of them), and first discoveries.
+const ATLAS_STARS := [10, 60, 0]
+const FIRST_STARS := [1, 25, 100]
 
 
 
@@ -76,6 +89,8 @@ static func lines() -> Array:
 	out.append({id = "animals", name = "Field guide", unit = "animals seen", stars = ANIMAL_STARS.map(func(share: float) -> int: return roundi(share * animal_count()))})
 	out.append({id = "wonders", name = "Wonders of the world", unit = "wonders seen", stars = WONDER_STARS.map(func(need: int) -> int: return need if need > 0 else GameData.wonders.size())})
 	out.append({id = "hidden_gems", name = "Hidden gems", unit = "hidden gems found", stars = GEM_STARS})
+	out.append({id = "atlas", name = "Atlas of the deep", unit = "research sites surveyed", stars = ATLAS_STARS.map(func(need: int) -> int: return need if need > 0 else Research.site_ids().size())})
+	out.append({id = "first_discoveries", name = "First to discover", unit = "sites surveyed before any other company", stars = FIRST_STARS})
 	return out
 
 
@@ -100,6 +115,11 @@ static func progress(company: Company, line_id: String) -> int:
 			return seen_count(company)
 		"hidden_gems":
 			return company.hidden_gems.size()
+		"atlas":
+			return int(Research.progress(company)[0])
+		"first_discoveries":
+			var done: Dictionary = company.research.get("done", {})
+			return done.values().filter(func(entry: Variant) -> bool: return entry is Dictionary and entry.get("first", false)).size()
 	return 0
 
 
@@ -139,6 +159,11 @@ static func badge_done(company: Company, badge_id: String) -> bool:
 			return company.achievements.has("loan") and company.loan <= 0
 		"mega":
 			return not company.mega_upgrades.is_empty()
+		"challenger":
+			return Research.is_done(company, "challenger_deep")
+	if badge_id.begins_with("atlas_"):  # A whole category of research sites (see Research).
+		var counts := Research.progress(company, badge_id.trim_prefix("atlas_"))
+		return int(counts[1]) > 0 and int(counts[0]) >= int(counts[1])
 	return false
 
 

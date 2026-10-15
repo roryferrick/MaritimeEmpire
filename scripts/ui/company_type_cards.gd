@@ -15,7 +15,7 @@ signal chosen(type_id: String)
 
 ## What each ship line is called on the cards.
 const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
-	tanker = "Tankers", gas = "Gas carriers", vehicles = "Car carriers", boat_carriers = "Boat carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers"}
+	tanker = "Tankers", gas = "Gas carriers", vehicles = "Car carriers", boat_carriers = "Boat carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers", survey = "Survey vessels", mothership = "Deep-sea motherships"}
 const CARD_WIDTH := 196.0  # (Six across within the 1280 px screen.)
 const ICON_SIZE := 40.0
 const PICTURE_LENGTH := 78.0
@@ -39,7 +39,7 @@ func _init(for_picking := false, company_taken: Array = []) -> void:
 
 
 func _ready() -> void:
-	for type: Dictionary in Progression.company_types():
+	for type: Dictionary in (Progression.company_types() if picking else Progression.start_types()):  # (Research only at a pick.)
 		var card := _card(type)
 		_cards[type.id] = card
 		add_child(card)

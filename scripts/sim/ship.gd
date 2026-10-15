@@ -69,6 +69,9 @@ const JOB_FISH := "fish"
 ## slot rig_slot) and home again.
 const JOB_RIG := "rig"
 const JOB_REPAIR := "repair"
+## An expedition (see Research): a research ship out to a site (or a
+## contract's field or ground), on station, and home to its base.
+const JOB_RESEARCH := "research"
 
 ## Canal states (canal_state; see CanalTraffic): heading into a lock chamber
 ## it has reserved, waiting in line for one, waiting for toll money, at anchor
@@ -357,6 +360,19 @@ var rig_wait := 0.0
 ## {cabins, amenities, service, looks, prices, monthly, package, departure,
 ## state, bookings, booking_since, voyage, reviews, refit_until, refit}.
 var cruise := {}
+## Research ship only (is_research()): its gear fitted (Research gear ids),
+## the base it sets out from and comes home to, where it's going (a lane end:
+## "@res_ID" for a site) and the contract it's for (0 for its own research);
+## on an expedition its phase ("out", "work" on station, "home"), the play
+## time on station so far, the time toward its next day's dives, and when it set out.
+var research_gear: Array[String] = []
+var research_base := ""
+var research_target := ""
+var research_contract := 0
+var research_phase := ""
+var research_work := 0.0
+var research_roll := 0.0
+var research_since := 0.0
 var fish_landing := "auto"
 var fish_phase := ""
 var fish_ground := ""
@@ -448,6 +464,11 @@ func is_cruise() -> bool:
 	return model().has("cruise")
 
 
+## True for a research ship (a survey vessel or deep-sea mothership: see Research).
+func is_research() -> bool:
+	return model().has("research")
+
+
 func is_service() -> bool:
 	return _kind() != KIND_CARGO
 
@@ -523,7 +544,8 @@ func can_sell() -> bool:
 
 
 func profit() -> float:
-	return ledger.income - ledger.cargo - ledger.fuel - ledger.repair - ledger.tolls - ledger.port_fees - ledger.wages
+	return ledger.income - ledger.cargo - ledger.fuel - ledger.repair - ledger.tolls - ledger.port_fees - ledger.wages \
+		+ float(ledger.get("research_pay", 0.0)) - float(ledger.get("research_gear", 0.0))  # (A research ship's contracts and gear: see Research.)
 
 
 ## Top speed, including the speed skill and the model's mega upgrade.
@@ -577,9 +599,10 @@ func _refresh_stats() -> void:
 	# A recovery boat's mega upgrade also cuts its fuel burn (a cargo ship's
 	# raises its profit instead; see GameState.trade_bonus()).
 	var mega_fuel := 1.0 - (float(settings.get("recovery_fuel_saving", 0.5)) if has_mega and is_recovery() else 0.0)
-	_top_speed = float(data.get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency")) * mega_fuel * (1.0 - bird_fuel_saving)
-	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability"))
+	var who := GameState.owner_of(self)  # (Its company's research perks too: see Research.perk().)
+	_top_speed = float(data.get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega * Research.perk(who, "speed")
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency")) * mega_fuel * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel")
+	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability")) * Research.perk(who, "wear")
 	_stats_dirty = false
 
 
@@ -602,7 +625,7 @@ func breakdown_chance() -> float:
 	var chance := lerpf(float(settings.get("chance_at_full", 0.0005)), float(settings.get("chance_at_empty", 0.005)), worn)
 	var age := minf(1.0 + float(settings.get("age_per_hour_at_sea", 0.1)) * sea_time / 3600.0,
 		float(settings.get("max_age_factor", 2.0)))
-	return chance * float(model().get("breakdown_factor", 1.0)) * age * (1.0 - breakdown_resistance())
+	return chance * float(model().get("breakdown_factor", 1.0)) * age * (1.0 - breakdown_resistance()) * Research.perk(GameState.owner_of(self), "breakdowns")
 
 
 ## {level, xp (into the level), cost (of the level)}.
@@ -878,7 +901,7 @@ func attention_reason() -> String:
 	if canal_state == CANAL_TOLL:
 		return "waiting for toll money"
 	if not is_service() and is_docked() and not has_route():
-		return "no route"
+		return "no expedition" if is_research() else "no route"
 	if is_docked() and paused:
 		return "paused"
 	if skill_points() > 0:
@@ -1463,6 +1486,14 @@ func to_dict() -> Dictionary:
 		"rig_phase": rig_phase,
 		"rig_wait": rig_wait,
 		"cruise": cruise,
+		"research_gear": research_gear,
+		"research_base": research_base,
+		"research_target": research_target,
+		"research_contract": research_contract,
+		"research_phase": research_phase,
+		"research_work": research_work,
+		"research_roll": research_roll,
+		"research_since": research_since,
 		"fish_home": fish_home,
 		"fish_landing": fish_landing,
 		"fish_phase": fish_phase,
@@ -1567,6 +1598,14 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.rig_phase = str(data.get("rig_phase", ""))
 	ship.rig_wait = float(data.get("rig_wait", 0.0))
 	ship.cruise = data.get("cruise", {}) if data.get("cruise") is Dictionary else {}
+	ship.research_gear.assign(data.get("research_gear", []))
+	ship.research_base = str(data.get("research_base", ""))
+	ship.research_target = str(data.get("research_target", ""))
+	ship.research_contract = int(data.get("research_contract", 0))
+	ship.research_phase = str(data.get("research_phase", ""))
+	ship.research_work = float(data.get("research_work", 0.0))
+	ship.research_roll = float(data.get("research_roll", 0.0))
+	ship.research_since = float(data.get("research_since", 0.0))
 	ship.fish_home = str(data.get("fish_home", ""))
 	ship.fish_landing = str(data.get("fish_landing", "auto"))
 	ship.fish_phase = str(data.get("fish_phase", ""))

@@ -55,6 +55,9 @@ func _ready() -> void:
 	_map.field_clicked.connect(func(field_id: String) -> void:
 		PopupHost.find(self).close()
 		GameRoot.find(self).show_energy("field:" + field_id))  # (A field's rigs: the Energy page.)
+	_map.site_clicked.connect(func(site_id: String) -> void:
+		PopupHost.find(self).close()
+		GameRoot.find(self).show_research_site(site_id))  # (A research site: its card on the Research page.)
 	_map.wonder_clicked.connect(_open_wonder_popup)
 	_map.gem_clicked.connect(func(gem_id: String, lon_lat: Vector2) -> void:
 		_open_gem_popup(gem_id, _map.lon_lat_screen_position.bind(lon_lat)))
@@ -63,6 +66,7 @@ func _ready() -> void:
 	Settings.changed.connect(func() -> void: _map.show_active_lanes = GameState.show_active_routes)  # (Routes, on the Settings page.)
 	_add_price_picker()
 	_add_factories_switch()
+	_add_research_switch()
 	_add_region_choice()
 	_add_zoom_buttons()
 	_add_side_buttons()
@@ -129,6 +133,32 @@ func _add_factories_switch() -> void:
 			_map.show_factories = true)  # (Drawn again: a factory built or closed.)
 	%MapControls.add_child(switch)
 
+
+## Turns the map to a place (lon, lat) (GameRoot.show_on_map()).
+func look_at_lon_lat(lon_lat: Vector2) -> void:
+	_map.look_at_lon_lat(lon_lat)
+
+
+## The Research switch in the map panel (Research companies: on to start
+## with): the sites under the sea it knows of, and the search areas of the
+## hidden ones (MapView.show_research).
+func _add_research_switch() -> void:
+	var shown := func() -> bool: return Research.can_research(GameState.company) and not GameState.company.all_types()
+	var switch := CheckButton.new()
+	switch.text = "Research"
+	switch.tooltip_text = "Mark the research sites under the sea: the ones you know of (ticked once done) and the search areas where hidden ones may lie."
+	switch.button_pressed = shown.call()
+	_map.show_research = switch.button_pressed
+	switch.toggled.connect(func(on: bool) -> void: _map.show_research = on)
+	switch.visible = Research.can_research(GameState.company)
+	GameState.company_types_changed.connect(func() -> void:
+		switch.visible = Research.can_research(GameState.company)
+		if shown.call() and not switch.button_pressed:
+			switch.button_pressed = true)
+	GameState.research.changed.connect(func() -> void:
+		if _map.show_research:
+			_map.show_research = true)  # (Drawn again: a site found or done.)
+	%MapControls.add_child(switch)
 
 ## The Unlock a region button (first in the map panel), the banner and the
 ## regions' buttons shown while choosing.
@@ -547,7 +577,8 @@ var page_buttons := {}
 var _page_column := VBoxContainer.new()
 const PAGES := [["markets", "Markets: the cheapest ports to buy each good and the best to sell"], ["hubs", "Hubs: your HQ and hubs, their upgrades and industry"],
 	["farms", "Farms: your plots at the farm ports and the farm store"], ["makers", "Makers: the car and boat makers, how much they like you, and your factories"],
-	["energy", "Energy: the oil and gas fields, your rigs and platforms, and your refineries"]]
+	["energy", "Energy: the oil and gas fields, your rigs and platforms, and your refineries"],
+	["research", "Research: the contracts board, your expeditions, the Atlas of the sites under the sea, and your ships' gear"]]
 
 
 func _add_page_buttons() -> void:
@@ -579,6 +610,7 @@ func _update_page_buttons() -> void:
 	page_buttons.farms.visible = Farms.can_farm(GameState.company)
 	page_buttons.makers.visible = Manufacturers.can_deal(GameState.company)
 	page_buttons.energy.visible = Energy.can_drill(GameState.company)
+	page_buttons.research.visible = Research.can_research(GameState.company)
 
 
 ## The field guide's square paw button at the map's top right, first in the

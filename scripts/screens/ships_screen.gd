@@ -39,7 +39,7 @@ const UPGRADE_ALL_GAP := 16.0
 const SERVICE_LINES := ["recovery", "tug", "icebreaker"]
 const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
 	tanker = "Tankers", gas = "Gas carriers", vehicles = "Car carriers", boat_carriers = "Boat carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers",
-	recovery = "Recovery boats", tug = "Tugs", icebreaker = "Icebreakers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers"}
+	recovery = "Recovery boats", tug = "Tugs", icebreaker = "Icebreakers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers", survey = "Survey vessels", mothership = "Deep-sea motherships"}
 ## The tabs' place under the header, and where the list starts below them (px).
 const TABS_TOP := 60.0
 const LIST_TOP := 100.0

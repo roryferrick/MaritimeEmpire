@@ -30,6 +30,14 @@ const CRUISE_TIPS := [
 	"Charge near the recommended prices (or under) so guests feel it was worth it, and keep the voyages smooth.",
 ]
 
+## How to raise each of the Research rating's parts.
+const RESEARCH_TIPS := [
+	"Take contracts your ships can do (the Research page) and finish them before their deadlines.",
+	"Send ships to sites you haven't done, the harder and deeper the better, and be first to the ones no one has.",
+	"Keep Repair on so ships set out sound, and fill every gear slot.",
+	"Send sound ships on deep dives: a worn ship fails more dives, and on the deepest sites can lose its ROV or sub.",
+]
+
 var _list := VBoxContainer.new()
 var _clock := 0.0
 
@@ -137,8 +145,8 @@ func _type_card(company: Company, type_id: String) -> Control:
 		box.add_child(_dim("Building up: %d of %d minutes on record (the minutes not yet on record count as no stars)." % [minutes, Ratings.WINDOW]))
 	var parts := ratings.part_stars(company, type_id)
 	var figures: Dictionary = (ratings.details.get(company, {}) as Dictionary).get(type_id, {})
-	var lines := _cruise_texts(figures) if type_id == "cruises" else _part_texts(figures, company.level())
-	var tips: Array = CRUISE_TIPS if type_id == "cruises" else TIPS
+	var lines := _cruise_texts(figures) if type_id == "cruises" else (_research_texts(figures) if type_id == "research" else _part_texts(figures, company.level()))
+	var tips: Array = CRUISE_TIPS if type_id == "cruises" else (RESEARCH_TIPS if type_id == "research" else TIPS)
 	if type_id == "agriculture":
 		tips = TIPS + [FARM_TIP]
 		lines.append(_farm_text(figures))
@@ -186,6 +194,18 @@ func _cruise_texts(figures: Dictionary) -> Array:
 		"Itineraries %d%% appealing on average (ports of call, sights, regions)" % roundi(float(figures.attraction) * 100.0),
 		"Maintenance %d%% on average · %d incidents and %d ports missed over the last %d voyages" % [roundi(float(figures.maintenance) * 100.0), int(figures.incidents), int(figures.skipped), int(figures.voyages)],
 		"Reviews %.1f of 5 over the last %d voyages" % [float(figures.review), int(figures.reviews)] if int(figures.reviews) > 0 else "No reviews yet (2.5 till the first voyage is back)",
+	]
+
+
+## The Research rating's figures from the latest minute.
+func _research_texts(figures: Dictionary) -> Array:
+	if figures.is_empty():
+		return ["Worked out every minute of play.", "", "", ""]
+	return [
+		"%.1f contracts finished lately, %.1f on time and %.1f failed" % [float(figures.contracts), float(figures.on_time), float(figures.failed)] if float(figures.contracts) > 0.05 else "No contracts finished lately.",
+		"%d sites done, worth %.0f of the %.0f expected at your level (deeper and first count more)" % [int(figures.sites), float(figures.score), float(figures.expected)],
+		"%d research ships, their condition and gear slots filled" % int(figures.ships) if int(figures.ships) > 0 else "No research ships yet: buy one in the Shop.",
+		"%.0f dives lately, %.1f troubles (failed dives, lost gear, breakdowns, losses)" % [float(figures.dives), float(figures.trouble)] if float(figures.dives) > 0.05 else "No dives yet.",
 	]
 
 

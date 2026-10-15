@@ -89,6 +89,18 @@ static func paint(item: CanvasItem, for_type: String, area: Rect2, color: Color,
 					item.draw_rect(Rect2(at.call(float(deck[0]) + 0.04 + k * 0.09, float(deck[1]) + 0.045), Vector2(0.045, 0.045) * side), dark)
 			item.draw_colored_polygon(PackedVector2Array([at.call(0.6, 0.24), at.call(0.62, 0.08), at.call(0.74, 0.08), at.call(0.72, 0.24)]), color)
 			item.draw_rect(Rect2(at.call(0.62, 0.08), Vector2(0.12, 0.04) * side), dark)
+		"research":
+			# A submersible: a round hull with a porthole, a sail on top, a propeller, and its light.
+			var hull := PackedVector2Array()
+			for i in range(0, 25):
+				var a := TAU * i / 24.0
+				hull.append(at.call(0.46 + cos(a) * 0.36, 0.56 + sin(a) * 0.24))
+			item.draw_colored_polygon(hull, color)
+			item.draw_rect(Rect2(at.call(0.36, 0.2), Vector2(0.2, 0.16) * side), color)
+			item.draw_colored_polygon(PackedVector2Array([at.call(0.8, 0.56), at.call(0.97, 0.4), at.call(0.97, 0.72)]), color)
+			item.draw_circle(at.call(0.3, 0.55), side * 0.1, dark)
+			item.draw_circle(at.call(0.3, 0.55), side * 0.055, color.lightened(0.5))
+			item.draw_line(at.call(0.12, 0.78), at.call(0.03, 0.92), color, maxf(side * 0.04, 1.0), true)
 		_:
 			# A compass star: every type.
 			var star := PackedVector2Array()

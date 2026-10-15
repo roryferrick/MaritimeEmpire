@@ -4331,6 +4331,11 @@ const FISHING_MAX_NM := 2500.0
 ## crow flies; the reach of the tier 3 boats), so a boat based there sails
 ## straight out to it and home, not by way of another port.
 const FISHING_DIRECT_NM := 1600.0
+## A research site's lanes: from its FISHING_PORTS nearest ports out to this
+## far (sites lie far out: the Bloop, mid-ocean trenches), and straight from
+## every port within RESEARCH_DIRECT_NM.
+const RESEARCH_MAX_NM := 4000.0
+const RESEARCH_DIRECT_NM := 500.0
 
 func _plan_fishing_lanes() -> void:
 	var started := Time.get_ticks_msec()
@@ -4360,6 +4365,11 @@ func _plan_fishing_lanes() -> void:
 	var energy: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/energy.json"))
 	for each: Dictionary in energy.get("fields", []):
 		ends.append({id = "rig_" + str(each.id), lon = each.lon, lat = each.lat})
+	# And the research sites' (data/research.json): keyed "PORT-@res_SITE" (Research.end_of()),
+	# from further off (sites lie far out) but fewer straight routes.
+	var research: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/research.json"))
+	for each: Dictionary in research.get("sites", []):
+		ends.append({id = "res_" + str(each.id), lon = each.lon, lat = each.lat, research = true})
 	for ground: Dictionary in ends:
 		var middle := Vector2(float(ground.lon), float(ground.lat))
 		var near := ports.duplicate()
@@ -4368,7 +4378,9 @@ func _plan_fishing_lanes() -> void:
 		var count := 0
 		for port: Dictionary in near:
 			var away := Geo.distance_nm(middle, Vector2(port.lon, port.lat))
-			if away > FISHING_MAX_NM or (count >= FISHING_PORTS and away > FISHING_DIRECT_NM):
+			var far := RESEARCH_MAX_NM if ground.get("research", false) else FISHING_MAX_NM
+			var direct := RESEARCH_DIRECT_NM if ground.get("research", false) else FISHING_DIRECT_NM
+			if away > far or (count >= FISHING_PORTS and away > direct):
 				break
 			var best := PackedVector2Array()
 			var best_nm := INF

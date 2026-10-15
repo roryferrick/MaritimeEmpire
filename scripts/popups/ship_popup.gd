@@ -65,6 +65,10 @@ func _ready() -> void:
 		%CapacityValue.text = "%s crates" % Fmt.thousands(ship.capacity())
 		%CapacityValue.tooltip_text = "%s, %d crew; %s" % [Fisheries.gear_text(gear), int(gear.get("crew", 0)), Fisheries.trip_text(gear)]
 		%CapacityValue.mouse_filter = Control.MOUSE_FILTER_PASS
+	elif ship.is_research():
+		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
+		$Content/Stats/CapacityName.text = "Dives to"
+		%CapacityValue.text = "%s m · %d gear slots" % [Fmt.thousands(Research.depth_of(model)), Research.slots_of(model)]
 	else:
 		%RangeValue.text = "%s nm" % Fmt.thousands(int(model.get("range_nm", 0)))
 		%CapacityValue.text = GameData.cargo_text(model)
@@ -111,6 +115,14 @@ func _ready() -> void:
 		planner.tooltip_text = "Its itinerary, prices, departures, cabins and amenities, and its guests' reviews."
 		planner.pressed.connect(func() -> void: GameRoot.find(self).add_child(CruisePlanner.new(ship)))
 		%Buttons.add_child(planner)
+	if ship.is_research() and GameState.owner_of(ship) == GameState.company:  # (Its expeditions, contracts and gear: see Research.)
+		var page := Button.new()
+		page.text = "Expeditions"
+		page.tooltip_text = "Send it to a site or on a contract, move it, or fit its gear (the Research page)."
+		page.pressed.connect(func() -> void:
+			queue_free()
+			GameRoot.find(self).show_research_ship(ship.id))
+		%Buttons.add_child(page)
 	%Buttons.move_child(_skin_button, %SellButton.get_index())
 	GameState.ship_sold.connect(func(sold: Ship, _price: int) -> void:
 		if sold == ship:
@@ -445,11 +457,13 @@ func _refresh() -> void:
 	%RescueToggle.set_pressed_no_signal(ship.auto_recover)
 	%FullToggle.set_pressed_no_signal(ship.full_loads)
 	%RescueToggle.visible = not ship.is_service()
-	%FullToggle.visible = not ship.is_service()
-	%AssignButton.visible = not ship.is_service()
-	%PauseButton.visible = not ship.is_service() or ship.is_fishing()
+	%FullToggle.visible = not ship.is_service() and not ship.is_research()
+	%AssignButton.visible = not ship.is_service() and not ship.is_research()
+	%PauseButton.visible = (not ship.is_service() or ship.is_fishing()) and not ship.is_research()
 	%RouteLabel.visible = not ship.is_service()
-	if ship.has_route():
+	if ship.is_research():
+		%RouteLabel.text = "Research: %s. Gear: %s." % [GameState.research.status_text(ship), ", ".join(PackedStringArray(ship.research_gear.map(func(gear_id: String) -> String: return Research.gear_name(gear_id)))) if not ship.research_gear.is_empty() else "none fitted"]
+	elif ship.has_route():
 		%RouteLabel.text = "Route: %s (loops)" % GameData.route_text(ship.route)
 		# Legs beyond one tank: the refuel stops on the way.
 		var stops: Array[String] = []

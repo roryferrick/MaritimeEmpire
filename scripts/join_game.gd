@@ -385,7 +385,7 @@ func _type_choices() -> HFlowContainer:
 	var row := HFlowContainer.new()
 	row.add_theme_constant_override(&"h_separation", 6)
 	var group := ButtonGroup.new()
-	for type: Dictionary in Progression.company_types():
+	for type: Dictionary in Progression.start_types():
 		var button := Button.new()
 		button.toggle_mode = true
 		button.button_group = group

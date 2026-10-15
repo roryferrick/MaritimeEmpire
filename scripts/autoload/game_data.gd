@@ -199,12 +199,18 @@ func _ground_port(id: String) -> Dictionary:
 		if Energy.is_field_end(id):  # (An oil or gas field's end of its lanes: see Energy.)
 			ground = Energy.field(Energy.field_of_end(id)).duplicate()
 			ground.ports = Energy.lane_ports(ground.get("id", ""))
+		elif Research.is_site_end(id):  # (A research site's end of its lanes: see Research.)
+			ground = Research.site(Research.site_of_end(id)).duplicate()
+			ground.ports = Research.lane_ports(id)
 		if not ground.is_empty():
 			var title := str(ground.name).trim_prefix("the ")
 			place = {id = id, name = title.left(1).to_upper() + title.substr(1), lon = ground.lon, lat = ground.lat, ground = ground.id}
 			if Energy.is_field_end(id):
 				place.erase("ground")
 				place.field = ground.id
+			elif Research.is_site_end(id):
+				place.erase("ground")
+				place.site = ground.id
 			# Where its lanes end (its middle, on the water).
 			var ports: Array = ground.get("ports", [])
 			if not ports.is_empty():
@@ -796,6 +802,8 @@ const CARGO_SUMMARIES := {
 	vehicles = "Cars and trucks from 22 makers, budget to luxury",
 	boat_carriers = "Boats from 22 makers, jet skis to superyachts",
 	tanker = "Crude oil, Diesel, Premium gasoline and Jet fuel",
+	survey = "No cargo: research gear (sonar, ROV, dive team...)",
+	mothership = "No cargo: research gear (ROV, crewed submersible...)",
 }
 
 ## "Toys, Clothing, Furniture": what a model can carry (a long list summed up: CARGO_SUMMARIES).

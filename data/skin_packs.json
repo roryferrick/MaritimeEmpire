@@ -31,7 +31,9 @@
 				"model_56": "pecan_pie", "model_57": "pecan_pie", "model_58": "pecan_pie", "model_59": "pecan_pie", "model_60": "pecan_pie",
 				"model_61": "harvest_basket", "model_62": "harvest_basket", "model_63": "harvest_basket", "model_64": "harvest_basket", "model_65": "harvest_basket",
 				"model_66": "butternut", "model_67": "butternut", "model_68": "butternut", "model_69": "butternut", "model_70": "butternut",
-				"model_71": "deviled_eggs", "model_72": "deviled_eggs", "model_73": "deviled_eggs", "model_74": "deviled_eggs", "model_75": "deviled_eggs"
+				"model_71": "deviled_eggs", "model_72": "deviled_eggs", "model_73": "deviled_eggs", "model_74": "deviled_eggs", "model_75": "deviled_eggs",
+				"model_86": "gravy", "model_87": "gravy", "model_88": "gravy", "model_89": "gravy", "model_90": "gravy",
+				"model_91": "cornucopia", "model_92": "cornucopia", "model_93": "cornucopia", "model_94": "cornucopia", "model_95": "cornucopia"
 			},
 			"ship_names": {"turkey": "Roast turkey", "corn": "Corn on the cob", "yams": "Candied yams", "beans": "Green bean casserole", "cranberry": "Cranberry sauce", "stuffing": "Stuffing", "gravy": "Gravy boat", "drumstick": "Turkey drumstick", "roll": "Dinner roll", "pie": "Pumpkin pie", "mayflower": "The Mayflower", "cornucopia": "Cornucopia", "mash": "Mashed potatoes", "cornbread": "Cornbread", "harvest_basket": "Harvest basket", "pecan_pie": "Pecan pie", "butternut": "Butternut squash", "deviled_eggs": "Deviled eggs"},
 			"outfits": [
@@ -65,7 +67,9 @@
 				"model_56": "pennant", "model_57": "pennant", "model_58": "pennant", "model_59": "pennant", "model_60": "pennant",
 				"model_61": "lemonade", "model_62": "lemonade", "model_63": "lemonade", "model_64": "lemonade", "model_65": "lemonade",
 				"model_66": "dugout", "model_67": "dugout", "model_68": "dugout", "model_69": "dugout", "model_70": "dugout",
-				"model_71": "bubble_gum", "model_72": "bubble_gum", "model_73": "bubble_gum", "model_74": "bubble_gum", "model_75": "bubble_gum"
+				"model_71": "bubble_gum", "model_72": "bubble_gum", "model_73": "bubble_gum", "model_74": "bubble_gum", "model_75": "bubble_gum",
+				"model_86": "glove", "model_87": "glove", "model_88": "glove", "model_89": "glove", "model_90": "glove",
+				"model_91": "helmet", "model_92": "helmet", "model_93": "helmet", "model_94": "helmet", "model_95": "helmet"
 			},
 			"ship_names": {"hotdog_mini": "Mini dog", "hotdog_ketchup": "Ketchup and mustard dog", "hotdog_chicago": "Chicago dog", "hotdog_chili": "Chili cheese dog", "hotdog_everything": "Foot-long with everything", "bat_wood": "Ash bat", "bat_black": "Black bat", "bat_blue": "Royal blue bat", "peanuts": "Bag of peanuts", "popcorn": "Popcorn box", "soda": "Soda cup", "softball": "Softball", "two_balls": "Two baseballs", "pretzel": "Soft pretzel", "glove": "Catcher's mitt", "helmet": "Batting helmet", "home_plate": "Home plate", "baseball": "Baseball", "foam_finger": "Foam finger", "scoreboard": "Scoreboard", "cotton_candy": "Cotton candy", "ballpark": "Ballpark", "lemonade": "Ballpark lemonade", "pennant": "Team pennant", "dugout": "Dugout canoe", "bubble_gum": "Bubble gum"},
 			"outfits": [
@@ -100,7 +104,9 @@
 				"model_56": "candle", "model_57": "candle", "model_58": "candle", "model_59": "candle", "model_60": "candle",
 				"model_61": "pumpkin_vine", "model_62": "pumpkin_vine", "model_63": "pumpkin_vine", "model_64": "pumpkin_vine", "model_65": "pumpkin_vine",
 				"model_66": "ribcage", "model_67": "ribcage", "model_68": "ribcage", "model_69": "ribcage", "model_70": "ribcage",
-				"model_71": "eyeballs", "model_72": "eyeballs", "model_73": "eyeballs", "model_74": "eyeballs", "model_75": "eyeballs"
+				"model_71": "eyeballs", "model_72": "eyeballs", "model_73": "eyeballs", "model_74": "eyeballs", "model_75": "eyeballs",
+				"model_86": "ghost_ship", "model_87": "ghost_ship", "model_88": "ghost_ship", "model_89": "ghost_ship", "model_90": "ghost_ship",
+				"model_91": "cauldron", "model_92": "cauldron", "model_93": "cauldron", "model_94": "cauldron", "model_95": "cauldron"
 			},
 			"ship_names": {"coffin_wood": "Wooden coffin", "coffin_black": "Black coffin", "coffin_vampire": "Vampire's coffin", "sarcophagus": "Mummy's sarcophagus", "coffin_chained": "Chained coffin", "broom": "Witch's broomstick", "black_cat": "Black cat", "skeleton": "Skeleton", "caramel_apple": "Caramel apple", "spellbook": "Spellbook", "bat": "Vampire bat", "jack_o_lantern": "Jack-o'-lantern", "cauldron": "Witch's cauldron", "ghost": "Sheet ghost", "candy_corn": "Candy corn", "skull": "Skull", "witch_hat": "Witch's hat", "spider": "Black widow", "ghost_ship": "Ghost ship", "haunted_house": "Haunted house", "monster": "Frankenstein's monster", "candy_bar": "Candy bar", "pumpkin_vine": "Pumpkin vine", "candle": "Spooky candle", "ribcage": "Ribcage", "eyeballs": "Eyeballs"},
 			"outfits": [
@@ -135,7 +141,9 @@
 				"model_56": "ice_skate", "model_57": "ice_skate", "model_58": "ice_skate", "model_59": "ice_skate", "model_60": "ice_skate",
 				"model_61": "fruitcake", "model_62": "fruitcake", "model_63": "fruitcake", "model_64": "fruitcake", "model_65": "fruitcake",
 				"model_66": "elf_shoe", "model_67": "elf_shoe", "model_68": "elf_shoe", "model_69": "elf_shoe", "model_70": "elf_shoe",
-				"model_71": "mince_pies", "model_72": "mince_pies", "model_73": "mince_pies", "model_74": "mince_pies", "model_75": "mince_pies"
+				"model_71": "mince_pies", "model_72": "mince_pies", "model_73": "mince_pies", "model_74": "mince_pies", "model_75": "mince_pies",
+				"model_86": "sled", "model_87": "sled", "model_88": "sled", "model_89": "sled", "model_90": "sled",
+				"model_91": "sleigh", "model_92": "sleigh", "model_93": "sleigh", "model_94": "sleigh", "model_95": "sleigh"
 			},
 			"ship_names": {"present_mini": "Present, red with dots", "present_stripes": "Present, green stripes", "present_gold": "Present, gold paper", "present_snow": "Present, snowflakes", "present_candy": "Present, candy-cane paper", "candy_cane": "Candy cane", "yule_log": "Yule log", "gingerbread_man": "Gingerbread man", "cookie_tin": "Tin of cookies", "nutcracker": "Nutcracker", "lights": "String of lights", "bauble": "Red bauble", "frosted": "Frosted bauble", "snowman": "Snowman", "stocking": "Stocking", "candy": "Boiled sweet", "gingerbread_house": "Gingerbread house", "sled": "Toboggan", "sleigh": "Santa's sleigh", "sack": "Santa's sack", "tree": "Christmas tree", "cracker": "Christmas cracker", "fruitcake": "Fruitcake", "ice_skate": "Ice skate", "elf_shoe": "Elf's shoe", "mince_pies": "Mince pies"},
 			"outfits": [

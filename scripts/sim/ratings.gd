@@ -16,7 +16,9 @@ extends RefCounted
 ## what its rigs made kept rather than lost for want of room).
 ##
 ## A cruise line's sample has four parts, a quarter each (Cruises.rating_parts():
-## guest experience, itinerary, reliability & safety, value & reviews). A cargo
+## guest experience, itinerary, reliability & safety, value & reviews). Research's
+## has four too (Research.rating_parts(): contracts, discoveries, fleet & gear,
+## safety & reliability). A cargo
 ## type's has three, a third of the stars each:
 ## - Condition: its ships' maintenance (from 40% up to 95%), the share of
 ##   their upgrade points spent, and the mega upgrades of its models;
@@ -39,6 +41,7 @@ const PART_NAMES := ["Condition", "Reliability", "Scale & reach"]
 const CRUISE_PART_NAMES := ["Guest experience", "Itinerary", "Reliability & safety", "Value & reviews"]
 const FARM_PART_NAMES := ["Condition", "Reliability", "Scale & reach", "Farms"]
 const ENERGY_PART_NAMES := ["Condition", "Reliability", "Scale & reach", "Production"]
+const RESEARCH_PART_NAMES := ["Contracts", "Discoveries", "Fleet & gear", "Safety & reliability"]
 
 var _state: Node
 var _clock := 0.0
@@ -109,6 +112,8 @@ static func part_names(type_id: String) -> Array:
 		return FARM_PART_NAMES
 	if type_id == "tankers":
 		return ENERGY_PART_NAMES
+	if type_id == "research":
+		return RESEARCH_PART_NAMES
 	return CRUISE_PART_NAMES if type_id == "cruises" else PART_NAMES
 
 
@@ -172,6 +177,10 @@ func sample(company: Company) -> void:
 			var cruise := (_state.cruises as Cruises).rating_parts(company, ships)
 			figures = cruise.figures
 			sample = (cruise.parts as Array).map(func(part: float) -> float: return snappedf(part, 0.01))
+		elif type_id == "research":  # (Its own four parts: see Research.rating_parts().)
+			var found := (_state.research as Research).rating_parts(company, ships)
+			figures = found.figures
+			sample = (found.parts as Array).map(func(part: float) -> float: return snappedf(part, 0.01))
 		else:
 			figures = _figures(company, type_id, ships, events.get(type_id, {}), entry, level)
 			sample = [snappedf(figures.condition, 0.01), snappedf(figures.reliability, 0.01), snappedf(figures.scale, 0.01)]

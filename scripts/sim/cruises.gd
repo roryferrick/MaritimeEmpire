@@ -209,6 +209,8 @@ func attraction(ship: Ship) -> Dictionary:
 	for port_id: String in stops:
 		var near := attractions(port_id)
 		sights += (near.wonders as Array).size()
+		if is_expedition(ship):  # (And the sites its company has surveyed near the port: see Research.)
+			sights += Research.sights_near(ship.company if ship.company != null else GameState.company, port_id)
 		polar += 1 if near.polar else 0
 		regions[str(GameData.port_region(port_id).get("id", ""))] = true
 	var stop_score := clampf(stops.size() / 4.0, 0.0, 1.0)

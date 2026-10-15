@@ -63,6 +63,11 @@ static func company_types() -> Array:
 	return GameData.config.get("company_types", {}).get("types", []).filter(func(each: Dictionary) -> bool: return not each.get("coming_soon", false))
 
 
+## The types a company can be founded as: not the pick_only ones (Research: taken only at a pick).
+static func start_types() -> Array:
+	return company_types().filter(func(each: Dictionary) -> bool: return not each.get("pick_only", false))
+
+
 ## The company types not playable yet (game_config company_types coming_soon: Cruises).
 static func upcoming_types() -> Array:
 	return GameData.config.get("company_types", {}).get("types", []).filter(func(each: Dictionary) -> bool: return each.get("coming_soon", false))
@@ -283,12 +288,12 @@ static func _full_fleet_xp_per_minute(level: int, company: Company = null) -> fl
 	var rate := 0.0
 	if company == null or company.all_types():
 		for model: Dictionary in GameData.ship_models:
-			if not model.get("recovery", false) and not model.get("new_tier", false) and not model.get("farm_line", false) and not model.get("boat_line", false) and not model.get("gas_line", false):
+			if not model.get("recovery", false) and not model.get("new_tier", false) and not model.get("farm_line", false) and not model.get("boat_line", false) and not model.get("extra_line", false) and not model.get("gas_line", false) and not model.get("research_line", false):
 				rate += _slots_from(model, int(model.get("unlock_level", 1)), level) * _xp_per_minute(model)
 		return rate * float(GameData.config.get("at_sea_share", 0.75))
 	for type_id: String in company.company_types:
 		rate += _type_rate(type_id, company.type_level(type_id), level)
-	var untaken := company_types().filter(func(each: Dictionary) -> bool: return not company.company_types.has(each.id))
+	var untaken := start_types().filter(func(each: Dictionary) -> bool: return not company.company_types.has(each.id))  # (Not Research: its ships earn no cargo XP, so it would make every level cheaper.)
 	for pick in range(company.company_types.size(), type_slots(level)):
 		var at := pick * type_pick_every()
 		var sum := 0.0
@@ -315,6 +320,8 @@ static func _type_rate(type_id: String, taken_at: int, level: int) -> float:
 static func _xp_per_minute(model: Dictionary) -> float:
 	if model.has("fishing"):
 		return _fishing_xp_per_minute(model)
+	if model.has("research"):  # A research ship's expeditions: its tier's cargo rate (Research.xp_rate()) for the 60% of the time it's out.
+		return Research.xp_rate(model) * 60.0 * 0.6
 	if model.has("cruise"):  # Its guests (a cruise about 85% full) over the miles it sails, at sea about 60% of the time (the rest in port booking).
 		var guests := roundi(float(model.cruise.get("guests", 0)) * 0.85)
 		return xp_for_delivery(guests, float(model.get("speed_nm_per_s", 0)) * 60.0) * float(GameData.config.get("cruises", {}).get("xp_factor", 0.4)) * 0.6

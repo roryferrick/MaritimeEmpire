@@ -15,8 +15,9 @@ const LEVEL_COLOR := Color(0.55, 0.85, 1.0)
 var _kicker := Label.new()
 var _title := Label.new()
 var _body := Label.new()
+var _picture := CenterContainer.new()
 var _button := Button.new()
-var _queue: Array[Dictionary] = []  # [{kicker, title, body, color}]
+var _queue: Array[Dictionary] = []  # [{kicker, title, body, color, site (a research site to picture)}]
 ## The speed the game ran at before the card paused it (0: it was paused already).
 var _was_speed := 0
 
@@ -39,6 +40,7 @@ func _ready() -> void:
 	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_title.custom_minimum_size.x = WIDTH - 32.0
 	box.add_child(_title)
+	box.add_child(_picture)
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_body.custom_minimum_size.x = WIDTH - 32.0
@@ -73,6 +75,16 @@ func show_achievement(name: String, stars: int, unit := "") -> void:
 	_enqueue({kicker = "ACHIEVEMENT", title = title, body = body, color = GOLD})
 
 
+## A research site discovered by one of this company's ships (see Research):
+## its picture and facts, and whether it was first there.
+func show_discovery(site_id: String, first: bool, ship_name: String, xp: float) -> void:
+	var site := Research.site(site_id)
+	var category := Research.category(str(site.get("category", "")))
+	var body := "%s · %s m down · %s\n\n%s" % [str(category.get("name", "")), Fmt.thousands(int(site.get("depth_m", 0))), str(site.get("when", "")), str(site.get("fact", ""))]
+	body += "\n\n%s surveyed it%s: +%s XP." % [ship_name, ", the first company ever" if first else "", Fmt.thousands(roundi(xp))]
+	_enqueue({kicker = "FIRST DISCOVERY" if first else "DISCOVERY", title = str(site.get("name", site_id)), body = body, color = GOLD if first else Color.from_string(str(category.get("color", "#9a7bd8")), LEVEL_COLOR).lightened(0.3), site = site_id})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:
@@ -88,6 +100,13 @@ func _show_next() -> void:
 	_title.text = card.title
 	_title.add_theme_color_override(&"font_color", card.color)
 	_body.text = card.body
+	for child in _picture.get_children():
+		child.queue_free()
+	_picture.visible = card.has("site")
+	if card.has("site"):
+		var art := SiteArt.new(str(card.site))
+		art.custom_minimum_size = Vector2(WIDTH - 40.0, 190.0)
+		_picture.add_child(art)
 	if not visible:
 		visible = true
 		if not Net.is_online():

@@ -35,6 +35,8 @@ signal wonder_clicked(id: String)
 signal gem_clicked(gem_id: String, lon_lat: Vector2)
 ## An oil or gas field's marker or rigs were clicked (see Energy).
 signal field_clicked(field_id: String)
+## A research site's marker (or a hidden one's search area) clicked (see _draw_research_sites()).
+signal site_clicked(site_id: String)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 ## While choosing a region to unlock (choosing_region): a locked region's
@@ -557,6 +559,13 @@ var show_active_lanes := false:
 var show_factories := false:
 	set(value):
 		show_factories = value
+		_static_layer.queue_redraw()
+## The research sites (data/research.json, see _draw_research_sites()): the
+## ones this company knows of, done ones ticked, hidden ones as search areas;
+## on the World map's Research switch.
+var show_research := false:
+	set(value):
+		show_research = value
 		_static_layer.queue_redraw()
 
 ## Port ids drawn as a looping route along its sea lanes, each stop numbered.
@@ -3296,6 +3305,8 @@ func _click(screen_pos: Vector2) -> void:
 		port_clicked.emit(nearest_port)
 	elif not _field_at(screen_pos).is_empty():
 		field_clicked.emit(_field_at(screen_pos))
+	elif not _site_at(screen_pos).is_empty():
+		site_clicked.emit(_site_at(screen_pos))
 	elif not _lock_at(screen_pos).is_empty():
 		var lock := _lock_at(screen_pos)
 		lock_clicked.emit(lock[0], lock[1])
@@ -7176,6 +7187,9 @@ func _draw_ports(labels: Array) -> void:
 		_draw_factories(visible_area)
 	if selectable_ports.is_empty() and not gray_mode:
 		_draw_energy(visible_area)  # (The fields' rigs, pipelines and refineries: see Energy.)
+	_site_marks.clear()
+	if show_research and selectable_ports.is_empty() and not gray_mode:
+		_draw_research_sites(visible_area)
 	var bounds := Rect2(Vector2.ZERO, size)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
@@ -14592,3 +14606,72 @@ func _draw_refuel_marks(stop_lists: Array) -> void:
 			var pos := at + Vector2(-width / 2.0, radius + PORT_FONT_SIZE + 2.0)
 			_canvas.draw_string(font, pos + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 			_canvas.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, REFUEL_COLOR)
+
+
+# --- Research sites (see Research) ------------------------------------------------------
+
+## How big (px) a research site's marker is, and from what zoom its name shows.
+const SITE_MARK_PX := 5.5
+const SITE_NAME_ZOOM := 18.0
+## A hidden site's search area: its ring's size on screen, at least and at most (px).
+const SITE_HINT_MIN_PX := 9.0
+const SITE_HINT_MAX_PX := 34.0
+## Site id -> where its marker was drawn (screen), for clicks.
+var _site_marks := {}
+
+## The research sites this company knows of, each a diamond in its category's
+## colour (with a gold tick once done, ringed white where a ship of the
+## company is bound for it), and the hidden ones as faint search areas with a "?".
+func _draw_research_sites(area: Rect2) -> void:
+	var who: Company = GameState.company
+	var font := _port_font()
+	var bound := {}
+	for ship: Ship in GameState.fleet(who):
+		if ship.is_research() and Research.is_site_end(ship.research_target):
+			bound[Research.site_of_end(ship.research_target)] = true
+	var nm_px := _radius() * deg_to_rad(1.0 / 60.0)  # (A nautical mile on screen, near enough.)
+	for site_id: String in Research.site_ids():
+		var site := Research.site(site_id)
+		if not Research.is_known(who, site_id):
+			var hint := world_to_screen(Geo.project(Research.hint_lonlat(site_id)))
+			if _is_hidden(hint) or not area.grow(40.0).has_point(hint):
+				continue
+			var ring := clampf(float(Research.setting("hint_nm", 260)) * nm_px * 0.5, SITE_HINT_MIN_PX, SITE_HINT_MAX_PX)
+			_canvas.draw_arc(hint, ring, 0.0, TAU, 24, Color(0.85, 0.9, 1.0, 0.28), 1.2, true)
+			_canvas.draw_string(font, hint + Vector2(-3.5, 4.5), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE - 3, Color(0.85, 0.9, 1.0, 0.45))
+			_site_marks[site_id] = hint
+			continue
+		var at := port_screen_position(Research.end_of(site_id))
+		if at == Vector2.ZERO:
+			at = world_to_screen(Geo.project(Vector2(float(site.lon), float(site.lat))))
+		if _is_hidden(at) or not area.grow(40.0).has_point(at):
+			continue
+		_site_marks[site_id] = at
+		var color := Color.from_string(str(Research.category(str(site.category)).get("color", "#9a7bd8")), Color(0.6, 0.5, 0.85))
+		var s := SITE_MARK_PX
+		var diamond := PackedVector2Array([at + Vector2(0, -s), at + Vector2(s, 0), at + Vector2(0, s), at + Vector2(-s, 0)])
+		var done := Research.is_done(who, site_id)
+		_canvas.draw_colored_polygon(diamond, color if done else Color(color, 0.8))
+		diamond.append(diamond[0])
+		_canvas.draw_polyline(diamond, Color(1.0, 0.85, 0.35) if done else Color(1, 1, 1, 0.85), 1.4 if done else 1.0, true)
+		if done:
+			_canvas.draw_polyline(PackedVector2Array([at + Vector2(-2.2, 0.2), at + Vector2(-0.6, 1.8), at + Vector2(2.4, -1.8)]), Color(1, 1, 1), 1.3, true)
+		if bound.has(site_id):
+			_canvas.draw_arc(at, s + 4.0, 0.0, TAU, 20, Color(1, 1, 1, 0.9), 1.2, true)
+		if _zoom >= SITE_NAME_ZOOM:
+			var text := str(site.name)
+			var pos := at + Vector2(s + 4.0, 5.0)
+			_canvas.draw_string(font, pos + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE - 3, Color(0, 0, 0, 0.6))
+			_canvas.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE - 3, color.lightened(0.35))
+
+
+## The research site whose marker (or search area) is under a screen point, or "".
+func _site_at(screen_pos: Vector2) -> String:
+	var best := ""
+	var best_dist := maxf(SITE_MARK_PX * 2.2, 10.0)
+	for site_id: String in _site_marks:
+		var dist := (_site_marks[site_id] as Vector2).distance_to(screen_pos)
+		if dist <= best_dist:
+			best_dist = dist
+			best = site_id
+	return best

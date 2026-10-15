@@ -100,6 +100,10 @@ var energy_tally := {}
 ## freezer: {ground id: {model id: {port, freeze}}}. Which boats are sent is
 ## each boat's own (Ship.fish_area).
 var fish_areas := {}
+## Its research (Research): the sites done (site id -> {day, first, ship}),
+## the hidden ones it knows of (site id -> true), and its rolling tallies for
+## the rating (trips, dives, dive_fails, gear_lost, contracts, on_time, failed...).
+var research := {}
 ## What it has traded at each port (see GameState._tally_port_trade()): port id ->
 ## {since (play time it began keeping count there), goods: {commodity id:
 ## [units bought, money spent, units sold, money earned]}}.
@@ -224,6 +228,7 @@ func to_dict() -> Dictionary:
 		"plants": plants,
 		"energy_tally": energy_tally,
 		"fish_areas": fish_areas,
+		"research": research,
 		"port_trade": port_trade,
 		"canal_stats": canal_stats,
 		"finance_window": finance_window,
@@ -284,6 +289,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.plants = data.get("plants", {}) if data.get("plants") is Dictionary else {}
 	company.energy_tally = data.get("energy_tally", {}) if data.get("energy_tally") is Dictionary else {}
 	company.fish_areas = data.get("fish_areas", {}) if data.get("fish_areas") is Dictionary else {}
+	company.research = data.get("research", {}) if data.get("research") is Dictionary else {}
 	company.port_trade = data.get("port_trade", {})
 	company.canal_stats = data.get("canal_stats", {})
 	company.finance_window = data.get("finance_window", [])

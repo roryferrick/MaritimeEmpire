@@ -24,7 +24,9 @@
 		{"id": "crabbing", "title": "Crabbers", "captain": {"hat": "Baseball cap", "shirt": "Charcoal", "trousers": "Denim"}, "crew": {"hat": "Watch cap", "shirt": "Oilskin orange", "trousers": "Oilskin orange"}},
 		{"id": "tug", "title": "Tugs", "captain": {"hat": "Fisherman's cap", "shirt": "Navy", "trousers": "Khaki"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Navy"}},
 		{"id": "recovery", "title": "Recovery boats", "captain": {"hat": "Fisherman's cap", "shirt": "Navy", "trousers": "Charcoal"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Charcoal"}},
-		{"id": "icebreaker", "title": "Icebreakers", "captain": {"hat": "Captain's cap", "shirt": "Navy", "trousers": "Navy"}, "crew": {"hat": "Pompom beanie", "shirt": "Red", "trousers": "Black"}}
+		{"id": "icebreaker", "title": "Icebreakers", "captain": {"hat": "Captain's cap", "shirt": "Navy", "trousers": "Navy"}, "crew": {"hat": "Pompom beanie", "shirt": "Red", "trousers": "Black"}},
+		{"id": "survey", "title": "Survey vessels", "captain": {"hat": "Captain's cap", "shirt": "Navy", "trousers": "Khaki"}, "crew": {"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Navy"}},
+		{"id": "mothership", "title": "Deep-sea motherships", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Watch cap", "shirt": "Oilskin orange", "trousers": "Charcoal"}}
 	],
 	"dock": [
 		{"hat": "Hard hat", "shirt": "Hi-vis orange", "trousers": "Navy"},

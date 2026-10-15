@@ -79,11 +79,11 @@ const CHAT_KEPT := 200
 ## Keys of a ship's dictionary that change every step while it moves: a change
 ## to only these doesn't need the screens to look at the ship again.
 const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "sea_time", "align_time", "dock_time", "berth_time",
-	"lock_time", "bill", "stop_fuel_cost", "stop_repair_cost", "canal_queue_since", "ledger", "xp", "job_nm", "carry_nm", "rig_wait"]
+	"lock_time", "bill", "stop_fuel_cost", "stop_repair_cost", "canal_queue_since", "ledger", "xp", "job_nm", "carry_nm", "rig_wait", "research_work", "research_roll"]
 ## GameState signals whose first argument is a ship: sent to that ship's
 ## company's player. port_band_changed goes to everyone.
 const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_held", &"ship_departed", &"canal_entered",
-	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled", &"ship_battered", &"wages_paid"]
+	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled", &"ship_battered", &"wages_paid", &"research_discovered", &"research_mishap"]
 ## Commands a joined player's game sends, done by the host for their company
 ## (each is the GameState function of that name).
 const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing_target", &"set_fishing_base", &"set_fish_landing", &"select_fish_area", &"assign_fish_boats", &"set_fish_area_model", &"set_uniform", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel", &"set_skin",
@@ -93,7 +93,8 @@ const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing
 	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item",
 	&"build_factory", &"close_factory", &"sell_factory_stock",
 	&"set_rig_run", &"send_rig_tug", &"buy_rig", &"sell_rig", &"list_rig", &"buy_listed_rig", &"upgrade_rig", &"lay_pipeline",
-	&"build_plant", &"demolish_plant", &"upgrade_plant", &"set_plant_mode", &"sell_energy_item"]
+	&"build_plant", &"demolish_plant", &"upgrade_plant", &"set_plant_mode", &"sell_energy_item",
+	&"send_expedition", &"recall_expedition", &"move_research_ship", &"fit_gear", &"remove_gear", &"accept_contract", &"abandon_contract"]
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its
@@ -669,6 +670,7 @@ func _collect() -> Dictionary:
 		divine = GameState.divine.to_dict().duplicate(true), ports = GameState.port_sizes.to_dict().duplicate(true),
 		farms = GameState.farms.to_dict().duplicate(true),
 		energy = GameState.energy.to_dict().duplicate(true),
+		research = GameState.research.to_dict().duplicate(true),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
 		ships = ships,
 	}
@@ -684,6 +686,7 @@ func _state_of(world: Dictionary) -> Dictionary:
 		weather = world.get("weather", {}), market = world.get("market", {}), divine = world.get("divine", {}),
 		farms = world.get("farms", {}),
 		energy = world.get("energy", {}),
+		research = world.get("research", {}),
 		ports = world.get("port_sizes", {}),
 		companies = world.get("companies", []),
 		ships = ships,
@@ -722,6 +725,10 @@ func _broadcast() -> void:
 	if energy != _sent.get("energy", {}):
 		update.energy = energy
 		_sent.energy = energy.duplicate(true)
+	var research := GameState.research.to_dict()
+	if research != _sent.get("research", {}):
+		update.research = research
+		_sent.research = research.duplicate(true)
 	_full_clock += SYNC_S
 	var full_round := _full_clock >= FULL_SYNC_S
 	if full_round:
@@ -836,6 +843,8 @@ func _sync(packed: Array) -> void:
 	if update.has("energy"):
 		GameState.energy.from_dict(update.energy)
 		GameState.energy_changed.emit()
+	if update.has("research"):
+		GameState.research.from_dict(update.research)
 	if update.has("ports"):
 		GameState.port_sizes.apply_update(update.ports)
 	if update.has("companies"):

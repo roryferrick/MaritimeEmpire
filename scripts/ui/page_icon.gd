@@ -64,3 +64,15 @@ func _draw() -> void:
 			draw_circle(at.call(0.93, 0.3), side * 0.06, Color(1.0, 0.62, 0.2))
 			for k in 3:
 				draw_line(at.call(0.06 + k * 0.32, 0.9), at.call(0.22 + k * 0.32, 0.9), color, line * 0.6, true)
+		"research":
+			# A submersible over the deep, its sonar pinging down to the seabed.
+			var hull := PackedVector2Array()
+			for i in range(0, 21):
+				var a := TAU * i / 20.0
+				hull.append(at.call(0.5 + cos(a) * 0.3, 0.3 + sin(a) * 0.17))
+			draw_colored_polygon(hull, color)
+			draw_rect(Rect2(at.call(0.42, 0.06), Vector2(0.16, 0.1) * side), color)
+			draw_circle(at.call(0.38, 0.3), side * 0.07, Color(0.12, 0.16, 0.24))
+			for k in 3:
+				draw_arc(at.call(0.5, 0.42), side * (0.14 + 0.13 * k), PI * 0.3, PI * 0.7, 10, color, line * 0.5, true)
+			draw_polyline(PackedVector2Array([at.call(0.04, 0.94), at.call(0.24, 0.86), at.call(0.42, 0.92), at.call(0.62, 0.84), at.call(0.8, 0.9), at.call(0.96, 0.84)]), color, line * 0.6, true)

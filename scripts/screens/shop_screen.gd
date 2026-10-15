@@ -19,7 +19,7 @@ extends Control
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
 	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
-	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"], ["Ocean cruisers", "cruise_ocean"], ["Expedition cruisers", "cruise_expedition"]]
+	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"], ["Ocean cruisers", "cruise_ocean"], ["Expedition cruisers", "cruise_expedition"], ["Survey vessels", "survey"], ["Deep-sea motherships", "mothership"]]
 ## Each company type's tab (game_config company_types: tab is its title): its
 ## rows, each row its sections side by side (by category). The service boats
 ## have the last tab, SERVICE_ROWS.
@@ -30,6 +30,7 @@ const TYPE_ROWS := {
 	tankers = [["tanker"], ["gas"]],
 	seafood = [["fishing"], ["crabbing"], ["seafood"]],
 	cruises = [["cruise_ocean"], ["cruise_expedition"]],
+	research = [["survey"], ["mothership"]],
 }
 const SERVICE_ROWS := [["recovery", "tug"], ["icebreaker"]]
 ## Cards a section shows across, fewer if they don't fit. Six fit across a row
@@ -309,6 +310,11 @@ func _make_card(model: Dictionary, coming := false) -> Control:
 		rows[2] = ["Decks", "%d amenity slots%s" % [int(cruise.get("deck_slots", 0)), " and a helipad" if cruise.get("helipad", false) else ""]]
 		if not str(cruise.get("ice", "")).is_empty():
 			rows.insert(3, ["Ice", ICE_TEXT.get(str(cruise.ice), "")])
+	elif model.has("research"):
+		var reach := Research.depth_of(model)
+		var sites := Research.site_ids().filter(func(id: String) -> bool: return int(Research.site(id).depth_m) <= reach).size()
+		rows[1] = ["Dives to", "%s m: %d of the %d sites" % [Fmt.thousands(reach), sites, Research.site_ids().size()]]
+		rows[2] = ["Gear", "%d slots for %s" % [Research.slots_of(model), ", ".join(PackedStringArray(Research.gear_list().filter(func(info: Dictionary) -> bool: return Research.can_fit(model, info.id)).map(func(info: Dictionary) -> String: return str(info.name).to_lower())))]]
 	elif model.get("recovery", false):
 		rows[1] = ["Carries", GameData.carries_text(model)]
 		rows[2] = ["Job", "Recovers lost ships"]

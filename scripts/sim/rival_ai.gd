@@ -108,7 +108,7 @@ func add_rivals(count: int, level: String) -> void:
 	if not SETTINGS.has(level):
 		level = "normal"
 	for i in clampi(count, 0, MAX_RIVALS):
-		var type_id := str(Progression.company_types().pick_random().id)  # (Any type, repeats and all.)
+		var type_id := str(Progression.start_types().pick_random().id)  # (Any type it could start as, repeats and all.)
 		var port := _pick_home_port(level, type_id)
 		if port.is_empty():
 			return
@@ -273,6 +273,8 @@ func _think(rival: Company, mind: Dictionary) -> void:
 		(_state.makers as Manufacturers).sell_rival_stock(rival)
 		# Its rigs, rig runs and a refinery, simply (see Energy.run_rival()).
 		news.append_array((_state.energy as Energy).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
+		# Its research ships, contracts and expeditions, simply (see Research.run_rival()).
+		news.append_array((_state.research as Research).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
 	if float(settings.reroute_s) > 0.0 and float(mind.reroute) <= 0.0:
 		mind.reroute = float(settings.reroute_s)
 		_reroute_one(rival, settings)
@@ -900,7 +902,7 @@ func _cargo_ships(rival: Company) -> Array[Ship]:
 	if not mind.has("cargo"):
 		var out: Array[Ship] = []
 		for ship: Ship in _state.fleet(rival):
-			if not ship.is_service():
+			if not ship.is_service() and not ship.is_research():
 				out.append(ship)
 		mind.cargo = out
 	return mind.cargo
@@ -926,7 +928,7 @@ func _forget_fleet(rival: Company) -> void:
 
 
 static func _is_service_model(model: Dictionary) -> bool:
-	return model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty() or model.has("fishing") or model.has("cruise")
+	return model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty() or model.has("fishing") or model.has("cruise") or model.has("research")
 
 
 ## The cheapest ship model passing a test, or "".

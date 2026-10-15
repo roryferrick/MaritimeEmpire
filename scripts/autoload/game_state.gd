@@ -91,7 +91,7 @@ const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales", "energy_built", "energy_sold", "energy", "energy_sales"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales", "energy_built", "energy_sold", "energy", "energy_sales", "research_pay", "research_gear", "research_penalty"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
@@ -335,6 +335,11 @@ var farms := Farms.new(self)
 signal farms_changed
 ## The oil and gas fields' rigs, the companies' buildings and stores (see Energy).
 var energy := Energy.new(self)
+## The Research type's contracts board, first discoveries and expeditions (see Research).
+var research := Research.new(self)
+## A research ship finished a site (first: no company had before), earning xp; a dive gone wrong (see Research).
+signal research_discovered(ship: Ship, site_id: String, first: bool, xp: float)
+signal research_mishap(ship: Ship, what: String)
 ## A rig or building was bought, sold or upgraded, or a day's output came in (see Energy).
 signal energy_changed
 ## The vehicle and boat makers, likeness and the companies' factories for them (see Manufacturers).
@@ -358,6 +363,7 @@ func _ready() -> void:
 	port_sizes.band_changed.connect(port_band_changed.emit)
 	ratings.connect_signals()
 	cruises.connect_signals()
+	research.connect_signals()
 
 
 func _notification(what: int) -> void:
@@ -428,6 +434,7 @@ func _step(delta: float) -> void:
 	farms.step(delta)
 	makers.step(delta)
 	energy.step(delta)
+	research.step(delta)
 	MapView._prof("sim.farms", t_s)
 	t_s = Time.get_ticks_usec()
 	_storm_warning_clock += delta
@@ -817,7 +824,7 @@ func port_fee(port_id: String, margin: float, of: Company = null, type_id := "")
 	var who := of if of != null else company
 	if margin <= 0.0 or who.hub_at(port_id) != null:
 		return 0
-	return roundi(margin * float(GameData.config.get("port_fee", 0.1)) * ratings.factor(who, type_id, "fees"))
+	return roundi(margin * float(GameData.config.get("port_fee", 0.1)) * ratings.factor(who, type_id, "fees") * Research.perk(who, "fees"))
 
 
 ## A model's crew: [captains, crew], by its tier (game_config crew).
@@ -1495,7 +1502,7 @@ func company_buy_price(port_id: String, commodity_id: String, of: Company = null
 func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
 	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(GameData.family_of(commodity_id), "sell") if hub else 0.0)) * divine.price_factor(port_id, true) \
-		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price")  # (The type's stars: see Ratings.)
+		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price") * Research.perk(of if of != null else company, "price")  # (The type's stars: see Ratings; the research perks: see Research.)
 
 
 ## Extra XP (e.g. 0.5 for +50%) a delivery of a commodity earns from a
@@ -2052,6 +2059,9 @@ func _advance_timed(ship: Ship, delta: float) -> void:
 	elif on_job and (ship.job_phase == Ship.JOB_RIG or ship.job_phase == Ship.JOB_REPAIR):
 		_advance_rig(ship, delta)  # (A rig run or a tug's repair: see Energy.)
 		MapView._prof("advance.rig", t_v)
+	elif on_job and ship.job_phase == Ship.JOB_RESEARCH:
+		research.advance(ship, delta)  # (An expedition: see Research.)
+		MapView._prof("advance.research", t_v)
 	elif on_job and ship.is_tug():
 		_advance_tug_job(ship, delta)
 		MapView._prof("advance.tug", t_v)
@@ -2224,7 +2234,7 @@ func _storm_hold(ship: Ship, target: float) -> float:
 ## icebreaker comes to lead it through, waiting there (engines off) in
 ## ice_wait. Service ships go on regardless.
 func _ice_hold(ship: Ship, target: float) -> float:
-	if ship.is_service():
+	if ship.is_service() or ship.research_gear.has("ice"):  # (A research ship with an ice hull goes on through: see Research.)
 		return target
 	# Areas open and close slowly: looked up again only every ICE_HOLD_REFRESH_S
 	# (and on a new leg).
@@ -2617,6 +2627,8 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 		MapView._prof("adv.try_depart", t_ad)
 	elif ship.is_rig_runner() and ship.is_running():
 		_rig_in_port(ship, delta)  # (Off to its field again, or back to its delivery port: see Energy.)
+	elif ship.is_research() and ship.is_running():
+		research.in_port(ship, delta)  # (Off on its expedition, or back to its base: see Research.)
 	elif ship.is_cruise() and ship.is_running() and cruises.in_port(ship, delta):
 		pass  # (A cruise ship in a refit, or at home taking bookings: see Cruises.)
 	elif ship.is_running():
@@ -2661,6 +2673,9 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 			elif ship.has_meta(&"rig_trip"):
 				ship.remove_meta(&"rig_trip")
 				_start_rig_trip(ship)  # (Clear of its pier: out to its field. See _rig_in_port().)
+			elif ship.has_meta(&"research_trip"):
+				ship.remove_meta(&"research_trip")
+				research.start_trip(ship)  # (Clear of its pier: out on its expedition. See Research.in_port().)
 			elif not to.is_empty():
 				_set_off(ship, to, true)
 			else:
@@ -2875,7 +2890,7 @@ func _load_cargo(ship: Ship, to: String) -> String:
 ## ship XP upgrade), announcing this player's level-ups.
 func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0, company_multiplier := 1.0) -> void:
 	var who := owner_of(ship)
-	amount *= ratings.factor(who, Progression.type_of_model(ship.model()), "xp")  # (The type's stars: see Ratings.)
+	amount *= ratings.factor(who, Progression.type_of_model(ship.model()), "xp") * Research.perk(who, "xp")  # (The type's stars: see Ratings; the research perks: see Research.)
 	var company_before := who.level()
 	var ship_before := ship.level()
 	who.xp += amount * company_multiplier
@@ -4045,7 +4060,7 @@ func _repair(ship: Ship, amount: float) -> void:
 	amount = minf(amount, 1.0 - ship.maintenance)
 	if amount <= 0.0:
 		return
-	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs", owner_of(ship)))
+	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs", owner_of(ship))) * Research.perk(owner_of(ship), "repairs")
 	var paid := _spend(ship, cost, "repair")
 	ship.stop_repair_cost += paid
 	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
@@ -4420,6 +4435,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	ratings.reset()
 	farms.reset()
 	energy.reset()
+	research.reset()
 	rivals.reset()
 	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
@@ -4471,6 +4487,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	divine.from_dict(data.get("divine", {}))
 	farms.from_dict(data.get("farms", {}))
 	energy.from_dict(data.get("energy", {}))
+	research.from_dict(data.get("research", {}))
 	next_ship_id = int(data.get("next_ship_id", 1))
 	for ship_data: Dictionary in data.get("ships", []):
 		var ship := Ship.from_dict(ship_data)
@@ -4567,6 +4584,7 @@ func world_dict() -> Dictionary:
 		"divine": divine.to_dict(),
 		"farms": farms.to_dict(),
 		"energy": energy.to_dict(),
+		"research": research.to_dict(),
 		"market": market.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
@@ -5008,7 +5026,7 @@ func _work_ground(ship: Ship, delta: float) -> void:
 	var month := fishing_month()
 	var key := "%s>%s" % [ship.fish_ground, ship.fish_species]
 	var stock := float(fish_stocks.get(key, 1.0))
-	var rate := fish.crates_a_day(model, ship.fish_ground, ship.fish_species, month, stock)
+	var rate := fish.crates_a_day(model, ship.fish_ground, ship.fish_species, month, stock) * Research.catch_factor(owner_of(ship), ship.fish_ground)  # (Its company's research: see Research.)
 	var storm := _storm_factors(ship)
 	var rough := fish.rough(ship.fish_ground, month)
 	var days := delta * calendar_seconds_per_second() / Fisheries.DAY_S
@@ -5773,3 +5791,60 @@ func sell_energy_item(port_id: String, commodity: String) -> void:
 	var value := energy.sell_item(company, port_id, commodity)
 	if value > 0 and ai_acting == null:
 		ActivityLog.add("Sold the %s in your tanks at %s for %s." % [Energy.good_word(commodity), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
+
+
+# --- Research (see Research) ----------------------------------------------------------
+
+## Sends a docked research ship on an expedition: to a site (or a contract's
+## target, with contract_id), from where it is. Research.trip_error() says why it can't.
+func send_expedition(ship: Ship, target: String, contract_id := 0) -> void:
+	var offer := research.offer_by_id(contract_id) if contract_id > 0 else {}
+	if not research.trip_error(company, ship, target, offer).is_empty():
+		return
+	if Net.command(&"send_expedition", [ship, target, contract_id]):
+		return
+	research.send(owner_of(ship), ship, target, contract_id)
+
+
+## Calls a research ship's expedition off (one out at sea heads home).
+func recall_expedition(ship: Ship) -> void:
+	if Net.command(&"recall_expedition", [ship]):
+		return
+	research.recall(ship)
+
+
+## Sends an idle research ship to another port, its new base.
+func move_research_ship(ship: Ship, port_id: String) -> void:
+	if Net.command(&"move_research_ship", [ship, port_id]):
+		return
+	research.move(owner_of(ship), ship, port_id)
+
+
+func fit_gear(ship: Ship, gear_id: String) -> void:
+	if not research.fit_error(owner_of(ship), ship, gear_id).is_empty():
+		return
+	if Net.command(&"fit_gear", [ship, gear_id]):
+		return
+	research.fit(owner_of(ship), ship, gear_id)
+
+
+func remove_gear(ship: Ship, gear_id: String) -> void:
+	if Net.command(&"remove_gear", [ship, gear_id]):
+		return
+	research.remove(owner_of(ship), ship, gear_id)
+
+
+## Takes a contract off the board (Research.accept_error() says why it can't).
+func accept_contract(contract_id: int) -> void:
+	if not research.accept_error(company, contract_id).is_empty():
+		return
+	if Net.command(&"accept_contract", [contract_id]):
+		return
+	research.accept(company, contract_id)
+
+
+## Gives a taken contract up: it fails, its penalty paid.
+func abandon_contract(contract_id: int) -> void:
+	if Net.command(&"abandon_contract", [contract_id]):
+		return
+	research.abandon(company, contract_id)
