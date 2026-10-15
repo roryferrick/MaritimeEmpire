@@ -1,9 +1,12 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
-## The player's ships, grouped by model (in shop order), each group on a faint
-## tint of its ship line's color under a title in that color, eight tiles wide,
-## with sort (within each model) and filter options, and "Upgrade all" (with a
-## red dot while any ship has points to spend).
+## The player's ships, grouped by model in the Shop's order under a heading per
+## ship line, each group on a faint tint of its ship line's color under a title
+## in that color, eight tiles wide, with sort (within each model) and filter
+## options, and "Upgrade all" (with a red dot while any ship has points to
+## spend). Tabs over the list, like the Shop's, show All, one company type
+## (its lines) or the service ships, each with its count (a type the company
+## has no ships or slots in is left out).
 ## Tiles are re-sorted when the fleet or the sort changes, not live, so they
 ## don't jump around; the filter follows each ship's status as it changes.
 
@@ -32,6 +35,14 @@ const UPGRADE_ALL_WIDTH := 250.0
 ## The header's buttons' text size.
 const HEADER_FONT_SIZE := 15
 const UPGRADE_ALL_GAP := 16.0
+## The service ships' lines (the Service tab) and every line's heading.
+const SERVICE_LINES := ["recovery", "tug", "icebreaker"]
+const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers",
+	tanker = "Tankers", vehicles = "Vehicle carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers",
+	recovery = "Recovery boats", tug = "Tugs", icebreaker = "Icebreakers"}
+## The tabs' place under the header, and where the list starts below them (px).
+const TABS_TOP := 60.0
+const LIST_TOP := 100.0
 const SORT_NAMES := {Sort.EARNINGS: "Earnings", Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit (all time)"}
 ## Sorted by earnings, the tiles re-sort this often (s) while the tab is open,
 ## and each time it opens.
@@ -44,6 +55,13 @@ const FILTER_NAMES := {
 
 ## Model id -> [group box, tile grid].
 var _groups := {}
+## The tabs over the list: All, a tab per company type, Service; each tab's
+## ship lines ([] for All), each line's heading, and each model group's line.
+var _tabs := TabBar.new()
+var _tab_names: Array[String] = []
+var _tab_lines: Array = []
+var _line_heads := {}
+var _group_lines := {}
 ## Spends every ship's upgrade points (see GameState.upgrade_all()).
 var _upgrade_all := Button.new()
 ## The red dot on "Upgrade all" while any ship has points to spend.
@@ -77,6 +95,7 @@ func _ready() -> void:
 	GameState.ship_changed.connect(_on_ship_changed)
 	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
 	GameState.mega_upgraded.connect(func(_model_id: String) -> void: _dirty = true)
+	GameState.company_types_changed.connect(func() -> void: _dirty = true)  # (A type taken shows its tab.)
 	visibility_changed.connect(func() -> void:
 		_dirty = true
 		if is_visible_in_tree() and %SortOption.get_selected_id() == Sort.EARNINGS:
@@ -107,6 +126,7 @@ func _ready() -> void:
 	uniforms.pressed.connect(func() -> void: get_tree().root.add_child(UniformsPage.new()))
 	%Header.add_child(uniforms)
 	%Header.move_child(uniforms, %CountLabel.get_index())
+	_add_tabs()
 	$Scroll.resized.connect(_size_tiles)
 	_rebuild()
 
@@ -149,17 +169,23 @@ func _rebuild() -> void:
 		child.queue_free()
 	_groups.clear()
 	_megas.clear()
+	_line_heads.clear()
+	_group_lines.clear()
 	_tiles.clear()
 	_needs_rebuild = false
 	_earnings = GameState.recent_finances(null, GameState.ship_window_seconds()).ships
 	_resort_clock = 0.0
 	var sorted := GameState.fleet().duplicate()
 	sorted.sort_custom(_ship_before)
-	for model: Dictionary in GameData.ship_models:
+	for model: Dictionary in _model_order():
 		var model_ships := sorted.filter(func(ship: Ship) -> bool: return ship.model_id == model.id)
 		if model_ships.is_empty():
 			continue
+		var line := str(model.get("category", ""))
+		if not _line_heads.has(line):
+			_line_heads[line] = _add_line_head(line)
 		var grid := _add_group(model)
+		_group_lines[model.id] = line
 		for ship: Ship in model_ships:
 			var tile := ShipTile.new(ship)
 			_tiles[ship] = tile
@@ -168,6 +194,7 @@ func _rebuild() -> void:
 			grid.add_child(tile)
 	%EmptyLabel.visible = GameState.fleet().is_empty()
 	%Header.visible = not GameState.fleet().is_empty()
+	_tabs.visible = %Header.visible
 	_apply_filter()
 	_size_tiles()
 	_update_megas()
@@ -344,19 +371,94 @@ static func _status_rank(ship: Ship) -> int:
 	return 4 if ship.is_active() else 3
 
 
-## Hides tiles that don't match the filter, and model groups left empty.
+## Hides tiles that don't match the filter, model groups left empty or outside
+## the tab, and line headings with nothing under them; counts each tab's ships
+## (those the filter shows) on it, leaving out a company type's tab while the
+## company has neither ships nor slots in it.
 func _apply_filter() -> void:
 	var filter: int = %FilterOption.get_selected_id()
+	var lines: Array = _tab_lines[_tabs.current_tab] if _tabs.current_tab >= 0 else []
 	var shown := 0
+	var per_line := {}  # line -> ships the filter shows
+	var owned := {}  # line -> ships owned
 	for model_id: String in _groups:
 		var group: Control = _groups[model_id][0]
+		var line: String = _group_lines.get(model_id, "")
 		var in_group := 0
 		for tile: ShipTile in _groups[model_id][1].get_children():
 			tile.visible = _matches(tile.ship, filter)
 			in_group += 1 if tile.visible else 0
-		group.visible = in_group > 0
-		shown += in_group
+		per_line[line] = int(per_line.get(line, 0)) + in_group
+		owned[line] = int(owned.get(line, 0)) + _groups[model_id][1].get_child_count()
+		var in_tab := lines.is_empty() or lines.has(line)
+		group.visible = in_group > 0 and in_tab
+		shown += in_group if in_tab else 0
+	for line: String in _line_heads:
+		(_line_heads[line] as Control).visible = int(per_line.get(line, 0)) > 0 and (lines.is_empty() or lines.has(line))
+	for tab in _tabs.tab_count:
+		var count := 0
+		var ships := 0
+		for line: String in per_line:
+			if (_tab_lines[tab] as Array).is_empty() or (_tab_lines[tab] as Array).has(line):
+				count += int(per_line[line])
+				ships += int(owned[line])
+		_tabs.set_tab_title(tab, "%s (%d)" % [_tab_names[tab], count])
+		var type_id := Progression.type_of_category(str((_tab_lines[tab] as Array).front())) if not (_tab_lines[tab] as Array).is_empty() else ""
+		_tabs.set_tab_hidden(tab, tab > 0 and ships == 0 and (type_id.is_empty() or not GameState.company.has_type(type_id)))
+	if _tabs.is_tab_hidden(_tabs.current_tab):
+		_tabs.current_tab = 0
+		return  # (tab_changed runs this again.)
 	%CountLabel.text = "%d of %d ships" % [shown, GameState.fleet().size()]
+
+
+## The tabs over the list: All, each company type's (its Shop tab name), Service.
+func _add_tabs() -> void:
+	_tab_names.append("All")
+	_tab_lines.append([])
+	for type: Dictionary in Progression.company_types():
+		_tab_names.append(str(type.get("tab", type.name)))
+		_tab_lines.append(type.categories)
+	_tab_names.append("Service")
+	_tab_lines.append(SERVICE_LINES)
+	for name: String in _tab_names:
+		_tabs.add_tab(name)
+	_tabs.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_tabs.offset_left = MARGIN
+	_tabs.offset_right = -MARGIN
+	_tabs.offset_top = TABS_TOP
+	_tabs.offset_bottom = LIST_TOP - 4.0
+	_tabs.clip_tabs = false
+	_tabs.tab_changed.connect(_apply_filter.unbind(1))
+	add_child(_tabs)
+	$Scroll.offset_top = LIST_TOP
+
+
+## Every model in the Shop's order: each company type's lines (as its tab
+## lays them out), then the service ships', each line smallest first.
+func _model_order() -> Array:
+	var lines: Array = []
+	for type: Dictionary in Progression.company_types():
+		lines.append_array(type.categories)
+	lines.append_array(SERVICE_LINES)
+	var order: Array = []
+	for line: String in lines:
+		var models := GameData.ship_models.filter(func(model: Dictionary) -> bool: return model.get("category", "") == line)
+		models.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("tier", 1)) < int(b.get("tier", 1)))
+		order.append_array(models)
+	for model: Dictionary in GameData.ship_models:  # (Any line not in a tab, last.)
+		if not order.has(model):
+			order.append(model)
+	return order
+
+
+## A ship line's heading over its model groups, in the line's color.
+func _add_line_head(line: String) -> Label:
+	var head := Label.new()
+	head.theme_type_variation = &"HeaderLabel"
+	head.text = str(LINE_TITLES.get(line, line.capitalize()))
+	head.add_theme_color_override(&"font_color", GameData.category_color(line))
+	%Groups.add_child(head)
+	return head
 
 
 static func _matches(ship: Ship, filter: int) -> bool:
