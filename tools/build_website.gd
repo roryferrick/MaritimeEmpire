@@ -7,7 +7,8 @@ extends SceneTree
 ## its own under it. Sections whose heading ends in a date ("(2026-10-12)")
 ## carry it as a note and are also listed under Recent changes on the wiki's
 ## home. The landing page (website/index.html), style.css and assets/wiki.js
-## are written by hand. Rerun after changing SPEC.md or PRIVACY.md:
+## are written by hand. Rerun after changing SPEC.md or PRIVACY.md (`-- --spec
+## <path>` builds from another copy of the spec, such as the last committed one):
 ##   Godot --headless --path . -s tools/build_website.gd
 
 const SPEC_PATH := "res://SPEC.md"
@@ -27,10 +28,10 @@ const SITE_URL := "https://maritimeempiregame.com"
 const TOPICS := [
 	["playing", "Playing the game", "Starting a company, the screens and popups, the tutorial and the settings.", "found_company",
 		["Screens", "Tutorial", "Popups", "Activity log", "Look", "Settings page sliders"]],
-	["business", "Business and trading", "Money, cargo and markets: how a shipping company makes (and loses) its fortune.", "shop",
-		["Economy & time", "Trading", "Market regions", "Headquarters and hubs", "Company and ship levels (XP)", "Achievements", "Divine Actions", "Skin packs, Sand Dollars and the Shop"]],
-	["ships", "Ships and crews", "Every model, fuel and repairs, tugs, icebreakers, recovery boats and the people on deck.", "fleet",
-		["Ship models", "Fuel, maintenance and port stops", "Lost ships and recovery boats", "Tugs", "Tugs working a ship in",
+	["business", "Business and trading", "Company types, ratings and logos, money, cargo, farms and markets: how a shipping company makes (and loses) its fortune.", "types",
+		["Company types", "Company ratings", "Company logos", "Economy & time", "Trading", "Farms", "Market regions", "Headquarters and hubs", "Company and ship levels (XP)", "Achievements", "Divine Actions", "Skin packs, Sand Dollars and the Shop"]],
+	["ships", "Ships and crews", "Every model, the cruise lines, fuel and repairs, tugs, icebreakers, recovery boats and the people on deck.", "fleet",
+		["Ship models", "Cruise lines", "Fuel, maintenance and port stops", "Refuel stops", "Lost ships and recovery boats", "Tugs", "Tugs working a ship in",
 			"Icebreakers", "Long-term moorings", "People on deck", "Wakes", "Fishing and crabbing", "Choosing a fishing base"]],
 	["world", "The world", "The globe, its ports and lanes, the great canals, the Arctic and the Great Lakes.", "globe",
 		["World", "Panama Canal", "Suez Canal", "Great Lakes", "The Arctic",
@@ -57,6 +58,11 @@ const PAGE_ART := {
 	"Ships screen": ["fleet", "The Ships screen: the whole fleet, by model"],
 	"2. Ships screen": ["fleet", "The Ships screen: the whole fleet, by model"],
 	"3. Shop screen": ["shop", "The Shop"],
+	"Farms": ["farms", "The Farms screen: a farm port's plots, what each grows, and the farm store"],
+	"Company types": ["types", "Choosing your company type: six trades, each with its five tiers of ships"],
+	"Company logos": ["logo", "Making your company logo"],
+	"Company ratings": ["ratings", "The Ratings page: each type's stars and what goes into them"],
+	"Cruise lines": ["cruise_planner", "The Cruise planner: prices against their recommendations, and the bookings outlook"],
 }
 
 var _bullet := RegEx.create_from_string("^(\\s*)[-*] (.*)$")
@@ -70,13 +76,13 @@ var _slug_strip := RegEx.create_from_string("[^a-z0-9]+")
 ## matters to the code: these sections whole, and from every other line each
 ## bracketed note, then each sentence, that names code (files, functions,
 ## constants, identifiers, tool flags) or talks about the build.
-const HIDDEN_SECTIONS := ["Tech", "Data & tools", "Lanes off the land and rounded", "Port approach fixes", "Ports on the water"]
+const HIDDEN_SECTIONS := ["Tech", "Data & tools", "Lanes off the land and rounded", "Port approach fixes", "Ports on the water", "Lanes gate to gate", "Steam achievements and ship skins"]
 ## Heading words dropped from titles ("Ship models (data file)").
 const TITLE_NOTES := [" (data file)"]
 const BUILD_WORDS := ["probe", "native", "gdscript", "godot", "headless", "dll", "the tool", "rerun", "rebuilt", "cached", "cache ",
 	"draw call", "per frame", "a frame", "each frame", "every frame", "shader", "atlas", "mesh", "batch", "export", "save version",
 	"saves from before", "from before", "old saves", "debug", "profil", "build_", "spec ", "commit", "renamed", "lanes run",
-	"grid", "tessellat", "thread", "callback", "signal", "autoload", "class "]
+	"grid", "tessellat", "thread", "callback", "signal", "autoload", "class_name"]
 var _code_token := RegEx.create_from_string(
 	"[\\w/.-]+\\.(gd|json|res|tscn|svg|ogg|wav|webp|png|gdshader|cfg|tres|md|h|cpp|ps1|py|sh|tsv|dll|txt)\\b" +
 	"|\\b[A-Z][A-Za-z0-9]*\\.[a-z_][A-Za-z0-9_]*" +  # Class.member
@@ -98,7 +104,9 @@ var _topics := []
 func _init() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(WIKI_DIR))
 	_clear_old_pages()
-	var spec := _split(FileAccess.get_file_as_string(SPEC_PATH))
+	var args := OS.get_cmdline_user_args()
+	var spec_path := args[args.find("--spec") + 1] if args.has("--spec") and args.find("--spec") + 1 < args.size() else SPEC_PATH
+	var spec := _split(FileAccess.get_file_as_string(spec_path))
 	_build_tree(spec.sections)
 	var index := []
 	for page in _pages:

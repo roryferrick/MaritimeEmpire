@@ -268,6 +268,8 @@ func _plot_card(key: String) -> Control:
 			continue
 		if built:
 			var done := _dim("%s built" % each.name)
+			done.autowrap_mode = TextServer.AUTOWRAP_OFF
+			done.size_flags_vertical = SIZE_SHRINK_CENTER
 			done.tooltip_text = str(each.text)
 			row.add_child(done)
 			continue
