@@ -105,6 +105,12 @@ func _ready() -> void:
 	_skin_button.tooltip_text = "Dress this ship in a skin you own, or the base ship."
 	_skin_button.pressed.connect(func() -> void: GameRoot.find(self).add_child(SkinPicker.new(ship)))
 	%Buttons.add_child(_skin_button)
+	if ship.is_cruise() and GameState.owner_of(ship) == GameState.company:  # (Its itinerary, prices, departures, ship and reviews.)
+		var planner := Button.new()
+		planner.text = "Cruise planner"
+		planner.tooltip_text = "Its itinerary, prices, departures, cabins and amenities, and its guests' reviews."
+		planner.pressed.connect(func() -> void: GameRoot.find(self).add_child(CruisePlanner.new(ship)))
+		%Buttons.add_child(planner)
 	%Buttons.move_child(_skin_button, %SellButton.get_index())
 	GameState.ship_sold.connect(func(sold: Ship, _price: int) -> void:
 		if sold == ship:

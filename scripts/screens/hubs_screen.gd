@@ -62,6 +62,10 @@ func _hub_card(hub: Hub) -> Control:
 	var box := _card()
 	var header := HBoxContainer.new()
 	box.add_child(header)
+	var logo := CompanyLogo.of(GameState.company)  # (The company's sign, as on the map.)
+	logo.custom_minimum_size = Vector2(28, 28)
+	logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	header.add_child(logo)
 	var title := Label.new()
 	title.theme_type_variation = &"HeaderLabel"
 	title.text = GameData.port_name(hub.port_id)

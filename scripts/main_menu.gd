@@ -10,7 +10,7 @@ extends Control
 const GAME_SCENE := "res://scenes/game.tscn"
 const NEW_COMPANY_SCENE := "res://scenes/new_company.tscn"
 const SLOT_BUTTON_SIZE := Vector2(420, 92)
-## The company type's icon left of a slot's button (CompanyTypeIcon).
+## The company's logo left of a slot's button (CompanyLogo).
 const SLOT_ICON_SIZE := 40.0
 const DELETE_BUTTON_SIZE := Vector2(96, 92)
 const MODE_BUTTON_SIZE := Vector2(420, 64)
@@ -117,8 +117,8 @@ func _show_slots(online: bool) -> void:
 	%Slots.add_child(back)
 
 
-## A slot's button (its company and its company type, the type's icon to its
-## left; home port, money and date; storms, seasonal
+## A slot's button (its company and its company type, the company's logo to
+## its left; home port, money and date; storms, seasonal
 ## closures and fastest game speed; or New Game when empty) and, when it holds
 ## a save, a Delete button.
 func _slot_row(slot: int) -> HBoxContainer:
@@ -153,9 +153,9 @@ func _slot_row(slot: int) -> HBoxContainer:
 " % summary.company_name, "%s  ·  %s
 " % [summary.company_name, Progression.type_name(summary.start_type)])
 		GameState.apply_company_text_color(button, summary.company_color)
-		var icon := CompanyTypeIcon.new(str(summary.start_type))
-		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		badge.add_child(icon)
+		var logo := CompanyLogo.new(summary.logo, str(summary.company_color), str(summary.start_type))  # (Its type's mark in its colours.)
+		logo.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		badge.add_child(logo)
 		button.pressed.connect(_ask_host.bind(_continue.bind(slot)) if GameState.multiplayer_save else _continue.bind(slot))
 	var delete := Button.new()
 	delete.custom_minimum_size = DELETE_BUTTON_SIZE

@@ -95,6 +95,19 @@ static func type_of_model(model: Dictionary) -> String:
 	return type_of_category(str(model.get("category", "")))
 
 
+## The company type whose ships carry a commodity ("" if none): by the models
+## that carry it (a seafood family by the seafood carriers, so a catch counts as Seafood).
+static func type_of_commodity(commodity_id: String) -> String:
+	if _commodity_types.is_empty():
+		for model: Dictionary in GameData.ship_models:
+			for each: String in model.get("cargo", []):
+				if not _commodity_types.has(each):
+					_commodity_types[each] = type_of_model(model)
+		_commodity_types[""] = ""
+	return str(_commodity_types.get(commodity_id, ""))
+static var _commodity_types := {}
+
+
 ## Levels between taking a type and its tiers unlocking (tier 1 first).
 static func tier_offset(model: Dictionary) -> int:
 	var offsets: Array = GameData.config.get("company_types", {}).get("tier_levels", [0, 3, 8, 15, 24])
@@ -295,6 +308,9 @@ static func _type_rate(type_id: String, taken_at: int, level: int) -> float:
 static func _xp_per_minute(model: Dictionary) -> float:
 	if model.has("fishing"):
 		return _fishing_xp_per_minute(model)
+	if model.has("cruise"):  # Its guests (a cruise about 85% full) over the miles it sails, at sea about 60% of the time (the rest in port booking).
+		var guests := roundi(float(model.cruise.get("guests", 0)) * 0.85)
+		return xp_for_delivery(guests, float(model.get("speed_nm_per_s", 0)) * 60.0) * float(GameData.config.get("cruises", {}).get("xp_factor", 0.4)) * 0.6
 	var cargo: Array = model.get("cargo", [])
 	if cargo.is_empty():
 		return 0.0

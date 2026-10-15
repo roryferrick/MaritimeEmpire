@@ -115,6 +115,7 @@ func add_rivals(count: int, level: String) -> void:
 		var rival := Company.new(_pick_name(), _pick_color(), port)
 		rival.ai = level
 		rival.company_types = {type_id: 1}
+		rival.logo = CompanyLogo.default_logo(rival.color, _rng.randi())  # (A shape, layout and second colour at random.)
 		rival.money = int(GameData.config.get("starting_money", 10000))
 		rival.ceo = Company.random_ceo()
 		rival.hubs.assign([Hub.new(port, true)])
@@ -261,6 +262,7 @@ func _think(rival: Company, mind: Dictionary) -> void:
 	_prices.clear()  # (A new hub changes its prices.)
 	_route_idle_ships(rival, settings)
 	news.append_array(_buy_ships(rival, settings))
+	news.append_array(_run_cruises(rival))
 	if float(settings.reroute_s) > 0.0 and float(mind.reroute) <= 0.0:
 		mind.reroute = float(settings.reroute_s)
 		_reroute_one(rival, settings)
@@ -913,7 +915,7 @@ func _forget_fleet(rival: Company) -> void:
 
 
 static func _is_service_model(model: Dictionary) -> bool:
-	return model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty() or model.has("fishing")
+	return model.get("recovery", false) or model.get("tug", false) or not str(model.get("icebreaker", "")).is_empty() or model.has("fishing") or model.has("cruise")
 
 
 ## The cheapest ship model passing a test, or "".
@@ -925,3 +927,98 @@ func _cheapest(test: Callable) -> String:
 			best = model.id
 			best_price = int(model.get("price", 0))
 	return best
+
+
+# --- Cruises ------------------------------------------------------------------------
+
+## A rival with the Cruises type runs a simple cruise line: every cruise ship
+## without an itinerary gets one from its best hub (up to 3 of the most
+## appealing ports within reach, sailed nearest first), recommended prices
+## and seasonal adjustments; and it buys the biggest cruise model it can
+## afford twice over (at most one more for every 10 company levels), fitting
+## its deck slots with the amenities that add most.
+func _run_cruises(rival: Company) -> Array:
+	var news := []
+	if not rival.has_type("cruises") or rival.all_types():
+		return news
+	var cruises: Cruises = _state.cruises
+	var fleet: Array = _state.fleet(rival).filter(func(ship: Ship) -> bool: return ship.is_cruise())
+	for ship: Ship in fleet:
+		if ship.route.size() < 2 and ship.is_docked() and ship.pending_route.is_empty():
+			var route := _cruise_itinerary(rival, ship)
+			if route.size() >= 2:
+				var typed: Array[String] = []
+				typed.assign(route)
+				_state.assign_route(ship, typed)
+				cruises.use_recommended(ship)
+				var monthly := []
+				for m in 12:
+					monthly.append(cruises.recommended_monthly(ship, m))
+				ship.cruise.monthly = monthly
+	if fleet.size() >= 1 + rival.level() / 10:
+		return news
+	var best := {}
+	for model: Dictionary in GameData.ship_models:
+		if not model.has("cruise") or not _state.buy_error(model.id).is_empty():
+			continue
+		if rival.money < _state.ship_price(model.id) * 2:
+			continue
+		if best.is_empty() or int(model.get("price", 0)) > int(best.get("price", 0)):
+			best = model
+	if best.is_empty():
+		return news
+	var port := ""
+	for hub in rival.hubs:
+		if _state.can_launch_at(best.id, hub.port_id):
+			port = hub.port_id
+			break
+	if port.is_empty():
+		return news
+	var ship: Ship = _state.buy_ship(best.id, _state.suggest_ship_name(), port)
+	_forget_fleet(rival)
+	if ship == null:
+		return news
+	_state.set_auto_recover(ship, true)
+	var picks := Cruises.amenities_for(best)
+	picks.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.points) + float(a.spend) > float(b.points) + float(b.spend))
+	var setup := {cabins = ship.cruise.cabins, amenities = picks.slice(0, int(best.cruise.get("deck_slots", 2))).map(func(each: Dictionary) -> String: return str(each.id)), looks = ship.cruise.looks}
+	while not (setup.amenities as Array).is_empty() and rival.money < int(cruises.refit_quote(ship, setup).cost) * 2:
+		(setup.amenities as Array).pop_back()
+	if not (setup.amenities as Array).is_empty() and cruises.refit_error(ship, setup).is_empty():
+		cruises.refit(ship, setup)
+	var route := _cruise_itinerary(rival, ship)
+	if route.size() >= 2:
+		var typed: Array[String] = []
+		typed.assign(route)
+		_state.assign_route(ship, typed)
+		cruises.use_recommended(ship)
+	news.append("launched the cruise ship %s (%s)" % [ship.name, best.get("name", "")])
+	return news
+
+
+## A rival's itinerary for a cruise ship: its home the hub it's at (or its HQ),
+## then up to 3 of the most appealing ports it can reach and back, nearest first.
+func _cruise_itinerary(rival: Company, ship: Ship) -> Array:
+	var home := ship.docked_at if rival.hub_at(ship.docked_at) != null else rival.home_port
+	var expedition := Cruises.is_expedition(ship)
+	var scored := []
+	for port: Dictionary in GameData.ports:
+		var id: String = port.id
+		if id == home or not _state.is_port_unlocked(id) or not ship.fits_port(id) or not ship.can_sail(home, id) or not ship.can_sail(id, home):
+			continue
+		var miles := GameData.distance_nm(home, id)
+		if miles > float(ship.model().get("range_nm", 1000)) * 0.8:
+			continue
+		var near := Cruises.attractions(id)
+		var score := 1.0 + 2.0 * (near.wonders as Array).size() + (3.0 if near.polar and expedition else 0.0) - miles / 1500.0
+		scored.append([score, id])
+	scored.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	var stops: Array = scored.slice(0, 3).map(func(entry: Array) -> String: return entry[1])
+	var route := [home]
+	var here := home
+	while not stops.is_empty():
+		stops.sort_custom(func(a: String, b: String) -> bool: return GameData.distance_nm(here, a) < GameData.distance_nm(here, b))
+		here = stops.pop_front()
+		if ship.can_sail(route[-1], here):
+			route.append(here)
+	return route

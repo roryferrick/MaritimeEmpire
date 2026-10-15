@@ -59,6 +59,10 @@ signal hub_built(hub: Hub)
 signal regions_changed
 ## A company took another company type (this player's, or a company's in multiplayer).
 signal company_types_changed
+## A company changed its logo.
+signal logo_changed
+## A company's rating in a type reached a new whole star (up) or fell to one (see Ratings).
+signal rating_changed(company: Company, type_id: String, star: int, up: bool)
 ## A model got its mega upgrade.
 signal mega_upgraded(model_id: String)
 ## A port grew or shrank into a new size band (see PortSizes).
@@ -87,7 +91,7 @@ const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
@@ -321,6 +325,10 @@ var port_sizes := PortSizes.new(self)
 var docks := Docks.new(self)
 ## The AI rivals: each thinks for itself, now and then (see RivalAI).
 var rivals := RivalAI.new(self)
+## Every company's star ratings by company type (see Ratings).
+var ratings := Ratings.new(self)
+## Cruise ships' voyages, bookings, prices and refits (see Cruises).
+var cruises := Cruises.new(self)
 ## Each step's ships, natively where the native library's there (ShipStepper:
 ## see native/README.md), and whether to use it (tests compare the two).
 var _ship_stepper: Object = null
@@ -336,6 +344,8 @@ func _ready() -> void:
 	add_child(_autosave_timer)
 	_migrate_legacy_save()
 	port_sizes.band_changed.connect(port_band_changed.emit)
+	ratings.connect_signals()
+	cruises.connect_signals()
 
 
 func _notification(what: int) -> void:
@@ -401,6 +411,7 @@ func _step(delta: float) -> void:
 	t_s = Time.get_ticks_usec()
 	rivals.step(delta)
 	MapView._prof("sim.rivals", t_s)
+	ratings.step(delta)
 	t_s = Time.get_ticks_usec()
 	_storm_warning_clock += delta
 	if _storm_warning_clock >= STORM_WARNING_CHECK_S:
@@ -554,6 +565,8 @@ func buy_ship(model_id: String, ship_name: String, port_id := "") -> Ship:
 	ship.purchase_price = price
 	ship.captains = Characters.officers_for(model)
 	ships.append(ship)
+	if ship.is_cruise():
+		cruises.ensure(ship)
 	if ship.is_service():
 		ship.base_port = port_id
 		if ship.is_recovery():
@@ -776,12 +789,13 @@ func fleet(of: Company = null) -> Array[Ship]:
 
 ## The port fee on a delivery: game_config port_fee (10%) of the trade's margin
 ## (what the cargo sold for, less what it cost), at a port where the company
-## has no HQ or hub; nothing at its own, or on a trade at a loss.
-func port_fee(port_id: String, margin: float, of: Company = null) -> int:
+## has no HQ or hub; nothing at its own, or on a trade at a loss. The company's
+## stars in the cargo's type (type_id) make it cheaper or dearer (Ratings).
+func port_fee(port_id: String, margin: float, of: Company = null, type_id := "") -> int:
 	var who := of if of != null else company
 	if margin <= 0.0 or who.hub_at(port_id) != null:
 		return 0
-	return roundi(margin * float(GameData.config.get("port_fee", 0.1)))
+	return roundi(margin * float(GameData.config.get("port_fee", 0.1)) * ratings.factor(who, type_id, "fees"))
 
 
 ## A model's crew: [captains, crew], by its tier (game_config crew).
@@ -797,7 +811,7 @@ static func crew_of(model: Dictionary) -> Array:
 		return [captains, ceili(float(model.cruise.get("guests", 0)) / CRUISE_GUESTS_PER_HAND)]
 	return [captains, int(settings.get("crew", [2])[mini(tier, settings.get("crew", [2]).size() - 1)])]
 ## A cruise ship's crew: one hand for every this many guests (before its Crew service level).
-const CRUISE_GUESTS_PER_HAND := 3.0
+const CRUISE_GUESTS_PER_HAND := 5.0
 
 
 ## What a model's captains and crew are paid each period (game_config crew).
@@ -833,6 +847,8 @@ func _check_payday() -> void:
 			continue
 		ship.worked = false
 		var wages := crew_wages(ship.model())
+		if ship.is_cruise():
+			wages = roundi(wages * cruises.crew_factor(ship))  # (Its Crew service level.)
 		var who := owner_of(ship)
 		_add_money(who, -wages)
 		_record(ship, "wages", wages)
@@ -1144,6 +1160,113 @@ func locked_type_note(type_id: String, of: Company = null) -> String:
 	return "Comes with the %s company type: you can choose a new type at company level %d." % [Progression.type_name(type_id), next]
 
 
+## A cruise ship's free settings (Cruises): any of prices {class: $},
+## monthly [12 %], package, departure {mode, days, fill}; changed any time.
+## Returns why not, or "".
+func set_cruise_settings(ship: Ship, changes: Dictionary) -> String:
+	if not ship.is_cruise() or owner_of(ship) != company:
+		return "Not one of your cruise ships."
+	if Net.command(&"set_cruise_settings", [ship, changes]):
+		return ""
+	cruises.ensure(ship)
+	for key: String in changes:
+		match key:
+			"prices":
+				ship.cruise.auto_prices = false  # (Its own now: they stop following the recommendations.)
+				var prices := {}
+				for cls: String in Cruises.CLASSES:
+					prices[cls] = clampi(int(changes.prices.get(cls, ship.cruise.prices.get(cls, 0))), 0, 10000000)
+				ship.cruise.prices = prices
+			"monthly":
+				ship.cruise.auto_monthly = false
+				var monthly: Array = changes.monthly
+				if monthly.size() == 12:
+					ship.cruise.monthly = monthly.map(func(value: Variant) -> int: return clampi(int(value), -50, 50))
+			"auto_prices", "auto_monthly":  # (Back to following the recommendations.)
+				ship.cruise[key] = true
+				cruises.follow_recommendations(ship)
+			"service":
+				var service := {}
+				for dial: String in Cruises.SERVICES:
+					service[dial] = clampi(int(changes.service.get(dial, ship.cruise.service.get(dial, 1))), 0, 4)
+				ship.cruise.service = service
+			"package":
+				if (Cruises.settings().get("packages", {}) as Dictionary).has(str(changes.package)):
+					ship.cruise.package = str(changes.package)
+			"departure":
+				var rule: Dictionary = changes.departure
+				ship.cruise.departure = {mode = str(rule.get("mode", "both")) if ["time", "fill", "both"].has(str(rule.get("mode", ""))) else "both",
+					days = clampi(int(rule.get("days", 2)), 0, 4), fill = clampi(int(rule.get("fill", 3)), 0, 4)}
+	ship_changed.emit(ship)
+	return ""
+
+
+## Refits a cruise ship to a new setup ({cabins, amenities, looks}; see Cruises.refit()).
+func refit_cruise(ship: Ship, setup: Dictionary) -> String:
+	if not ship.is_cruise() or owner_of(ship) != company:
+		return "Not one of your cruise ships."
+	var error := cruises.refit_error(ship, setup)
+	if not error.is_empty():
+		return error
+	if Net.command(&"refit_cruise", [ship, setup]):
+		return ""
+	var quote := cruises.refit_quote(ship, setup)
+	error = cruises.refit(ship, setup)
+	if error.is_empty():
+		ActivityLog.add("%s is in refit at %s: %s, back in %s." % [ship.name, GameData.port_name(ship.docked_at), Fmt.money(int(quote.cost)),
+			Fmt.duration(float(quote.days) * 86400.0 / calendar_seconds_per_second())], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+		ship_changed.emit(ship)
+		save_game()
+	return error
+
+
+## Builds a cruise terminal at a port (Cruises.terminal_cost()), so the company's cruise ships can sail from it.
+func buy_terminal(port_id: String) -> String:
+	var error := cruises.terminal_error(company, port_id)
+	if not error.is_empty():
+		return error
+	if Net.command(&"buy_terminal", [port_id]):
+		return ""
+	var cost := cruises.terminal_cost(company)
+	company.terminals.append(port_id)
+	_add_money(company, -cost)
+	_record(null, "hubs", cost)
+	ActivityLog.add("Built a cruise terminal at %s (%s): your cruise ships can sail from there." % [GameData.port_name(port_id), Fmt.money(cost)], ActivityLog.Kind.GOOD)
+	hubs_changed.emit()
+	save_game()
+	return ""
+
+
+## What changing the company's logo costs (it's chosen free when founding).
+const LOGO_CHANGE_COST := 1000000
+
+
+func set_logo_error(new_logo: Dictionary) -> String:
+	if not CompanyLogo.SHAPES.has(str(new_logo.get("shape", ""))) or not CompanyLogo.LAYOUTS.has(str(new_logo.get("layout", ""))):
+		return "That isn't a logo."
+	if str(new_logo.get("secondary", "")) == company.color:
+		return "Pick a second colour other than the company's own."
+	if money < LOGO_CHANGE_COST:
+		return "Changing the logo costs %s." % Fmt.money(LOGO_CHANGE_COST)
+	return ""
+
+
+## Changes the company's logo for LOGO_CHANGE_COST. Returns why it couldn't, or "".
+func set_logo(new_logo: Dictionary) -> String:
+	var error := set_logo_error(new_logo)
+	if not error.is_empty():
+		return error
+	if Net.command(&"set_logo", [new_logo]):
+		return ""
+	company.logo = {shape = str(new_logo.shape), layout = str(new_logo.layout), secondary = str(new_logo.get("secondary", "white")), swap = bool(new_logo.get("swap", false))}
+	_add_money(company, -LOGO_CHANGE_COST)
+	_record(null, "logo", LOGO_CHANGE_COST)
+	ActivityLog.add("Your company has a new logo (%s)." % Fmt.money(LOGO_CHANGE_COST), ActivityLog.Kind.INFO)
+	logo_changed.emit()
+	save_game()
+	return ""
+
+
 ## Regions the company can still unlock (one every few company levels: see
 ## Progression.region_slots()).
 func regions_available() -> int:
@@ -1342,7 +1465,8 @@ func company_buy_price(port_id: String, commodity_id: String, of: Company = null
 
 func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
-	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(commodity_id, "sell") if hub else 0.0)) * divine.price_factor(port_id, true)
+	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(commodity_id, "sell") if hub else 0.0)) * divine.price_factor(port_id, true) \
+		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price")  # (The type's stars: see Ratings.)
 
 
 ## Extra XP (e.g. 0.5 for +50%) a delivery of a commodity earns from a
@@ -1766,6 +1890,8 @@ func assign_route(ship: Ship, route: Array[String]) -> void:
 	else:
 		ship.pending_route = route.duplicate()
 	_rebalance_tugs()
+	if ship.is_cruise():
+		cruises.follow_recommendations(ship)  # (Prices left to the recommendations follow the new itinerary.)
 	ship_changed.emit(ship)
 
 
@@ -2371,6 +2497,8 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 		ship.cargo_leg_nm = GameData.distance_nm(origin, port) if paid and origin != port else 0.0
 	ship.unloaded = ship.is_service() and not ship.is_fishing() or refuel_stop
 	ship.docked_at = port
+	if ship.is_cruise() and not refuel_stop:
+		cruises.arrived(ship, port)  # (A port of call, or home: the voyage's end.)
 	ship.from_port = ""
 	ship.to_port = ""
 	ship.traveled_nm = 0.0
@@ -2447,6 +2575,8 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 	elif ship.is_service() and not ship.base_port.is_empty() and ship.docked_at != ship.base_port and not _on_ice_duty(ship):
 		_try_depart(ship, delta, ship.base_port)
 		MapView._prof("adv.try_depart", t_ad)
+	elif ship.is_cruise() and ship.is_running() and cruises.in_port(ship, delta):
+		pass  # (A cruise ship in a refit, or at home taking bookings: see Cruises.)
 	elif ship.is_running():
 		_try_depart(ship, delta, ship.route[ship.next_route_index()])
 		MapView._prof("adv.try_depart", t_ad)
@@ -2574,7 +2704,7 @@ func _sell_cargo(ship: Ship) -> void:
 	MapView._prof("sell.trade", t_s)
 	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
 	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
-	var fee := port_fee(ship.docked_at, ship.cargo_payment - ship.cargo_cost, who)
+	var fee := port_fee(ship.docked_at, ship.cargo_payment - ship.cargo_cost, who, Progression.type_of_model(ship.model()))
 	if fee > 0:
 		_add_money(who, -fee)
 		_record(ship, "port_fees", fee)
@@ -2670,6 +2800,7 @@ func _load_cargo(ship: Ship, to: String) -> String:
 ## ship XP upgrade), announcing this player's level-ups.
 func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0, company_multiplier := 1.0) -> void:
 	var who := owner_of(ship)
+	amount *= ratings.factor(who, Progression.type_of_model(ship.model()), "xp")  # (The type's stars: see Ratings.)
 	var company_before := who.level()
 	var ship_before := ship.level()
 	who.xp += amount * company_multiplier
@@ -4025,6 +4156,7 @@ func found_company(new_name: String, new_color: String, new_home_port: String, n
 	founded.money = int(GameData.config.get("starting_money", 10000))
 	var playable: bool = not Progression.company_type(new_type).is_empty() and not Progression.company_type(new_type).get("coming_soon", false)
 	founded.company_types = {new_type if playable else "cargo": 1}
+	founded.logo = CompanyLogo.default_logo(founded.color)
 	founded.ceo = Characters.clean(new_ceo)
 	if founded.ceo.is_empty():
 		founded.ceo = Company.random_ceo()
@@ -4156,6 +4288,7 @@ func save_summary(slot: int, online := multiplayer_save) -> Dictionary:
 		date = calendar_time_at(float(data.get("play_time", 0.0))),
 		companies = maxi(list.size(), 1),
 		start_type = "",  # (Its first company type; "" for a save from before types: every type.)
+		logo = mine.get("logo", {}) if mine.get("logo") is Dictionary and not (mine.get("logo") as Dictionary).is_empty() else CompanyLogo.default_logo(str(mine.get("company_color", "purple"))),
 	}
 	var types: Variant = mine.get("company_types", {})
 	if types is Dictionary and not (types as Dictionary).is_empty():
@@ -4184,6 +4317,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company = Company.new(new_company_name.strip_edges(), new_color, new_home_port)
 	company.money = int(GameData.config.get("starting_money", 10000))
 	company.company_types = {str(options.get("company_type", "cargo")): 1}
+	company.logo = options.get("logo", {}) if not (options.get("logo", {}) as Dictionary).is_empty() else CompanyLogo.default_logo(company.color)
 	company.tutorials = bool(options.get("tutorials", false))
 	company.ceo = options.get("ceo", {}) if not (options.get("ceo", {}) as Dictionary).is_empty() else Company.random_ceo()
 	company.hubs.assign([Hub.new(new_home_port, true)])
@@ -4202,6 +4336,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	weather.clear()
 	divine.reset()
 	divine.on = bool(options.get("divine", false))
+	ratings.reset()
 	rivals.reset()
 	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
@@ -4233,6 +4368,7 @@ func continue_game(slot: int) -> String:
 func load_world(data: Dictionary, local := -1) -> void:
 	data = _without_retired_ports(data)
 	rivals.reset()
+	ratings.reset()
 	companies.clear()
 	for company_data: Dictionary in data.get("companies", [data]):
 		companies.append(Company.from_dict(company_data))

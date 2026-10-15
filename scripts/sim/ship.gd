@@ -324,6 +324,10 @@ var carry_reversed := false
 ## port, if it can't go).
 var fish_target := ""
 var fish_area := ""
+## Cruise ship only (is_cruise()): its cruise line's setup and state (Cruises):
+## {cabins, amenities, service, looks, prices, monthly, package, departure,
+## state, bookings, booking_since, voyage, reviews, refit_until, refit}.
+var cruise := {}
 var fish_landing := "auto"
 var fish_phase := ""
 var fish_ground := ""
@@ -410,6 +414,11 @@ func fishing_line() -> String:
 ## A service ship (a recovery boat, an icebreaker, a tug or a fishing boat):
 ## no route; pays its own fuel and repairs, and (but for a fishing boat) is
 ## never lost at sea.
+## True for a cruise ship (its model has cruise: see Cruises).
+func is_cruise() -> bool:
+	return model().has("cruise")
+
+
 func is_service() -> bool:
 	return _kind() != KIND_CARGO
 
@@ -1052,6 +1061,13 @@ func next_route_index() -> int:
 
 func status_text() -> String:
 	var canal := canal_status_text()
+	if is_cruise() and not is_lost() and not cruise.is_empty():  # (Booking, in a refit, or on a voyage: Cruises.)
+		var voyage: Dictionary = cruise.get("voyage", {})
+		var line := str(cruise.get("status", ""))
+		if not voyage.is_empty() and str(cruise.get("state", "")) == "sailing":
+			line = "On a %d-night cruise with %d guests (%d%% full), %d of %d ports of call so far" % [int(voyage.nights), int(voyage.total), roundi(float(voyage.fill) * 100.0), (voyage.stops as Array).size(), maxi(route.size() - 1, 0)]
+		if not line.is_empty():
+			return line if canal.is_empty() else "%s — %s" % [line, canal]
 	if is_icebreaker():
 		var duty := _icebreaker_status_text()
 		return duty if canal.is_empty() else "%s — %s" % [duty, canal]
@@ -1361,6 +1377,7 @@ func to_dict() -> Dictionary:
 		"to_port": to_port,
 		"fish_target": fish_target,
 		"fish_area": fish_area,
+		"cruise": cruise,
 		"fish_home": fish_home,
 		"fish_landing": fish_landing,
 		"fish_phase": fish_phase,
@@ -1454,6 +1471,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.to_port = data.get("to_port", "")
 	ship.fish_target = str(data.get("fish_target", ""))
 	ship.fish_area = str(data.get("fish_area", ""))
+	ship.cruise = data.get("cruise", {}) if data.get("cruise") is Dictionary else {}
 	ship.fish_home = str(data.get("fish_home", ""))
 	ship.fish_landing = str(data.get("fish_landing", "auto"))
 	ship.fish_phase = str(data.get("fish_phase", ""))

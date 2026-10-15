@@ -8,6 +8,8 @@ extends PanelContainer
 ## unlocks and time estimates.
 
 const SPEED_BUTTON_WIDTH := 64.0
+## The company's logo before its name (px).
+const LOGO_SIZE := 22.0
 
 ## Multiplayer: who's playing (see _update_players()).
 var _players := Label.new()
@@ -24,6 +26,7 @@ func _ready() -> void:
 		label.add_theme_font_override(&"font", heading_font)
 	%CompanyLabel.text = GameState.company_name
 	GameState.apply_company_text_color(%CompanyLabel)
+	_add_logo()
 	GameState.money_changed.connect(_on_money_changed)
 	GameState.company_xp_changed.connect(_on_xp_changed)
 	for control: Control in [%LevelLabel, %LevelBar]:
@@ -175,3 +178,24 @@ func _on_players_input(event: InputEvent) -> void:
 			dialog.queue_free())
 	add_child(dialog)
 	dialog.popup_centered()
+
+
+## The company's logo before its name (CompanyLogo), the two centred together.
+func _add_logo() -> void:
+	var label: Label = %CompanyLabel
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override(&"separation", 8)
+	var parent := label.get_parent()
+	var index := label.get_index()
+	parent.remove_child(label)
+	parent.add_child(row)
+	parent.move_child(row, index)
+	var logo := CompanyLogo.of(GameState.company)
+	logo.custom_minimum_size = Vector2.ONE * LOGO_SIZE
+	logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(logo)
+	row.add_child(label)
+	GameState.logo_changed.connect(func() -> void:
+		logo.logo = GameState.company.logo
+		logo.queue_redraw())

@@ -63,6 +63,7 @@ func _ready() -> void:
 	_add_side_buttons()
 	_add_field_guide_button()
 	_add_achievements_button()
+	_add_ratings_button()
 	if GameState.divine.on:
 		_add_divine_button()
 	_map.divine_target.connect(_on_divine_target)
@@ -552,6 +553,24 @@ func _add_achievements_button() -> void:
 	timer.autostart = true
 	timer.timeout.connect(_check_achievements)
 	add_child(timer)
+
+
+## The company's star ratings (RatingsPage): a star button under the trophy.
+func _add_ratings_button() -> void:
+	var button := Button.new()
+	button.tooltip_text = "Company ratings"
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2.ONE * FIELD_GUIDE_BUTTON
+	button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	var star := StarRating.new(1.0, FIELD_GUIDE_BUTTON - 14.0, 1)
+	star.custom_minimum_size = Vector2.ONE * (FIELD_GUIDE_BUTTON - 14.0)
+	star.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	star.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 7)
+	button.add_child(star)
+	button.pressed.connect(func() -> void:
+		PopupHost.find(self).close()
+		add_child(RatingsPage.new()))
+	_side_buttons.add_child(button)
 
 
 ## Divine Actions (Divine): the bolt button under the trophy (in the side column) opens the panel;

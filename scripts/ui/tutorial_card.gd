@@ -194,6 +194,13 @@ func _tips_list() -> Array[Dictionary]:
 			show = func() -> bool: return seen.call("map") and GameState.company_types_available() > 0,
 			done = func() -> bool: return GameState.company_types_available() <= 0,
 			text = func() -> String: return "We've grown enough to go into a second trade. Press Choose a company type at the top right of the map (or on a locked tab in the Shop) and pick one: its smallest ships open straight away and the bigger ones follow as we level up.\n\nIt's for good, so look at what each carries and which ports near our hubs trade it. Another choice comes every %d levels." % Progression.type_pick_every()},
+		{id = "cruise_plan", who = "dick", title = "Plan a cruise",
+			show = func() -> bool: return seen.call("map") and GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and ship.route.size() < 2),
+			done = func() -> bool: return not GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and ship.route.size() < 2),
+			text = func() -> String: return "A cruise ship sails round trips. Click it and press Assign Route: its first port is its home port, where guests board (our HQ, a hub, or a port with our cruise terminal), and the rest are its ports of call. Ports near wonders, and for Expedition ships the polar ports, make the best cruises.\n\nIts popup's Cruise planner shows everything: how appealing the itinerary is, the recommended prices and why, and how bookings are going."},
+		{id = "cruise_prices", who = "marissa", title = "Tickets and reviews",
+			show = func() -> bool: return seen.call("cruise_plan") and GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and not ship.cruise.get("history", []).is_empty()),
+			text = func() -> String: return "Our first cruise is back. Guests book in the home port till the ship sails (the Departures tab sets when), and price decides how many come: at the recommended price about nine in ten berths fill, half again over it about a third.\n\nEvery voyage gets a review, and the reviews, the itineraries, the guest experience and how smoothly things go make our Cruises rating: more stars, and guests will pay more."},
 		{id = "achievements", who = "marissa", title = "A milestone",
 			show = func() -> bool: return seen.call("map") and Achievements.score(GameState.company).x > 0,
 			text = func() -> String: return "You've earned your first achievement star. The trophy button at the top right of the map keeps them all: stars for cargo delivered of each kind, for the fleet, the company level, the bank, the field guide, and badges for the rest.\n\nThey're the big milestones. Each one takes real work, so keep at it; the next is always listed with how far along we are."},
@@ -245,6 +252,8 @@ static func _type_welcome() -> String:
 			return "We're in Tankers: oil and gas. Buy tankers, give them routes between ports, and they'll fill up where oil is cheap and sell it where it's dear."
 		"seafood":
 			return "We're in Seafood: fishing and crabbing boats that work the grounds near their port and sell the catch, and fish tenders and reefers that carry seafood between ports."
+		"cruises":
+			return "We're in Cruises: ships full of guests on round trips from our home port. You set where they call, what the cabins and decks hold, and what tickets cost, and the guests decide whether it was worth it."
 	return "Buy ships, give them routes between ports, and they'll buy cargo where it's cheap and sell it where it's expensive."
 
 

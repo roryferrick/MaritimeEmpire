@@ -10,7 +10,8 @@ extends Control
 ## whether to have seasonal closures and the tutorial; then make
 ## the CEO: their name and looks (Characters), part by part or at random.
 ## Before all that, the company type (CompanyTypeCards: game_config
-## company_types), which sets the ships it starts with.
+## company_types), which sets the ships it starts with; after the company, its
+## logo (LogoEditor) in its colour with its type's mark.
 
 const GAME_SCENE := "res://scenes/game.tscn"
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
@@ -38,6 +39,9 @@ var _ceo_page := CeoEditor.new()
 var _company_type := "cargo"
 var _type_page := Control.new()
 var _type_label := Label.new()
+## The logo (the page after the company's: see _show_logo_page()).
+var _logo := {}
+var _logo_page := Control.new()
 
 
 func _ready() -> void:
@@ -50,7 +54,7 @@ func _ready() -> void:
 	%NameEdit.text_changed.connect(_validate.unbind(1))
 	%NameEdit.text_submitted.connect(_start.unbind(1))
 	%StartButton.pressed.connect(_start)
-	%StartButton.text = "Next: Your CEO"
+	%StartButton.text = "Next: Your Logo"
 	_add_ceo_page()
 	%BackButton.pressed.connect(_show_type_page)
 	_add_type_page()
@@ -242,25 +246,24 @@ func _validate() -> bool:
 	return error.is_empty()
 
 
-## On to making the CEO (once the company's name will do).
+## On to the logo (once the company's name will do).
 func _start() -> void:
 	if not _validate():
 		return
 	$Row.visible = false
-	_ceo_page.visible = true
-	_ceo_page.focus_name()
+	_show_logo_page()
 
 
 # --- The CEO --------------------------------------------------------------------
 
-## The CEO page (CeoEditor), hidden till Next: Back returns to the company,
+## The CEO page (CeoEditor), hidden till Next: Back returns to the logo,
 ## Found Company starts the game.
 func _add_ceo_page() -> void:
 	_ceo_page.visible = false
 	_ceo_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_ceo_page.back_pressed.connect(func() -> void:
 		_ceo_page.visible = false
-		$Row.visible = true)
+		_show_logo_page())
 	_ceo_page.confirmed.connect(_found.unbind(1))
 	add_child(_ceo_page)
 
@@ -277,6 +280,7 @@ func _found() -> void:
 		seasons = %SeasonsToggle.button_pressed,
 		divine = %DivineToggle.button_pressed,
 		company_type = _company_type,
+		logo = _logo.duplicate(),
 		ceo = _ceo_page.ceo.duplicate(true),
 	})
 	if GameState.multiplayer_save:
@@ -341,6 +345,7 @@ func _add_type_page() -> void:
 func _show_type_page() -> void:
 	$Row.visible = false
 	_ceo_page.visible = false
+	_logo_page.visible = false
 	_type_page.visible = true
 
 
@@ -358,3 +363,63 @@ func _pick_type(type_id: String) -> void:
 	_show_start_note()
 	_type_label.text = "Company type: %s" % Progression.type_name(type_id)
 	_type_label.add_theme_color_override(&"font_color", CompanyTypeIcon.type_color(type_id))
+
+
+# --- The logo ---------------------------------------------------------------------
+
+## The logo page, between the company and the CEO: the LogoEditor in the
+## company's colour with its type's mark (made afresh each time, so a changed
+## colour or type shows), Back to the company and Next: Your CEO.
+func _show_logo_page() -> void:
+	if _logo.is_empty():
+		_logo = CompanyLogo.default_logo(_color)
+	elif str(_logo.get("secondary", "")) == _color:  # (The company colour changed to the second one.)
+		_logo.secondary = CompanyLogo.default_logo(_color).secondary
+	for child in _logo_page.get_children():
+		_logo_page.remove_child(child)
+		child.queue_free()
+	if _logo_page.get_parent() == null:
+		_logo_page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(_logo_page)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_logo_page.add_child(center)
+	var card := PanelContainer.new()
+	card.theme_type_variation = &"CardPanel"
+	center.add_child(card)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override(&"separation", 16)
+	card.add_child(content)
+	var title := Label.new()
+	title.theme_type_variation = &"TitleLabel"
+	title.text = "Your company logo"
+	content.add_child(title)
+	var note := Label.new()
+	note.theme_type_variation = &"DimLabel"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 700
+	note.text = "Your colour with a second one, round the mark of your company type (%s). It flies at your HQ and hubs, sits beside your name in the company tables and goes on your cruise ships' funnels. You can change it later for %s." % [Progression.type_name(_company_type), Fmt.money(GameState.LOGO_CHANGE_COST)]
+	content.add_child(note)
+	var editor := LogoEditor.new(_logo, _color, _company_type)
+	editor.changed.connect(func(logo: Dictionary) -> void: _logo = logo)
+	content.add_child(editor)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override(&"separation", 16)
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_child(buttons)
+	var back := Button.new()
+	back.text = "Back"
+	back.custom_minimum_size = Vector2(160, 44)
+	back.pressed.connect(func() -> void:
+		_logo_page.visible = false
+		$Row.visible = true)
+	buttons.add_child(back)
+	var next := Button.new()
+	next.text = "Next: Your CEO"
+	next.custom_minimum_size = Vector2(220, 44)
+	next.pressed.connect(func() -> void:
+		_logo_page.visible = false
+		_ceo_page.visible = true
+		_ceo_page.focus_name())
+	buttons.add_child(next)
+	_logo_page.visible = true

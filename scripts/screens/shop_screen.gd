@@ -29,6 +29,7 @@ const TYPE_ROWS := {
 	agriculture = [["grain"], ["livestock"]],
 	tankers = [["tanker"]],
 	seafood = [["fishing"], ["crabbing"], ["seafood"]],
+	cruises = [["cruise_ocean"], ["cruise_expedition"]],
 }
 const SERVICE_ROWS := [["recovery", "tug"], ["icebreaker"]]
 ## Cards a section shows across, fewer if they don't fit. Six fit across a row
@@ -476,6 +477,8 @@ func _update_types() -> void:
 		for row: Control in _type_rows[type_id]:
 			row.modulate.a = 1.0 if has else 0.5
 		_tabs.set_tab_icon(_type_tabs[type_id], null if has else _lock())
+		var tab_name := str(Progression.company_type(type_id).get("tab", name))
+		_tabs.set_tab_title(_type_tabs[type_id], "%s %.1f★" % [tab_name, GameState.ratings.stars(GameState.company, type_id)] if has else tab_name)
 
 
 ## The note over a coming-soon type's ships (Cruises, until its voyages are built).

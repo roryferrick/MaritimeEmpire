@@ -78,6 +78,7 @@ func _ready() -> void:
 	GameState.ship_at_risk.connect(_on_ship_at_risk)
 	GameState.ship_sold.connect(_on_ship_sold)
 	GameState.company_leveled.connect(_on_company_leveled)
+	GameState.rating_changed.connect(_on_rating_changed)
 	GameState.ship_leveled.connect(_on_ship_leveled)
 	%ShipsButton.add_child(_ships_alert)
 	%ShopButton.add_child(_shop_alert)
@@ -390,6 +391,15 @@ func _on_ship_sold(ship: Ship, price: int) -> void:
 	if not GameState.is_mine(ship):
 		return  # Another player's (see Net).
 	ActivityLog.add("Sold %s for %s" % [ship.name, Fmt.money(price)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+
+
+## One of this player's company types reached a new whole star, or fell to one (Ratings).
+func _on_rating_changed(who: Company, type_id: String, star: int, up: bool) -> void:
+	if who != GameState.company:
+		return
+	var type_name := Progression.type_name(type_id)
+	ActivityLog.add("%s %s to %d stars." % [type_name, "rose" if up else "fell", star], ActivityLog.Kind.GOOD if up else ActivityLog.Kind.BAD)
+	event_card.show_rating(type_name, star, up)
 
 
 func _on_company_leveled(level: int, unlocks: Array[String]) -> void:

@@ -242,6 +242,13 @@ const LABEL_PADDING := 3.0
 const BOW_LENGTH_FACTOR := 0.6
 ## Ships are drawn this share of their map_size (and of everything built on it).
 const SHIP_SIZE := 0.245
+## How big (px) a company's logo sign is at its HQ and hubs on the map.
+const LOGO_SIGN_PX := 16.0
+## Where a cruise ship's funnel (its logo) and its open decks are on its art, as shares of the art.
+const CRUISE_FUNNELS := {cruise_ocean = Rect2(40.0 / 180.0, 25.0 / 64.0, 14.0 / 180.0, 14.0 / 64.0),
+	cruise_expedition = Rect2(84.0 / 180.0, 28.0 / 68.0, 12.0 / 180.0, 12.0 / 68.0), cruise_expedition_heli = Rect2(84.0 / 180.0, 26.0 / 64.0, 12.0 / 180.0, 12.0 / 64.0)}
+const CRUISE_DECKS := {cruise_ocean = Rect2(10.0 / 180.0, 10.0 / 64.0, 142.0 / 180.0, 44.0 / 64.0),
+	cruise_expedition = Rect2(52.0 / 180.0, 9.0 / 68.0, 92.0 / 180.0, 50.0 / 68.0), cruise_expedition_heli = Rect2(52.0 / 180.0, 9.0 / 64.0, 92.0 / 180.0, 46.0 / 64.0)}
 ## Ship art, per model category: <category>_hull.svg (white, tinted with the
 ## model's map color), <category>_details.svg (drawn as is, over the cargo) and,
 ## for categories whose cargo shows, <category>_cargo.svg. Categories without
@@ -5101,6 +5108,7 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 	if owner == null:
 		if hub_owner != null:
 			_draw_hub_warehouses(port_id, layout, owned_hub, GameState.company_color_value(hub_owner.color))
+			_draw_logo_sign(hub_owner, _marina_polygon(port_id, PackedVector2Array([_bounds(_hq_region(layout)).get_center()]))[0])
 		return
 	var level := hq_level(owner)
 	var tint := GameState.company_color_value(owner.color)
@@ -5119,6 +5127,7 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 		_draw_hq_house(port_id, level, box, tint)
 	else:
 		_draw_hq_block(port_id, level, foot, box, tint)
+	_draw_logo_sign(owner, _marina_polygon(port_id, PackedVector2Array([box.get_center()]))[0])  # (Its sign on the roof.)
 
 ## A hub that isn't an HQ: its company's warehouses on the HQ's half of the
 ## quay, roofed in its colour so whose hub it is shows from above (more of
@@ -7099,7 +7108,7 @@ func _draw_ports(labels: Array) -> void:
 	for each in GameState.all_companies() if selectable_ports.is_empty() else []:
 		var each_color := _color(&"hub_ring_gray") if gray_mode else GameState.company_color_value(each.color)
 		for hub in each.hubs:
-			(hub_ports.get_or_add(hub.port_id, []) as Array).append([hub, each_color])
+			(hub_ports.get_or_add(hub.port_id, []) as Array).append([hub, each_color, each])
 	if _port_painter == null and ClassDB.class_exists(&"PortPainter"):
 		_port_painter = ClassDB.instantiate(&"PortPainter")
 		var units := PackedVector3Array()
@@ -7130,6 +7139,12 @@ func _draw_ports(labels: Array) -> void:
 			var width := HQ_RING_WIDTH if entry[0].is_hq else HUB_RING_WIDTH
 			_canvas.draw_arc(port_screen_position(port_id), radius + width / 2.0, 0.0, TAU, clampi(int(radius), 32, 128), entry[1], width, true)
 			radius += width
+		# Each company's logo flies beside it, up and to the right (one after another).
+		var sign := port_screen_position(port_id) + Vector2(radius, -radius) * 0.75
+		for entry: Array in hub_ports[port_id]:
+			if not gray_mode:
+				_draw_logo_sign(entry[2], sign + Vector2(LOGO_SIGN_PX * 0.6, -LOGO_SIGN_PX * 0.6))
+			sign.x += LOGO_SIGN_PX + 2.0
 	var bounds := Rect2(Vector2.ZERO, size)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
@@ -7141,6 +7156,13 @@ func _draw_ports(labels: Array) -> void:
 		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
 		_canvas.draw_string(port_font, baseline + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, shadow)
 		_canvas.draw_string(port_font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE, color)
+
+## A company's logo as a small sign (CompanyLogo) centred on a screen point,
+## on a dark backing so it reads on the map.
+func _draw_logo_sign(company: Company, at: Vector2) -> void:
+	var rect := Rect2(at - Vector2.ONE * LOGO_SIGN_PX / 2.0, Vector2.ONE * LOGO_SIGN_PX)
+	_canvas.draw_rect(rect.grow(1.5), Color(0.05, 0.07, 0.1, 0.55))
+	CompanyLogo.paint(_canvas, rect, company.logo, company.color, company.start_type())
 
 ## Works out every port's look for the native dots (PortPainter) again when
 ## anything that sets it has changed: a port picked, dimmed or shining, the regions open, the
@@ -9081,6 +9103,9 @@ func _ship_draw_scale(ship: Ship, at: Vector2) -> float:
 ## The hull in the model's color, the cargo (cut off behind how full the hold
 ## is, in CARGO_STEPS steps, any cargo showing at least one) and the details.
 func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade := Color.WHITE, lean := 0.0) -> void:
+	var looks: Dictionary = ship.cruise.get("looks", {}) if ship != null and ship.is_cruise() else {}
+	if not looks.is_empty():
+		color = GameState.company_color_value(str(looks.get("hull", "white")))  # (A cruise ship's own hull colour: Cruises.)
 	_canvas.draw_texture_rect(art.hull, rect, false, color)
 	# Its superstructure and details lean further than the hull as it rolls (they stand up).
 	rect = Rect2(rect.position + Vector2(0.0, lean * rect.size.y * ROLL_TOWER), rect.size)
@@ -9101,6 +9126,23 @@ func _draw_ship_art(ship: Ship, art: Dictionary, rect: Rect2, color: Color, fade
 	# <art>_details_fishing.svg); otherwise it's stowed.
 	var rigged: bool = art.has("fishing_details") and ship != null and ship.is_working_ground()
 	_canvas.draw_texture_rect(art.fishing_details if rigged else art.details, rect, false, fade)
+	if not looks.is_empty():
+		_draw_cruise_looks(ship, looks, rect, fade)
+
+## A cruise ship's looks over its art (Cruises): its decks tinted, an accent
+## stripe down both sides, and its company's logo on the funnel.
+func _draw_cruise_looks(ship: Ship, looks: Dictionary, rect: Rect2, fade: Color) -> void:
+	var art := str(ship.model().get("art", ""))
+	var part := func(share: Rect2) -> Rect2: return Rect2(rect.position + share.position * rect.size, share.size * rect.size)
+	var deck: Color = Cruises.DECK_COLORS.get(str(looks.get("deck", "teak")), Color.WHITE)
+	_canvas.draw_rect(part.call(CRUISE_DECKS.get(art, Rect2())), Color(deck, 0.32 * fade.a))
+	var stripe := Color(GameState.company_color_value(str(looks.get("stripe", "white"))), fade.a)
+	var band := maxf(rect.size.y * 0.035, 0.6)
+	_canvas.draw_line(rect.position + Vector2(rect.size.x * 0.06, rect.size.y * 0.08), rect.position + Vector2(rect.size.x * 0.8, rect.size.y * 0.08), stripe, band)
+	_canvas.draw_line(rect.position + Vector2(rect.size.x * 0.06, rect.size.y * 0.92), rect.position + Vector2(rect.size.x * 0.8, rect.size.y * 0.92), stripe, band)
+	if CRUISE_FUNNELS.has(art):
+		var owner := GameState.owner_of(ship)
+		CompanyLogo.paint(_canvas, part.call(CRUISE_FUNNELS[art]), owner.logo, owner.color, owner.start_type())
 
 ## The skin the player's ships of a model wear (the Inventory's choice for the
 ## model, or the equipped skin pack's: see Cosmetics.default_skin()), or null: other players' and the rivals' ships are

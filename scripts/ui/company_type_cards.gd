@@ -15,11 +15,11 @@ signal chosen(type_id: String)
 
 ## What each ship line is called on the cards.
 const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers",
-	tanker = "Tankers", vehicles = "Vehicle carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers"}
-const CARD_WIDTH := 236.0
+	tanker = "Tankers", vehicles = "Vehicle carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers"}
+const CARD_WIDTH := 196.0  # (Six across within the 1280 px screen.)
 const ICON_SIZE := 40.0
 const PICTURE_LENGTH := 78.0
-const NAME_FONT_SIZE := 18
+const NAME_FONT_SIZE := 16
 
 var picking := false
 ## The types the company has already (picking): greyed, not choosable.
@@ -34,7 +34,7 @@ var _armed := ""
 func _init(for_picking := false, company_taken: Array = []) -> void:
 	picking = for_picking
 	taken = company_taken
-	add_theme_constant_override(&"separation", 12)
+	add_theme_constant_override(&"separation", 8)
 	alignment = BoxContainer.ALIGNMENT_CENTER
 
 
@@ -82,7 +82,9 @@ func _card(type: Dictionary) -> PanelContainer:
 	name_label.add_theme_font_size_override(&"font_size", NAME_FONT_SIZE)  # (Small enough that "Agriculture" fits on one line.)
 	header.add_child(name_label)
 	box.add_child(header)
-	box.add_child(_text(str(type.get("blurb", "")), &""))
+	var blurb := _text(str(type.get("blurb", "")), &"")
+	blurb.add_theme_font_size_override(&"font_size", 14)
+	box.add_child(blurb)
 	box.add_child(_text("First ships" if not picking else "Its first ships", &"DimLabel"))
 	var firsts := HBoxContainer.new()
 	firsts.add_theme_constant_override(&"separation", 8)
@@ -107,7 +109,7 @@ func _card(type: Dictionary) -> PanelContainer:
 		var names := GameData.ship_models.filter(func(model: Dictionary) -> bool: return model.get("category", "") == category)
 		names.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("tier", 1)) < int(b.get("tier", 1)))
 		var line := _text("%s: %s" % [LINE_TITLES.get(category, category), ", ".join(names.map(func(model: Dictionary) -> String: return str(model.name)))], &"DimLabel")
-		line.add_theme_font_size_override(&"font_size", 12)
+		line.add_theme_font_size_override(&"font_size", 11)
 		box.add_child(line)
 	if picking:
 		var spacer := Control.new()

@@ -39,7 +39,7 @@ const UPGRADE_ALL_GAP := 16.0
 const SERVICE_LINES := ["recovery", "tug", "icebreaker"]
 const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", grain = "Grain carriers", livestock = "Livestock carriers",
 	tanker = "Tankers", vehicles = "Vehicle carriers", fishing = "Fishing boats", crabbing = "Crabbing boats", seafood = "Seafood carriers",
-	recovery = "Recovery boats", tug = "Tugs", icebreaker = "Icebreakers"}
+	recovery = "Recovery boats", tug = "Tugs", icebreaker = "Icebreakers", cruise_ocean = "Ocean cruisers", cruise_expedition = "Expedition cruisers"}
 ## The tabs' place under the header, and where the list starts below them (px).
 const TABS_TOP := 60.0
 const LIST_TOP := 100.0
@@ -402,8 +402,9 @@ func _apply_filter() -> void:
 			if (_tab_lines[tab] as Array).is_empty() or (_tab_lines[tab] as Array).has(line):
 				count += int(per_line[line])
 				ships += int(owned[line])
-		_tabs.set_tab_title(tab, "%s (%d)" % [_tab_names[tab], count])
-		var type_id := Progression.type_of_category(str((_tab_lines[tab] as Array).front())) if not (_tab_lines[tab] as Array).is_empty() else ""
+		var type_id :=Progression.type_of_category(str((_tab_lines[tab] as Array).front())) if not (_tab_lines[tab] as Array).is_empty() else ""
+		var rated := not type_id.is_empty() and GameState.company.has_type(type_id)  # (Its stars beside its name: see Ratings.)
+		_tabs.set_tab_title(tab, "%s%s (%d)" % [_tab_names[tab], " %.1f★" % GameState.ratings.stars(GameState.company, type_id) if rated else "", count])
 		_tabs.set_tab_hidden(tab, tab > 0 and ships == 0 and (type_id.is_empty() or not GameState.company.has_type(type_id)))
 	if _tabs.is_tab_hidden(_tabs.current_tab):
 		_tabs.current_tab = 0

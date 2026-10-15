@@ -118,3 +118,11 @@ static func calendar_duration(seconds: float) -> String:
 	var days := floori(seconds / 86400.0)
 	var rest := roundi((seconds - days * 86400.0) / 3600.0)
 	return "%d days" % days if rest == 0 else "%d days %d h" % [days, rest]
+
+
+const MONTH_NAMES := ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+
+## A month's name (0 = January).
+static func month_name(month: int) -> String:
+	return MONTH_NAMES[posmod(month, 12)]

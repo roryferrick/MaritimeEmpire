@@ -27,7 +27,7 @@ const COLUMNS := [
 const TOTAL_ROWS := [
 	["Cargo sales", "income", false], ["Cargo bought", "cargo", true], ["Fuel", "fuel", true], ["Repairs", "repair", true],
 	["Canal tolls", "tolls", true], ["Port fees", "port_fees", true], ["Crew wages", "wages", true], ["Loan interest", "interest", true],
-	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true],
+	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true], ["Logo changes", "logo", true], ["Cruise supplies", "supplies", true],
 ]
 ## Ship table groups, in shop order: [title, ship_models.json category].
 const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
@@ -40,10 +40,12 @@ const DELIVERED_UNITS := {container = "Containers", ton = "Tons", head = "Head o
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0
 ## The Compare companies table's columns, and how big (px) each company's CEO's face is in it.
-const COMPARE_COLUMNS: Array[String] = ["#", "Company", "Type", "Level", "Money", "Ships", "Hubs", "Profit, last 10 min", "Profit, all time ▼", "Delivered"]
+const COMPARE_COLUMNS: Array[String] = ["#", "Company", "Type", "Ratings", "Level", "Money", "Ships", "Hubs", "Profit (10 min)", "Profit (all) ▼", "Delivered"]
 const CEO_FACE_SIZE := 34.0
 ## How big (px) the company type's icon is in the Type column (CompanyTypeIcon).
 const TYPE_ICON_SIZE := 24.0
+## How big (px) each company's logo is beside its name there (CompanyLogo).
+const LOGO_SIZE := 26.0
 ## Choices for "Keep in the bank" (0 = spend everything on cargo).
 const BANK_RESERVES: Array[int] = [0, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000]
 
@@ -89,6 +91,7 @@ func _ready() -> void:
 	row.add_sibling(_canal_card)
 	_add_bank_row()
 	_add_loan_row()
+	_add_logo_row()
 	_add_tabs()
 	%ShipTable.columns = COLUMNS.size()  # (One per column, however many there are.)
 	%ShipTable.draw.connect(_draw_bands)
@@ -399,7 +402,7 @@ func _show_page(compare: bool) -> void:
 
 
 ## A row per company, ranked by operating profit all time (the most first),
-## numbered: its CEO's face (their name on hover) and
+## numbered: its CEO's face (their name on hover), its logo and
 ## its name (in its color; this player's marked), the company type it started
 ## as (icon and name; every type it has on hover), level, money, ships, hubs,
 ## operating profit over the last 10 minutes and all time, and units
@@ -424,10 +427,15 @@ func _fill_comparison() -> void:
 		face.custom_minimum_size = Vector2.ONE * CEO_FACE_SIZE
 		face.tooltip_text = str(each.ceo.get("name", ""))
 		cell.add_child(face)
+		var logo := CompanyLogo.of(each)
+		logo.custom_minimum_size = Vector2.ONE * LOGO_SIZE
+		logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		cell.add_child(logo)
 		var name := _add_label(cell, each.name + ("  (you)" if each == GameState.company else "  (AI · %s)" % RivalAI.LEVEL_NAMES.get(each.ai, "") if each.is_ai() else ""))
 		name.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		name.add_theme_color_override(&"font_color", GameState.company_color_value(each.color))
 		_compare_grid.add_child(_type_cell(each))
+		_compare_grid.add_child(_ratings_cell(each))
 		_add_label(_compare_grid, str(each.level()))
 		_add_label(_compare_grid, Fmt.money(each.money))
 		_add_label(_compare_grid, str(GameState.fleet(each).size()))
@@ -439,6 +447,28 @@ func _fill_comparison() -> void:
 		for commodity: String in each.delivered:
 			units += int(each.delivered[commodity])
 		_add_label(_compare_grid, Fmt.short(units + each.earlier_containers))
+
+
+## A company's stars in each type it runs (Ratings): its icon and the stars,
+## the full stars on hover.
+func _ratings_cell(each: Company) -> Control:
+	var cell := GridContainer.new()  # (Three types to a row, so six fit the table.)
+	cell.columns = 6
+	cell.add_theme_constant_override(&"h_separation", 4)
+	var tips := PackedStringArray()
+	for type_id: String in Ratings.rated_types(each):
+		var stars := GameState.ratings.stars(each, type_id)
+		var icon := CompanyTypeIcon.new(type_id)
+		icon.custom_minimum_size = Vector2.ONE * 18.0
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		cell.add_child(icon)
+		var label := _add_label(cell, "%.1f★" % stars)
+		label.add_theme_font_size_override(&"font_size", 13)
+		label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		tips.append("%s: %.1f of 5 stars" % [Progression.type_name(type_id), stars])
+	cell.tooltip_text = "\n".join(tips)
+	cell.mouse_filter = Control.MOUSE_FILTER_PASS
+	return cell
 
 
 ## A company's starting type in the comparison: its icon and name, with every
@@ -544,3 +574,25 @@ static func _wrap(label: Label) -> void:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.custom_minimum_size.x = 160
+
+
+## "Company logo" under the loan row: the logo, and Change logo (LogoDialog,
+## for GameState.LOGO_CHANGE_COST).
+func _add_logo_row() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 12)
+	var title := Label.new()
+	title.text = "Company logo"
+	row.add_child(title)
+	var logo := CompanyLogo.of(GameState.company)
+	logo.custom_minimum_size = Vector2.ONE * 40.0
+	row.add_child(logo)
+	var change := Button.new()
+	change.text = "Change logo: %s" % Fmt.money(GameState.LOGO_CHANGE_COST)
+	change.pressed.connect(func() -> void: GameRoot.find(self).add_child(LogoDialog.new()))
+	row.add_child(change)
+	GameState.logo_changed.connect(func() -> void:
+		logo.logo = GameState.company.logo
+		logo.queue_redraw())
+	$Scroll/Margin/Content.add_child(row)
+	$Scroll/Margin/Content.move_child(row, 2)

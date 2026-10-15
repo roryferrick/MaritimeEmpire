@@ -39,6 +39,18 @@ var xp := 0.0
 ## -> the company level it was taken at (1 for the type it was founded as).
 ## Empty for a company from before types, which has every type (all_types()).
 var company_types := {}
+## Its logo (CompanyLogo): {shape, layout, secondary (a company colour id), swap}.
+var logo := {}
+## The ports where it has built a cruise terminal (Cruises: a cruise ship may
+## sail from its HQ, a hub, or one of these).
+var terminals: Array[String] = []
+## Its star rating's record in each company type (Ratings): type id ->
+## {samples: [[condition, reliability, scale] a minute], ports: {port id: when
+## last traded at}, star: the whole stars last announced}.
+var ratings := {}
+## True for a company loaded from a save from before ratings, till its first
+## sample (which then fills its window: see Ratings.sample()). Not saved.
+var ratings_seed := false
 ## Money cargo purchases leave in the bank (set on the Finances screen).
 var bank_reserve := 0
 ## Money borrowed on the Finances screen and not yet paid back (see
@@ -166,6 +178,9 @@ func to_dict() -> Dictionary:
 		"money": money,
 		"company_xp": xp,
 		"company_types": company_types,
+		"logo": logo,
+		"terminals": terminals,
+		"ratings": ratings,
 		"delivered": delivered,
 		"earlier_containers": earlier_containers,
 		"first_prices_used": first_prices_used,
@@ -199,6 +214,12 @@ static func from_dict(data: Dictionary) -> Company:
 	company.ai = str(data.get("ai", ""))
 	company.money = int(data.get("money", 0))
 	company.xp = float(data.get("company_xp", 0.0))
+	company.ratings = data.get("ratings", {}) if data.get("ratings") is Dictionary else {}
+	company.ratings_seed = not data.has("ratings")
+	company.terminals.assign(data.get("terminals", []))
+	company.logo = data.get("logo", {}) if data.get("logo") is Dictionary else {}
+	if company.logo.is_empty():  # (Saves from before logos: one made up from its colour.)
+		company.logo = CompanyLogo.default_logo(company.color)
 	var types: Variant = data.get("company_types", {})  # (Saves from before types have none: every type open.)
 	if types is Dictionary:
 		for type_id: String in types:
@@ -266,7 +287,7 @@ func apply_update(data: Dictionary, keep_prefs := false) -> void:
 				company_types = {}
 				for type_id: String in value:
 					company_types[type_id] = int(value[type_id])
-			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models", "regions", "discovered":
+			"first_prices_used", "mega_upgrades", "tutorial_done", "muted_models", "regions", "discovered", "terminals":
 				(get(key) as Array).assign(value)
 			"hubs":
 				var kept: Array[Hub] = []

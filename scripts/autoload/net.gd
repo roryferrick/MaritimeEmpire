@@ -89,7 +89,7 @@ const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_
 const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing_target", &"set_fishing_base", &"set_fish_landing", &"select_fish_area", &"assign_fish_boats", &"set_fish_area_model", &"set_uniform", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel", &"set_skin",
 	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve", &"level_skill", &"upgrade_all",
 	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
-	&"rename_ship", &"set_prefs", &"unlock_region", &"choose_company_type", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act"]
+	&"rename_ship", &"set_prefs", &"unlock_region", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act"]
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its
@@ -840,6 +840,8 @@ func _apply_companies(changes: Dictionary) -> void:
 			GameState.hubs_changed.emit()
 		if changes[index].has("company_types"):
 			GameState.company_types_changed.emit()
+		if changes[index].has("logo"):
+			GameState.logo_changed.emit()
 	if mine.money != money_before:
 		GameState.money_changed.emit(mine.money)
 	if mine.level() != level_before or changes.has(GameState.companies.find(mine)):

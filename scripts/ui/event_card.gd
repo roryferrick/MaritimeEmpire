@@ -59,6 +59,13 @@ func show_level(level: int, unlocks: Array[String]) -> void:
 	_enqueue({kicker = "COMPANY LEVEL UP", title = "Level %d" % level, body = body, color = LEVEL_COLOR})
 
 
+## A company type's rating reached a new whole star (up) or fell to one (see Ratings).
+func show_rating(type_name: String, star: int, up: bool) -> void:
+	var body := "Your %s ships' condition, reliability and reach earned it. Their cargo sells a little better and pays lower port fees as the stars rise." % type_name if up \
+		else "Look at the Ratings page (the star button on the map) to see which part slipped and how to lift it."
+	_enqueue({kicker = "RATING UP" if up else "RATING DOWN", title = "%s: %s" % [type_name, "★".repeat(star) if star > 0 else "no stars"], body = body, color = GOLD if up else Color(0.95, 0.5, 0.45)})
+
+
 ## An achievement earned (stars 0 for a one-off badge), as Achievements.check() reports it.
 func show_achievement(name: String, stars: int, unit := "") -> void:
 	var title := name if stars == 0 else "%s %s" % [name, "★".repeat(stars)]

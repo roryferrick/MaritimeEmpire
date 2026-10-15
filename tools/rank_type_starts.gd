@@ -16,28 +16,37 @@ extends Node
 ## season averaged over the year (Fisheries.options()) less its wages. A port
 ## where the first-tier ships can't make money isn't offered.
 ##
-##   Godot --headless --path . tools/rank_type_starts.tscn
+##   Godot --headless --path . tools/rank_type_starts.tscn -- [--only cruises]
 
 const OUT := "res://data/type_starts.json"
 const TIER_WEIGHTS := {1: 8.0, 2: 3.0}
 const KIND_SIZES := {excellent = 5, great = 20, fair = 20, hard = 20}
 
 var _fake := Company.new("Ranking", "purple", "")
+## With "--only a,b": just those types, merged into the file as it is.
+var _only: Array = []
 
 
 func _ready() -> void:
+	var args := OS.get_cmdline_user_args()
+	var at := args.find("--only")
+	if at >= 0 and at + 1 < args.size():
+		_only.assign(args[at + 1].split(","))
 	await get_tree().process_frame
 	GameState.company = _fake
+	_fake.company_types = {"cruises": 1}  # (So its cruise ratings and prices work out as a new company's.)
 	GameState.companies.assign([_fake])
 	GameState.market.clear()
 	GameState.port_sizes.reset()
 	GameState.play_time = 0.0
 	var lakes: Array = GameData.starts.get("great_lakes", {}).get("ports", [])
+	var kept: Dictionary = GameData.type_starts.duplicate(true) if not _only.is_empty() else {}
 	var out := {"_comment": "HQ ports recommended for each company type but Cargo & Ore (data/starts.json), made by tools/rank_type_starts.tscn: see its header for how. Kinds as starts.json: excellent (5, different market regions), great (20), fair (20), hard (20 big ports with a thin profit); notes give the best first-tier run. The Great Lakes ports are starts.json's great_lakes for every type. Rerun after changing markets.json, ship models, ports, regions or fisheries."}
 	var scores := {}  # type id -> [[score, port, note]]
 	for type: Dictionary in Progression.company_types():
 		if type.id != "cargo":
-			scores[type.id] = []
+			if _only.is_empty() or _only.has(type.id):
+				scores[type.id] = []
 	var started := Time.get_ticks_msec()
 	for port: Dictionary in GameData.ports:
 		if lakes.has(port.id):
@@ -50,6 +59,9 @@ func _ready() -> void:
 			if not scored.is_empty():
 				(scores[type_id] as Array).append(scored)
 	print("Scored %d ports in %d s" % [GameData.ports.size(), (Time.get_ticks_msec() - started) / 1000])
+	for type_id: String in kept:
+		if type_id != "_comment" and not scores.has(type_id):
+			out[type_id] = kept[type_id]
 	for type_id: String in scores:
 		out[type_id] = _sort_kinds(scores[type_id])
 		print("%s: %d ports make money; excellent %s" % [type_id, (scores[type_id] as Array).size(), ", ".join(out[type_id].excellent.map(func(entry: Dictionary) -> String: return "%s (%s)" % [GameData.port_name(entry.port), entry.note]))])
@@ -71,7 +83,7 @@ func _score(type_id: String, port_id: String) -> Array:
 			continue
 		var sum := 0.0
 		for model: Dictionary in models:
-			var found := _fishing(model, port_id) if model.has("fishing") else _trading(model, port_id)
+			var found := _fishing(model, port_id) if model.has("fishing") else (_cruising(model, port_id) if model.has("cruise") else _trading(model, port_id))
 			var per_minute: float = found[0]
 			sum += maxf(per_minute, 0.0)
 			if tier == 1 and per_minute > best_first:
@@ -129,6 +141,43 @@ func _fishing(model: Dictionary, port_id: String) -> Array:
 			best_key = key
 	var parts := best_key.split("|")
 	return [total / 12.0 / day_minutes - wages, "%s off %s, something in season %d months a year" % [fish.species_word(parts[0]), Fisheries.ground_name(parts[1]), months]]
+
+
+## [$ a minute, "Western Med from here: 3 ports of call, 4 nights"] for a cruise
+## model based at the port: the itinerary a rival would plan (RivalAI), sold
+## at the recommended prices, filled from the port's would-be cruisers over
+## up to 3 days (at most 90%), less its supplies, port fees, fuel and wages.
+func _cruising(model: Dictionary, port_id: String) -> Array:
+	var ship := Ship.new("", model.id, port_id)
+	ship.company = _fake
+	ship.docked_at = port_id
+	ship.cruise = Cruises.default_setup(ship)
+	var route: Array = GameState.rivals._cruise_itinerary(_fake, ship)
+	if route.size() < 2:
+		return [-INF, ""]
+	ship.route.assign(route)
+	var cruises: Cruises = GameState.cruises
+	cruises.use_recommended(ship)
+	var s := Cruises.settings()
+	var nights := cruises.nights(ship)
+	var trip := cruises.trip(ship)
+	var day_s: float = 86400.0 / GameState.calendar_seconds_per_second()
+	var capacity := Cruises.total(cruises.capacity(ship))
+	var pool := float(s.get("pool_per_size", 30)) * GameState.port_sizes.size(port_id)
+	var guests := minf(capacity * 0.9, pool * 3.0)
+	var wait_days := clampf(guests / maxf(pool, 1.0), 1.0, 3.0)
+	var ticket := 0.0
+	for cls: String in Cruises.CLASSES:
+		ticket += float(cruises.recommend(ship, cls, -1, false).price) * float(cruises.capacity(ship)[cls]) / maxf(capacity, 1.0)
+	var income := guests * (ticket + cruises.onboard_per_guest(ship) + cruises.excursions_per_guest(ship) * 0.5)
+	var costs := guests * (nights * (float(s.get("supplies_per_night", 22)) + float(s.get("entertainment_per_night", 6))) + float(s.get("port_fee_per_guest", 6)) * (route.size() - 1))
+	var seconds := float(trip.seconds) + wait_days * day_s
+	costs += float(model.get("fuel_per_s", 0)) * float(trip.seconds) * float(GameState.market.fuel_price(port_id))
+	costs += float(GameState.crew_wages(model)) * seconds / (float(GameData.config.get("crew", {}).get("period_days", 14)) * day_s)
+	var stops := PackedStringArray()
+	for id: String in route.slice(1):
+		stops.append(GameData.port_name(id))
+	return [(income - costs) / seconds * 60.0, "%d-night cruises to %s" % [nights, ", ".join(stops)]]
 
 
 ## "Bunker Tankers", "Sport Fishers": a model's name made plural, its size number dropped.
