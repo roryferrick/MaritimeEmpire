@@ -4,9 +4,9 @@
 		"excellent": [
 			{"port": "FNA", "note": "Car Barges: empty to Dakar, boats back (about $13,700 a minute each)."},
 			{"port": "LPA", "note": "Car Barges: empty to Funchal, trucks back (about $10,600 a minute each)."},
-			{"port": "MAW", "note": "Car Barges: cars to Davis Station, boats back (about $10,500 a minute each)."},
 			{"port": "MRA", "note": "Car Barges: empty to Cagliari, trucks back (about $8,900 a minute each)."},
-			{"port": "KHI", "note": "Car Barges: empty to Nhava Sheva (Mumbai), trucks back (about $7,200 a minute each)."}
+			{"port": "KHI", "note": "Car Barges: empty to Nhava Sheva (Mumbai), trucks back (about $7,200 a minute each)."},
+			{"port": "JIB", "note": "Car Barges: empty to Massawa, trucks back (about $4,100 a minute each)."}
 		],
 		"great": [
 			{"port": "CKY", "note": "Car Barges: empty to Dakar, boats back (about $13,400 a minute each)."},
@@ -17,7 +17,6 @@
 			{"port": "BJL", "note": "Car Barges: boats to Freetown, empty back (about $9,500 a minute each)."},
 			{"port": "NKC", "note": "Car Barges: boats to Banjul, empty back (about $7,800 a minute each)."},
 			{"port": "BNW", "note": "Car Barges: cars to Lobito, trucks back (about $10,300 a minute each)."},
-			{"port": "DAV", "note": "Car Barges: boats to Mawson Station, cars back (about $9,700 a minute each)."},
 			{"port": "RAI", "note": "Car Barges: boats to Banjul, empty back (about $5,800 a minute each)."},
 			{"port": "FNC", "note": "Car Barges: trucks to Las Palmas, empty back (about $9,400 a minute each)."},
 			{"port": "MLW", "note": "Car Barges: empty to Bissau, boats back (about $5,700 a minute each)."},
@@ -28,15 +27,14 @@
 			{"port": "TUN", "note": "Car Barges: empty to Cagliari, trucks to Misrata, empty back (about $7,200 a minute each)."},
 			{"port": "COO", "note": "Car Barges: trucks to Malabo, boats back (about $4,900 a minute each)."},
 			{"port": "LAD", "note": "Car Barges: trucks to Pointe-Noire, cars back (about $6,600 a minute each)."},
-			{"port": "TEM", "note": "Car Barges: trucks to Onne, boats back (about $5,500 a minute each)."}
+			{"port": "TEM", "note": "Car Barges: trucks to Onne, boats back (about $5,500 a minute each)."},
+			{"port": "SSG", "note": "Car Barges: boats to Lome, trucks back (about $6,700 a minute each)."}
 		],
 		"fair": [
-			{"port": "SSG", "note": "Car Barges: boats to Lome, trucks back (about $6,700 a minute each)."},
 			{"port": "JNP", "note": "Car Barges: trucks to Karachi, empty back (about $6,300 a minute each)."},
 			{"port": "VTZ", "note": "Car Barges: empty to Mongla, boats back (about $6,200 a minute each)."},
 			{"port": "LOS", "note": "Car Barges: trucks to Malabo, boats back (about $3,500 a minute each)."},
 			{"port": "MGL", "note": "Car Barges: boats to Visakhapatnam, empty back (about $5,300 a minute each)."},
-			{"port": "JIB", "note": "Car Barges: empty to Massawa, trucks back (about $4,100 a minute each)."},
 			{"port": "BCN", "note": "Car Barges: trucks to Tunis, empty back (about $5,600 a minute each)."},
 			{"port": "PRT", "note": "Car Barges: empty to Mongla, boats to Visakhapatnam, empty back (about $4,800 a minute each)."},
 			{"port": "UQR", "note": "Car Barges: empty to Hamad, trucks back (about $5,900 a minute each)."},
@@ -50,7 +48,9 @@
 			{"port": "PQZ", "note": "Car Barges: trucks to Puntarenas, boats back (about $5,400 a minute each)."},
 			{"port": "ABJ", "note": "Car Barges: empty to Cotonou, boats back (about $900 a minute each)."},
 			{"port": "GIT", "note": "Car Barges: empty to Bastia, trucks back (about $4,900 a minute each)."},
-			{"port": "PMO", "note": "Car Barges: empty to Bastia, trucks back (about $4,300 a minute each)."}
+			{"port": "PMO", "note": "Car Barges: empty to Bastia, trucks back (about $4,300 a minute each)."},
+			{"port": "LBV", "note": "Car Barges: cars to Onne, empty back (about $500 a minute each)."},
+			{"port": "HMD", "note": "Car Barges: trucks to Umm Qasr, empty back (about $5,200 a minute each)."}
 		],
 		"hard": [
 			{"port": "SHA", "note": "Car Barges: boats to Xiamen, trucks back (about $3,300 a minute each)."},
@@ -77,15 +77,13 @@
 	},
 	"agriculture": {
 		"excellent": [
-			{"port": "ROT", "note": "Grain Coasters: empty to King George Island, soybeans back (about $8,600 a minute each)."},
 			{"port": "NGB", "note": "Grain Coasters: rice to Busan, barley back (about $6,300 a minute each)."},
 			{"port": "LFW", "note": "Grain Coasters: barley to Malabo, rice back (about $5,300 a minute each)."},
 			{"port": "ALY", "note": "Grain Coasters: rice to Piraeus, empty back (about $2,300 a minute each)."},
-			{"port": "ARH", "note": "Grain Coasters: corn to Kirkenes, rice back (about $5,000 a minute each)."}
+			{"port": "JNP", "note": "Grain Coasters: soybeans to Karachi, empty back (about $3,900 a minute each)."},
+			{"port": "DMM", "note": "Grain Coasters: soybeans to Sohar, rice back (about $4,800 a minute each)."}
 		],
 		"great": [
-			{"port": "KGI", "note": "Grain Coasters: soybeans to Rothera, empty back (about $7,600 a minute each)."},
-			{"port": "PAL", "note": "Grain Coasters: empty to King George Island, soybeans to Rothera, empty back (about $7,100 a minute each)."},
 			{"port": "SHA", "note": "Grain Coasters: rice to Busan, barley back (about $6,100 a minute each)."},
 			{"port": "PUS", "note": "Grain Coasters: barley to Ningbo-Zhoushan, rice back (about $6,600 a minute each)."},
 			{"port": "ICN", "note": "Grain Coasters: barley to Shanghai, rice back (about $5,300 a minute each)."},
@@ -94,22 +92,20 @@
 			{"port": "TAC", "note": "Grain Coasters: rice to Incheon, barley back (about $4,800 a minute each)."},
 			{"port": "TEM", "note": "Grain Coasters: barley to Onne, rice back (about $4,300 a minute each)."},
 			{"port": "COO", "note": "Grain Coasters: barley to Malabo, rice back (about $4,800 a minute each)."},
-			{"port": "JNP", "note": "Grain Coasters: soybeans to Karachi, empty back (about $3,900 a minute each)."},
 			{"port": "KHI", "note": "Grain Coasters: empty to Nhava Sheva (Mumbai), soybeans back (about $4,400 a minute each)."},
 			{"port": "LOS", "note": "Grain Coasters: barley to Malabo, rice back (about $4,500 a minute each)."},
 			{"port": "SSG", "note": "Grain Coasters: rice to Lome, barley back (about $5,100 a minute each)."},
-			{"port": "DMM", "note": "Grain Coasters: soybeans to Sohar, rice back (about $4,800 a minute each)."},
 			{"port": "BAH", "note": "Grain Coasters: soybeans to Sohar, rice back (about $4,600 a minute each)."},
 			{"port": "KAP", "note": "Grain Coasters: empty to Eilat & Aqaba, rice back (about $4,000 a minute each)."},
 			{"port": "HZR", "note": "Grain Coasters: soybeans to Karachi, empty back (about $3,600 a minute each)."},
 			{"port": "DLC", "note": "Grain Coasters: barley to Taicang, rice back (about $2,800 a minute each)."},
-			{"port": "MRA", "note": "Grain Coasters: empty to Cagliari, wheat back (about $1,800 a minute each)."}
-		],
-		"fair": [
+			{"port": "MRA", "note": "Grain Coasters: empty to Cagliari, wheat back (about $1,800 a minute each)."},
 			{"port": "SOH", "note": "Grain Coasters: rice to Dammam, soybeans back (about $4,700 a minute each)."},
 			{"port": "TPE", "note": "Grain Coasters: wheat to Hong Kong, barley back (about $2,500 a minute each)."},
 			{"port": "FOC", "note": "Grain Coasters: wheat to Hong Kong, barley back (about $2,400 a minute each)."},
-			{"port": "KKN", "note": "Grain Coasters: rice to Arkhangelsk, corn back (about $4,600 a minute each)."},
+			{"port": "KKN", "note": "Grain Coasters: rice to Arkhangelsk, corn back (about $4,600 a minute each)."}
+		],
+		"fair": [
 			{"port": "MUN", "note": "Grain Coasters: empty to Nhava Sheva (Mumbai), soybeans to Karachi, empty back (about $3,400 a minute each)."},
 			{"port": "LYG", "note": "Grain Coasters: wheat to Nampo, barley back (about $3,900 a minute each)."},
 			{"port": "MLA", "note": "Grain Coasters: empty to Cagliari, wheat back (about $1,400 a minute each)."},
@@ -125,10 +121,13 @@
 			{"port": "KLF", "note": "Grain Coasters: rice to Dammam, soybeans back (about $4,000 a minute each)."},
 			{"port": "ONN", "note": "Grain Coasters: rice to Tema, barley back (about $4,100 a minute each)."},
 			{"port": "MLW", "note": "Grain Coasters: empty to Bissau, rice back (about $3,500 a minute each)."},
-			{"port": "THN", "note": "Grain Coasters: empty to Bergen, rice back (about $4,200 a minute each)."}
+			{"port": "THN", "note": "Grain Coasters: empty to Bergen, rice back (about $4,200 a minute each)."},
+			{"port": "SZX", "note": "Grain Coasters: barley to Taipei, wheat back (about $2,000 a minute each)."},
+			{"port": "BND", "note": "Grain Coasters: empty to Sohar, rice to Dammam, soybeans back (about $3,900 a minute each)."},
+			{"port": "FNA", "note": "Grain Coasters: empty to Bissau, rice to Monrovia, empty back (about $2,800 a minute each)."},
+			{"port": "BJL", "note": "Grain Coasters: rice to Praia, barley back (about $3,100 a minute each)."}
 		],
 		"hard": [
-			{"port": "SZX", "note": "Grain Coasters: barley to Taipei, wheat back (about $2,000 a minute each)."},
 			{"port": "TSN", "note": "Grain Coasters: wheat to Nampo, barley back (about $400 a minute each)."},
 			{"port": "DXB", "note": "Grain Coasters: rice to Dammam, soybeans back (about $2,900 a minute each)."},
 			{"port": "RTM", "note": "Grain Coasters: corn to Grangemouth, empty back (about $1,300 a minute each)."},
@@ -147,7 +146,8 @@
 			{"port": "HOU", "note": "Grain Coasters: soybeans to Mobile, empty back (about $1,300 a minute each)."},
 			{"port": "SUB", "note": "Grain Coasters: rice to Balikpapan, empty back (about $600 a minute each)."},
 			{"port": "AUH", "note": "Grain Coasters: rice to Umm Qasr, corn back (about $2,500 a minute each)."},
-			{"port": "BCN", "note": "Grain Coasters: rice to Tunis, empty back (about $1,700 a minute each)."}
+			{"port": "BCN", "note": "Grain Coasters: rice to Tunis, empty back (about $1,700 a minute each)."},
+			{"port": "FXT", "note": "Grain Coasters: rice to Cork, empty back (about $1,300 a minute each)."}
 		]
 	},
 	"tankers": {
