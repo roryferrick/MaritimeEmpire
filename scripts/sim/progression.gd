@@ -201,6 +201,11 @@ static func unlocks_at(level: int, company: Company = null) -> Array[String]:
 			more_slots.append(String(model.get("name", model.id)))
 	if not more_slots.is_empty():
 		unlocked.append("+1 slot: %s" % ", ".join(more_slots))
+	if level > 1 and Energy.can_drill(company):  # (Rigs, refineries and pipelines by the Tankers tiers: see Energy.)
+		for what: String in Energy.building_ids() + ["rig", "platform", "pipeline"]:
+			if Energy.unlock_level(what, company) == level:
+				var title := str(Energy.building(what).get("name", Energy.rig_info(what).get("name", "Pipelines")))
+				unlocked.append("%s (the Energy page)" % title)
 	if company != null and not company.all_types() and type_slots(level) > type_slots(level - 1):
 		unlocked.append("a new company type to choose")
 	if hub_slots(level) > hub_slots(level - 1):
@@ -268,8 +273,8 @@ static func _build_company_costs(company: Company) -> Array[int]:
 ## XP per minute from every unlocked cargo model with all its slots filled
 ## at this level, at sea at_sea_share of the time. A company from before types
 ## counts every model but the new_tier ones (so its levels stay as they were),
-## and no company counts the farm_line or boat_line ones (the Fresh produce
-## carriers and the boat carriers).
+## and no company counts the farm_line, boat_line or gas_line ones (the Fresh
+## produce carriers, the boat carriers and the gas carriers).
 ## One with types counts its types' models; for each type pick it has reached
 ## but not made yet, the average of the types it could still take (taken at
 ## that pick's level).
@@ -278,7 +283,7 @@ static func _full_fleet_xp_per_minute(level: int, company: Company = null) -> fl
 	var rate := 0.0
 	if company == null or company.all_types():
 		for model: Dictionary in GameData.ship_models:
-			if not model.get("recovery", false) and not model.get("new_tier", false) and not model.get("farm_line", false) and not model.get("boat_line", false):
+			if not model.get("recovery", false) and not model.get("new_tier", false) and not model.get("farm_line", false) and not model.get("boat_line", false) and not model.get("gas_line", false):
 				rate += _slots_from(model, int(model.get("unlock_level", 1)), level) * _xp_per_minute(model)
 		return rate * float(GameData.config.get("at_sea_share", 0.75))
 	for type_id: String in company.company_types:
@@ -298,7 +303,7 @@ static func _type_rate(type_id: String, taken_at: int, level: int) -> float:
 	var categories: Array = company_type(type_id).get("categories", [])
 	var rate := 0.0
 	for model: Dictionary in GameData.ship_models:
-		if categories.has(model.get("category", "")) and not model.get("farm_line", false) and not model.get("boat_line", false):  # (Not the Fresh produce carriers or the boat carriers: added with the farms and the makers, so companies keep their levels.)
+		if categories.has(model.get("category", "")) and not model.get("farm_line", false) and not model.get("boat_line", false) and not model.get("gas_line", false):  # (Not the Fresh produce carriers, the boat carriers or the gas carriers: added with the farms, the makers and the rigs, so companies keep their levels.)
 			rate += _slots_from(model, taken_at + tier_offset(model), level) * _xp_per_minute(model)
 	return rate
 

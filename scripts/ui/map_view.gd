@@ -33,6 +33,8 @@ signal wonder_clicked(id: String)
 ## A hidden gem on the land clicked (GameState.HIDDEN_GEMS with an area, not yet
 ## found by this player: see gem_at()).
 signal gem_clicked(gem_id: String, lon_lat: Vector2)
+## An oil or gas field's marker or rigs were clicked (see Energy).
+signal field_clicked(field_id: String)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
 ## While choosing a region to unlock (choosing_region): a locked region's
@@ -3292,6 +3294,8 @@ func _click(screen_pos: Vector2) -> void:
 		ship_clicked.emit(nearest_ship)
 	elif not nearest_port.is_empty():
 		port_clicked.emit(nearest_port)
+	elif not _field_at(screen_pos).is_empty():
+		field_clicked.emit(_field_at(screen_pos))
 	elif not _lock_at(screen_pos).is_empty():
 		var lock := _lock_at(screen_pos)
 		lock_clicked.emit(lock[0], lock[1])
@@ -7170,6 +7174,8 @@ func _draw_ports(labels: Array) -> void:
 			sign.x += LOGO_SIGN_PX + 2.0
 	if show_factories and selectable_ports.is_empty():
 		_draw_factories(visible_area)
+	if selectable_ports.is_empty() and not gray_mode:
+		_draw_energy(visible_area)  # (The fields' rigs, pipelines and refineries: see Energy.)
 	var bounds := Rect2(Vector2.ZERO, size)
 	for label: Array in labels:
 		var rect: Rect2 = label[1]
@@ -7212,6 +7218,137 @@ func _draw_factory_icon(at: Vector2, fill: Color, outline: Color) -> void:
 	_canvas.draw_colored_polygon(shape, fill)
 	shape.append(at)
 	_canvas.draw_polyline(shape, outline, 1.5 if outline.v > 0.2 else 1.0, true)
+
+# --- Oil and gas (Energy) on the map ------------------------------------------------------
+
+## A rig's deck across (in map_size units, times SHIP_SIZE like a ship), and
+## the least it's drawn (px) so it can be found zoomed out.
+const RIG_SIZE := 8.0
+const RIG_MIN_PX := 7.0
+## A field's marker for companies that can drill (px), and the zoom (px a
+## degree) from which its name shows.
+const FIELD_MARK_PX := 5.0
+const FIELD_NAME_ZOOM := 25.0
+const FIELD_COLOR := Color(0.36, 0.77, 0.66)
+const RIG_STEEL := Color(0.62, 0.64, 0.66)
+const FLARE := Color(1.0, 0.62, 0.2)
+## A refinery's mark by its port (px across), its tanks white with a flare stack.
+const REFINERY_PX := 9.0
+var _energy_marks := {}  # Field id -> its marker's screen point (for clicks), this frame.
+
+## The fields, their rigs and platforms (each in its owner's colour), the
+## pipelines ashore, and the refineries by their ports.
+func _draw_energy(area: Rect2) -> void:
+	_energy_marks.clear()
+	var energy: Energy = GameState.energy
+	var drill := Energy.can_drill(GameState.company)
+	var scale := _ship_scale()
+	var deck := maxf(RIG_SIZE * SHIP_SIZE * scale, RIG_MIN_PX)
+	var font := _port_font()
+	var all := GameState.all_companies()
+	for field_id in Energy.field_ids():
+		var end := port_screen_position(Energy.end_of(field_id))
+		if _is_hidden(end) or not area.grow(deck * 4.0 + 40.0).has_point(end):
+			continue
+		var keys := Energy.keys_at(field_id).filter(func(key: String) -> bool: return energy.owner_of(key) != null)
+		if drill or not keys.is_empty():
+			_energy_marks[field_id] = end
+		if drill and keys.is_empty():
+			# A free field: a small diamond, and its name closer in.
+			var s := FIELD_MARK_PX
+			_canvas.draw_colored_polygon(PackedVector2Array([end + Vector2(0, -s), end + Vector2(s, 0), end + Vector2(0, s), end + Vector2(-s, 0)]), Color(FIELD_COLOR, 0.75))
+		if drill and _zoom >= FIELD_NAME_ZOOM:
+			var text := Energy.field_name(field_id)
+			var at := end + Vector2(maxf(deck, FIELD_MARK_PX) + 4.0, 5.0)
+			_canvas.draw_string(font, at + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE - 2, Color(0, 0, 0, 0.6))
+			_canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, PORT_FONT_SIZE - 2, FIELD_COLOR)
+		for key: String in keys:
+			var owner := energy.owner_of(key)
+			var colour := GameState.company_color_value(owner.color)
+			var pos := world_to_screen(Geo.project(energy.slot_position(key)))
+			if _is_hidden(pos):
+				continue
+			var pipe := str(energy.slot(key).get("pipe", ""))
+			if not pipe.is_empty():
+				var shore := port_screen_position(pipe)
+				if not _is_hidden(shore):
+					_dashed_line(pos, shore, Color(colour, 0.7), maxf(scale * 0.25, 1.5), maxf(scale * 0.8, 4.0))
+			_draw_rig(pos, deck, str(energy.slot(key).get("kind", "rig")), colour, int(energy.slot(key).get("damage", 0)), bool(energy.slot(key).get("shut", false)), key)
+	# The refineries, by their ports (down and right of the dot), each company's in its colour.
+	for who in all:
+		for port_id: String in energy.plant_ports(who):
+			var pos := port_screen_position(port_id)
+			if _is_hidden(pos) or not area.has_point(pos):
+				continue
+			var radius := _port_radius(port_id)
+			var corner := pos + Vector2(radius + 2.0 + all.find(who) * (REFINERY_PX + 2.0), radius * 0.4 + REFINERY_PX * 0.2)
+			_draw_refinery_icon(corner, GameState.company_color_value(who.color), energy.plants_at(who, port_id).size())
+
+
+## An oil rig or gas platform seen from above, `size` px across, centred on
+## `at`: its deck edged in its owner's colour, a derrick (a rig) or modules
+## and a stack (a platform), a helideck, and a flare burning off its boom
+## (out while it's stopped or shut by a storm).
+func _draw_rig(at: Vector2, size: float, kind: String, colour: Color, damage: int, shut: bool, key: String) -> void:
+	var h := size / 2.0
+	var deck := Rect2(at - Vector2(h, h), Vector2(size, size))
+	_canvas.draw_rect(Rect2(deck.position + Vector2(size * 0.08, size * 0.1), deck.size), Color(0, 0, 0, 0.25))  # (Its shadow on the sea.)
+	_canvas.draw_rect(deck, Color(0.42, 0.44, 0.46))
+	_canvas.draw_rect(deck, colour, false, maxf(size * 0.08, 1.2))
+	if size < 12.0:
+		_canvas.draw_circle(at, size * 0.18, RIG_STEEL.lightened(0.3))
+		return
+	if kind == "rig":
+		# The derrick: a lattice tower, square from above, crossed.
+		var d := size * 0.18
+		var tower := Rect2(at + Vector2(-d - size * 0.12, -d), Vector2(d * 2.0, d * 2.0))
+		_canvas.draw_rect(tower, RIG_STEEL, false, maxf(size * 0.03, 1.0))
+		_canvas.draw_line(tower.position, tower.end, RIG_STEEL, maxf(size * 0.02, 1.0))
+		_canvas.draw_line(tower.position + Vector2(tower.size.x, 0), tower.position + Vector2(0, tower.size.y), RIG_STEEL, maxf(size * 0.02, 1.0))
+	else:
+		# Process modules, and a stack.
+		for i in 3:
+			_canvas.draw_rect(Rect2(at + Vector2(-h * 0.8 + i * h * 0.42, -h * 0.7), Vector2(h * 0.36, h * 0.6)), Color(0.78, 0.76, 0.7))
+		_canvas.draw_circle(at + Vector2(-h * 0.4, h * 0.35), size * 0.07, Color(0.85, 0.85, 0.85))
+	# The helideck, in a corner.
+	var heli := at + Vector2(h * 0.55, h * 0.55)
+	_canvas.draw_circle(heli, size * 0.16, Color(0.2, 0.32, 0.26))
+	_canvas.draw_arc(heli, size * 0.13, 0.0, TAU, 16, Color(1.0, 0.85, 0.2), maxf(size * 0.015, 1.0))
+	# The flare boom, off the side away from the helideck.
+	var tip := at + Vector2(-h * 1.35, -h * 1.05)
+	_canvas.draw_line(at + Vector2(-h, -h * 0.75), tip, RIG_STEEL, maxf(size * 0.035, 1.0), true)
+	if damage < 2 and not shut:
+		var flicker := 0.8 + 0.2 * sin(Time.get_ticks_msec() / 90.0 + float(hash(key) % 100))
+		_canvas.draw_circle(tip, size * 0.11 * flicker, Color(FLARE, 0.55))
+		_canvas.draw_circle(tip, size * 0.06 * flicker, Color(1.0, 0.9, 0.5))
+	if damage > 0:
+		# Storm damage: a red mark across its deck.
+		_canvas.draw_line(deck.position, deck.end, Color(0.9, 0.2, 0.15, 0.85), maxf(size * 0.06, 1.5))
+		if damage > 1:
+			_canvas.draw_line(deck.position + Vector2(size, 0), deck.position + Vector2(0, size), Color(0.9, 0.2, 0.15, 0.85), maxf(size * 0.06, 1.5))
+
+
+## A refinery's mark REFINERY_PX across, its bottom left at `at`: storage tanks
+## (more for more buildings) and a flare stack, outlined in its company's colour.
+func _draw_refinery_icon(at: Vector2, outline: Color, buildings: int) -> void:
+	var s := REFINERY_PX
+	var r := s * 0.22
+	for i in clampi(buildings, 1, 3):
+		var c := at + Vector2(r + i * r * 1.3, -r)
+		_canvas.draw_circle(c, r, Color(0.92, 0.92, 0.9))
+		_canvas.draw_arc(c, r, 0.0, TAU, 12, outline, 1.2, true)
+	var stack := at + Vector2(s * 0.95, 0.0)
+	_canvas.draw_line(stack, stack + Vector2(0.0, -s), outline, 1.5, true)
+	_canvas.draw_circle(stack + Vector2(0.0, -s), 1.8, FLARE)
+
+
+## The field whose marker or rigs are under a screen point, or "".
+func _field_at(screen_pos: Vector2) -> String:
+	var reach := maxf(RIG_SIZE * SHIP_SIZE * _ship_scale() * 1.6, PORT_HIT_RADIUS)
+	for field_id: String in _energy_marks:
+		if (_energy_marks[field_id] as Vector2).distance_to(screen_pos) <= reach:
+			return field_id
+	return ""
 
 ## A company's logo as a small sign (CompanyLogo) centred on a screen point,
 ## on a dark backing so it reads on the map.
@@ -8886,7 +9023,7 @@ const DECK_HAT_CELL := 7
 ## Dock workers on the quay beside a ship in port: line handlers at the
 ## bollards as it comes alongside and pulls out, and a gang working its cargo
 ## through its stop (DOCK_GANGS: [at least, more a tier] by its line).
-const DOCK_GANGS := {container = [2, 2], ore = [2, 1], grain = [2, 1], livestock = [2, 1], produce = [2, 1], tanker = [2, 0], vehicles = [3, 1], boat_carriers = [2, 1],
+const DOCK_GANGS := {container = [2, 2], ore = [2, 1], grain = [2, 1], livestock = [2, 1], produce = [2, 1], tanker = [2, 0], gas = [2, 0], vehicles = [3, 1], boat_carriers = [2, 1],
 	seafood = [3, 1], fishing = [1, 0], crabbing = [1, 1]}
 ## How far in from the quay's edge (dock units) the line handlers stand, and
 ## the band the gang works in: on the near half of a pier (PIER_WIDTH), its

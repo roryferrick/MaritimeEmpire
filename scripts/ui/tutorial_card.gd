@@ -200,6 +200,12 @@ func _tips_list() -> Array[Dictionary]:
 			text = func() -> String: return "The Farms button at the top left of the map: the world's farm ports, each with a few plots of land for sale. Buy one, plant a crop that suits the climate (or graze a herd), and the harvest comes in by the season to our farm store at that port, where our own ships load it free.
 
 Grain carriers take the dry crops, Fresh produce carriers the fruit and vegetables (they lose a little value every day, so don't let them sit), livestock carriers the young stock. Watch the almanac: a drought or a frost can take most of a year's harvest."},
+		{id = "energy", who = "sonny", title = "Our own oil",
+			show = func() -> bool: return seen.call("trading") and Energy.can_drill(GameState.company) and GameState.company.level() >= Energy.unlock_level("oil_refinery", GameState.company),
+			done = func() -> bool: return not GameState.energy.owned_by(GameState.company).is_empty() or not GameState.energy.plant_ports(GameState.company).is_empty(),
+			text = func() -> String: return "The Energy button at the top left of the map. An oil refinery at any port turns crude into diesel: route a tanker so its last stop is there and it brings the crude, and our ships load the diesel free (and fill their own tanks from it, free). Gas refineries and a jet fuel plant come later.
+
+Once we're bigger, the offshore fields: put up a rig, send a tanker on rig runs to collect, and keep a tug near for when a storm damages it."},
 		{id = "cruise_plan", who = "dick", title = "Plan a cruise",
 			show = func() -> bool: return seen.call("map") and GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and ship.route.size() < 2),
 			done = func() -> bool: return not GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and ship.route.size() < 2),
@@ -255,7 +261,7 @@ static func _type_welcome() -> String:
 		"agriculture":
 			return "We're in Agriculture: farms at the world's farm ports, grain carriers with grain, coffee, cocoa, sugar and spices, Fresh produce carriers with fruit and vegetables, and livestock carriers with cattle, sheep, pigs and horses. Buy ships, give them routes between ports, and they'll buy where the harvest is cheap and sell where it's wanted."
 		"tankers":
-			return "We're in Tankers: oil and gas. Buy tankers, give them routes between ports, and they'll fill up where oil is cheap and sell it where it's expensive."
+			return "We're in Tankers: oil and gas. Buy tankers, give them routes between ports, and they'll fill up with crude, diesel, gasoline or jet fuel where it's cheap and sell it where it's expensive. Gas carriers do the same with LNG, LPG, ammonia and hydrogen, and later we can drill and refine our own."
 		"seafood":
 			return "We're in Seafood: fishing and crabbing boats that work the grounds near their port and sell the catch, and fish tenders and reefers that carry seafood between ports."
 		"cruises":

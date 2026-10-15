@@ -86,6 +86,15 @@ var maker_likes := {}
 ## Its factories for makers (Manufacturers): [{maker, port, stock (units
 ## waiting), paid, day (the calendar day it last ran), made (units all time)}].
 var factories: Array = []
+## Its oil and gas (Energy): its stores at ports (port id -> {commodity:
+## tons}: its buildings' tanks, its pipelines'), its storage at the fields
+## (field id -> {commodity: tons}), its buildings (port id -> {building id:
+## {upgrades, mode}}), and what its rigs made and lost and its buildings ran
+## lately (fading a little each day): {made, lost, collected, processed, idle}.
+var energy_stores := {}
+var energy_sea := {}
+var plants := {}
+var energy_tally := {}
 ## The fishing grounds it has picked on the Fishing Grounds screen, and for each
 ## boat model sent there where its catch is landed and whether it goes in the
 ## freezer: {ground id: {model id: {port, freeze}}}. Which boats are sent is
@@ -210,6 +219,10 @@ func to_dict() -> Dictionary:
 		"farm_tally": farm_tally,
 		"maker_likes": maker_likes,
 		"factories": factories,
+		"energy_stores": energy_stores,
+		"energy_sea": energy_sea,
+		"plants": plants,
+		"energy_tally": energy_tally,
 		"fish_areas": fish_areas,
 		"port_trade": port_trade,
 		"canal_stats": canal_stats,
@@ -266,6 +279,10 @@ static func from_dict(data: Dictionary) -> Company:
 	company.farm_tally = data.get("farm_tally", {}) if data.get("farm_tally") is Dictionary else {}
 	company.maker_likes = data.get("maker_likes", {}) if data.get("maker_likes") is Dictionary else {}
 	company.factories = data.get("factories", []) if data.get("factories") is Array else []
+	company.energy_stores = data.get("energy_stores", {}) if data.get("energy_stores") is Dictionary else {}
+	company.energy_sea = data.get("energy_sea", {}) if data.get("energy_sea") is Dictionary else {}
+	company.plants = data.get("plants", {}) if data.get("plants") is Dictionary else {}
+	company.energy_tally = data.get("energy_tally", {}) if data.get("energy_tally") is Dictionary else {}
 	company.fish_areas = data.get("fish_areas", {}) if data.get("fish_areas") is Dictionary else {}
 	company.port_trade = data.get("port_trade", {})
 	company.canal_stats = data.get("canal_stats", {})

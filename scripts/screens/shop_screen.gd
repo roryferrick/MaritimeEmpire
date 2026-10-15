@@ -18,7 +18,7 @@ extends Control
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
+	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Tugs (two per route port)", "tug"],
 	["Icebreakers (for seasonal ice)", "icebreaker"], ["Seafood carriers", "seafood"], ["Ocean cruisers", "cruise_ocean"], ["Expedition cruisers", "cruise_expedition"]]
 ## Each company type's tab (game_config company_types: tab is its title): its
 ## rows, each row its sections side by side (by category). The service boats
@@ -27,7 +27,7 @@ const TYPE_ROWS := {
 	cargo = [["container"], ["ore"]],
 	vehicles = [["vehicles"], ["boat_carriers"]],
 	agriculture = [["grain"], ["livestock"], ["produce"]],
-	tankers = [["tanker"]],
+	tankers = [["tanker"], ["gas"]],
 	seafood = [["fishing"], ["crabbing"], ["seafood"]],
 	cruises = [["cruise_ocean"], ["cruise_expedition"]],
 }

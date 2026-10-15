@@ -91,7 +91,7 @@ const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales", "energy_built", "energy_sold", "energy", "energy_sales"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
@@ -121,7 +121,7 @@ const HIDDEN_GEMS := {
 ## build_industry(); its art is art/industry/<commodity>.svg).
 const INDUSTRY_NAMES := {
 	toys = "Toy factory", clothing = "Textile mill", furniture = "Furniture works", coffee = "Coffee roastery",
-	oil = "Oil refinery", gas = "Gas terminal", iron = "Steel mill", coal = "Coal power station", gold = "Gold refinery",
+	oil = "Oil terminal", gas = "Gas terminal", iron = "Steel mill", coal = "Coal power station", gold = "Gold refinery",
 	wheat = "Flour mill", corn = "Corn mill", soybeans = "Soybean crushing plant", rice = "Rice mill", barley = "Malting house",
 	cows = "Cattle ranch", sheep = "Wool mill", pigs = "Pig farm",
 	cars = "Car plant", trucks = "Truck plant", boats = "Boatyard",
@@ -333,6 +333,10 @@ var cruises := Cruises.new(self)
 var farms := Farms.new(self)
 ## A farm changed hands, was planted or stocked, or a day's harvest came in (see Farms).
 signal farms_changed
+## The oil and gas fields' rigs, the companies' buildings and stores (see Energy).
+var energy := Energy.new(self)
+## A rig or building was bought, sold or upgraded, or a day's output came in (see Energy).
+signal energy_changed
 ## The vehicle and boat makers, likeness and the companies' factories for them (see Manufacturers).
 var makers := Manufacturers.new(self)
 ## A factory was built, closed or sold from, or a day's output came in (see Manufacturers).
@@ -423,6 +427,7 @@ func _step(delta: float) -> void:
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
+	energy.step(delta)
 	MapView._prof("sim.farms", t_s)
 	t_s = Time.get_ticks_usec()
 	_storm_warning_clock += delta
@@ -875,6 +880,7 @@ func _check_payday() -> void:
 	for who: Company in paid:
 		wages_paid.emit(paid[who][2], paid[who][0], paid[who][1])
 	farms.pay_wages()  # (The farm workers', at the same time.)
+	energy.pay_wages()  # (The rigs' crews and the refinery workers' too.)
 	# Interest on loans, paid at the same time.
 	for who in all_companies():
 		var interest := loan_interest(who.loan)
@@ -1905,6 +1911,11 @@ func assign_route(ship: Ship, route: Array[String]) -> void:
 	if Net.command(&"assign_route", [ship, route]):
 		return
 	ship.paused = false
+	if ship.job_phase == Ship.JOB_RIG:
+		ship.set_meta(&"rig_off", true)  # (Off rig runs once it's back from this one: see _advance_rig().)
+	else:
+		ship.rig_field = ""  # (Off rig runs, if it was on them: see set_rig_run().)
+		ship.rig_port = ""
 	if ship.is_docked():
 		ship.route = route.duplicate()
 		ship.pending_route.clear()
@@ -2038,6 +2049,9 @@ func _advance_timed(ship: Ship, delta: float) -> void:
 	elif on_job and ship.is_fishing():
 		_advance_fishing(ship, delta)
 		MapView._prof("advance.fishing", t_v)
+	elif on_job and (ship.job_phase == Ship.JOB_RIG or ship.job_phase == Ship.JOB_REPAIR):
+		_advance_rig(ship, delta)  # (A rig run or a tug's repair: see Energy.)
+		MapView._prof("advance.rig", t_v)
 	elif on_job and ship.is_tug():
 		_advance_tug_job(ship, delta)
 		MapView._prof("advance.tug", t_v)
@@ -2601,6 +2615,8 @@ func _advance_docked(ship: Ship, delta: float) -> void:
 	elif ship.is_service() and not ship.base_port.is_empty() and ship.docked_at != ship.base_port and not _on_ice_duty(ship):
 		_try_depart(ship, delta, ship.base_port)
 		MapView._prof("adv.try_depart", t_ad)
+	elif ship.is_rig_runner() and ship.is_running():
+		_rig_in_port(ship, delta)  # (Off to its field again, or back to its delivery port: see Energy.)
 	elif ship.is_cruise() and ship.is_running() and cruises.in_port(ship, delta):
 		pass  # (A cruise ship in a refit, or at home taking bookings: see Cruises.)
 	elif ship.is_running():
@@ -2642,6 +2658,9 @@ func _advance_berth(ship: Ship, delta: float) -> bool:
 			if ship.is_fishing() and ship.has_meta(&"fish_trip"):
 				ship.remove_meta(&"fish_trip")
 				_set_off_fishing(ship)  # (Clear of its pier: off on its trip. See _fishing_in_port().)
+			elif ship.has_meta(&"rig_trip"):
+				ship.remove_meta(&"rig_trip")
+				_start_rig_trip(ship)  # (Clear of its pier: out to its field. See _rig_in_port().)
 			elif not to.is_empty():
 				_set_off(ship, to, true)
 			else:
@@ -2700,11 +2719,13 @@ func _unload_timed(ship: Ship) -> void:
 	ship.unloaded = true
 	if ship.is_fishing() and ship.catch > 0.0 and ship.docked_at == ship.base_port:  # (Elsewhere it's on its way home: see _fishing_in_port().)
 		_land_catch(ship, ship.docked_at)
+	if not ship.cargo_id.is_empty() and not owner_of(ship).plants.is_empty():
+		_deliver_to_plants(ship)  # (Its company's refineries here take what their tanks have room for: see Energy.)
 	if not ship.cargo_id.is_empty():
 		var t_u := Time.get_ticks_usec()
 		_sell_cargo(ship)
 		MapView._prof("unload.sell", t_u)
-	if ship.is_running() and not ship.is_refuel_stop():
+	if ship.is_running() and not ship.is_refuel_stop() and not ship.is_rig_runner():
 		var t_l := Time.get_ticks_usec()
 		_load_cargo(ship, ship.route[ship.next_route_index()])
 		MapView._prof("unload.load", t_l)
@@ -2800,9 +2821,14 @@ func _load_cargo(ship: Ship, to: String) -> String:
 		var made := makers.load_ship(ship, to)
 		if not made.is_empty():
 			return made[0]
+	if owner_of(ship).energy_stores.has(ship.docked_at):  # (Its refineries' and pipelines' goods, free: see Energy.load_ship().)
+		var stored := energy.load_ship(ship, to)
+		if not stored.is_empty():
+			return stored[0]
 	var who := owner_of(ship)
 	var t_b := Time.get_ticks_usec()
-	var best := market.best_cargo(ship.model(), ship.docked_at, to, who)
+	var feed := energy.feed_for(ship, to) if not who.plants.is_empty() else ""
+	var best := [feed] if not feed.is_empty() else market.best_cargo(ship.model(), ship.docked_at, to, who)  # (Input for its refinery there first: see Energy.feed_for().)
 	MapView._prof("load.best", t_b)
 	if best[0] == "":
 		return ""
@@ -4030,6 +4056,12 @@ func _refuel(ship: Ship, amount: float) -> void:
 	amount = minf(amount, ship.fuel_tank() - ship.fuel)
 	if amount <= 0.0:
 		return
+	if not owner_of(ship).energy_stores.is_empty():  # Free from its company's own Diesel here (see Energy.bunker()).
+		var free := energy.bunker(ship, amount, market.fuel_price(ship.docked_at))
+		ship.fuel = minf(ship.fuel + free, ship.fuel_tank())
+		amount -= free
+		if amount <= 0.001:
+			return
 	var cost := amount * market.fuel_price(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs", owner_of(ship)))
 	var paid := _spend(ship, cost, "fuel")
 	ship.stop_fuel_cost += paid
@@ -4387,6 +4419,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	divine.on = bool(options.get("divine", false))
 	ratings.reset()
 	farms.reset()
+	energy.reset()
 	rivals.reset()
 	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
@@ -4437,6 +4470,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	weather.from_dict(data.get("weather", {}))
 	divine.from_dict(data.get("divine", {}))
 	farms.from_dict(data.get("farms", {}))
+	energy.from_dict(data.get("energy", {}))
 	next_ship_id = int(data.get("next_ship_id", 1))
 	for ship_data: Dictionary in data.get("ships", []):
 		var ship := Ship.from_dict(ship_data)
@@ -4532,6 +4566,7 @@ func world_dict() -> Dictionary:
 		"weather": weather.to_dict(),
 		"divine": divine.to_dict(),
 		"farms": farms.to_dict(),
+		"energy": energy.to_dict(),
 		"market": market.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
@@ -5376,3 +5411,365 @@ func sell_factory_stock(maker_id: String, port_id: String) -> void:
 	var value := makers.sell_stock(company, maker_id, port_id)
 	if value > 0 and ai_acting == null:
 		ActivityLog.add("Sold your %s factory's stock at %s for %s, after the maker's cut." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
+
+
+# --- Oil and gas (see Energy): rig runs, repairs, and this player's actions ----------------------
+
+## A ship delivering to a port where its company's buildings take in its cargo:
+## what their tanks have room for goes into the store (no sale, the delivery's
+## XP all the same); the rest sells as usual.
+func _deliver_to_plants(ship: Ship) -> void:
+	var who := owner_of(ship)
+	if not who.plants.has(ship.docked_at) or ship.cargo_qty <= 0:
+		return
+	var taken := energy.take_delivery(who, ship.docked_at, ship.cargo_id, ship.cargo_qty)
+	if taken <= 0:
+		return
+	var left := 1.0 - float(taken) / ship.cargo_qty
+	var xp := Progression.xp_for_cargo(taken, ship.cargo_id, ship.cargo_leg_nm)
+	_gain_xp(ship, xp)
+	var hub := hub_at(ship.docked_at, who)
+	if hub:
+		_gain_hub_xp(hub, xp, who)
+	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + taken
+	if who == company and ai_acting == null:
+		ActivityLog.add("%s unloaded %s tons of %s into your tanks at %s." % [ship.name, Fmt.thousands(taken), str(GameData.commodity(ship.cargo_id).get("name", ship.cargo_id)).to_lower(),
+			GameData.port_name(ship.docked_at)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+	ship.cargo_qty -= taken
+	ship.cargo_payment = roundi(ship.cargo_payment * left)
+	ship.cargo_cost = roundi(ship.cargo_cost * left)
+	if ship.cargo_qty <= 0:
+		ship.cargo_id = ""
+		ship.cargo_qty = 0
+		ship.cargo_cost = 0
+		ship.cargo_payment = 0
+		ship.delivery_canals.clear()
+
+
+## Puts a ship on rig runs between a field and a port (its route just that
+## port), or takes it off them (field ""): Energy.run_error() says why it can't.
+func set_rig_run(ship: Ship, field_id: String, port_id: String) -> void:
+	if not field_id.is_empty() and not energy.run_error(company, ship, field_id, port_id).is_empty():
+		return
+	if Net.command(&"set_rig_run", [ship, field_id, port_id]):
+		return
+	_set_rig_run(ship, field_id, port_id)
+
+
+func _set_rig_run(ship: Ship, field_id: String, port_id: String) -> void:
+	var who := owner_of(ship)
+	if field_id.is_empty():
+		if not ship.is_rig_runner():
+			return
+		if ship.job_phase == Ship.JOB_RIG:
+			ship.set_meta(&"rig_off", true)  # (Back from this one first: see _advance_rig().)
+		else:
+			ship.rig_field = ""
+			ship.rig_port = ""
+			ship.route.clear()
+			ship.pending_route.clear()
+			_set_hold(ship, "")
+		ship_changed.emit(ship)
+		return
+	if not energy.run_error(who, ship, field_id, port_id).is_empty():
+		return
+	ship.remove_meta(&"rig_off")
+	ship.rig_field = field_id
+	ship.rig_port = port_id
+	ship.paused = false
+	if ship.is_docked():
+		ship.route.assign([port_id])
+		ship.pending_route.clear()
+		ship.hop_to = ""
+		ship.route_index = 0
+	else:
+		ship.pending_route.assign([port_id])
+	_set_hold(ship, "")
+	_rebalance_tugs()
+	ship_changed.emit(ship)
+
+
+## A ship on rig runs in port with its stop done: away from its delivery port
+## it heads there; there, it sets out for its field once it has the fuel for
+## the trip there and back.
+func _rig_in_port(ship: Ship, delta: float) -> void:
+	if ship.docked_at != ship.rig_port:
+		_try_depart(ship, delta, ship.rig_port)
+		return
+	var who := owner_of(ship)
+	var where := Energy.field_name(ship.rig_field)
+	if energy.owned_by(who, ship.rig_field).is_empty():
+		_set_hold(ship, "you have no rigs at %s any more; give it a new route" % where)
+		return
+	var miles := Energy.miles_to(ship.rig_port, ship.rig_field)
+	if miles == INF:
+		_set_hold(ship, "there's no way out to %s from here" % where)
+		return
+	var storm := weather.closed_by(ship.docked_at)
+	if not storm.is_empty():
+		_set_hold(ship, "%s is closed by %s" % [GameData.port_name(ship.docked_at), Weather.title(storm)])
+		return
+	var need := ship.fuel_per_s() * (2.0 * ship.sailing_seconds(miles, maxf(ship.maintenance, 0.5)) + DEPARTURE_MARGIN_S)
+	if need > ship.fuel_tank():
+		_set_hold(ship, "%s is too far there and back on one tank; give it a nearer port" % where)
+		return
+	if ship.fuel < need:
+		if ship.auto_refuel:
+			_refuel(ship, need - ship.fuel)
+		if ship.fuel < need:
+			_set_hold(ship, "waiting for the money for fuel")
+			return
+	_set_hold(ship, "")
+	# At its pier: it pulls out and sails straight on out to its field (its
+	# first leg's end as where it's bound: see _advance_berth(), which starts
+	# the trip once it's clear). From the moorings, it sets off from its spot.
+	if ship.berth >= 0 and ship.berth_phase == Ship.BERTH_NONE:
+		var legs := Energy.legs(ship.docked_at, ship.rig_field)
+		ship.set_meta(&"rig_trip", true)
+		_pull_out(ship, str((legs[0] as Array)[0][1]))
+		return
+	_start_rig_trip(ship)
+
+
+## Sets out for its field: on a job the whole trip (Ship.JOB_RIG), sailing its legs out.
+func _start_rig_trip(ship: Ship) -> void:
+	if not ship.is_rig_runner() or ship.docked_at.is_empty():
+		return
+	var legs := Energy.legs(ship.docked_at, ship.rig_field)
+	if (legs[0] as Array).is_empty() or float(legs[0][-1][3]) == INF:
+		return
+	_set_hold(ship, "")
+	_leave_port(ship)
+	ship.docked_at = ""
+	ship.job_phase = Ship.JOB_RIG
+	ship.rig_phase = "out"
+	ship.rig_wait = 0.0
+	ship.job_segments = (legs[0] as Array).duplicate(true)
+	_start_segment(ship, ship.job_segments.pop_front())
+	ship_changed.emit(ship)
+
+
+## The field a rig run or a tug's repair is for.
+func _rig_field_of(ship: Ship) -> String:
+	return ship.rig_field if ship.job_phase == Ship.JOB_RIG else Energy.field_of(ship.rig_slot)
+
+
+## A rig run or a tug's repair: sailing out, alongside the rigs (loading, or
+## repairing), sailing home.
+func _advance_rig(ship: Ship, delta: float) -> void:
+	if ship.rig_phase == "load":
+		ship.worked = true
+		ship.rig_wait += delta
+		if ship.job_phase == Ship.JOB_REPAIR:
+			_repair_at_rig(ship)
+		else:
+			_load_at_rig(ship)
+		return
+	if not _sail(ship, delta):
+		_rig_lost(ship)
+		return
+	if ship.traveled_nm < ship.segment_end:
+		return
+	ship.traveled_nm = ship.segment_end
+	if not ship.job_segments.is_empty():
+		_start_segment(ship, ship.job_segments.pop_front())
+		return
+	if ship.rig_phase == "out":
+		ship.rig_phase = "load"
+		ship.rig_wait = 0.0
+		ship_changed.emit(ship)
+		return
+	# Home: a tug back from its repair, or a ship with its load for its delivery port.
+	var port := ship.to_port
+	var repair := ship.job_phase == Ship.JOB_REPAIR
+	var field_id := _rig_field_of(ship)
+	ship.job_phase = Ship.JOB_NONE
+	ship.rig_phase = ""
+	ship.job_segments.clear()
+	ship.segment_end = 0.0
+	if repair:
+		ship.rig_slot = ""
+		ship.rig_port = ""
+		_arrive(ship, port, false)
+		return
+	_arrive(ship, port, true)
+	if not ship.cargo_id.is_empty():
+		ship.cargo_leg_nm = Energy.miles_to(port, field_id)  # (Its leg from the field, for its XP.)
+	if ship.has_meta(&"rig_off"):
+		ship.remove_meta(&"rig_off")
+		ship.rig_field = ""
+		ship.rig_port = ""
+		if ship.pending_route.is_empty() and ship.route == [port]:
+			ship.route.clear()
+
+
+## Alongside the rigs: it loads what they've stored (topping up as they pump),
+## for a stop's time at least, and heads home full, or after rig_wait_days.
+func _load_at_rig(ship: Ship) -> void:
+	var full := not ship.cargo_id.is_empty() and ship.cargo_qty >= floori(ship.capacity() / GameData.hold_of(ship.cargo_id))
+	if not full and energy.load_at_field(ship) > 0:
+		ship_changed.emit(ship)
+		full = ship.cargo_qty >= floori(ship.capacity() / GameData.hold_of(ship.cargo_id))
+	if ship.rig_wait < float(ship.model().get("dock_s", 10)):
+		return
+	var day_s := Energy.DAY_S / maxf(calendar_seconds_per_second(), 1.0)
+	if full or ship.rig_wait >= float(Energy.setting("rig_wait_days", 3)) * day_s or energy.owned_by(owner_of(ship), ship.rig_field).is_empty():
+		_head_home_from_rig(ship)
+
+
+## A tug alongside a damaged rig: repair_days of work, then it's sound and the tug heads home.
+func _repair_at_rig(ship: Ship) -> void:
+	var day_s := Energy.DAY_S / maxf(calendar_seconds_per_second(), 1.0)
+	if ship.rig_wait < float(Energy.setting("repair_days", 2)) * day_s:
+		return
+	energy.repaired(ship.rig_slot)
+	_head_home_from_rig(ship)
+
+
+func _head_home_from_rig(ship: Ship) -> void:
+	var home := ship.rig_port
+	var legs := Energy.legs(home, _rig_field_of(ship))
+	ship.rig_phase = "home"
+	ship.job_segments = (legs[1] as Array).duplicate(true)
+	_start_segment(ship, ship.job_segments.pop_front())
+	if ship.job_phase == Ship.JOB_RIG and not ship.cargo_id.is_empty():
+		cargo_loaded.emit(ship, Energy.end_of(ship.rig_field), ship.cargo_id, ship.cargo_qty, ship.cargo_cost, home)
+	ship_changed.emit(ship)
+
+
+## Lost at sea on a rig run (its load stays aboard, sold wherever it's brought
+## in, or its delivery port after) or a tug's repair (the rig waits for another).
+func _rig_lost(ship: Ship) -> void:
+	if ship.job_phase == Ship.JOB_REPAIR and energy.slots.has(ship.rig_slot):
+		energy.slots[ship.rig_slot].tug = 0
+		ship.rig_slot = ""
+	ship.job_phase = Ship.JOB_NONE
+	ship.rig_phase = ""
+	ship.job_segments.clear()
+	ship.segment_end = 0.0
+	ship_changed.emit(ship)
+
+
+## Sends this player's nearest free tug out to repair a damaged rig (Energy.repair_error() says why it can't).
+func send_rig_tug(key: String) -> void:
+	if not energy.repair_error(company, key).is_empty():
+		return
+	if Net.command(&"send_rig_tug", [key]):
+		return
+	_send_rig_tug(company, key)
+
+
+func _send_rig_tug(who: Company, key: String) -> void:
+	if not energy.repair_error(who, key).is_empty():
+		return
+	var tug: Ship = energy.repair_tug(who, key)[0]
+	var fee := energy.repair_fee(key)
+	_add_money(who, -fee)
+	_record(null, "energy", fee, who)
+	energy.slots[key].tug = tug.id
+	var legs := Energy.legs(tug.docked_at, Energy.field_of(key))
+	tug.rig_slot = key
+	tug.rig_port = tug.docked_at
+	_set_hold(tug, "")
+	_leave_port(tug)
+	tug.docked_at = ""
+	tug.job_phase = Ship.JOB_REPAIR
+	tug.rig_phase = "out"
+	tug.rig_wait = 0.0
+	tug.job_segments = (legs[0] as Array).duplicate(true)
+	_start_segment(tug, tug.job_segments.pop_front())
+	if who == company and ai_acting == null:
+		ActivityLog.add("%s is heading out to repair your %s at %s (%s)." % [tug.name, str(Energy.rig_info(str(energy.slots[key].kind)).get("name", "rig")).to_lower(),
+			Energy.field_name(Energy.field_of(key)), Fmt.money(fee)], ActivityLog.Kind.INFO, ActivityLog.ship_color(tug))
+	energy._changed()
+	ship_changed.emit(tug)
+
+
+## Buys a free slot at a field for its rig or platform (Energy.buy_error() says why it can't).
+func buy_rig(key: String) -> void:
+	if Net.command(&"buy_rig", [key]):
+		return
+	energy.buy(company, key)
+
+
+func sell_rig(key: String) -> void:
+	if Net.command(&"sell_rig", [key]):
+		return
+	var price := energy.sell_back(company, key)
+	if price > 0 and ai_acting == null:
+		ActivityLog.add("Sold your rig at %s for %s." % [Energy.field_name(Energy.field_of(key)), Fmt.money(price)], ActivityLog.Kind.INFO)
+
+
+## Lists a slot for other Tankers companies at an asking price (0 takes it off the list).
+func list_rig(key: String, price: int) -> void:
+	if Net.command(&"list_rig", [key, price]):
+		return
+	energy.list(company, key, price)
+
+
+func buy_listed_rig(key: String) -> void:
+	if Net.command(&"buy_listed_rig", [key]):
+		return
+	energy.buy_listing(company, key)
+
+
+func upgrade_rig(key: String, upgrade_id: String) -> void:
+	if Net.command(&"upgrade_rig", [key, upgrade_id]):
+		return
+	energy.add_upgrade(company, key, upgrade_id)
+
+
+func lay_pipeline(key: String) -> void:
+	if Net.command(&"lay_pipeline", [key]):
+		return
+	if not energy.pipe_error(company, key).is_empty():
+		return
+	var target: Array = energy.pipe_target(company, Energy.field_of(key))
+	energy.lay_pipe(company, key)
+	if ai_acting == null:
+		ActivityLog.add("Laid a pipeline from %s to %s." % [Energy.field_name(Energy.field_of(key)), GameData.port_name(str(target[0]))], ActivityLog.Kind.GOOD)
+
+
+## "a" or "an" before a word.
+static func _a(word: String) -> String:
+	return ("an " if word.left(1).to_lower() in ["a", "e", "i", "o", "u"] else "a ") + word
+
+
+## Puts up a building at a port (Energy.build_error() says why it can't).
+func build_plant(building_id: String, port_id: String) -> void:
+	if Net.command(&"build_plant", [building_id, port_id]):
+		return
+	if not energy.build_error(company, building_id, port_id).is_empty():
+		return
+	energy.build(company, building_id, port_id)
+	if ai_acting == null:
+		ActivityLog.add("Built %s at %s." % [_a(str(Energy.building(building_id).name).to_lower()), GameData.port_name(port_id)], ActivityLog.Kind.GOOD)
+
+
+func demolish_plant(building_id: String, port_id: String) -> void:
+	if Net.command(&"demolish_plant", [building_id, port_id]):
+		return
+	var refund := energy.demolish(company, building_id, port_id)
+	if refund > 0 and ai_acting == null:
+		ActivityLog.add("Pulled down your %s at %s for %s." % [str(Energy.building(building_id).name).to_lower(), GameData.port_name(port_id), Fmt.money(refund)], ActivityLog.Kind.INFO)
+
+
+func upgrade_plant(building_id: String, port_id: String, upgrade_id: String) -> void:
+	if Net.command(&"upgrade_plant", [building_id, port_id, upgrade_id]):
+		return
+	energy.upgrade_plant(company, building_id, port_id, upgrade_id)
+
+
+func set_plant_mode(building_id: String, port_id: String, mode: String) -> void:
+	if Net.command(&"set_plant_mode", [building_id, port_id, mode]):
+		return
+	energy.set_mode(company, building_id, port_id, mode)
+
+
+## Sells what this player's store at a port holds of a good, at the port's price.
+func sell_energy_item(port_id: String, commodity: String) -> void:
+	if Net.command(&"sell_energy_item", [port_id, commodity]):
+		return
+	var value := energy.sell_item(company, port_id, commodity)
+	if value > 0 and ai_acting == null:
+		ActivityLog.add("Sold the %s in your tanks at %s for %s." % [str(GameData.commodity(commodity).get("name", commodity)).to_lower(), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)

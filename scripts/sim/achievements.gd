@@ -41,7 +41,7 @@ const WONDER_STARS := [10, 25, 0]
 ## Hidden gems found for each star (GameState.HIDDEN_GEMS: three of them).
 const GEM_STARS := [1, 2, 3]
 ## The ship lines owning one of each counts for the Full house badge.
-const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "produce", "tanker", "vehicles", "boat_carriers", "seafood"]
+const CARGO_LINES: Array[String] = ["container", "ore", "grain", "livestock", "produce", "tanker", "gas", "vehicles", "boat_carriers", "seafood"]
 ## Badges: [id, name, what it takes].
 const BADGES := [
 	["first_delivery", "Maiden voyage", "Deliver a cargo"],

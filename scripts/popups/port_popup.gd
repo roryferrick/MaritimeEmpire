@@ -104,6 +104,7 @@ func _build_size() -> void:
 		%SizeBox.add_child(cold)
 	_add_farm_line()
 	_add_maker_line()
+	_add_energy_line()
 	_update_birds()
 	_update_size()
 
@@ -140,6 +141,44 @@ func _add_maker_line() -> void:
 		open.size_flags_vertical = SIZE_SHRINK_CENTER
 		open.pressed.connect(func() -> void:
 			GameRoot.find(self).show_maker(here[0])
+			queue_free())
+		row.add_child(open)
+	%SizeBox.add_child(row)
+
+
+## Oil and gas here (for a Tankers company, and anyone's refineries): the
+## buildings here (the company's and others'), the company's tanks' worth, and
+## a button to the port on the Energy page (where it can build).
+func _add_energy_line() -> void:
+	var energy := GameState.energy
+	var parts := PackedStringArray()
+	for who in GameState.all_companies():
+		var built := energy.plants_at(who, port_id)
+		if built.is_empty():
+			continue
+		var names := built.keys().map(func(id: String) -> String: return str(Energy.building(id).get("name", id)).to_lower())
+		parts.append("%s %s" % ["your" if who == GameState.company else who.name + "'s", ", ".join(names)])
+	var can := Energy.can_drill(GameState.company)
+	if parts.is_empty() and not can:
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.add_theme_color_override(&"font_color", Color(0.4, 0.82, 0.72))
+	label.text = "Refineries: %s" % " · ".join(parts) if not parts.is_empty() else "No refineries here yet"
+	var value := energy.store_value(GameState.company, port_id)
+	if value > 0:
+		label.text += " · your tanks hold %s" % Fmt.money(value)
+	row.add_child(label)
+	if can:
+		var open := Button.new()
+		open.text = "Energy"
+		open.tooltip_text = "Your refineries and tanks here, and building others."
+		open.size_flags_vertical = SIZE_SHRINK_CENTER
+		open.pressed.connect(func() -> void:
+			GameRoot.find(self).show_energy(port_id)
 			queue_free())
 		row.add_child(open)
 	%SizeBox.add_child(row)

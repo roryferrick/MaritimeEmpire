@@ -79,7 +79,7 @@ const CHAT_KEPT := 200
 ## Keys of a ship's dictionary that change every step while it moves: a change
 ## to only these doesn't need the screens to look at the ship again.
 const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "sea_time", "align_time", "dock_time", "berth_time",
-	"lock_time", "bill", "stop_fuel_cost", "stop_repair_cost", "canal_queue_since", "ledger", "xp", "job_nm", "carry_nm"]
+	"lock_time", "bill", "stop_fuel_cost", "stop_repair_cost", "canal_queue_since", "ledger", "xp", "job_nm", "carry_nm", "rig_wait"]
 ## GameState signals whose first argument is a ship: sent to that ship's
 ## company's player. port_band_changed goes to everyone.
 const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_held", &"ship_departed", &"canal_entered",
@@ -91,7 +91,9 @@ const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing
 	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
 	&"rename_ship", &"set_prefs", &"unlock_region", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act",
 	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item",
-	&"build_factory", &"close_factory", &"sell_factory_stock"]
+	&"build_factory", &"close_factory", &"sell_factory_stock",
+	&"set_rig_run", &"send_rig_tug", &"buy_rig", &"sell_rig", &"list_rig", &"buy_listed_rig", &"upgrade_rig", &"lay_pipeline",
+	&"build_plant", &"demolish_plant", &"upgrade_plant", &"set_plant_mode", &"sell_energy_item"]
 
 var role := Role.OFFLINE
 ## The host's settings: the game's name (shown in the games list), its
@@ -666,6 +668,7 @@ func _collect() -> Dictionary:
 		weather = GameState.weather.to_dict(false).duplicate(true), market = GameState.market.to_dict().duplicate(true),
 		divine = GameState.divine.to_dict().duplicate(true), ports = GameState.port_sizes.to_dict().duplicate(true),
 		farms = GameState.farms.to_dict().duplicate(true),
+		energy = GameState.energy.to_dict().duplicate(true),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
 		ships = ships,
 	}
@@ -680,6 +683,7 @@ func _state_of(world: Dictionary) -> Dictionary:
 		t = float(world.get("play_time", 0.0)), speed = 1,
 		weather = world.get("weather", {}), market = world.get("market", {}), divine = world.get("divine", {}),
 		farms = world.get("farms", {}),
+		energy = world.get("energy", {}),
 		ports = world.get("port_sizes", {}),
 		companies = world.get("companies", []),
 		ships = ships,
@@ -714,6 +718,10 @@ func _broadcast() -> void:
 	if farms != _sent.get("farms", {}):
 		update.farms = farms
 		_sent.farms = farms.duplicate(true)
+	var energy := GameState.energy.to_dict()
+	if energy != _sent.get("energy", {}):
+		update.energy = energy
+		_sent.energy = energy.duplicate(true)
 	_full_clock += SYNC_S
 	var full_round := _full_clock >= FULL_SYNC_S
 	if full_round:
@@ -825,6 +833,9 @@ func _sync(packed: Array) -> void:
 	if update.has("farms"):
 		GameState.farms.from_dict(update.farms)
 		GameState.farms_changed.emit()
+	if update.has("energy"):
+		GameState.energy.from_dict(update.energy)
+		GameState.energy_changed.emit()
 	if update.has("ports"):
 		GameState.port_sizes.apply_update(update.ports)
 	if update.has("companies"):

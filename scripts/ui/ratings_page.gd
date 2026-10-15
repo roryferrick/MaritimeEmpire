@@ -17,6 +17,8 @@ const TIPS := [
 	"Grow the fleet as your slots allow, trade at more ports, and found every hub your level gives.",
 ]
 
+## How to raise Tankers' fourth part, its rigs and refineries.
+const ENERGY_TIP := "Put up rigs and platforms on the fields and refineries at ports (the Energy page), keep tugs at hand for storm damage, and send ships to collect before the rigs fill up."
 ## How to raise Agriculture's fourth part, its farms.
 const FARM_TIP := "Buy plots at the farm ports (the Farms screen), grow what suits each climate (or fit greenhouses and irrigation), and send ships to collect the harvest before it spoils."
 
@@ -72,7 +74,7 @@ func _ready() -> void:
 	var note := Label.new()
 	note.theme_type_variation = &"DimLabel"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Each company type you run earns 0 to 5 stars from the last 2 hours of play, worked out every minute: a third each for its ships' condition, their reliability, and its scale and reach. At 2.5 stars nothing changes; above, its cargo sells for more, pays lower port fees and earns more XP, and below, the opposite. Agriculture has a fourth part, a quarter of its stars, for its farms. Cruises has four parts, a quarter each: guest experience, itinerary, reliability & safety, and value & reviews; its stars move what guests will pay."
+	note.text = "Each company type you run earns 0 to 5 stars from the last 2 hours of play, worked out every minute: a third each for its ships' condition, their reliability, and its scale and reach. At 2.5 stars nothing changes; above, its cargo sells for more, pays lower port fees and earns more XP, and below, the opposite. Agriculture has a fourth part, a quarter of its stars, for its farms, and Tankers one for its rigs and refineries. Cruises has four parts, a quarter each: guest experience, itinerary, reliability & safety, and value & reviews; its stars move what guests will pay."
 	content.add_child(note)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
@@ -140,6 +142,9 @@ func _type_card(company: Company, type_id: String) -> Control:
 	if type_id == "agriculture":
 		tips = TIPS + [FARM_TIP]
 		lines.append(_farm_text(figures))
+	elif type_id == "tankers":
+		tips = TIPS + [ENERGY_TIP]
+		lines.append(_energy_text(figures))
 	var names := Ratings.part_names(type_id)
 	for i in names.size():
 		var row := HBoxContainer.new()
@@ -185,6 +190,17 @@ func _cruise_texts(figures: Dictionary) -> Array:
 
 
 ## Agriculture's Farms part's figures from the latest minute.
+## Tankers' Production part's figures from the latest minute.
+func _energy_text(figures: Dictionary) -> String:
+	if not figures.has("rigs"):
+		return "Not worked out yet."
+	if int(figures.rigs) == 0 and int(figures.plant_ports) == 0:
+		return "No rigs or refineries yet: see the Energy page."
+	return "%d rigs and %d refinery ports of about %d expected · %d%% of rigs working · refineries %d%% busy · %d%% of the output kept" % [
+		int(figures.rigs), int(figures.plant_ports), roundi(float(figures.expected_rigs)), roundi(float(figures.rigs_sound) * 100.0),
+		roundi(float(figures.plants_used) * 100.0), roundi(float(figures.output_kept) * 100.0)]
+
+
 func _farm_text(figures: Dictionary) -> String:
 	if not figures.has("farmed"):
 		return "Worked out every minute of play."

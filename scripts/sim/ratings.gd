@@ -10,7 +10,10 @@ extends RefCounted
 ##
 ## Agriculture's has a fourth, a quarter of its stars: its Farms (Farms.rating_part():
 ## plots farmed against its level, its crops' and herds' climate fit, and the
-## share of its harvests collected rather than spoiled).
+## share of its harvests collected rather than spoiled). Tankers' has a fourth
+## too, a quarter of its stars: its Production (Energy.rating_part(): rigs and
+## refineries against its level, its rigs working, its refineries running, and
+## what its rigs made kept rather than lost for want of room).
 ##
 ## A cruise line's sample has four parts, a quarter each (Cruises.rating_parts():
 ## guest experience, itinerary, reliability & safety, value & reviews). A cargo
@@ -35,6 +38,7 @@ const EFFECTS := {price = 0.05, fees = -0.2, xp = 0.1}
 const PART_NAMES := ["Condition", "Reliability", "Scale & reach"]
 const CRUISE_PART_NAMES := ["Guest experience", "Itinerary", "Reliability & safety", "Value & reviews"]
 const FARM_PART_NAMES := ["Condition", "Reliability", "Scale & reach", "Farms"]
+const ENERGY_PART_NAMES := ["Condition", "Reliability", "Scale & reach", "Production"]
 
 var _state: Node
 var _clock := 0.0
@@ -103,6 +107,8 @@ static func rated_types(company: Company) -> Array:
 static func part_names(type_id: String) -> Array:
 	if type_id == "agriculture":
 		return FARM_PART_NAMES
+	if type_id == "tankers":
+		return ENERGY_PART_NAMES
 	return CRUISE_PART_NAMES if type_id == "cruises" else PART_NAMES
 
 
@@ -174,6 +180,11 @@ func sample(company: Company) -> void:
 				figures.merge({farm_stars = farm.stars, farmed = farm.farmed, farm_plots = farm.plots, expected_plots = farm.expected_plots,
 					farm_fit = farm.fit, collected = farm.collected})
 				sample.append(snappedf(farm.stars, 0.01))
+			elif type_id == "tankers":  # (Its fourth part, its rigs and refineries: see Energy.rating_part().)
+				var made := (_state.energy as Energy).rating_part(company)
+				figures.merge({energy_stars = made.stars, rigs = made.rigs, expected_rigs = made.expected, rigs_sound = made.sound,
+					plants_used = made.used, output_kept = made.kept, plant_ports = made.plants})
+				sample.append(snappedf(made.stars, 0.01))
 		(details.get_or_add(company, {}) as Dictionary)[type_id] = figures
 		var samples: Array = entry.samples
 		if company.ratings_seed and samples.is_empty():

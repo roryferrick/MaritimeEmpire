@@ -16,7 +16,7 @@ const FIELD_GUIDE_BUTTON := 44.0
 const LINE_MIN_LUMINANCE := 0.5
 ## The price picker's ship lines: [name, ship_models.json category].
 const PRICE_LINES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Seafood carriers", "seafood"]]
+	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Seafood carriers", "seafood"]]
 ## The box (px) a seafood family's picture is fitted in, in the price picker
 ## (see _catch_icon()); and the family whose picture marks the seafood line.
 const CATCH_ICON_SIZE := Vector2i(30, 18)
@@ -52,6 +52,9 @@ func _ready() -> void:
 	_map.birds_clicked.connect(_open_birds_popup)
 	_map.animals_clicked.connect(_open_animals_popup)
 	_map.industry_clicked.connect(_open_industry_popup)
+	_map.field_clicked.connect(func(field_id: String) -> void:
+		PopupHost.find(self).close()
+		GameRoot.find(self).show_energy("field:" + field_id))  # (A field's rigs: the Energy page.)
 	_map.wonder_clicked.connect(_open_wonder_popup)
 	_map.gem_clicked.connect(func(gem_id: String, lon_lat: Vector2) -> void:
 		_open_gem_popup(gem_id, _map.lon_lat_screen_position.bind(lon_lat)))

@@ -63,6 +63,12 @@ const KIND_FISHING := 4
 ## A fishing or crabbing trip (see GameState._advance_fishing()): it's on a
 ## job the whole time it's away, out to its ground, working it and home.
 const JOB_FISH := "fish"
+## A rig run (see GameState._advance_rig()): a tanker or gas carrier out to its
+## company's rigs at a field (rig_field) and back to its delivery port, on a
+## job the whole time it's away; and a tug out to repair a damaged rig (its
+## slot rig_slot) and home again.
+const JOB_RIG := "rig"
+const JOB_REPAIR := "repair"
 
 ## Canal states (canal_state; see CanalTraffic): heading into a lock chamber
 ## it has reserved, waiting in line for one, waiting for toll money, at anchor
@@ -338,6 +344,15 @@ var carry_reversed := false
 ## port, if it can't go).
 var fish_target := ""
 var fish_area := ""
+## On rig runs (Energy): the field it collects from and the port it delivers
+## to (its route is just that port: see GameState._set_rig_run()); a tug sent
+## to repair a rig, its slot. rig_phase "out", "load" (alongside the rigs) or
+## "home" while away; rig_wait the play seconds it's waited at the field.
+var rig_field := ""
+var rig_port := ""
+var rig_slot := ""
+var rig_phase := ""
+var rig_wait := 0.0
 ## Cruise ship only (is_cruise()): its cruise line's setup and state (Cruises):
 ## {cabins, amenities, service, looks, prices, monthly, package, departure,
 ## state, bookings, booking_since, voyage, reviews, refit_until, refit}.
@@ -743,6 +758,11 @@ func is_refuel_stop() -> bool:
 	return is_docked() and not hop_to.is_empty() and docked_at != hop_to
 
 
+## On rig runs between a field and a port (Energy).
+func is_rig_runner() -> bool:
+	return not rig_field.is_empty()
+
+
 ## Green on the status dot: has a route and isn't paused.
 func is_running() -> bool:
 	return has_route() and not paused
@@ -1099,6 +1119,9 @@ func status_text() -> String:
 	if is_recovery():
 		var job := _recovery_status_text()
 		return job if canal.is_empty() else "%s — %s" % [job, canal]
+	if is_tug() and job_phase == JOB_REPAIR:
+		var job := _repair_status_text()
+		return job if canal.is_empty() else "%s — %s" % [job, canal]
 	if is_tug():
 		var job := _tug_status_text()
 		return job if canal.is_empty() else "%s — %s" % [job, canal]
@@ -1106,6 +1129,9 @@ func status_text() -> String:
 		var trip := _fishing_status_text()
 		if not trip.is_empty():
 			return trip if canal.is_empty() else "%s — %s" % [trip, canal]
+	if job_phase == JOB_RIG and not is_lost():
+		var run := _rig_status_text()
+		return run if canal.is_empty() else "%s — %s" % [run, canal]
 	if is_lost():
 		if rescuer == null:
 			if auto_recover:
@@ -1304,6 +1330,35 @@ func _tug_status_text() -> String:
 	return "Sailing to its base at %s — %d%%" % [GameData.port_name(to_port), int(leg_progress() * 100.0)]
 
 
+## On a rig run: "Heading out to Brent", "Loading at Brent — 3,200 / 5,000
+## tons of crude oil", "Bringing 5,000 tons of crude oil from Brent to Rotterdam".
+func _rig_status_text() -> String:
+	var where := Energy.field_name(rig_field)
+	match rig_phase:
+		"out":
+			return "Heading out to the rigs at %s" % where
+		"load":
+			if cargo_qty <= 0:
+				return "Alongside the rigs at %s, waiting for them to fill its hold" % where
+			return "Loading at the rigs at %s — %s / %s tons of %s" % [where, Fmt.thousands(cargo_qty), Fmt.thousands(capacity()), Energy.good_word(cargo_id)]
+		"home":
+			if cargo_qty <= 0:
+				return "Heading back to %s from %s" % [GameData.port_name(rig_port), where]
+			return "Bringing %s tons of %s from %s to %s" % [Fmt.thousands(cargo_qty), Energy.good_word(cargo_id), where, GameData.port_name(rig_port)]
+	return ""
+
+
+## A tug sent to repair a rig: "Heading out to repair the oil rig at Brent", "Repairing...", "Heading home...".
+func _repair_status_text() -> String:
+	var where := Energy.field_name(Energy.field_of(rig_slot))
+	match rig_phase:
+		"out":
+			return "Heading out to repair a rig at %s" % where
+		"load":
+			return "Repairing a rig at %s" % where
+	return "Heading back to %s from the rigs at %s" % [GameData.port_name(base_port), where]
+
+
 ## Tug only: the tugs on its job (itself included, the lead first), or [].
 func tug_team() -> Array[Ship]:
 	var team: Array[Ship] = []
@@ -1402,6 +1457,11 @@ func to_dict() -> Dictionary:
 		"to_port": to_port,
 		"fish_target": fish_target,
 		"fish_area": fish_area,
+		"rig_field": rig_field,
+		"rig_port": rig_port,
+		"rig_slot": rig_slot,
+		"rig_phase": rig_phase,
+		"rig_wait": rig_wait,
 		"cruise": cruise,
 		"fish_home": fish_home,
 		"fish_landing": fish_landing,
@@ -1501,6 +1561,11 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.to_port = data.get("to_port", "")
 	ship.fish_target = str(data.get("fish_target", ""))
 	ship.fish_area = str(data.get("fish_area", ""))
+	ship.rig_field = str(data.get("rig_field", ""))
+	ship.rig_port = str(data.get("rig_port", ""))
+	ship.rig_slot = str(data.get("rig_slot", ""))
+	ship.rig_phase = str(data.get("rig_phase", ""))
+	ship.rig_wait = float(data.get("rig_wait", 0.0))
 	ship.cruise = data.get("cruise", {}) if data.get("cruise") is Dictionary else {}
 	ship.fish_home = str(data.get("fish_home", ""))
 	ship.fish_landing = str(data.get("fish_landing", "auto"))
@@ -1612,7 +1677,7 @@ static func link_rescues(all: Array[Ship]) -> void:
 				mammoth.rescuing = ship
 				if not mammoth.is_tug() or mammoth.tug_lead:  # A pair of tugs: the lead one.
 					ship.rescuer = mammoth
-		if mammoth.rescuing == null and mammoth.job_phase != JOB_FISH:
+		if mammoth.rescuing == null and mammoth.job_phase != JOB_FISH and mammoth.job_phase != JOB_RIG and mammoth.job_phase != JOB_REPAIR:
 			# (A rescue or tow with no one left to bring in is over. Not a fishing
 			# trip: that job needs no other ship, and clearing it left a boat at
 			# work on its ground "arriving" there as if at a port, then sailing

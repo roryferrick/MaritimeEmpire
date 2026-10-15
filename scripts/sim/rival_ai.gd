@@ -271,6 +271,8 @@ func _think(rival: Company, mind: Dictionary) -> void:
 		# Its factories for makers that like it enough, simply (see Manufacturers.run_rival()).
 		news.append_array((_state.makers as Manufacturers).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
 		(_state.makers as Manufacturers).sell_rival_stock(rival)
+		# Its rigs, rig runs and a refinery, simply (see Energy.run_rival()).
+		news.append_array((_state.energy as Energy).run_rival(rival, maxi(rival.money - _needs(rival, settings) * 2, 0)))
 	if float(settings.reroute_s) > 0.0 and float(mind.reroute) <= 0.0:
 		mind.reroute = float(settings.reroute_s)
 		_reroute_one(rival, settings)
@@ -432,7 +434,7 @@ func _buy_ships(rival: Company, settings: Dictionary) -> Array:
 ## Looks again at one of its ships: on a loop much worse than the best it could
 ## sail now, it moves to that one.
 func _reroute_one(rival: Company, settings: Dictionary) -> void:
-	var cargo := _cargo_ships(rival).filter(func(ship: Ship) -> bool: return ship.has_route() and ship.pending_route.is_empty())
+	var cargo := _cargo_ships(rival).filter(func(ship: Ship) -> bool: return ship.has_route() and ship.pending_route.is_empty() and not ship.is_rig_runner())
 	if cargo.is_empty():
 		return
 	var ship: Ship = cargo[_rng.randi() % cargo.size()]

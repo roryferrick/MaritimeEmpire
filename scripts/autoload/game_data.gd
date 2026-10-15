@@ -196,9 +196,15 @@ func _ground_port(id: String) -> Dictionary:
 	if not _ground_ports.has(id):
 		var ground: Dictionary = Fisheries.shared().grounds.get(id.substr(1), {})
 		var place := {}
+		if Energy.is_field_end(id):  # (An oil or gas field's end of its lanes: see Energy.)
+			ground = Energy.field(Energy.field_of_end(id)).duplicate()
+			ground.ports = Energy.lane_ports(ground.get("id", ""))
 		if not ground.is_empty():
 			var title := str(ground.name).trim_prefix("the ")
 			place = {id = id, name = title.left(1).to_upper() + title.substr(1), lon = ground.lon, lat = ground.lat, ground = ground.id}
+			if Energy.is_field_end(id):
+				place.erase("ground")
+				place.field = ground.id
 			# Where its lanes end (its middle, on the water).
 			var ports: Array = ground.get("ports", [])
 			if not ports.is_empty():
@@ -789,6 +795,7 @@ const CARGO_SUMMARIES := {
 	produce = "Fruit, Berries and Vegetables: 21 kinds, fresh",
 	vehicles = "Cars and trucks from 22 makers, budget to luxury",
 	boat_carriers = "Boats from 22 makers, jet skis to superyachts",
+	tanker = "Crude oil, Diesel, Premium gasoline and Jet fuel",
 }
 
 ## "Toys, Clothing, Furniture": what a model can carry (a long list summed up: CARGO_SUMMARIES).

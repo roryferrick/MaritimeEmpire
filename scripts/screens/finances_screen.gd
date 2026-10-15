@@ -30,10 +30,11 @@ const TOTAL_ROWS := [
 	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true], ["Logo changes", "logo", true], ["Cruise supplies", "supplies", true],
 	["Farm land bought", "land", true], ["Farm land sold", "land_sold", false], ["Farm costs (planting, herds, wages, upgrades)", "farms", true], ["Farm store sales", "farm_sales", false],
 	["Factories (building, upkeep)", "factories", true], ["Factory stock sales", "factory_sales", false],
+	["Rigs, refineries and pipelines built", "energy_built", true], ["Rigs and refineries sold", "energy_sold", false], ["Energy costs (crews, workers, repairs)", "energy", true], ["Energy tank sales", "energy_sales", false],
 ]
 ## Ship table groups, in shop order: [title, ship_models.json category].
 const CATEGORIES := [["Container ships", "container"], ["Ore carriers", "ore"], ["Grain carriers", "grain"],
-	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"]]
+	["Livestock carriers", "livestock"], ["Fresh produce carriers", "produce"], ["Tankers", "tanker"], ["Gas carriers", "gas"], ["Car carriers", "vehicles"], ["Boat carriers", "boat_carriers"], ["Recovery boats", "recovery"], ["Tugs", "tug"], ["Icebreakers", "icebreaker"], ["Fishing boats", "fishing"], ["Crabbing boats", "crabbing"], ["Seafood carriers", "seafood"]]
 ## Money columns summed in each group's total row.
 const MONEY_COLUMNS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "wages", "profit", "recent"]
 ## The Delivered card's heading for each markets.json unit.

@@ -16,6 +16,7 @@
 		{"id": "livestock", "title": "Livestock carriers", "captain": {"hat": "Captain's cap", "shirt": "Khaki", "trousers": "Brown"}, "crew": {"hat": "Cowboy hat", "shirt": "Brick", "trousers": "Denim"}},
 		{"id": "produce", "title": "Fresh produce carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Baseball cap", "shirt": "Forest green", "trousers": "Khaki"}},
 		{"id": "tanker", "title": "Tankers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Red", "trousers": "Red"}},
+		{"id": "gas", "title": "Gas carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Hard hat", "shirt": "Royal blue", "trousers": "Royal blue"}},
 		{"id": "vehicles", "title": "Car carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Black"}, "crew": {"hat": "Baseball cap", "shirt": "Hi-vis yellow", "trousers": "Charcoal"}},
 		{"id": "boat_carriers", "title": "Boat carriers", "captain": {"hat": "Captain's cap", "shirt": "White", "trousers": "Navy"}, "crew": {"hat": "Baseball cap", "shirt": "Hi-vis orange", "trousers": "Navy"}},
 		{"id": "seafood", "title": "Reefers", "captain": {"hat": "Captain's cap", "shirt": "Navy", "trousers": "Navy"}, "crew": {"hat": "Watch cap", "shirt": "Navy", "trousers": "Black"}},

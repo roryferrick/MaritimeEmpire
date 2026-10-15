@@ -1,0 +1,70 @@
+{
+	"_comment": "Oil and gas (scripts/sim/energy.gd), for Tankers companies. Fields: real offshore oil and gas fields (kind oil or gas), each with slots (shared by every company, first come; at most max_share of a field's slots a company) and its richness (a rig's output against the average). A slot holds an oil rig (oil fields) or a gas platform (gas fields), bought for its cost: a rig pumps output_t tons of crude oil a year times the field's richness and its upgrades, plus gas_share as much again of gas; a platform output_t of gas a year; gas comes out lng_share LNG and the rest LPG. What it makes goes into its company's storage at the field (storage tons a rig, Bigger storage more); full, it stops. Ships collect it on rig runs (a tanker or gas carrier shuttling between the field and a delivery port), or a pipeline (pipeline_cost + pipeline_per_nm a sea mile, if the company's HQ or a hub is within pipeline_nm) sends it into the company's store at that port. Storms over a field shut it while they pass (shut_at); a strong one (damage_at) may damage it (damage_odds a day, hardened half): damaged, it makes half; damaged twice it stops, till one of the company's tugs sails out and repairs it (repair_days, repair_fee a step of damage). Rigs and platforms pay wages each pay period; sold back for sale_share of their cost, or listed for other Tankers companies. Buildings: built at any port by a company (one of each a port), each turning its input into its output (yield tons of output a ton of input) at rate tons of input a day, from its company's store at the port (tank_days of its rate a tank, input and output; Bigger tanks double it) into it; only the company's own ships deliver input (unloading it there, or buying it elsewhere for a port with room in its tank), and its ships load the outputs free. A building's upgrade costs its share of the building's cost. tier: the Tankers tier that unlocks it (and rigs, platforms and pipelines). Companies' own ships bunker free from the Diesel in their store at a port.",
+	"settings": {
+		"max_share": 0.5,
+		"sale_share": 0.5,
+		"lng_share": 0.75,
+		"shut_at": 0.3,
+		"damage_at": 0.6,
+		"damage_odds": 0.35,
+		"hardened_odds": 0.5,
+		"repair_days": 2,
+		"repair_fee": 1500000,
+		"pipeline_nm": 300,
+		"pipeline_cost": 40000000,
+		"pipeline_per_nm": 100000,
+		"pipe_storage": 60000,
+		"rig_wait_days": 3,
+		"rig_tier": 3,
+		"platform_tier": 4,
+		"pipeline_tier": 4
+	},
+	"rigs": {
+		"rig": {"name": "Oil rig", "field": "oil", "cost": 20000000, "output_t": 120000, "gas_share": 0.1, "storage": 20000, "wages": 60000},
+		"platform": {"name": "Gas platform", "field": "gas", "cost": 25000000, "output_t": 100000, "gas_share": 0.0, "storage": 20000, "wages": 60000}
+	},
+	"rig_upgrades": [
+		{"id": "wells", "name": "More wells", "cost": 8000000, "text": "+30% output", "output": 1.3},
+		{"id": "storage", "name": "Bigger storage", "cost": 5000000, "text": "Holds 60,000 tons", "storage": 60000},
+		{"id": "hardening", "name": "Storm hardening", "cost": 6000000, "text": "Storms damage it half as often"}
+	],
+	"buildings": [
+		{"id": "oil_refinery", "name": "Oil refinery", "input": "oil", "outputs": {"diesel": 0.95}, "rate": 1500, "cost": 30000000, "wages": 80000, "tank_days": 20, "tier": 2,
+			"text": "Turns crude oil into diesel"},
+		{"id": "gas_refinery", "name": "Gas refinery", "input": "diesel", "outputs": {"gasoline": 0.95}, "rate": 1200, "cost": 45000000, "wages": 100000, "tank_days": 20, "tier": 3,
+			"text": "Turns diesel into premium gasoline"},
+		{"id": "jet_plant", "name": "Jet fuel plant", "input": "gasoline", "outputs": {"jet_fuel": 0.95}, "rate": 1000, "cost": 70000000, "wages": 120000, "tank_days": 20, "tier": 5,
+			"text": "Turns premium gasoline into jet fuel"},
+		{"id": "h2_plant", "name": "Hydrogen & ammonia plant", "input": "gas", "outputs": {"hydrogen": 0.6, "ammonia": 1.0}, "rate": 800, "cost": 60000000, "wages": 100000, "tank_days": 20, "tier": 4,
+			"text": "Turns LNG into hydrogen or ammonia (set at each plant)"}
+	],
+	"building_upgrades": [
+		{"id": "tanks", "name": "Bigger tanks", "share": 0.15, "text": "Twice the tanks"},
+		{"id": "throughput", "name": "More throughput", "share": 0.3, "text": "+25% a day"},
+		{"id": "automation", "name": "Automation", "share": 0.1, "text": "Half the workers' wages"}
+	],
+	"fields": [
+		{"id": "brent", "name": "Brent", "kind": "oil", "lon": 1.7, "lat": 61.0, "richness": 1.0, "slots": 8, "known": "The North Sea field that gave the world's oil price its name"},
+		{"id": "haltenbanken", "name": "Norwegian Sea", "kind": "oil", "lon": 7.0, "lat": 65.0, "richness": 0.9, "slots": 6, "known": "Rigs off Mid-Norway in rough northern seas"},
+		{"id": "gulf_deepwater", "name": "Gulf of Mexico deepwater", "kind": "oil", "lon": -90.0, "lat": 27.4, "richness": 1.2, "slots": 10, "known": "Thunder Horse and Mars country, in hurricane alley"},
+		{"id": "cantarell", "name": "Bay of Campeche", "kind": "oil", "lon": -92.2, "lat": 19.6, "richness": 1.1, "slots": 8, "known": "Mexico's Cantarell field, once the world's second biggest"},
+		{"id": "presalt", "name": "Santos pre-salt", "kind": "oil", "lon": -42.8, "lat": -25.5, "richness": 1.3, "slots": 10, "known": "Brazil's deep fields under a mile of salt"},
+		{"id": "stabroek", "name": "Guyana (Stabroek)", "kind": "oil", "lon": -57.3, "lat": 8.0, "richness": 1.3, "slots": 6, "known": "The newest big find, off Guyana"},
+		{"id": "hibernia", "name": "Grand Banks (Hibernia)", "kind": "oil", "lon": -48.8, "lat": 46.75, "richness": 0.9, "slots": 4, "known": "Iceberg-proof rigs off Newfoundland"},
+		{"id": "niger_delta", "name": "Niger Delta (Bonga)", "kind": "oil", "lon": 4.5, "lat": 4.0, "richness": 1.0, "slots": 8, "known": "Deepwater fields off Nigeria"},
+		{"id": "angola", "name": "Angola deepwater", "kind": "oil", "lon": 11.5, "lat": -7.7, "richness": 1.1, "slots": 8, "known": "Block 17's floating production ships"},
+		{"id": "safaniya", "name": "Persian Gulf (Safaniya)", "kind": "oil", "lon": 49.0, "lat": 28.3, "richness": 1.4, "slots": 10, "known": "The world's biggest offshore oil field"},
+		{"id": "mumbai_high", "name": "Mumbai High", "kind": "oil", "lon": 71.3, "lat": 19.4, "richness": 0.9, "slots": 6, "known": "India's big field off Mumbai"},
+		{"id": "bohai", "name": "Bohai Bay", "kind": "oil", "lon": 119.5, "lat": 38.5, "richness": 0.8, "slots": 6, "known": "China's shallow-water fields"},
+		{"id": "bach_ho", "name": "South China Sea (Bach Ho)", "kind": "oil", "lon": 108.0, "lat": 9.7, "richness": 0.9, "slots": 6, "known": "Vietnam's White Tiger field"},
+		{"id": "bass_strait", "name": "Bass Strait", "kind": "oil", "lon": 148.3, "lat": -38.4, "richness": 0.7, "slots": 4, "known": "Australia's platforms between Victoria and Tasmania"},
+		{"id": "cook_inlet", "name": "Cook Inlet", "kind": "oil", "lon": -151.5, "lat": 60.6, "richness": 0.7, "slots": 4, "known": "Alaska's platforms in fierce tides"},
+		{"id": "north_field", "name": "Qatar North Field", "kind": "gas", "lon": 51.9, "lat": 26.3, "richness": 1.4, "slots": 10, "known": "The world's biggest gas field"},
+		{"id": "nw_shelf", "name": "North West Shelf", "kind": "gas", "lon": 116.0, "lat": -19.6, "richness": 1.2, "slots": 8, "known": "Australia's LNG giant, in cyclone season's path"},
+		{"id": "troll", "name": "Troll", "kind": "gas", "lon": 3.7, "lat": 60.65, "richness": 1.1, "slots": 6, "known": "Norway's tallest platform on its biggest gas field"},
+		{"id": "rovuma", "name": "Rovuma Basin", "kind": "gas", "lon": 41.0, "lat": -10.6, "richness": 1.1, "slots": 6, "known": "The deep gas off Mozambique"},
+		{"id": "gulf_gas", "name": "Gulf of Mexico shelf gas", "kind": "gas", "lon": -92.5, "lat": 28.4, "richness": 0.9, "slots": 6, "known": "Thousands of shallow platforms off Louisiana"},
+		{"id": "sakhalin", "name": "Sakhalin", "kind": "gas", "lon": 143.6, "lat": 52.8, "richness": 1.0, "slots": 6, "known": "Platforms built for winter sea ice"},
+		{"id": "leviathan", "name": "Leviathan", "kind": "gas", "lon": 33.8, "lat": 32.9, "richness": 1.0, "slots": 6, "known": "The Eastern Mediterranean's big find"}
+	]
+}

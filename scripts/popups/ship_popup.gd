@@ -188,6 +188,8 @@ func _update_cargo() -> void:
 		if not ship.cargo_breed.is_empty():  # (A farm's young stock: its breed's worth, see Farms.)
 			what = "%s %s (worth x%s)" % [Farms.breed_name(ship.cargo_breed), what.to_lower(), Fmt.decimal(Farms.breed_value(ship.cargo_breed), 1)]
 		var source := "from the farm at %s (worth %s there)" % [GameData.port_name(ship.cargo_from), Fmt.money(ship.cargo_cost)] if ship.cargo_farm else "bought for %s at %s" % [Fmt.money(ship.cargo_cost), GameData.port_name(ship.cargo_from)]
+		if Energy.is_field_end(ship.cargo_from):  # (From its company's rigs: see Energy.load_at_field().)
+			source = "from your rigs at %s" % Energy.field_name(Energy.field_of_end(ship.cargo_from))
 		if ship.cargo_cut > 0.0:  # (From its factory: see Manufacturers.load_ship().)
 			source = "from your factory at %s (%s takes %d%% of the sale)" % [GameData.port_name(ship.cargo_from), commodity.get("name", ship.cargo_id), roundi(ship.cargo_cut * 100.0)]
 		if commodity.get("maker", false):
@@ -196,6 +198,10 @@ func _update_cargo() -> void:
 		if Farms.loses_a_day(ship.cargo_id) > 0.0:
 			lines.append("Fresh: %d%% of its full value now, losing about %s%% a day aboard." % [roundi(ship.cargo_value_factor(GameState.play_time, GameState.days_per_second()) * 100.0),
 				Fmt.decimal(Farms.loses_a_day(ship.cargo_id) * (1.0 - float(ship.model().get("keeps_fresh", 0.0))) * 100.0, 1)])
+	if ship.is_rig_runner():  # (Rig runs: see Energy.)
+		lines.append("On rig runs: out to the rigs at %s, delivering to %s. The Energy page sends or stops it; a new route takes it off them." % [Energy.field_name(ship.rig_field), GameData.port_name(ship.rig_port)])
+		_cargo_label.text = "\n".join(lines)
+		return
 	if at.is_empty():
 		_cargo_label.text = "\n".join(lines)
 		return

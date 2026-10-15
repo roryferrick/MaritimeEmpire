@@ -4320,7 +4320,7 @@ func _through_canal(points: PackedVector2Array) -> bool:
 # --- Fishing grounds' lanes -------------------------------------------------
 
 ## Fishing lanes ("-- --fishing-only", into the existing lanes; run last,
-## after the lanes, channels and currents): from each of a fishing ground's
+## after the lanes, channels and currents; the oil and gas fields' too): from each of a fishing ground's
 ## nearest ports (data/fisheries.json grounds) a lane out to the ground,
 ## routed round the land like any lane, keyed "PORT-@ground" (the ground's
 ## end, its middle on the water). A boat's trip is its base's lane to one of
@@ -4354,7 +4354,13 @@ func _plan_fishing_lanes() -> void:
 	for field: String in ["variant_keys", "variant_months", "variant_currents", "variant_starts", "variant_points", "variant_distances"]:
 		data.set(field, old.get(field))
 	var made := 0
-	for ground: Dictionary in fish.grounds:
+	# And the oil and gas fields' (data/energy.json), the same way: keyed
+	# "PORT-@rig_FIELD" (Energy.end_of()), for the ships on rig runs.
+	var ends: Array = fish.grounds.duplicate()
+	var energy: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/energy.json"))
+	for each: Dictionary in energy.get("fields", []):
+		ends.append({id = "rig_" + str(each.id), lon = each.lon, lat = each.lat})
+	for ground: Dictionary in ends:
 		var middle := Vector2(float(ground.lon), float(ground.lat))
 		var near := ports.duplicate()
 		near.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -4407,4 +4413,4 @@ func _plan_fishing_lanes() -> void:
 	data.starts.append(data.points.size())
 	var err := ResourceSaver.save(data, LANES_OUT, ResourceSaver.FLAG_COMPRESS)
 	assert(err == OK, "Couldn't save %s" % LANES_OUT)
-	print("Fishing lanes: %d to %d grounds (%.1f min)" % [made, fish.grounds.size(), (Time.get_ticks_msec() - started) / 60000.0])
+	print("Fishing lanes: %d to %d grounds and fields (%.1f min)" % [made, ends.size(), (Time.get_ticks_msec() - started) / 60000.0])
