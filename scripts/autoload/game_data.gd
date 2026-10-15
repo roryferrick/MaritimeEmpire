@@ -58,6 +58,12 @@ var _lane_cache: Dictionary = {}  # "FROM-TO" -> SeaLane, built on first use
 var _crossing_cache: Dictionary = {}  # "FROM-TO" -> canal_crossings()
 var _chambers_cache: Dictionary = {}  # "FROM-TO" -> lane_chambers()
 var _zones_cache: Dictionary = {}  # "FROM-TO#way@month" -> lane_zones()
+## The lanes whose zones were asked for ("FROM>TO" -> [from, to]), whose next
+## month's zones warm_next_month() works out ahead, a few a frame, so the
+## month's turn doesn't work them all out at once (a 200 ms hitch at 8x).
+var _zones_lanes: Dictionary = {}
+var _zones_warm_keys: Array = []
+var _zones_warm_at := 0
 ## The currents' second ways round (SeaLaneData variant_*: one way, riding a
 ## current, in the months it's quicker): "FROM>TO" -> its index there.
 var _variant_index: Dictionary = {}
@@ -345,8 +351,9 @@ func set_month(new_month: int) -> void:
 	if new_month == month:
 		return
 	month = new_month
-	_ways_now.clear()
-	_zones_cache.clear()
+	_ways_now.clear()  # (The zones are kept by month: the next one's are worked out ahead.)
+	_zones_warm_keys = _zones_lanes.keys()
+	_zones_warm_at = 0
 
 
 ## The current at a way's name (a chain like "gulf_stream+north_atlantic": its
@@ -596,11 +603,32 @@ func lane_zones(from_port: String, to_port: String, way := -2, in_month := -1) -
 	var key := "%s-%s#%d@%d" % [from_port, to_port, way, in_month]
 	if _zones_cache.has(key):
 		return _zones_cache[key]
+	if in_month == month and month != Currents.MEAN:
+		var lane_key := "%s>%s" % [from_port, to_port]
+		if not _zones_lanes.has(lane_key):
+			_zones_lanes[lane_key] = [from_port, to_port]
+			_zones_warm_keys.append(lane_key)
 	var zones := _lane_zones_plain(from_port, to_port, way)
 	if not zones.is_empty():
 		zones = _with_currents(zones, lane(from_port, to_port, way), in_month)
 	_zones_cache[key] = zones
 	return zones
+
+
+## Works out next month's zones for the lanes asked about this month (see
+## _zones_lanes) for up to `budget_ms`; GameState calls it every frame.
+func warm_next_month(budget_ms: float) -> void:
+	if month == Currents.MEAN or _zones_warm_at >= _zones_warm_keys.size():
+		return
+	var start := Time.get_ticks_usec()
+	var next := (month + 1) % 12
+	while _zones_warm_at < _zones_warm_keys.size():
+		var pair: Array = _zones_lanes[_zones_warm_keys[_zones_warm_at]]
+		_zones_warm_at += 1
+		var index: int = _variant_index.get("%s>%s" % [pair[0], pair[1]], -1)
+		lane_zones(pair[0], pair[1], index if index >= 0 and _lane_data.variant_months[index] & (1 << next) else -1, next)
+		if Time.get_ticks_usec() - start >= budget_ms * 1000.0:
+			return
 
 
 ## A lane's zones with the currents (Currents.lane_factors()) laid over:

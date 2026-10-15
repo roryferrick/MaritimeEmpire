@@ -88,6 +88,12 @@ const AUTO_RECOVERY_INTERVAL := 0.5
 const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
+## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
+## fewer, longer steps (never more than time_speed of them), each no longer
+## than a 1x frame at about 28 fps, which the game takes in its stride
+## anyway. Each step costs about the same however long, so 8x at 60 fps runs
+## 4 steps a frame rather than 8.
+const MAX_STEP_S := 0.036
 ## The hidden gems: three spots on the map that each pay HIDDEN_GEM_MONEY, once
 ## per company, when clicked (see claim_hidden_gem()): a wonder's picture
 ## (wonder, a WonderPopup id) or a stretch of land ((lon, lat) area, clicked on
@@ -154,6 +160,9 @@ const STORM_FACTOR_REFRESH_S := 0.25
 const ICE_HOLD_REFRESH_S := 0.5
 ## How often a ship in port looks again at whether a seasonal closure blocks its next leg.
 const SEASON_RECHECK_S := 1.0
+## How often a ship held in port because its next stop is beyond its reach,
+## even refuelling on the way, looks again (the refuel stops are a search).
+const REACH_RECHECK_S := 2.0
 ## How often (seconds of play) a docking ship is repaired and refueled (and
 ## pays for it).
 const REFILL_BILL_S := 0.25
@@ -342,11 +351,16 @@ func _process(delta: float) -> void:
 	if Net.is_client():
 		_client_frame(delta)  # The host runs the world.
 		return
-	# Fast forward runs whole extra steps rather than one longer one, so ships
-	# arrive, dock and break down exactly as they would at 1x.
+	GameData.warm_next_month(0.5)
+	# Fast forward runs extra steps rather than one long one, so ships arrive,
+	# dock and break down as they would at 1x: as many as time_speed, each no
+	# longer than MAX_STEP_S (fewer, so a frame at 8x costs less).
 	var t_sim := Time.get_ticks_usec()
-	for step in time_speed:
-		_step(delta)
+	var steps := time_speed
+	if steps > 1:
+		steps = clampi(ceili(delta * time_speed / MAX_STEP_S), 1, time_speed)
+	for step in steps:
+		_step(delta * time_speed / steps)
 	MapView._prof("sim", t_sim)
 
 
@@ -1476,28 +1490,37 @@ func port_open_to(who: Company, port_id: String) -> bool:
 
 ## Every port a ship can get to from `from` stepping port to port and
 ## refuelling at each: {nm: {port: miles there, refuel stops counted},
-## prev: {port: the stop before it}, stops: {port: refuel stops on the way}}.
-## Kept for ships alike (model, speed, burn, wear) from the same port.
-func refuel_tree(ship: Ship, from: String) -> Dictionary:
+## prev: {port: the stop before it}, stops: {port: refuel stops on the way},
+## done: {port: true}}. Kept for ships alike (model, speed, burn, wear) from
+## the same port. The search goes nearest first; with `until` it stops once
+## that port is settled, and carries on from there when asked again (a big
+## ship's whole tree is tens of ms). The ports in done are settled (their nm,
+## prev and stops final); the rest are only reached so far, till it's done.
+func refuel_tree(ship: Ship, from: String, until := "") -> Dictionary:
 	var who := owner_of(ship)
 	var month_key := [GameData.month, regions.size(), companies.size()]
 	if month_key != _refuel_trees_key:
 		_refuel_trees.clear()
 		_refuel_trees_key = month_key
 	var key := [ship.model_id, ship.top_speed(), ship.fuel_per_s(), ship.wear_per_s(), who.regions.size() if who.ai.is_empty() else -1, from]
-	if _refuel_trees.has(key):
-		return _refuel_trees[key]
+	var tree: Dictionary = _refuel_trees.get(key, {})
+	if tree.is_empty():
+		tree = {nm = {from: 0.0}, prev = {}, stops = {from: 0}, done = {}, open = {from: true}, bad = {}}
+		_refuel_trees[key] = tree
+	var open: Dictionary = tree.open  # (Ports reached but not yet stepped on from.)
+	var done: Dictionary = tree.done
+	if open.is_empty() or done.has(until):
+		return tree
 	var reach := ship.range_nm()
-	var best := {from: 0.0}
-	var prev := {}
-	var stops := {from: 0}
-	var done := {}
-	var open := {from: true}  # (Ports reached but not yet stepped on from.)
+	var best: Dictionary = tree.nm
+	var prev: Dictionary = tree.prev
+	var stops: Dictionary = tree.stops
 	# Legs are checked for fuel (Ship.can_sail(), costly the first time for a
 	# lane: its zones) only as the search settles on them, not every one in
 	# range: a leg that fails is ruled out and the port is reached again by
 	# its next best way from the ports already settled.
-	var bad := {}
+	var bad: Dictionary = tree.bad
+	var usable := {}  # (Whether each port is open to the ship and fits it, asked once.)
 	while not open.is_empty():
 		var here := ""
 		var here_nm := INF
@@ -1523,24 +1546,29 @@ func refuel_tree(ship: Ship, from: String) -> Dictionary:
 				open[here] = true  # (Checked again when it's next the nearest.)
 			continue
 		done[here] = true
+		var step_nm := REFUEL_STOP_NM if here != from else 0.0
 		for pair: Array in _lane_neighbours_of(here):
 			var nm := float(pair[1])
 			if nm > reach:
 				break
-			var there := str(pair[0])
-			if done.has(there) or bad.has([here, there]):
+			var there: String = pair[0]
+			if done.has(there) or not bad.is_empty() and bad.has([here, there]):
 				continue
-			var total := here_nm + nm + (REFUEL_STOP_NM if here != from else 0.0)
+			var total := here_nm + nm + step_nm
 			if total >= float(best.get(there, INF)):
 				continue
-			if not port_open_to(who, there) or not ship.fits_port(there) or not ship.fits_lane(here, there):
+			var ok: Variant = usable.get(there)
+			if ok == null:
+				ok = port_open_to(who, there) and ship.fits_port(there)
+				usable[there] = ok
+			if not ok or not ship.fits_lane(here, there):
 				continue
 			best[there] = total
 			prev[there] = here
 			stops[there] = int(stops[here]) + (1 if here != from else 0)
 			open[there] = true
-	var tree := {nm = best, prev = prev, stops = stops}
-	_refuel_trees[key] = tree
+		if here == until:
+			break
 	return tree
 
 
@@ -1554,8 +1582,8 @@ func refuel_path(ship: Ship, from: String, to: String) -> Array[String]:
 	if ship.can_sail(from, to):
 		path.append(to)
 		return path
-	var tree := refuel_tree(ship, from)
-	if not (tree.prev as Dictionary).has(to):
+	var tree := refuel_tree(ship, from, to)
+	if not (tree.done as Dictionary).has(to):
 		return path
 	var at := to
 	while at != from:
@@ -1575,7 +1603,7 @@ func refuel_stops(ship: Ship, from: String, to: String) -> Array[String]:
 
 ## True if a ship can get from one port to another at all, refuelling on the way if it must.
 func can_get_to(ship: Ship, from: String, to: String) -> bool:
-	return from == to or ship.can_sail(from, to) or (refuel_tree(ship, from).prev as Dictionary).has(to)
+	return from == to or ship.can_sail(from, to) or (refuel_tree(ship, from, to).done as Dictionary).has(to)
 
 
 ## The sea miles from one port to another by way of its refuel stops (INF if it can't get there).
@@ -2603,9 +2631,13 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 	# where it sails now, and it carries on from there. Its cargo is still for `to`.
 	var bound := to
 	if not ship.can_sail(ship.docked_at, to):
+		if ship.reach_check_to == to and play_time < ship.reach_check_time and not ship.hold_reason.is_empty():
+			return  # (Held as beyond its reach: not due another look.)
 		var path := refuel_path(ship, ship.docked_at, to)
 		if path.is_empty():
 			_set_hold(ship, "%s is beyond this ship's reach, even refuelling on the way; assign a new route" % GameData.port_name(to))
+			ship.reach_check_to = to
+			ship.reach_check_time = play_time + REACH_RECHECK_S
 			return
 		to = path[0]
 	ship.bound_for = bound  # (Becomes its hop_to as it sets off for `to`: see _set_off().)

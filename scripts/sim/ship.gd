@@ -268,6 +268,10 @@ var ice_check_time := 0.0
 var season_blocker := {}
 var season_check_to := ""
 var season_check_time := 0.0
+## In port: held as beyond its reach for its next stop (reach_check_to), not
+## looked at again till reach_check_time (see GameState._try_depart()). Not saved.
+var reach_check_to := ""
+var reach_check_time := 0.0
 ## Seconds spent sailing since it was bought; older ships break down more.
 var sea_time := 0.0
 ## Lifetime money in (income: cargo sold) and out (cargo bought, fuel, repair
