@@ -298,6 +298,9 @@ var world := WorldEconomy.new(self)
 var firms := ShippingFirms.new(self)
 ## The other firms' ships drawn on the map (see AmbientTraffic); not saved.
 var traffic := AmbientTraffic.new(self)
+## The world's price history (its own file beside the save) and the news (saved with the game).
+var history := WorldHistory.new(self)
+var news := News.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -4068,6 +4071,7 @@ func save_summary(slot: int, online := multiplayer_save) -> Dictionary:
 func delete_save(slot: int, online := multiplayer_save) -> void:
 	_finish_autosave()
 	DirAccess.remove_absolute(save_path(slot, online))
+	DirAccess.remove_absolute(save_path(slot, online) + WorldHistory.HISTORY_SUFFIX)
 
 
 ## The single save from before slots moves into slot 1.
@@ -4107,6 +4111,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	energy.reset()
 	research.reset()
 	industry.reset()
+	history.clear()
+	news.clear()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
@@ -4151,6 +4157,8 @@ func load_world(data: Dictionary, local := -1) -> void:
 	market.from_dict(data.get("market", {}))
 	world.from_dict(data.get("world", {}))
 	firms.from_dict(data.get("firms", {}), world)
+	news.from_dict(data.get("news", {}))
+	history.load(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, world)  # (Joining a game: none; the host's history isn't sent.)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
 	# Saves from before weather have no storms or seasonal closures.
@@ -4209,6 +4217,7 @@ func save_game() -> void:
 		return  # A joined player's game is the host's to save.
 	_finish_autosave()  # (So an older autosave can't land after this.)
 	_write_save(save_path(save_slot), world_dict())
+	WorldHistory.write(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, history.to_bytes())
 
 
 ## The timed autosave: the game is copied here, then turned into text and
@@ -4227,8 +4236,14 @@ func _autosave() -> void:
 	data.erase("firms")
 	data = data.duplicate(true)
 	data.merge(fresh)
+	_autosaves += 1
+	if _autosaves % HISTORY_EVERY_AUTOSAVES == 0:  # (A few MB written at once, so not every time: the history is the least of a save.)
+		WorldHistory.write(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, history.to_bytes())
 	_autosave_task = WorkerThreadPool.add_task(_write_save.bind(save_path(save_slot), data), false, "Autosave")
 
+
+var _autosaves := 0
+const HISTORY_EVERY_AUTOSAVES := 10
 
 ## Waits for the autosave being written, if any.
 func _finish_autosave() -> void:
@@ -4270,6 +4285,7 @@ func world_dict() -> Dictionary:
 		"market": market.to_dict(),
 		"world": world.to_dict(),
 		"firms": firms.to_dict(),
+		"news": news.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
 			var ship_data := ship.to_dict()
@@ -5605,7 +5621,9 @@ func _warm_up_frame(limit_ms := WARM_UP_FRAME_MS) -> void:
 		return
 	play_time = _warm_up_to
 	world.day = world._today()
+	history.weekly_day = world.day  # (The warm-up counted its own days: the next weekly sample a week from now.)
 	firms._dispatch_day = world.day - ShippingFirms.DISPATCH_DAYS
+	news.clear()  # (The warm-up's weeks made news before the game began: the history keeps them, the paper doesn't.)
 	save_game()
 
 

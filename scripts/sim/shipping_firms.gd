@@ -248,6 +248,7 @@ func dispatch_day() -> void:
 func _flush_batch() -> void:
 	var day_s: float = _state.calendar_seconds_per_second()
 	var now: float = _state.play_time
+	var biggest := {}  # The dispatch's biggest sailing: the News.
 	for key: String in _batch:
 		var lot_entry: Dictionary = _batch[key]
 		var model: Dictionary = _models[lot_entry.line][0]
@@ -256,7 +257,19 @@ func _flush_batch() -> void:
 		_insert_sorted(voyages, {firm = lot_entry.firm, model = model.id, ships = ships, line = lot_entry.line, goods = lot_entry.goods, hold = lot_entry.hold,
 			from = lot_entry.from, to = lot_entry.to, start = now, arrive = now + days * 86400.0 / day_s,
 			free = now + days * (1.0 + BACKHAUL) * 86400.0 / day_s, cost = lot_entry.cost}, "arrive")
+		month_sailings += ships
+		month_calls[lot_entry.from] = int(month_calls.get(lot_entry.from, 0)) + ships
+		month_calls[lot_entry.to] = int(month_calls.get(lot_entry.to, 0)) + ships
+		if float(lot_entry.cost) > float(biggest.get("cost", 0.0)):
+			biggest = {firm = lot_entry.firm, model = model, ships = ships, goods = lot_entry.goods, from = lot_entry.from, to = lot_entry.to, cost = lot_entry.cost, hold = lot_entry.hold}
 	_batch.clear()
+	if not biggest.is_empty() and _state.news != null and _state.warm_up_left <= 0:
+		var goods: Array = biggest.goods.keys()
+		goods.sort_custom(func(a: String, b: String) -> bool: return float(biggest.goods[a]) > float(biggest.goods[b]))
+		var good := str(GameData.commodity(goods[0]).get("name", goods[0]))
+		_state.news.add("company", "%s sends %d %s%s with %s %s from %s to %s" % [firms[int(biggest.firm)].name, int(biggest.ships), str(biggest.model.name), "s" if int(biggest.ships) > 1 else "",
+			Fmt.short(float(biggest.goods[goods[0]])), good if good == good.to_upper() else good.to_lower(), GameData.port_name(str(biggest.from)), GameData.port_name(str(biggest.to))],
+			{port = biggest.to, firm = int(biggest.firm), good = goods[0]})
 
 
 ## Voyages that have arrived deliver their goods and the firm is paid; ships
@@ -303,6 +316,10 @@ static func _insert_sorted(list: Array, entry: Variant, key: Variant) -> void:
 			hi = mid
 	list.insert(lo, entry)
 
+
+## This month's sailings and calls by port (for the News' monthly figures, which reset them).
+var month_sailings := 0
+var month_calls := {}
 
 ## Hold units of a line's capacity out on voyages now (kept as voyages come and go).
 func busy(line: String) -> float:

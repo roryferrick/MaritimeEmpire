@@ -2964,6 +2964,16 @@ func focus_port(port_id: String) -> void:
 	_look_at(GameData.port_position(port_id))
 	_changed()
 
+## Centers the view on an inland city (see _draw_cities()).
+func focus_city(city_id: String) -> void:
+	var city := _city(city_id)
+	if city.is_empty():
+		return
+	followed = null
+	followed_bird = -1
+	_look_at(Geo.project(Vector2(float(city.lon), float(city.lat))))
+	_changed()
+
 ## Brings a ship (its port while docked) into view, keeping the zoom: centered
 ## across, and raised_px above the middle (to leave room for its popup below).
 func focus_ship(ship: Ship, raised_px := 0.0) -> void:

@@ -69,6 +69,7 @@ func _ready() -> void:
 		_add_divine_button()
 	_map.divine_target.connect(_on_divine_target)
 	_add_page_buttons()
+	_add_ticker()
 	if _map.ambience != null:  # The bird that's calling, top left (see SoundTracker), beside the page buttons.
 		var tracker := SoundTracker.new(_map)
 		add_child(tracker)
@@ -77,6 +78,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	_step_ticker(_delta)
 	var t_x := Time.get_ticks_usec()
 	_process_timed(_delta)
 	MapView._prof("proc.world_screen", t_x)
@@ -487,7 +489,7 @@ func _place_side_buttons() -> void:
 ## for GameRoot's alert dot on Hubs.
 var page_buttons := {}
 var _page_column := VBoxContainer.new()
-const PAGES := [["markets", "Markets: the cheapest ports to buy each good and the best to sell"], ["hubs", "Hubs: your HQ and hubs, their upgrades and warehouses"],
+const PAGES := [["markets", "Intelligence: the countries, the companies, the markets and their history, and the news"], ["hubs", "Hubs: your HQ and hubs, their upgrades and warehouses"],
 	["farms", "Farms: your plots at the farm ports and the farm store"], ["makers", "Makers: the car and boat makers, how much they like you, and your factories"],
 	["energy", "Energy: the oil and gas fields, your rigs and platforms, and your refineries"], ["industry", "Industry: your mines, plants and factories, and the claims at the resource ports"],
 	["research", "Research: the contracts board, your expeditions, the Atlas of the sites under the sea, and your ships' gear"]]
@@ -516,6 +518,55 @@ func _add_page_buttons() -> void:
 	_update_page_buttons()
 	GameState.company_types_changed.connect(_update_page_buttons)
 
+
+## The news ticker along the bottom of the map: the latest headlines (News)
+## sliding by, each a click from the Intelligence page's News tab.
+const TICKER_HEIGHT := 24.0
+const TICKER_SPEED := 60.0
+const TICKER_SHOWN := 8
+var _ticker := PanelContainer.new()
+var _ticker_text := Label.new()
+var _ticker_x := 0.0
+
+
+func _add_ticker() -> void:
+	_ticker.theme_type_variation = &"BarPanel"
+	_ticker.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_ticker.offset_top = -TICKER_HEIGHT
+	_ticker.offset_bottom = 0.0
+	_ticker.clip_contents = true
+	_ticker.mouse_filter = Control.MOUSE_FILTER_STOP
+	_ticker.tooltip_text = "The news. Click for the Intelligence page."
+	_ticker.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			GameRoot.find(self).show_intelligence("news"))
+	_ticker_text.add_theme_font_size_override(&"font_size", 13)
+	_ticker_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ticker_text.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_ticker.add_child(_ticker_text)
+	add_child(_ticker)
+	GameState.news.added.connect(func(_item: Dictionary) -> void: _refresh_ticker())
+	_refresh_ticker()
+
+
+func _refresh_ticker() -> void:
+	var parts := PackedStringArray()
+	for item: Dictionary in GameState.news.latest(TICKER_SHOWN):
+		parts.append(str(item.text))
+	_ticker.visible = not parts.is_empty()
+	_ticker_text.text = "   ✦   ".join(parts) + "   ✦   "
+
+
+func _step_ticker(delta: float) -> void:
+	if not _ticker.visible or _ticker_text.text.is_empty():
+		return
+	_ticker_x -= TICKER_SPEED * delta
+	var width := _ticker_text.size.x
+	if width <= _ticker.size.x:
+		_ticker_x = 0.0
+	elif _ticker_x < -width:
+		_ticker_x = _ticker.size.x
+	_ticker_text.position.x = _ticker_x
 
 ## Farms, Makers and Energy show only for the types that have them.
 func _update_page_buttons() -> void:

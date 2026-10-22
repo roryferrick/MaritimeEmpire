@@ -500,6 +500,8 @@ func _end_day() -> void:
 	_cursor = -1
 	_grow_people()
 	_drift_currencies()
+	if _state.history != null:
+		_state.history.sample(self, day)  # (The week's and month's price history, and the news in it.)
 	changed.emit()
 
 
@@ -654,6 +656,14 @@ func sell_price(port_id: String, good: String) -> float:
 	if z < 0 or g < 0:
 		return GameData.base_price(port_id, good)
 	return price[z * goods.size() + g] * float(_port_factor.get(port_id, 1.0))
+
+
+## A zone's name for a sentence: its country's, or "coast (country)" for one of a split country's.
+func zone_label(z: int) -> String:
+	var zone: Dictionary = zones[z]
+	if str(zone.id).ends_with("/all"):
+		return str(zone.name)
+	return "%s (%s)" % [str(zone.name), str(country(str(zone.country)).get("name", zone.country))]
 
 
 func zone_price(z: int, g: int) -> float:

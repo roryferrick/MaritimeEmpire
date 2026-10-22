@@ -255,6 +255,18 @@ func show_port_on_map(port_id: String) -> void:
 	(%WorldScreen.find_child("MapView") as MapView).focus_port(port_id)
 
 
+## Switches to the World map, centered on an inland city.
+func show_city_on_map(city_id: String) -> void:
+	show_screen(Screen.WORLD)
+	(%WorldScreen.find_child("MapView") as MapView).focus_city(city_id)
+
+
+## Opens the Intelligence page (the Markets page's place) at a tab: "countries", "companies", "markets", "charts" or "news".
+func show_intelligence(tab := "") -> void:
+	(_pages.markets as IntelligenceScreen).show_tab(tab)
+	open_page("markets")
+
+
 ## Switches to the World map, centered on a ship, with its popup open.
 func show_ship_on_map(ship: Ship) -> void:
 	show_screen(Screen.WORLD)
