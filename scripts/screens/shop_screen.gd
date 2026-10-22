@@ -72,6 +72,9 @@ var _rows: Array = []
 var _buy_all_tugs := Button.new()
 ## The "can't afford" note shown above a hovered Buy button, and that model's id ("" when none is hovered).
 var _hint := PanelContainer.new()
+var _yard_bar := HBoxContainer.new()
+var _orders_label := Label.new()
+var _cancel_menu := MenuButton.new()
 var _hint_label := Label.new()
 var _hovered := ""
 ## Money or the fleet changed since the cards were last updated.
@@ -89,6 +92,7 @@ func _ready() -> void:
 	var titles := {}
 	for section: Array in SECTIONS:
 		titles[section[1]] = section[0]
+	_add_yard_bar()
 	var tabs := TabContainer.new()
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	%Items.add_child(tabs)
@@ -165,6 +169,38 @@ func _ready() -> void:
 	_hint.add_child(_hint_label)
 	add_child(_hint)
 	_update_cards()
+
+
+## Above the tabs: the ships on order (Shipyards) and the way into the second-hand market.
+func _add_yard_bar() -> void:
+	_yard_bar.add_theme_constant_override(&"separation", 12)
+	%Items.add_child(_yard_bar)
+	_orders_label.theme_type_variation = &"DimLabel"
+	_orders_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_orders_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_yard_bar.add_child(_orders_label)
+	_cancel_menu.text = "Cancel an order"
+	_cancel_menu.get_popup().index_pressed.connect(func(index: int) -> void: GameState.cancel_order(int(_cancel_menu.get_popup().get_item_metadata(index))))
+	_yard_bar.add_child(_cancel_menu)
+	var used := Button.new()
+	used.text = "Second-hand ships"
+	used.tooltip_text = "Ready ships the shipping firms are selling, cheaper by age and condition."
+	used.pressed.connect(func() -> void: PopupHost.find(self).open(UsedMarketPopup.new()))
+	_yard_bar.add_child(used)
+	GameState.shipyards.changed.connect(_update_yard_bar)
+	_update_yard_bar()
+
+
+func _update_yard_bar() -> void:
+	var orders: Array = GameState.company.orders
+	var parts := PackedStringArray()
+	_cancel_menu.get_popup().clear()
+	for order: Dictionary in orders:
+		parts.append("%s (%s) from %s, %s%s" % [str(order.name), str(GameData.get_ship_model(str(order.model)).get("name", "")), str(GameState.shipyards.yard(str(order.yard)).get("name", "")), Fmt.calendar_short(int(order.due)), " (late)" if bool(order.get("late", false)) else ""])
+		_cancel_menu.get_popup().add_item(str(order.name))
+		_cancel_menu.get_popup().set_item_metadata(_cancel_menu.get_popup().item_count - 1, int(order.id))
+	_orders_label.text = "Ships of Feeder size and up are ordered from a shipyard (a %d%% deposit, the rest on delivery at the yard) and built over months; small boats and tugs are bought outright. %s" % [roundi(GameState.shipyards.deposit_share() * 100.0), "On order: " + "; ".join(parts) + "." if not parts.is_empty() else "Nothing on order; %d second-hand ships for sale." % GameState.shipyards.listings.size()]
+	_cancel_menu.visible = not orders.is_empty()
 
 
 ## Each row's sections side by side if they fit across, else one under
@@ -414,7 +450,7 @@ func _update_cards() -> void:
 		elif model.get("tug", false) and owned >= GameState.tug_slots():
 			button.text = "Route to more ports for more"
 		else:
-			button.text = "Buy"
+			button.text = "Order…" if Shipyards.is_ordered(model) else "Buy"
 		var error := GameState.buy_error(model_id)
 		button.disabled = not error.is_empty()
 		_buy_alerts[model_id].visible = error.is_empty()
@@ -520,6 +556,9 @@ func _short_of_money(model_id: String) -> int:
 	var model := GameData.get_ship_model(model_id)
 	if not Progression.can_buy_model(model) or model.get("tug", false) and GameState.owned_count(model_id) >= GameState.tug_slots():
 		return 0
+	if Shipyards.is_ordered(model):  # (The deposit, at the cheapest yard.)
+		var offers: Array = GameState.shipyards.yards_for(model)
+		return maxi(roundi(int(offers[0].price) * GameState.shipyards.deposit_share()) - GameState.money, 0) if not offers.is_empty() else 0
 	return maxi(GameState.ship_price(model_id) - GameState.money, 0)
 
 

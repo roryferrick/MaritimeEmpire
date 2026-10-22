@@ -566,7 +566,11 @@ func _fill_parts() -> void:
 			note.theme_type_variation = &"DimLabel"
 			note.text = "%d%%%s" % [roundi(condition * 100.0), " · %s fitted" % str((each.get("upgrade", {}) as Dictionary).get("name", "")) if ship.upgrades.has(each.id) else ""]
 			grid.add_child(note)
-	_parts_box.add_child(grid)
+	var scroll := ScrollContainer.new()  # (Fifty parts on a giant: scrolls.)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0.0, minf(24.0 * (list.size() + groups.size()) + 8.0, 330.0))
+	scroll.add_child(grid)
+	_parts_box.add_child(scroll)
 	var foot := Label.new()
 	foot.theme_type_variation = &"DimLabel"
 	foot.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

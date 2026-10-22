@@ -205,6 +205,14 @@ func show_quarterly(report: Dictionary) -> void:
 			"; %s paid in dividends" % Fmt.money(int(report.dividend)) if int(report.dividend) > 0 else ""]})
 
 
+## A ship ordered from a yard has been delivered (Shipyards.delivered).
+func show_delivery(ship: Ship, order: Dictionary) -> void:
+	var yard: Dictionary = GameState.shipyards.yard(str(order.yard))
+	_enqueue({kicker = "DELIVERY", title = "%s is yours" % ship.name, color = GOLD,
+		body = "%s has handed over %s, a %s, at %s. %s paid in all. Give it a route from the Ships page or the map." % [str(yard.get("name", "the yard")), ship.name, str(ship.model().get("name", "")), GameData.port_name(ship.docked_at), Fmt.money(int(order.price))],
+		actions = [["Show on map", func() -> void: GameRoot.find(self).show_ship_on_map(ship)], ["Later", Callable()]]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

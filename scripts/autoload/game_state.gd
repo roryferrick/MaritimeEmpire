@@ -307,6 +307,8 @@ var contracts := Contracts.new(self)
 var people := People.new(self)
 ## Who owns the companies: shares, the board, the firms bought into, the IPO (see Ownership).
 var ownership := Ownership.new(self)
+## The shipyards, ship orders and the second-hand market (see Shipyards).
+var shipyards := Shipyards.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -438,6 +440,7 @@ func _step(delta: float) -> void:
 	contracts.step(delta)
 	people.step(delta)
 	ownership.step(delta)
+	shipyards.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -679,6 +682,12 @@ func buy_error(model_id: String) -> String:
 		if owned_count(model_id) >= tug_slots():
 			return "Each port on your routes takes %d tugs, and all %d tug slots are full. Routes to more ports give more." % [tugs_per_port(), tug_slots()]
 		return "You can't afford this ship." if money < ship_price(model_id) else ""
+	if Shipyards.is_ordered(model):  # (Ordered from a yard, delivered there: see Shipyards.)
+		var offers: Array = shipyards.yards_for(model)
+		if offers.is_empty():
+			return "No yard builds a %s." % model.get("name", model_id)
+		var deposit := roundi(int(offers[0].price) * shipyards.deposit_share())
+		return "You can't afford the deposit (%s)." % Fmt.money(deposit) if money < deposit else ""
 	if money < ship_price(model_id):
 		return "You can't afford this ship."
 	if not hubs.any(func(hub: Hub) -> bool: return can_launch_at(model_id, hub.port_id)):
@@ -1378,6 +1387,51 @@ func choose_successor(kind: String, key: String) -> void:
 		return
 	people.succeed(company, kind, key)
 	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
+
+# --- Shipyards (see Shipyards) ------------------------------------------------------------------
+
+func place_order(model_id: String, ship_name: String, yard_id: String) -> void:
+	ship_name = ship_name.strip_edges()
+	if not ship_name_error(ship_name).is_empty():
+		return
+	if Net.command(&"place_order", [model_id, ship_name, yard_id]):
+		return
+	shipyards.place_order(company, model_id, Net.clean_text(ship_name), yard_id)
+
+
+func cancel_order(order_id: int) -> void:
+	if Net.command(&"cancel_order", [order_id]):
+		return
+	shipyards.cancel_order(company, order_id)
+
+
+func buy_used(listing_id: int, ship_name: String) -> void:
+	ship_name = ship_name.strip_edges()
+	if not ship_name_error(ship_name).is_empty():
+		return
+	if Net.command(&"buy_used", [listing_id, ship_name]):
+		return
+	shipyards.buy_used(company, listing_id, Net.clean_text(ship_name))
+
+
+## A ship put into a company's fleet at a port for a price already paid (a delivery or a used ship: see Shipyards).
+func launch_ship(who: Company, model_id: String, ship_name: String, port_id: String, price: int) -> Ship:
+	var model := GameData.get_ship_model(model_id)
+	if model.is_empty():
+		return null
+	var ship := Ship.new(ship_name, model_id, port_id)
+	ship.id = next_ship_id
+	next_ship_id += 1
+	ship.company = who
+	ship.purchase_price = price
+	ship.captains = Characters.officers_for(model)
+	ships.append(ship)
+	if ship.is_cruise():
+		cruises.ensure(ship)
+	ships_changed.emit()
+	ship_changed.emit(ship)
+	return ship
+
 
 # --- Drydock (see ShipParts) --------------------------------------------------------------------
 
@@ -4515,6 +4569,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	contracts.clear()
 	people.reset()
 	ownership.reset()
+	shipyards.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
@@ -4597,6 +4652,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	news.from_dict(data.get("news", {}))
 	contracts.from_dict(data.get("contracts", {}))
 	people.from_dict(data.get("people", {}))
+	shipyards.from_dict(data.get("shipyards", {}))
 	history.load(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, world)  # (Joining a game: none; the host's history isn't sent.)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
@@ -4727,6 +4783,7 @@ func world_dict() -> Dictionary:
 		"news": news.to_dict(),
 		"contracts": contracts.to_dict(),
 		"people": people.to_dict(),
+		"shipyards": shipyards.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
 			var ship_data := ship.to_dict()
