@@ -110,7 +110,23 @@ var to_port := ""
 var traveled_nm := 0.0
 
 var fuel := 0.0
-var maintenance := 1.0
+## Its parts' conditions (ShipParts: part id -> 0 to 1), the upgrades fitted
+## (part id -> upgrade id), the drydock it's in ({port, until (calendar time),
+## upgrades, route, paused}: see GameState.order_drydock()) and the yard it's
+## bound for. maintenance is the parts' weighted mean: changes to it are
+## spread over the parts when they're next looked at (part_debt, ShipParts.flush()).
+var parts := {}
+var upgrades := {}
+var drydock := {}
+var drydock_to := ""
+var part_debt := 0.0
+var _maintenance := 1.0
+var maintenance: float:
+	get:
+		return _maintenance
+	set(value):
+		part_debt += value - _maintenance
+		_maintenance = value
 ## What the company paid for it (a first-purchase discount makes it less than
 ## the model's price); selling returns part of this.
 var purchase_price := 0
@@ -238,6 +254,8 @@ var load_need := 0
 var _top_speed := 0.0
 var _fuel_per_s := 0.0
 var _wear_per_s := 0.0
+var _parts_breakdowns := 1.0
+var _parts_dock := 1.0
 var _stats_dirty := true
 ## The fuel the birds following it save (a share; see GameState.bird_boosts()).
 var bird_fuel_saving := 0.0
@@ -576,15 +594,27 @@ func wear_per_s() -> float:
 	return _wear_per_s
 
 
+## The parts' own account of the maintenance (ShipParts.flush()): no debt to spread.
+func sync_maintenance(value: float) -> void:
+	_maintenance = value
+	part_debt = 0.0
+
+
+## Whether it's laid up in a yard (see drydock).
+func in_drydock() -> bool:
+	return not drydock.is_empty()
+
 ## Top speed, fuel burn and wear depend on the model, its company's research
 ## perks and the birds following it, which change rarely, so they're worked out
 ## once and kept until invalidate_stats().
 func _refresh_stats() -> void:
 	var data := model()
 	var who := GameState.owner_of(self)  # (Its company's research perks too: see Research.perk().)
-	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed") * People.captain_factor(self, "speed", true)  # (The captain's seamanship: see People.)
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel") * Traits.factor(who, "fuel", false) * People.captain_factor(self, "fuel")  # (The CEO's traits too: see Traits.)
+	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed") * People.captain_factor(self, "speed", true) * ShipParts.factor(self, "speed")  # (Worn propulsion: see ShipParts.)  # (The captain's seamanship: see People.)
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel") * Traits.factor(who, "fuel", false) * People.captain_factor(self, "fuel") * ShipParts.factor(self, "fuel")  # (A fouled hull.)  # (The CEO's traits too: see Traits.)
 	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear") * Traits.factor(who, "wear", false) * People.captain_factor(self, "wear") * People.factor(who, "wear")  # (The captain's engineering and the CTO's.)
+	_parts_breakdowns = ShipParts.factor(self, "breakdowns")  # (A tired engine or electrics; kept with the rest.)
+	_parts_dock = ShipParts.factor(self, "dock")
 	_stats_dirty = false
 
 
@@ -602,7 +632,7 @@ func breakdown_chance() -> float:
 	var chance := lerpf(float(settings.get("chance_at_full", 0.0005)), float(settings.get("chance_at_empty", 0.005)), worn)
 	var age := minf(1.0 + float(settings.get("age_per_hour_at_sea", 0.1)) * sea_time / 3600.0,
 		float(settings.get("max_age_factor", 2.0)))
-	return chance * float(model().get("breakdown_factor", 1.0)) * age * Research.perk(GameState.owner_of(self), "breakdowns") * Traits.factor(GameState.owner_of(self), "breakdowns", false) * People.captain_factor(self, "breakdowns") * People.factor(GameState.owner_of(self), "breakdowns")
+	return chance * float(model().get("breakdown_factor", 1.0)) * age * Research.perk(GameState.owner_of(self), "breakdowns") * Traits.factor(GameState.owner_of(self), "breakdowns", false) * People.captain_factor(self, "breakdowns") * People.factor(GameState.owner_of(self), "breakdowns") * _parts_breakdowns
 
 
 ## Cost of restoring 100% maintenance (from 0%).
@@ -612,7 +642,9 @@ func full_repair_cost() -> float:
 
 ## How long a port stop takes, shorter at a hub with the port stops upgrade.
 func dock_seconds() -> float:
-	return float(model().get("dock_s", 0)) * _hub_stop_factor()
+	if _stats_dirty:
+		_refresh_stats()
+	return float(model().get("dock_s", 0)) * _hub_stop_factor() * _parts_dock  # (Worn deck gear slows the stop: see ShipParts.)
 
 
 ## How long the repair phase takes, and then the refuel phase, while docked.
@@ -1093,6 +1125,10 @@ func next_route_index() -> int:
 
 func status_text() -> String:
 	var canal := canal_status_text()
+	if in_drydock():
+		return "In drydock at %s, back in service %s" % [GameData.port_name(docked_at), Fmt.calendar_short(int(drydock.until))]
+	if not drydock_to.is_empty() and not is_docked():
+		return "Sailing to the yard at %s for drydock" % GameData.port_name(drydock_to)
 	if is_cruise() and not is_lost() and not cruise.is_empty():  # (Booking, in a refit, or on a voyage: Cruises.)
 		var voyage: Dictionary = cruise.get("voyage", {})
 		var line := str(cruise.get("status", ""))
@@ -1482,6 +1518,10 @@ func to_dict() -> Dictionary:
 		"berth": berth,
 		"berth_half": berth_half,
 		"captains": captains,
+		"parts": parts,
+		"upgrades": upgrades,
+		"drydock": drydock,
+		"drydock_to": drydock_to,
 		"last_home_call": last_home_call,
 		"berth_phase": berth_phase,
 		"berth_time": berth_time,
@@ -1596,6 +1636,10 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.berth = int(data.get("berth", -1))
 	ship.berth_half = int(data.get("berth_half", -1))
 	ship.captains = data.get("captains", [])
+	ship.parts = data.get("parts", {}) if data.get("parts") is Dictionary else {}
+	ship.upgrades = data.get("upgrades", {}) if data.get("upgrades") is Dictionary else {}
+	ship.drydock = data.get("drydock", {}) if data.get("drydock") is Dictionary else {}
+	ship.drydock_to = str(data.get("drydock_to", ""))
 	ship.last_home_call = int(data.get("last_home_call", 0))
 	if ship.captains.is_empty():  # Saves from before officers: the same ones every time it loads.
 		ship.captains = Characters.officers_for(ship.model(), ship.id * 7919 + 17)

@@ -1379,6 +1379,116 @@ func choose_successor(kind: String, key: String) -> void:
 	people.succeed(company, kind, key)
 	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
 
+# --- Drydock (see ShipParts) --------------------------------------------------------------------
+
+## Why a ship can't be sent to a yard, or "".
+func drydock_error(ship: Ship, port_id: String, upgrade_ids: Array) -> String:
+	if ship == null or owner_of(ship) != company:
+		return "Not your ship"
+	if ship.in_drydock():
+		return "Already in drydock"
+	if not ship.is_docked() or ship.is_on_job() or ship.is_lost():
+		return "It must be in port"
+	if not ship.cargo_id.is_empty():
+		return "Its hold must be empty"
+	if not ShipParts.is_yard(port_id, company):
+		return "No yard there"
+	if port_id != ship.docked_at and not reachable(ship, ship.docked_at, port_id):
+		return "It can't reach %s" % GameData.port_name(port_id)
+	var cost := ShipParts.drydock_cost(ship, port_id, upgrade_ids)
+	if money < cost or in_debt():
+		return "Costs %s" % Fmt.money(cost)
+	return ""
+
+
+## Whether a ship can get from one port to another, refuelling on the way.
+func reachable(ship: Ship, from: String, to: String) -> bool:
+	return ship.fits_port(to) and ship.fits_lane(from, to) and (ship.can_reach(from, to) or not refuel_stops(ship, from, to).is_empty())
+
+
+## Sends a ship to a yard for drydock: it sails there (its route set aside),
+## is laid up for ShipParts.drydock_days(), paid for when the work starts, and
+## comes back as new with the upgrades fitted, its route resumed.
+func order_drydock(ship: Ship, port_id: String, upgrade_ids: Array) -> void:
+	if not drydock_error(ship, port_id, upgrade_ids).is_empty():
+		return
+	if Net.command(&"order_drydock", [ship, port_id, upgrade_ids]):
+		return
+	ship.set_meta(&"drydock_plan", {upgrades = upgrade_ids.duplicate(), route = ship.route.duplicate(), paused = ship.paused})
+	ship.drydock_to = port_id
+	if port_id == ship.docked_at:
+		_begin_drydock(ship)
+		return
+	ship.route = [port_id]  # (A one-port route: it sails there and waits; the plan has the old one.)
+	ship.route_index = -1
+	ship.pending_route.clear()
+	ship.hop_to = ""
+	ship.paused = false
+	ship.load_wait = ""
+	ActivityLog.add("%s is sailing to the yard at %s for drydock." % [ship.name, GameData.port_name(port_id)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+	ship_changed.emit(ship)
+
+
+func cancel_drydock(ship: Ship) -> void:
+	if ship == null or owner_of(ship) != company or ship.drydock_to.is_empty() or ship.in_drydock():
+		return
+	if Net.command(&"cancel_drydock", [ship]):
+		return
+	var plan: Dictionary = ship.get_meta(&"drydock_plan", {})
+	ship.drydock_to = ""
+	ship.route.assign(plan.get("route", []))
+	ship.pending_route.clear()
+	ship.route_index = ship.route.find(ship.docked_at) if ship.is_docked() else -1
+	ship.paused = bool(plan.get("paused", false)) or ship.route.is_empty()
+	ship_changed.emit(ship)
+
+
+func _begin_drydock(ship: Ship) -> void:
+	var plan: Dictionary = ship.get_meta(&"drydock_plan", {upgrades = [], route = [], paused = false})
+	var upgrade_ids: Array = plan.get("upgrades", [])
+	var cost := ShipParts.drydock_cost(ship, ship.docked_at, upgrade_ids)
+	if money < cost:
+		_set_hold(ship, "waiting for %s to pay the yard" % Fmt.money(cost))
+		return
+	_set_hold(ship, "")
+	var who := owner_of(ship)
+	_add_money(who, -cost)
+	_record(ship, "repair", cost, who)
+	docks.release(ship)
+	ship.berth = -1
+	ship.berth_phase = Ship.BERTH_NONE
+	ship.dock_time = -1.0
+	ship.drydock_to = ""
+	ship.drydock = {port = ship.docked_at, until = calendar_time() + int(ShipParts.drydock_days(ship, ship.docked_at) * 86400.0), upgrades = upgrade_ids, route = plan.get("route", []), paused = plan.get("paused", false), cost = cost}
+	ship.remove_meta(&"drydock_plan")
+	ActivityLog.add("%s is in drydock at %s: %s, back %s." % [ship.name, GameData.port_name(ship.docked_at), Fmt.money(cost), Fmt.calendar_short(int(ship.drydock.until))], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+	ship_changed.emit(ship)
+
+
+func _advance_drydock(ship: Ship) -> void:
+	if calendar_time() < int(ship.drydock.until):
+		return
+	for part_id: String in ship.drydock.get("upgrades", []):
+		var upgrade: Dictionary = ShipParts.part(part_id).get("upgrade", {})
+		if not upgrade.is_empty():
+			ship.upgrades[part_id] = str(upgrade.id)
+	ship.maintenance = 1.0
+	ShipParts.flush(ship)  # (In drydock still: the major parts too.)
+	var route: Array = ship.drydock.get("route", [])
+	var paused := bool(ship.drydock.get("paused", false))
+	ship.drydock = {}
+	ship.sea_time *= 0.5  # (A refit takes years off it: breakdowns by age.)
+	ship.route.assign(route)
+	ship.route_index = ship.route.find(ship.docked_at)
+	ship.pending_route.clear()
+	ship.paused = paused or ship.route.is_empty()
+	ship.dock_time = -1.0
+	ship.invalidate_stats()
+	if owner_of(ship) == company:
+		ActivityLog.add("%s is out of drydock at %s, as new%s." % [ship.name, GameData.port_name(ship.docked_at), "" if route.is_empty() else "; back on its route"], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
+	ship_changed.emit(ship)
+
+
 ## Names the child who inherits the shares and the post (People.set_heir()); -1 for the eldest of age.
 func set_heir(index: int) -> void:
 	if Net.command(&"set_heir", [index]):
@@ -2026,6 +2136,9 @@ func _advance(ship: Ship, delta: float) -> void:
 	MapView._prof("sim.advance", t_x)
 
 func _advance_timed(ship: Ship, delta: float) -> void:
+	if ship.in_drydock():
+		_advance_drydock(ship)
+		return
 	# A ship waiting in port for a full load, not due another look: nothing to do.
 	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _short_of_load(ship) and ship.is_docked() \
 			and ship.berth_phase == Ship.BERTH_NONE:
@@ -2585,6 +2698,9 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 ## Afterwards a running ship leaves as soon as it has the fuel for its next
 ## leg, and a Mammoth away from home sails back.
 func _advance_docked(ship: Ship, delta: float) -> void:
+	if ship.drydock_to == ship.docked_at and not ship.is_docking() and ship.cargo_id.is_empty():  # (Arrived at the yard: see order_drydock().)
+		_begin_drydock(ship)
+		return
 	# A cargo ship waiting at the anchorage comes in to a pier while the port has
 	# room to spare (and goes back out if it fills up: see below).
 	if ship.berth < 0 and ship.berth_phase == Ship.BERTH_NONE and not ship.is_service() and not ship.is_docking() and not ship.is_on_job() and ship.is_running() and docks.free_berths(ship.docked_at) > WAIT_AT_PIER_FREE + 1:
@@ -4010,7 +4126,7 @@ func _hand_to_tugs(mammoth: Ship, lost: Ship) -> void:
 
 ## Restores up to `amount` of maintenance, as far as money allows.
 func _repair(ship: Ship, amount: float) -> void:
-	amount = minf(amount, 1.0 - ship.maintenance)
+	amount = minf(amount, ShipParts.repairable(ship))  # (The minor parts at a port stop; everything in drydock: see ShipParts.)
 	if amount <= 0.0:
 		return
 	var dock_hub := hub_at(ship.docked_at, owner_of(ship))

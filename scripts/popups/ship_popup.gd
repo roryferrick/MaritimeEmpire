@@ -21,6 +21,8 @@ var _cargo_label := Label.new()
 ## The Crew button, and the page it swaps the bars for: every officer (the
 ## captain and mates) with their picture, and the crew.
 var _crew_button := Button.new()
+var _parts_button := Button.new()
+var _parts_box := VBoxContainer.new()
 var _crew_box := VBoxContainer.new()
 ## The gulls round it and the seabirds following it (see Birds), redone every
 ## BIRDS_SECONDS.
@@ -77,6 +79,7 @@ func _ready() -> void:
 		%Buttons.get_parent().move_child(%Buttons, -1)
 	%BarsSlot.add_child(ShipBars.new(ship))
 	_add_captain()
+	_add_parts()
 	%CloseButton.pressed.connect(queue_free)
 	%NameLabel.gui_input.connect(_on_name_input)
 	%RenameEdit.text_submitted.connect(_finish_rename.unbind(1))
@@ -507,7 +510,106 @@ func _add_captain() -> void:
 	_crew_box.add_child(uniform)
 
 
+## The Parts view (ShipParts): each part's condition by group, the upgrades fitted, and the Drydock button.
+func _add_parts() -> void:
+	_parts_button.text = "Parts"
+	_parts_button.toggle_mode = true
+	_parts_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_parts_button.tooltip_text = "The ship's parts and their condition; drydock for the major ones and upgrades."
+	_parts_button.toggled.connect(_show_parts)
+	%CloseButton.add_sibling(_parts_button)
+	%CloseButton.get_parent().move_child(_parts_button, %CloseButton.get_index())
+	_parts_box.visible = false
+	_parts_box.add_theme_constant_override(&"separation", 4)
+	%BarsSlot.add_sibling(_parts_box)
+
+
+func _fill_parts() -> void:
+	for child in _parts_box.get_children():
+		_parts_box.remove_child(child)
+		child.queue_free()
+	ShipParts.flush(ship)
+	var list := ShipParts.for_model(ship.model())
+	var groups := {}
+	for each: Dictionary in list:
+		(groups.get_or_add(str(each.group), []) as Array).append(each)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override(&"h_separation", 10)
+	grid.add_theme_constant_override(&"v_separation", 1)
+	for group: String in ["hull", "propulsion", "engine", "electrics", "deck", "systems"]:
+		if not groups.has(group):
+			continue
+		var head := Label.new()
+		head.text = ShipParts.group_name(group)
+		head.theme_type_variation = &"DimLabel"
+		grid.add_child(head)
+		grid.add_child(Control.new())
+		grid.add_child(Control.new())
+		for each: Dictionary in groups[group]:
+			var name := Label.new()
+			name.text = "  " + str(each.name) + ("*" if bool(each.get("major", false)) else "")
+			name.add_theme_font_size_override(&"font_size", 13)
+			grid.add_child(name)
+			var bar := ProgressBar.new()
+			var condition := float(ship.parts.get(each.id, 1.0))
+			bar.min_value = 0.0
+			bar.max_value = 1.0
+			bar.value = condition
+			bar.show_percentage = false
+			bar.custom_minimum_size = Vector2(110.0, 10.0)
+			bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			bar.modulate = Color(0.6, 0.9, 0.6) if condition > 0.6 else (Color(0.95, 0.8, 0.4) if condition > 0.3 else Color(0.95, 0.5, 0.45))
+			grid.add_child(bar)
+			var note := Label.new()
+			note.add_theme_font_size_override(&"font_size", 13)
+			note.theme_type_variation = &"DimLabel"
+			note.text = "%d%%%s" % [roundi(condition * 100.0), " · %s fitted" % str((each.get("upgrade", {}) as Dictionary).get("name", "")) if ship.upgrades.has(each.id) else ""]
+			grid.add_child(note)
+	_parts_box.add_child(grid)
+	var foot := Label.new()
+	foot.theme_type_variation = &"DimLabel"
+	foot.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	foot.add_theme_font_size_override(&"font_size", 13)
+	foot.text = "* major: only put right in drydock (a shipyard port or a hub of yours with the Drydock facility). Fuel x%s (hull), speed x%s (propulsion), breakdowns x%s, port time x%s from the parts now." % [Fmt.decimal(ShipParts.factor(ship, "fuel"), 2), Fmt.decimal(ShipParts.factor(ship, "speed"), 2), Fmt.decimal(ShipParts.factor(ship, "breakdowns"), 2), Fmt.decimal(ShipParts.factor(ship, "dock"), 2)]
+	_parts_box.add_child(foot)
+	if GameState.is_mine(ship):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override(&"separation", 8)
+		if ship.in_drydock():
+			row.add_child(foot.duplicate())
+			(row.get_child(0) as Label).text = ship.status_text()
+		elif not ship.drydock_to.is_empty():
+			var cancel := Button.new()
+			cancel.text = "Cancel the drydock"
+			cancel.pressed.connect(func() -> void:
+				GameState.cancel_drydock(ship)
+				_fill_parts())
+			row.add_child(cancel)
+		else:
+			var dock := Button.new()
+			dock.text = "Drydock…"
+			dock.tooltip_text = "Send it to a yard: every part put right, upgrades fitted, days out of service."
+			dock.pressed.connect(func() -> void: PopupHost.find(self).open(DrydockPopup.new(ship)))
+			row.add_child(dock)
+		_parts_box.add_child(row)
+
+
+func _show_parts(on: bool) -> void:
+	if on:
+		_fill_parts()
+		if _crew_button.button_pressed:
+			_crew_button.button_pressed = false
+	_parts_box.visible = on
+	%BarsSlot.visible = not on and not _crew_button.button_pressed
+	%Toggles.visible = not on and not _crew_button.button_pressed
+	_update_live()
+	reset_size.call_deferred()
+
+
 func _show_crew(on: bool) -> void:
+	if on and _parts_button.button_pressed:
+		_parts_button.button_pressed = false
 	_crew_box.visible = on
 	%BarsSlot.visible = not on
 	%Toggles.visible = not on
