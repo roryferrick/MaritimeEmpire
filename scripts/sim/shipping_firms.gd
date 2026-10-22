@@ -184,7 +184,7 @@ func _world_capacity(world: WorldEconomy) -> Dictionary:
 	for line: String in daily:
 		var speed := _mean_speed(line)
 		var days := MEAN_VOYAGE_NM / maxf(speed * _nm_per_day_per_speed(), 1.0) * (1.0 + BACKHAUL)
-		out[line] = float(daily[line]) * days * SLACK
+		out[line] = roundf(float(daily[line]) * days * SLACK)  # (Whole units: a save round-trips them exactly, so the fleets dealt from them come back the same.)
 	return out
 
 
@@ -205,9 +205,11 @@ func _nm_per_day_per_speed() -> float:
 ## Each firm's fleet: its share of each line's capacity in that line's models,
 ## the biggest firms in the biggest ships.
 func _give_fleets(rng: RandomNumberGenerator) -> void:
+	var lines: Array = capacity.keys()
+	lines.sort()  # (A fixed order: a save's dictionary may come back sorted, and the draws must match.)
 	for firm: Dictionary in firms:
 		var big := clampf(float(firm.size) * FIRMS / 4.0, 0.0, 1.0)  # (0 for the smallest, 1 for a giant.)
-		for line: String in capacity:
+		for line: String in lines:
 			var units := float(capacity[line]) * float(firm.size)
 			var models: Array = _models[line]
 			var fleet: Dictionary = firm.fleet
