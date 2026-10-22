@@ -303,6 +303,8 @@ var history := WorldHistory.new(self)
 var news := News.new(self)
 ## The producers' contracts and the companies' standing (saved with the game).
 var contracts := Contracts.new(self)
+## The people: executives, heads, officers and the job market (saved with the game).
+var people := People.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -432,6 +434,7 @@ func _step(delta: float) -> void:
 	MapView._prof("sim.firms", t_s)
 	traffic.step(delta)
 	contracts.step(delta)
+	people.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -785,7 +788,7 @@ func port_fee(port_id: String, margin: float, of: Company = null, type_id := "")
 	var who := of if of != null else company
 	if margin <= 0.0 or who.hub_at(port_id) != null:
 		return 0
-	return roundi(margin * float(GameData.config.get("port_fee", 0.1)) * ratings.factor(who, type_id, "fees") * Research.perk(who, "fees"))
+	return roundi(margin * float(GameData.config.get("port_fee", 0.1)) * ratings.factor(who, type_id, "fees") * Research.perk(who, "fees") * People.factor(who, "fees"))
 
 
 ## A model's crew: [captains, crew], by its tier (game_config crew).
@@ -836,7 +839,7 @@ func _check_payday() -> void:
 		if not ship.worked:
 			continue
 		ship.worked = false
-		var wages := roundi(crew_wages(ship.model()) * Traits.factor(owner_of(ship), "wages", false))  # (A thrifty or ex-navy CEO pays less: see Traits.)
+		var wages := roundi(crew_wages(ship.model()) * Traits.factor(owner_of(ship), "wages", false) * People.captain_factor(ship, "wages") * People.factor(owner_of(ship), "wages"))  # (A thrifty or ex-navy CEO pays less; a captain and a CPO who lead well too: see Traits, People.)
 		if ship.is_cruise():
 			wages = roundi(wages * cruises.crew_factor(ship))  # (Its Crew service level.)
 		var who := owner_of(ship)
@@ -848,12 +851,19 @@ func _check_payday() -> void:
 		tally[1] += 1
 	for who: Company in paid:
 		wages_paid.emit(paid[who][2], paid[who][0], paid[who][1])
+	for who in all_companies():  # The executives' and heads' salaries (see People).
+		var salaries := people.salaries_due(who)
+		if salaries > 0:
+			_add_money(who, -salaries)
+			_record(null, "salaries", salaries, who)
+			if who == company:
+				ActivityLog.add("Paid %s in salaries to your executives and heads." % Fmt.money(salaries), ActivityLog.Kind.INFO)
 	farms.pay_wages()  # (The farm workers', at the same time.)
 	energy.pay_wages()  # (The rigs' crews and the refinery workers' too.)
 	_pay_hub_upkeep()
 	# Interest on loans, paid at the same time.
 	for who in all_companies():
-		var interest := roundi(loan_interest(who.loan) * Traits.factor(who, "interest", false))  # (A bookkeeper CEO borrows cheaper: see Traits.)
+		var interest := roundi(loan_interest(who.loan) * Traits.factor(who, "interest", false) * People.factor(who, "interest"))  # (A bookkeeper CEO, or a good CFO, borrows cheaper: see Traits, People.)
 		if interest > 0:
 			_add_money(who, -interest)
 			_record(null, "interest", interest, who)
@@ -1310,6 +1320,59 @@ func bid_tender(offer_id: int, rate: float) -> void:
 	contracts.bid(offer, rate)
 	ActivityLog.add("Bid %s a unit on %s's tender for %s." % [Fmt.money(roundi(rate)) if rate >= 10.0 else "$%s" % Fmt.decimal(rate, 2), contracts.producer_name(int(offer.producer)), str(GameData.commodity(str(offer.good)).get("name", offer.good)).to_lower()], ActivityLog.Kind.INFO)
 
+
+# --- People (see People) -----------------------------------------------------------------------
+
+func hire_person(candidate_id: int, kind: String, key: String, budget: int) -> void:
+	var candidate := people.candidate_by_id(candidate_id)
+	if candidate.is_empty():
+		return
+	if Net.command(&"hire_person", [candidate_id, kind, key, budget]):
+		return
+	var name := str((candidate.character as Dictionary).get("name", ""))
+	var error := people.hire(company, candidate, kind, key, budget)
+	if error.is_empty():
+		ActivityLog.add("Hired %s as %s." % [name, People.head_title(key) if kind == "head" else (str(People.ROLES[key].name) if kind == "exec" else "an officer")], ActivityLog.Kind.GOOD)
+
+
+func fire_person(kind: String, key: String) -> void:
+	if Net.command(&"fire_person", [kind, key]):
+		return
+	people.dismiss(company, kind, key)
+
+
+func promote_officer(ship: Ship, index: int, role: String) -> void:
+	if ship == null or owner_of(ship) != company:
+		return
+	if Net.command(&"promote_officer", [ship, index, role]):
+		return
+	var name := str((ship.captains[index] as Dictionary).get("name", "")) if index < ship.captains.size() else ""
+	if people.promote(company, ship, index, role).is_empty():
+		ActivityLog.add("Promoted %s from %s to %s." % [name, ship.name, str(People.ROLES[role].name)], ActivityLog.Kind.GOOD)
+
+
+func headhunt(kind: String, role: String) -> void:
+	if Net.command(&"headhunt", [kind, role]):
+		return
+	var error := people.headhunt(company, kind, role)
+	if error.is_empty():
+		ActivityLog.add("The headhunter has found someone: look at the top of the job market.", ActivityLog.Kind.INFO)
+
+
+func set_head_budget(key: String, amount: int) -> void:
+	if not company.heads.has(key):
+		return
+	if Net.command(&"set_head_budget", [key, amount]):
+		return
+	company.head_budgets[key] = maxi(amount, 0)
+
+
+## A new CEO after the old one's going (the succession card): an executive (kind "exec", key the role) or a candidate (kind "candidate", key the id).
+func choose_successor(kind: String, key: String) -> void:
+	if Net.command(&"choose_successor", [kind, key]):
+		return
+	people.succeed(company, kind, key)
+	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
 
 ## The player's answer to a contract's event card (Contracts.answer_event()).
 func answer_contract_event(contract_id: int, kind: String, accepted: bool) -> void:
@@ -4234,6 +4297,11 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company.ceo = options.get("ceo", {}) if not (options.get("ceo", {}) as Dictionary).is_empty() else Company.random_ceo()
 	if not (company.ceo as Dictionary).has("skills"):
 		company.ceo.skills = Traits.random_skills(RandomNumberGenerator.new())
+	if not (company.ceo as Dictionary).has("age"):
+		var rng_age := RandomNumberGenerator.new()
+		rng_age.randomize()
+		company.ceo.age = rng_age.randf_range(30.0, 60.0)
+		company.ceo.nationality = world.country_of_port(new_home_port)
 	company.hubs.assign([Hub.new(new_home_port, true)])
 	companies.assign([company])
 	_clear_ships()
@@ -4258,6 +4326,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	history.clear()
 	news.clear()
 	contracts.clear()
+	people.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
@@ -4335,6 +4404,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	firms.from_dict(data.get("firms", {}), world)
 	news.from_dict(data.get("news", {}))
 	contracts.from_dict(data.get("contracts", {}))
+	people.from_dict(data.get("people", {}))
 	history.load(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, world)  # (Joining a game: none; the host's history isn't sent.)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
@@ -4464,6 +4534,7 @@ func world_dict() -> Dictionary:
 		"firms": firms.to_dict(),
 		"news": news.to_dict(),
 		"contracts": contracts.to_dict(),
+		"people": people.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
 			var ship_data := ship.to_dict()

@@ -141,6 +141,20 @@ func show_contract_event(contract: Dictionary, kind: String, info: Dictionary) -
 				actions = [["Make it up next quarter", func() -> void: GameState.answer_contract_event(id, "short_quarter", true)], ["Pay the fee", func() -> void: GameState.answer_contract_event(id, "short_quarter", false)]]})
 
 
+## The CEO has retired or died (People.succession_needed): a successor from the executives, or a hire.
+func show_succession(company: Company, why: String) -> void:
+	var old := str(company.ceo.get("name", "The founder"))
+	var actions := []
+	var ranked: Array = People.ROLE_ORDER.filter(func(role: String) -> bool: return not (company.executives.get(role, {}) as Dictionary).is_empty())
+	ranked.sort_custom(func(a: String, b: String) -> bool: return int(Traits.skills_of(company.executives[a]).leadership) > int(Traits.skills_of(company.executives[b]).leadership))
+	for role: String in ranked.slice(0, 3):
+		var person: Dictionary = company.executives[role]
+		actions.append(["%s (%s)" % [str(person.name), str(People.ROLES[role].short)], func() -> void: GameState.choose_successor("exec", role)])
+	actions.append(["Hire from outside", func() -> void: GameState.choose_successor("candidate", "")])
+	_enqueue({kicker = "SUCCESSION", title = "%s has %s" % [old, "died" if why == "died" else "retired"], color = Color(0.95, 0.8, 0.5),
+		body = "The company needs a chief executive. Pick one of your executives to step up (their traits and skills become the company's), or bring someone in from outside: the board will accept a stranger, but the market knows nothing of them.", actions = actions})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

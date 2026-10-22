@@ -54,6 +54,10 @@ var investors := {}
 var story := ""
 ## Standing from the backstory: {countries: {id: value}, firms: {firm index: value}} (used when reputation arrives in M2).
 var relations := {}
+## The executives by role (People.ROLES), the department heads by "group|region" and each head's budget of contracts (see People).
+var executives := {}
+var heads := {}
+var head_budgets := {}
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
 ## What its people wear, line by line, where it's changed the defaults
@@ -179,6 +183,9 @@ func to_dict() -> Dictionary:
 		"investors": investors,
 		"story": story,
 		"relations": relations,
+		"executives": executives,
+		"heads": heads,
+		"head_budgets": head_budgets,
 		"ceo": ceo,
 		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
@@ -241,6 +248,9 @@ static func from_dict(data: Dictionary) -> Company:
 	company.local_sales = int(data.get("local_sales", 0))
 	company.start_debt = int(data.get("start_debt", 0))
 	company.relations = data.get("relations", {}) if data.get("relations") is Dictionary else {}
+	company.executives = data.get("executives", {}) if data.get("executives") is Dictionary else {}
+	company.heads = data.get("heads", {}) if data.get("heads") is Dictionary else {}
+	company.head_budgets = data.get("head_budgets", {}) if data.get("head_budgets") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.

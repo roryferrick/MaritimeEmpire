@@ -160,6 +160,8 @@ func best_tier(company: Company) -> String:
 ## Moves a company's standing with a producer and its country.
 func change_standing(company: Company, producer: int, amount: float, country := "", country_share := 0.5) -> void:
 	var info := _producer(producer)
+	if amount > 0.0:
+		amount *= People.factor(company, "standing", true)  # (A CCO who keeps the producers sweet: see People.)
 	var producers: Dictionary = company.relations.get_or_add("producers", {})
 	producers[str(producer)] = clampf(float(producers.get(str(producer), 0.0)) + amount * (1.0 - country_share), -100.0, 100.0)
 	if not str(info.get("country", "")).is_empty():
@@ -275,6 +277,8 @@ func _refresh_offers() -> void:
 		made += _charter_offers(company, rng, quota - offers.size())
 	if made > 0:
 		offers_changed.emit()
+	if _state.people != null:
+		_state.people.run_heads(company)  # (The department heads take what's theirs: see People.run_heads().)
 
 
 ## A fish market's supply deal at a port where the company bases boats (or its home): crates of a family a quarter at a premium over the landing price.
@@ -408,6 +412,7 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 	rate = maxf(rate, gap * GAP_FLOOR)
 	if GameData.commodity(good).get("maker", false):  # A maker's goods: the more it likes the company, the better the rate.
 		rate *= 1.0 + MAKER_LIKE * maxf(Manufacturers.likeness(company, good) - float(Manufacturers.setting("start", 20)), 0.0)
+	rate *= People.factor(company, "rates", true)  # (A CCO who negotiates well: see People.)
 	var units: int
 	var quarters := 0
 	if recurring:
@@ -749,7 +754,7 @@ func _run_contracts(now: int) -> void:
 				_quarter_event(contract, company)
 			changed = true
 		elif now > int(contract.due):
-			var fee := roundi(float(contract.value) * FAILED_FEE)
+			var fee := roundi(float(contract.value) * FAILED_FEE * People.factor(company, "penalties"))
 			_state._add_money(company, -fee)
 			_state._record(null, "contract_fees", fee, company)
 			contract.fees = int(contract.fees) + fee
@@ -760,6 +765,7 @@ func _run_contracts(now: int) -> void:
 
 
 func _charge_short(contract: Dictionary, company: Company, short: int, fee: int) -> void:
+	fee = roundi(fee * People.factor(company, "penalties"))  # (Good counsel talks the fee down: see People.)
 	_state._add_money(company, -fee)
 	_state._record(null, "contract_fees", fee, company)
 	contract.fees = int(contract.fees) + fee

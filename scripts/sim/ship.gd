@@ -580,9 +580,9 @@ func wear_per_s() -> float:
 func _refresh_stats() -> void:
 	var data := model()
 	var who := GameState.owner_of(self)  # (Its company's research perks too: see Research.perk().)
-	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed")
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel") * Traits.factor(who, "fuel", false)  # (The CEO's traits too: see Traits.)
-	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear") * Traits.factor(who, "wear", false)
+	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed") * People.captain_factor(self, "speed", true)  # (The captain's seamanship: see People.)
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel") * Traits.factor(who, "fuel", false) * People.captain_factor(self, "fuel")  # (The CEO's traits too: see Traits.)
+	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear") * Traits.factor(who, "wear", false) * People.captain_factor(self, "wear") * People.factor(who, "wear")  # (The captain's engineering and the CTO's.)
 	_stats_dirty = false
 
 
@@ -600,7 +600,7 @@ func breakdown_chance() -> float:
 	var chance := lerpf(float(settings.get("chance_at_full", 0.0005)), float(settings.get("chance_at_empty", 0.005)), worn)
 	var age := minf(1.0 + float(settings.get("age_per_hour_at_sea", 0.1)) * sea_time / 3600.0,
 		float(settings.get("max_age_factor", 2.0)))
-	return chance * float(model().get("breakdown_factor", 1.0)) * age * Research.perk(GameState.owner_of(self), "breakdowns") * Traits.factor(GameState.owner_of(self), "breakdowns", false)
+	return chance * float(model().get("breakdown_factor", 1.0)) * age * Research.perk(GameState.owner_of(self), "breakdowns") * Traits.factor(GameState.owner_of(self), "breakdowns", false) * People.captain_factor(self, "breakdowns") * People.factor(GameState.owner_of(self), "breakdowns")
 
 
 ## Cost of restoring 100% maintenance (from 0%).
@@ -625,7 +625,7 @@ func _hub_stop_factor() -> float:
 		return 1.0
 	var hub := GameState.hub_at(docked_at, GameState.owner_of(self))  # (A terminal for its kind at its company's hub here: a shorter stop. See Hub.effect_of().)
 	var terminal := hub.effect_of("dock", str(model().get("category", ""))) if hub != null else 0.0
-	return GameState.divine.stop_factor(self) * clampf(1.0 - terminal, 0.3, 1.0)
+	return GameState.divine.stop_factor(self) * clampf(1.0 - terminal, 0.3, 1.0) * People.factor(GameState.owner_of(self), "dock")  # (A COO who runs operations well: see People.)
 
 
 ## A leg within the ship's range that it fits (the Seaway) and can sail on one

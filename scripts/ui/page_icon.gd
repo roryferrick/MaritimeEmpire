@@ -33,6 +33,12 @@ func _draw() -> void:
 			for k in 4:
 				draw_rect(Rect2(at.call(0.28, 0.2 + k * 0.13), Vector2(0.44 if k < 3 else 0.26, 0.05) * side), Color(0.12, 0.16, 0.24))
 			draw_circle(at.call(0.64, 0.78), side * 0.09, Color(0.85, 0.3, 0.3))
+		"people":
+			# Two heads and shoulders, one behind the other.
+			draw_circle(at.call(0.36, 0.3), side * 0.14, color)
+			draw_colored_polygon(PackedVector2Array([at.call(0.1, 0.9), at.call(0.14, 0.58), at.call(0.36, 0.48), at.call(0.58, 0.58), at.call(0.62, 0.9)]), color)
+			draw_circle(at.call(0.68, 0.26), side * 0.12, Color(color, 0.7))
+			draw_colored_polygon(PackedVector2Array([at.call(0.5, 0.86), at.call(0.52, 0.52), at.call(0.68, 0.42), at.call(0.88, 0.52), at.call(0.92, 0.86)]), Color(color, 0.7))
 		"hubs":
 			# A quayside crane: a tower, a jib out to the left with its hook, and the quay.
 			draw_rect(Rect2(at.call(0.58, 0.18), Vector2(0.12, 0.66) * side), color)

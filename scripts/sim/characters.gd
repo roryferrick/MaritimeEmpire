@@ -156,6 +156,27 @@ static func random_character(rng: RandomNumberGenerator) -> Dictionary:
 	return {name = random_name(rng), look = random_look(rng)}
 
 
+## A person of working age for a kind of post ("officer", "head", "exec" or
+## "ceo"), with traits, skills, an age and a nationality (a country with a
+## port, or the one given): see People.
+static func random_person(rng: RandomNumberGenerator, kind: String, country: String) -> Dictionary:
+	var person := random_character(rng)
+	person.traits = Traits.random_traits(rng, rng.randi() % 3 if kind == "officer" else 1 + rng.randi() % 3)
+	person.skills = Traits.random_skills(rng)
+	match kind:
+		"officer":
+			person.age = rng.randf_range(28.0, 58.0)
+		"head":
+			person.age = rng.randf_range(32.0, 60.0)
+		_:
+			person.age = rng.randf_range(35.0, 62.0)
+	if country.is_empty():
+		var port: Dictionary = GameData.ports[rng.randi() % GameData.ports.size()]
+		country = GameState.world.country_of_port(str(port.id))
+	person.nationality = country
+	return person
+
+
 ## A ship's officers made up for a model: the captain first, then the mates
 ## (GameState.crew_of()). seed -1 for a random lot.
 static func officers_for(model: Dictionary, seed := -1) -> Array:
@@ -166,7 +187,7 @@ static func officers_for(model: Dictionary, seed := -1) -> Array:
 		rng.randomize()
 	var officers := []
 	for i in maxi(int(GameState.crew_of(model)[0]), 1):
-		officers.append(random_character(rng))
+		officers.append(random_person(rng, "officer", ""))
 	return officers
 
 

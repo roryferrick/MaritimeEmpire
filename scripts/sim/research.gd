@@ -754,7 +754,7 @@ static func points_rate(model: Dictionary) -> float:
 ## Banks research points for a ship's company.
 func earn_points(ship: Ship, points: float) -> void:
 	if points > 0.0:
-		_state.owner_of(ship).research_points += points
+		_state.owner_of(ship).research_points += points * People.factor(_state.owner_of(ship), "research", true)  # (A CTO who reads the research: see People.)
 
 
 ## A site finished by a company's ship: into its journal (the first company's
