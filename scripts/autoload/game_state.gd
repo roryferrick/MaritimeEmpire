@@ -1198,6 +1198,56 @@ func build_industry(hub: Hub, slot: int, commodity_id: String) -> void:
 	hubs_changed.emit()
 
 
+## A plant of the player's (an industry site, a farm plot, a maker's factory or
+## an energy building) set to sell its output locally: each day's output goes
+## into its zone's stockpile (WorldEconomy) and is paid for at the port's price
+## less LOCAL_SALE_CUT for the handling, instead of waiting in its store for
+## the company's ships. kind: "site", "plot", "factory" ("maker|port") or
+## "plant" ("port/building").
+const LOCAL_SALE_CUT := 0.1
+
+
+func set_local_sale(kind: String, key: String, on: bool) -> void:
+	if Net.command(&"set_local_sale", [kind, key, on]):
+		return
+	match kind:
+		"site":
+			if industry.owner_of(key) == company:
+				industry.site(key).local = on
+				industry_changed.emit()
+		"plot":
+			if farms.owner_of(key) == company:
+				farms.plot(key).local = on
+				farms_changed.emit()
+		"factory":
+			var parts := key.split("|")
+			var factory := Manufacturers.factory(company, parts[0], parts[1]) if parts.size() == 2 else {}
+			if not factory.is_empty():
+				factory.local = on
+				makers_changed.emit()
+		"plant":
+			var parts := key.split("/")
+			var plants := energy.plants_at(company, parts[0]) if parts.size() == 2 else {}
+			if plants.has(parts[1]):
+				plants[parts[1]].local = on
+				energy_changed.emit()
+
+
+## Sells a plant's output into its port's zone (see set_local_sale()): the
+## amount into the zone's stockpile, the company paid the port's price (x
+## factor: a breed's worth) less LOCAL_SALE_CUT. Returns what it was paid.
+func sell_locally(who: Company, port_id: String, good: String, amount: float, kind: String, factor := 1.0) -> int:
+	if amount <= 0.0:
+		return 0
+	var value := roundi(amount * company_sell_price(port_id, good, who) * factor * (1.0 - LOCAL_SALE_CUT))
+	var z := world.zone_of_port(port_id)
+	var g := world.good_index(good)
+	if z >= 0 and g >= 0:
+		world.deliver(z, g, amount)
+	_add_money(who, value)
+	_record(null, kind, -value, who)
+	return value
+
 ## Pulls down the building on one of a hub's industry plots, for some of its price back.
 func demolish_industry(hub: Hub, slot: int) -> void:
 	if slot < 0 or slot >= Hub.INDUSTRY_SLOTS or hub.industries[slot].is_empty():

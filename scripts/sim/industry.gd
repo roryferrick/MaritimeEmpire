@@ -403,7 +403,8 @@ func _run_day(key: String, entry: Dictionary) -> void:
 		return
 	var building_id := building_of(key)
 	var port_id := port_of(key)
-	var make := minf(output_a_day(building_id), maxf(stock_cap(building_id) - float(entry.get("stock", 0.0)), 0.0))
+	var local := bool(entry.get("local", false))  # Sold into the port's zone each day: see GameState.set_local_sale().
+	var make := output_a_day(building_id) if local else minf(output_a_day(building_id), maxf(stock_cap(building_id) - float(entry.get("stock", 0.0)), 0.0))
 	if make > 0.0:
 		var bought := 0.0
 		var store: Dictionary = entry.get_or_add("inputs", {})
@@ -417,7 +418,10 @@ func _run_day(key: String, entry: Dictionary) -> void:
 		if bought > 0.0:
 			_state._add_money(who, -roundi(bought))
 			_state._record(null, "industry", roundi(bought), who)
-		entry.stock = float(entry.get("stock", 0.0)) + make
+		if local:
+			entry.sold_local = float(entry.get("sold_local", 0.0)) + _state.sell_locally(who, port_id, str(building(building_id).makes), make, "industry")
+		else:
+			entry.stock = float(entry.get("stock", 0.0)) + make
 		entry.made = float(entry.get("made", 0.0)) + make
 	var upkeep := roundi(upkeep_a_month(building_id) / MONTH_DAYS)
 	_state._add_money(who, -upkeep)

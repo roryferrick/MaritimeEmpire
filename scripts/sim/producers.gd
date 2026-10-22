@@ -37,6 +37,8 @@ const FIELD_PORT_NM := 400.0
 var companies: Array = []
 ## [{id, company (index), good, site, site_kind ("port" or "city"), country, capacity}].
 var plants: Array = []
+## Site id -> the plants there (indices into plants), biggest first (see plants_at()).
+var _at_site := {}
 
 
 ## The trade a good belongs to.
@@ -62,6 +64,7 @@ static func trade_of(good: String) -> String:
 func generate(economy: WorldEconomy, seed: int) -> void:
 	companies.clear()
 	plants.clear()
+	_at_site.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var production: Dictionary = WorldEconomy.data("production").get("goods", {})
@@ -241,3 +244,58 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary) -> void:
 	companies = data.get("companies", [])
 	plants = data.get("plants", [])
+	_at_site.clear()
+
+
+## The plants at a site (a port id or a city id): indices into plants, the
+## biggest first. Worked out once.
+func plants_at(site: String) -> Array:
+	if _at_site.is_empty() and not plants.is_empty():
+		for i in plants.size():
+			(_at_site.get_or_add(str(plants[i].site), []) as Array).append(i)
+		for key: String in _at_site:
+			(_at_site[key] as Array).sort_custom(func(a: int, b: int) -> bool: return float(plants[a].capacity) > float(plants[b].capacity))
+	return _at_site.get(site, [])
+
+
+## A plant's company.
+func company_of(plant: Dictionary) -> Dictionary:
+	var index := int(plant.get("company", -1))
+	return companies[index] if index >= 0 and index < companies.size() else {}
+
+
+## How many plants a company has.
+func plant_count(company_index: int) -> int:
+	var count := 0
+	for plant: Dictionary in plants:
+		if int(plant.company) == company_index:
+			count += 1
+	return count
+
+
+## What kind of works a plant is, by its good: "Iron mine", "Wheat farm", "Steel mill"...
+static func plant_title(plant: Dictionary) -> String:
+	var good := str(plant.good)
+	var name := str(GameData.commodity(good).get("name", good.capitalize()))
+	var line := WorldEconomy.line_of(good)
+	var kind := "works"
+	match trade_of(good):
+		"mining":
+			kind = "mine"
+		"energy":
+			kind = "field" if good in ["oil", "gas"] else "refinery"
+		"chemicals":
+			kind = "plant"
+		"forestry":
+			kind = "sawmill"
+		"metals":
+			kind = "mill" if good == "steel" else "smelter"
+		"farming":
+			kind = "ranch" if line == "livestock" else ("orchard" if line == "produce" else "farm")
+		"fishing":
+			kind = "fishery"
+		"manufacturing":
+			kind = "factory"
+	if good in ["cars", "trucks", "boats"] or Manufacturers.maker(good).size() > 0:
+		kind = "factory"
+	return "%s %s" % [name, kind]

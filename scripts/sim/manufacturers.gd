@@ -389,8 +389,12 @@ func step(_delta: float) -> void:
 
 func _run_day(who: Company, each: Dictionary) -> void:
 	var id := str(each.maker)
-	var made := minf(output_a_day(id), maxf(stock_cap(id) - float(each.get("stock", 0.0)), 0.0))
-	each.stock = float(each.get("stock", 0.0)) + made
+	var local := bool(each.get("local", false))  # Sold into the port's zone each day: see GameState.set_local_sale().
+	var made := output_a_day(id) if local else minf(output_a_day(id), maxf(stock_cap(id) - float(each.get("stock", 0.0)), 0.0))
+	if local:
+		each.sold_local = float(each.get("sold_local", 0.0)) + _state.sell_locally(who, str(each.port), id, made, "factories")
+	else:
+		each.stock = float(each.get("stock", 0.0)) + made
 	each.made = float(each.get("made", 0.0)) + made
 	var upkeep := upkeep_a_month(id) / (365.25 / 12.0)
 	_state._add_money(who, -roundi(upkeep))

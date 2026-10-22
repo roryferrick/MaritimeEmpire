@@ -588,14 +588,18 @@ func _run_plants(who: Company, port_id: String) -> void:
 		var rate := rate_of(who, port_id, building_id)
 		var held := float(store_items(who, port_id).get(input, 0.0))
 		var take := minf(rate, held)
-		if yield_t > 0.0:
+		var local := bool((plants[building_id] as Dictionary).get("local", false))  # Its output sold into the port's zone: see GameState.set_local_sale().
+		if yield_t > 0.0 and not local:
 			take = minf(take, store_room(who, port_id, output) / yield_t)
 		var value := rate * float(GameData.commodity(input).get("base", 0.0))
 		if take <= 0.0:
 			who.energy_tally.idle = float(who.energy_tally.get("idle", 0.0)) + value
 			continue
 		_take_store(who, port_id, input, take)
-		_add_store(who, port_id, output, take * yield_t)
+		if local:
+			_state.sell_locally(who, port_id, output, take * yield_t, "energy")
+		else:
+			_add_store(who, port_id, output, take * yield_t)
 		who.energy_tally.processed = float(who.energy_tally.get("processed", 0.0)) + take * float(GameData.commodity(input).get("base", 0.0))
 		who.energy_tally.idle = float(who.energy_tally.get("idle", 0.0)) + value * (1.0 - take / rate)
 

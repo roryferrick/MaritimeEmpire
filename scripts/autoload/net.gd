@@ -92,7 +92,7 @@ const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing
 	&"rename_ship", &"set_prefs", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act",
 	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item",
 	&"build_factory", &"close_factory", &"sell_factory_stock",
-	&"build_site", &"close_site", &"sell_site_stock", &"list_site", &"buy_listed_site",
+	&"build_site", &"close_site", &"sell_site_stock", &"list_site", &"buy_listed_site", &"set_local_sale",
 	&"set_rig_run", &"send_rig_tug", &"buy_rig", &"sell_rig", &"list_rig", &"buy_listed_rig", &"upgrade_rig", &"lay_pipeline",
 	&"build_plant", &"demolish_plant", &"upgrade_plant", &"set_plant_mode", &"sell_energy_item",
 	&"send_expedition", &"recall_expedition", &"move_research_ship", &"fit_gear", &"remove_gear", &"accept_contract", &"abandon_contract"]

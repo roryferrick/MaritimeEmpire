@@ -28,6 +28,10 @@ signal animals_clicked(key: String, kind: String)
 signal home_clicked(kind: String, index: int)
 ## One of this player's hubs' industry plots was clicked (see _industry_plots()).
 signal industry_clicked(port_id: String, slot: int)
+## One of the other producers' plants on a port's industrial estate was clicked (see _estate()): the port and the plant (Producers.plants index).
+signal plant_clicked(port_id: String, plant: int)
+## An inland city's dot or name was clicked (see _draw_cities()).
+signal city_clicked(city_id: String)
 ## A wonder of the world clicked (see _draw_wonders()).
 signal wonder_clicked(id: String)
 ## A hidden gem on the land clicked (GameState.HIDDEN_GEMS with an area, not yet
@@ -3305,6 +3309,11 @@ func _click(screen_pos: Vector2) -> void:
 	elif not _industry_at(screen_pos).is_empty():
 		var plot := _industry_at(screen_pos)
 		industry_clicked.emit(plot[0], plot[1])
+	elif not _plant_at(screen_pos).is_empty():
+		var found := _plant_at(screen_pos)
+		plant_clicked.emit(found[0], int(found[1]))
+	elif not _city_at(screen_pos).is_empty():
+		city_clicked.emit(_city_at(screen_pos))
 	elif not gem_at(screen_pos).is_empty():
 		gem_clicked.emit(gem_at(screen_pos), _screen_lon_lat(screen_pos))
 	elif not marina_port.is_empty():
@@ -3793,6 +3802,9 @@ func _draw_static_layer() -> void:
 			_port_labels = _place_port_labels(placed_labels, boxed[1])
 			_prof("place.ports", tp)
 			tp = Time.get_ticks_usec()
+			_city_labels = _place_city_labels(placed_labels)
+			_prof("place.cities", tp)
+			tp = Time.get_ticks_usec()
 			_country_labels = _place_country_labels(placed_labels)
 			_prof("place.countries", tp)
 			tp = Time.get_ticks_usec()
@@ -3811,6 +3823,7 @@ func _draw_static_layer() -> void:
 	t0 = Time.get_ticks_usec()
 	_draw_route()
 	_draw_ports(_port_labels)
+	_draw_cities()
 	_prof("static.ports", t0)
 	t0 = Time.get_ticks_usec()
 	_draw_price_boxes()
@@ -3824,6 +3837,9 @@ func _shift_labels() -> void:
 	var font := get_theme_default_font()
 	for label: Array in _port_labels:
 		label[1] = _port_label_rect(font, GameData.get_port(label[0]))
+	for label: Array in _city_labels:
+		var rect: Rect2 = label[1]
+		label[1] = Rect2(city_screen_position(label[0]) + Vector2(-rect.size.x / 2.0, CITY_RADIUS + 2.0), rect.size)
 	for label: Array in _country_labels:
 		var rect: Rect2 = label[1]
 		label[1] = Rect2(_unit_to_screen(_country_units[label[2]]) - rect.size / 2.0, rect.size)
@@ -3844,6 +3860,8 @@ func _preload_label_atlas() -> void:
 	var font := get_theme_default_font()
 	for port: Dictionary in GameData.ports:
 		_label_atlas.add(_port_font(), PORT_FONT_SIZE, 0, GameData.port_name(port.id))
+	for city: Dictionary in _cities():
+		_label_atlas.add(_port_font(), CITY_FONT_SIZE, 0, str(city.name))
 	var data := GameData.world_map
 	for text: String in data.label_names:
 		_label_atlas.add(font, COUNTRY_FONT_SIZE, 0, text)
@@ -3901,6 +3919,17 @@ func _draw_label_layer() -> void:
 		var color := dimmed if dimmed_ports.has(label[0]) or _port_locked(label[0]) else label_color  # (Locked regions' ports named, but dimmed.)
 		if _label_quad(port_font, PORT_FONT_SIZE, 0, text, rect.position + Vector2(1, 1), shadow, pixels):
 			_label_quad(port_font, PORT_FONT_SIZE, 0, text, rect.position, color, pixels)
+	var city_alpha := _city_alpha()
+	if city_alpha > 0.0:
+		var city_color := Color(label_color, label_color.a * city_alpha * CITY_LABEL_ALPHA)
+		var city_shadow := Color(shadow, shadow.a * city_alpha)
+		for label: Array in _city_labels:
+			var rect: Rect2 = label[1]
+			if not bounds.intersects(rect):
+				continue
+			var text := str(_city(label[0]).get("name", label[0]))
+			if _label_quad(port_font, CITY_FONT_SIZE, 0, text, rect.position + Vector2(1, 1), city_shadow, pixels):
+				_label_quad(port_font, CITY_FONT_SIZE, 0, text, rect.position, city_color, pixels)
 	_label_batch.flush(_label_layer, _label_atlas.get_texture())
 	_prof("labels.layer", t_l)
 
@@ -4900,6 +4929,222 @@ static func _industry_texture(commodity_id: String) -> Texture2D:
 		_industry_art[commodity_id] = load(path) if ResourceLoader.exists(path) else null
 	return _industry_art[commodity_id]
 
+# --- The other producers' plants, and the inland cities (2026-10-22, the living world) ----------
+
+## The world's other producers' plants at a port (Producers.plants_at()) are
+## drawn behind its town as an industrial estate: up to ESTATE_MOST plots of
+## ESTATE_CELL dock units in rows across the town's width (the biggest plants
+## first), each a works for its good (the warehouse art with the good's band
+## along it) with its owner's mark at a corner, only where the map's land is.
+## Clicking one opens its card (plant_clicked). Laid out once per port (and
+## again if its town is).
+const ESTATE_MOST := 12
+const ESTATE_CELL := 4.4
+const ESTATE_GAP := 0.9
+const ESTATE_ROW_GAP := 1.4
+var _estates := {}  # Port id -> {key, plots: [[Rect2 (dock units), plant index]]}
+
+
+func _estate(port_id: String, layout: Dictionary) -> Array:
+	if GameState.world.producers.plants.is_empty():
+		return []
+	var town := _town(port_id, layout)
+	if town.is_empty():
+		return []
+	var key := [town.key, GameState.world.seed]
+	var kept: Dictionary = _estates.get(port_id, {})
+	if not kept.is_empty() and kept.key == key:
+		return kept.plots
+	var here: Array = GameState.world.producers.plants_at(port_id)
+	var claims := _town_claims(port_id)
+	var plots := []
+	var wide := float(layout.radius) * TOWN_HALF_RADII
+	var columns := maxi(floori(wide * 2.0 / (ESTATE_CELL + ESTATE_GAP)), 1)
+	var x := -float(town.reach) - ESTATE_ROW_GAP - ESTATE_CELL / 2.0
+	var i := 0
+	var most := mini(here.size(), ESTATE_MOST)
+	for r in 2:
+		for c in columns:
+			if i >= most:
+				break
+			var middle := Vector2(x, -wide + (ESTATE_CELL + ESTATE_GAP) * (c + 0.5))
+			if not _on_land(_dock_lon_lat(port_id, middle)) or _on_other_marina(port_id, middle) or _cell_on_other_town(port_id, middle, Vector2.ONE * ESTATE_CELL, claims):
+				continue  # (In the water, on a neighbour's quay or on its town.)
+			plots.append([Rect2(middle - Vector2.ONE * ESTATE_CELL / 2.0, Vector2.ONE * ESTATE_CELL), here[i]])
+			i += 1
+		x -= ESTATE_CELL + ESTATE_ROW_GAP
+	_estates[port_id] = {key = key, plots = plots}
+	return plots
+
+
+## A producer company's colour on the map (its mark on its plants): one of the
+## company colours by its place in the list.
+static func producer_color(company_index: int) -> Color:
+	return GameState.company_color_value(AmbientTraffic.COLORS[posmod(company_index, AmbientTraffic.COLORS.size())])
+
+
+func _draw_estate(port_id: String, layout: Dictionary) -> void:
+	var plots := _estate(port_id, layout)
+	if plots.is_empty():
+		return
+	var texture := _industry_texture("warehouse")
+	if texture == null:
+		return
+	var producers: Producers = GameState.world.producers
+	var scale := dock_scale(port_id)
+	var flip := float(_dock_flips.get(port_id, 1.0))
+	var turn := 0.0 if port_id == _recording_marina else _port_sea_angle(port_id) + _port_turn(port_id)
+	var drop := _shadow_drop(port_id, 0.7)
+	for entry: Array in plots:
+		var plot: Rect2 = entry[0]
+		var plant: Dictionary = producers.plants[entry[1]]
+		var shadow := _marina_polygon(port_id, _rect_points(plot.grow(-plot.size.x * 0.04)))
+		for k in shadow.size():
+			shadow[k] += drop
+		_canvas.draw_colored_polygon(shadow, Color(0, 0, 0, 0.22))
+		_canvas.draw_set_transform(_dock_point(port_id, plot.get_center()), turn, Vector2(scale, scale * flip))
+		_canvas.draw_texture_rect(texture, Rect2(-plot.size / 2.0, plot.size), false)
+		_canvas.draw_rect(Rect2(-plot.size.x * 0.44, -plot.size.y * 0.38, plot.size.x * 0.88, plot.size.y * 0.1), _good_color(str(plant.good)))
+		_canvas.draw_rect(Rect2(plot.size.x * 0.26, plot.size.y * 0.22, plot.size.x * 0.16, plot.size.y * 0.16), producer_color(int(plant.company)))
+		_canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## An estate lit at night like a hub's industry: each works under a sodium glow with a lamp at each corner.
+func _record_estate_lights(item: Control, port_id: String, layout: Dictionary, glow: Texture2D, scale: float) -> void:
+	for entry: Array in _estate(port_id, layout):
+		var plot: Rect2 = entry[0]
+		item.draw_texture_rect(glow, plot.grow(plot.size.x * 0.45), false, Color(LIGHT_SODIUM, 0.45))
+		var yard := plot.grow(-plot.size.x * 0.08)
+		for corner: Vector2 in [yard.position, Vector2(yard.end.x, yard.position.y), yard.end, Vector2(yard.position.x, yard.end.y)]:
+			_record_lamp(item, glow, corner, LIGHT_SODIUM, scale, 0.7)
+
+
+## The estate plot under a screen point: [port id, plant index], or [] (the
+## estates laid so far are those of the marinas drawn; a port far from the
+## point has no plot under it).
+func _plant_at(screen_pos: Vector2) -> Array:
+	if not docks_shown():
+		return []
+	var near := Rect2(Vector2.ZERO, size).grow(PORT_MAX_REACH * _ship_scale())
+	for port_id: String in _estates:
+		if not near.has_point(port_screen_position(port_id)):
+			continue
+		var plots: Array = _estates[port_id].plots
+		var local: Vector2 = _screen_to_local(port_id, [screen_pos, 0.0])[0]
+		for entry: Array in plots:
+			if (entry[0] as Rect2).has_point(local):
+				return [port_id, entry[1]]
+	return []
+
+
+## The inland cities (data/cities.json, the living world's people): from
+## CITY_MIN_ZOOM up each is a small square dot with its name under it, fading
+## in over the next doubling of the zoom, the biggest cities named first (the
+## names placed with the ports', never over one). Clicking one opens its card
+## (city_clicked).
+const CITY_MIN_ZOOM := 7.0
+const CITY_FONT_SIZE := 12
+const CITY_RADIUS := 2.6
+const CITY_LABEL_ALPHA := 0.85
+const CITY_HIT_PX := 9.0
+var _city_labels := []  # [[city id, rect]]
+var _city_list := []  # The cities, biggest first.
+var _city_by_id := {}
+var _city_cells := {}  # _label_cell() -> the cities (indices into _city_list) in it.
+
+
+func _cities() -> Array:
+	if _city_list.is_empty():
+		_city_list = WorldEconomy.data("cities").get("cities", []).duplicate()
+		_city_list.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("population", 0)) > float(b.get("population", 0)))
+		for i in _city_list.size():
+			var city: Dictionary = _city_list[i]
+			_city_by_id[city.id] = city
+			var cell := _label_cell(Vector2(float(city.get("lon", 0.0)), float(city.get("lat", 0.0))))
+			if not _city_cells.has(cell):
+				_city_cells[cell] = PackedInt32Array()
+			_city_cells[cell].append(i)
+	return _city_list
+
+
+func _city(city_id: String) -> Dictionary:
+	_cities()
+	return _city_by_id.get(city_id, {})
+
+
+## How much the cities show at this zoom (0 hidden, 1 full).
+func _city_alpha() -> float:
+	return clampf((_zoom - CITY_MIN_ZOOM) / CITY_MIN_ZOOM, 0.0, 1.0)
+
+
+func city_screen_position(city_id: String) -> Vector2:
+	var city := _city(city_id)
+	if city.is_empty():
+		return Vector2.INF
+	return world_to_screen(Geo.project(Vector2(float(city.lon), float(city.lat))))
+
+
+func _place_city_labels(placed: Array[Rect2]) -> Array:
+	if _city_alpha() <= 0.0 or gray_mode:
+		return []
+	var cities := _cities()
+	var labels := []
+	var bounds := Rect2(Vector2.ZERO, size)
+	var near := bounds.grow(LABEL_REACH_PX)
+	var font := _port_font()
+	var order := _ranks_near_view(_city_cells)
+	order.sort()  # (Biggest first: they come indexed by size.)
+	for i in order:
+		var city: Dictionary = cities[i]
+		var pos := city_screen_position(city.id)
+		if not near.has_point(pos):
+			continue
+		var text_size := _label_size(font, str(city.name), CITY_FONT_SIZE)
+		var rect := Rect2(pos + Vector2(-text_size.x / 2.0, CITY_RADIUS + 2.0), text_size)
+		if not bounds.intersects(rect) or _overlaps(rect, placed):
+			continue
+		placed.append(rect.grow(LABEL_PADDING))
+		labels.append([city.id, rect])
+	return labels
+
+
+## The cities' dots (every city near the view, named or not), with the static layer.
+func _draw_cities() -> void:
+	var alpha := _city_alpha()
+	if alpha <= 0.0 or gray_mode:
+		return
+	var cities := _cities()
+	var fill := Color(_color(&"port"), alpha * 0.9)
+	var outline := Color(_color(&"port_outline"), alpha)
+	var bounds := Rect2(Vector2.ZERO, size).grow(CITY_RADIUS * 2.0)
+	for i in _ranks_near_view(_city_cells):
+		var pos := city_screen_position(cities[i].id)
+		if not bounds.has_point(pos):
+			continue
+		var rect := Rect2(pos - Vector2.ONE * CITY_RADIUS, Vector2.ONE * CITY_RADIUS * 2.0)
+		_canvas.draw_rect(rect, fill)
+		_canvas.draw_rect(rect, outline, false, 1.0)
+
+
+## The city under a screen point (its dot, or its name), or "".
+func _city_at(screen_pos: Vector2) -> String:
+	if _city_alpha() <= 0.0 or gray_mode:
+		return ""
+	for label: Array in _city_labels:
+		if (label[1] as Rect2).has_point(screen_pos):
+			return label[0]
+	var cities := _cities()
+	var best := ""
+	var best_dist := CITY_HIT_PX
+	for i in _ranks_near_view(_city_cells):
+		var dist := city_screen_position(cities[i].id).distance_to(screen_pos)
+		if dist < best_dist:
+			best_dist = dist
+			best = cities[i].id
+	return best
+
+
+
 ## The industry plot under a screen point at a hub of this player's: [port id,
 ## slot], or [].
 func _industry_at(screen_pos: Vector2) -> Array:
@@ -4970,6 +5215,7 @@ func _draw_marina(port_id: String, layout: Dictionary) -> void:
 	t_m = Time.get_ticks_usec()
 	_draw_hq_building(port_id, layout)
 	_draw_industry(port_id, layout)
+	_draw_estate(port_id, layout)
 	_prof("marina.hq_industry", t_m)
 	t_m = Time.get_ticks_usec()
 	_draw_lighthouse(port_id, layout, scale)
@@ -12723,6 +12969,7 @@ func _record_marina_lights(item: Control) -> void:
 	_record_harbour_lamps(item, layout, glow, scale)
 	_record_hq_lights(item, port_id, layout, glow, scale)
 	_record_industry_lights(item, port_id, layout, glow, scale)
+	_record_estate_lights(item, port_id, layout, glow, scale)
 	# The lighthouse's halo and lantern (its beam is drawn each frame: see _draw_marina_lights()).
 	var tower := _lighthouse_spot(layout)
 	var halo := maxf(LIGHTHOUSE_RADIUS * 4.0, 8.0 / scale)

@@ -42,6 +42,8 @@ func _ready() -> void:
 	_map.birds_clicked.connect(_open_birds_popup)
 	_map.animals_clicked.connect(_open_animals_popup)
 	_map.industry_clicked.connect(_open_industry_popup)
+	_map.plant_clicked.connect(_open_plant_popup)
+	_map.city_clicked.connect(_open_city_popup)
 	_map.field_clicked.connect(func(field_id: String) -> void:
 		PopupHost.find(self).close()
 		GameRoot.find(self).show_energy("field:" + field_id))  # (A field's rigs: the Energy page.)
@@ -728,6 +730,32 @@ func _open_gem_popup(gem_id: String, where: Callable, claimed := Callable()) -> 
 
 
 ## A home of the wildlife clicked on the map: its popup, following it.
+## One of the other producers' plants on a port's estate: its card, following the port.
+func _open_plant_popup(port_id: String, plant: int) -> void:
+	var popup := PlantPopup.new()
+	popup.plant = plant
+	var last := [Vector2.ZERO]
+	popup.follow = func() -> Vector2:
+		var at := _map.port_screen_position(port_id)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)
+
+
+## An inland city: its card, following it.
+func _open_city_popup(city_id: String) -> void:
+	var popup := CityPopup.new()
+	popup.city_id = city_id
+	popup.map = _map
+	var last := [Vector2.ZERO]
+	popup.follow = func() -> Vector2:
+		var at := _map.city_screen_position(city_id)
+		if at != Vector2.INF:
+			last[0] = _map.get_global_transform() * at
+		return last[0]
+	PopupHost.find(self).open(popup)
+
 func _open_home_popup(kind: String, index: int) -> void:
 	var popup := HomePopup.new()
 	popup.kind = kind

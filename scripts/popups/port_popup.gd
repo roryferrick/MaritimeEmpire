@@ -103,6 +103,7 @@ func _build_size() -> void:
 	_add_maker_line()
 	_add_industry_line()
 	_add_energy_line()
+	_add_plants_line()
 	_update_birds()
 	_update_size()
 
@@ -158,6 +159,25 @@ func _add_industry_line() -> void:
 			queue_free())
 		row.add_child(open)
 	%SizeBox.add_child(row)
+
+
+## The world's other producers' plants here (Producers; drawn as the port's
+## industrial estate): how many, and the biggest by name and owner.
+func _add_plants_line() -> void:
+	var producers: Producers = GameState.world.producers
+	var here: Array = producers.plants_at(port_id)
+	if here.is_empty():
+		return
+	var parts := PackedStringArray()
+	for i in mini(here.size(), 4):
+		var plant: Dictionary = producers.plants[here[i]]
+		parts.append("%s (%s)" % [Producers.plant_title(plant), str(producers.company_of(plant).get("name", ""))])
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override(&"font_color", Color(0.82, 0.78, 0.7))
+	label.text = "%d producers' plants: %s%s" % [here.size(), ", ".join(parts), " and %d more" % (here.size() - 4) if here.size() > 4 else ""]
+	label.tooltip_text = "The world's producers' works here, drawn behind the town. Click one on the map for its card."
+	%SizeBox.add_child(label)
 
 
 ## The vehicle and boat makers with a factory here (their own, or a company's

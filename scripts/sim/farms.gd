@@ -519,7 +519,7 @@ func _grow_crop(who: Company, key: String, entry: Dictionary, month: int, year: 
 		var storm: float = _state.weather.strongest_at(Vector2(float(port.get("lon", 0.0)), float(port.get("lat", 0.0))))[1]
 		if storm > 0.3:
 			amount *= float(setting("storm_yield", 0.3))
-	_add_to_store(who, port_id, crop_id, amount, 1.0)
+	_add_to_store(who, port_id, crop_id, amount, 1.0, bool(entry.get("local", false)))
 
 
 ## A day of a herd: short of what the land carries it grows back; full, its
@@ -548,13 +548,19 @@ func _grow_herd(who: Company, key: String, entry: Dictionary, year: int) -> void
 			young *= 1.0 - (float(setting("barn_winter_loss", 0.05)) if _has(key, "barns") else float(setting("hard_winter_loss", 0.4)))
 		"drought":
 			young *= 0.6
-	_add_to_store(who, port_id, str(breed(breed_id).species) + BREED_SEP + breed_id, young, 1.0)
+	_add_to_store(who, port_id, str(breed(breed_id).species) + BREED_SEP + breed_id, young, 1.0, bool(entry.get("local", false)))
 
 
 ## Adds to a company's farm store at a port: the amount at its freshness
-## (mixed in with what's there).
-func _add_to_store(who: Company, port_id: String, item: String, amount: float, fresh: float) -> void:
+## (mixed in with what's there); or, from a plot set to sell locally, sells
+## it into the port's zone at once (GameState.sell_locally()).
+func _add_to_store(who: Company, port_id: String, item: String, amount: float, fresh: float, local := false) -> void:
 	if amount <= 0.0:
+		return
+	if local:
+		var paid: int = _state.sell_locally(who, port_id, item_commodity(item), amount, "farms", breed_value(item_breed(item)) * fresh)
+		who.farm_tally.harvested = float(who.farm_tally.get("harvested", 0.0)) + paid
+		who.farm_tally.sold_local = float(who.farm_tally.get("sold_local", 0.0)) + paid
 		return
 	var store: Dictionary = who.farm_stores.get_or_add(port_id, {items = {}, cold = false})
 	var items: Dictionary = store.get_or_add("items", {})

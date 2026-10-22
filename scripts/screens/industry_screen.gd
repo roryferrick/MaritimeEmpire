@@ -277,6 +277,7 @@ func _site_row(key: String) -> Control:
 	title.add_theme_color_override(&"font_color", GameState.company_color_value(GameState.company.color).lightened(0.2))
 	title.size_flags_horizontal = SIZE_EXPAND_FILL
 	head.add_child(title)
+	head.add_child(_local_switch("site", key, bool(entry.get("local", false)), Industry.port_of(key)))
 	var stock := floori(float(entry.get("stock", 0.0)))
 	head.add_child(_action("Sell %s" % Fmt.money_short(industry.stock_value(key)), "" if stock > 0 else "Nothing made yet", func() -> void: GameState.sell_site_stock(key)))
 	if int(entry.get("listing", 0)) > 0:
@@ -311,6 +312,17 @@ func _site_row(key: String) -> Control:
 		parts.append("%s %s in store" % [Fmt.thousands(floori(float(store.get(input, 0.0)))), str(GameData.commodity(input).get("name", input)).to_lower()])
 	row.add_child(_dim(" · ".join(parts)))
 	return row
+
+
+## The "Sell locally" switch of a plant (see GameState.set_local_sale()).
+func _local_switch(kind: String, key: String, on: bool, port_id: String) -> CheckButton:
+	var switch := CheckButton.new()
+	switch.text = "Sell locally"
+	switch.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	switch.button_pressed = on
+	switch.tooltip_text = "On, each day's output is sold into %s's market at the local price less %d%% for handling, money straight in, instead of waiting in store for your ships." % [GameData.port_name(port_id), roundi(GameState.LOCAL_SALE_CUT * 100.0)]
+	switch.toggled.connect(func(now: bool) -> void: GameState.set_local_sale(kind, key, now))
+	return switch
 
 
 func _card(title_text: String) -> VBoxContainer:

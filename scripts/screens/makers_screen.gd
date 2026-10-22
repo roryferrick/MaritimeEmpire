@@ -311,6 +311,13 @@ func _factory_row(factory: Dictionary) -> Control:
 	title.add_theme_color_override(&"font_color", GameState.company_color_value(me.color).lightened(0.2))
 	title.size_flags_horizontal = SIZE_EXPAND_FILL
 	head.add_child(title)
+	var local := CheckButton.new()
+	local.text = "Sell locally"
+	local.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	local.button_pressed = bool(factory.get("local", false))
+	local.tooltip_text = "On, each day's output is sold into %s's market at the local price less %d%% for handling, instead of waiting for your carriers." % [GameData.port_name(port_id), roundi(GameState.LOCAL_SALE_CUT * 100.0)]
+	local.toggled.connect(func(now: bool) -> void: GameState.set_local_sale("factory", "%s|%s" % [maker_id, port_id], now))
+	head.add_child(local)
 	var stock := floori(float(factory.get("stock", 0.0)))
 	var value := GameState.makers.stock_value(me, factory)
 	head.add_child(_action("Sell %s" % Fmt.money_short(value), "" if stock > 0 else "Nothing made yet", func() -> void: GameState.sell_factory_stock(maker_id, port_id)))

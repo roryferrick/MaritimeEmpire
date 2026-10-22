@@ -220,6 +220,13 @@ func _plot_card(key: String) -> Control:
 	mine.add_theme_color_override(&"font_color", GameState.company_color_value(GameState.company.color).lightened(0.2))
 	box.add_child(mine)
 	box.add_child(_text(_use_text(key)))
+	var local := CheckButton.new()
+	local.text = "Sell locally"
+	local.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	local.button_pressed = bool(entry.get("local", false))
+	local.tooltip_text = "On, each harvest is sold into %s's market as it comes in, at the local price less %d%% for handling, instead of going into your store there for your ships." % [GameData.port_name(port_id), roundi(GameState.LOCAL_SALE_CUT * 100.0)]
+	local.toggled.connect(func(now: bool) -> void: GameState.set_local_sale("plot", key, now))
+	box.add_child(local)
 	var crop_picker := OptionButton.new()
 	crop_picker.add_theme_font_size_override(&"font_size", FONT_SIZE)
 	crop_picker.add_item("Plant a crop...")

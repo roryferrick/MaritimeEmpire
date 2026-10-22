@@ -448,6 +448,13 @@ func _building_card(port_id: String, building_id: String) -> Control:
 		mode.item_selected.connect(func(index: int) -> void: GameState.set_plant_mode(building_id, port_id, str(mode.get_item_metadata(index))))
 		box.add_child(mode)
 		_pickers.append(mode)
+	var local := CheckButton.new()
+	local.text = "Sell locally"
+	local.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	local.button_pressed = bool((energy.plants_at(who, port_id)[building_id] as Dictionary).get("local", false))
+	local.tooltip_text = "On, what it makes each day is sold into %s's market at the local price less %d%% for handling, instead of filling its tank for your tankers." % [GameData.port_name(port_id), roundi(GameState.LOCAL_SALE_CUT * 100.0)]
+	local.toggled.connect(func(now: bool) -> void: GameState.set_local_sale("plant", "%s/%s" % [port_id, building_id], now))
+	box.add_child(local)
 	var row := HFlowContainer.new()
 	row.add_theme_constant_override(&"h_separation", 6)
 	for each: Dictionary in Energy.data().get("building_upgrades", []):
