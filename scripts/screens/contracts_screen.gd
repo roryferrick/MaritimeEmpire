@@ -109,10 +109,10 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 		line.add_child(_port_button(str(offer.to)))
 		line.add_child(_dim("(%s nm)" % Fmt.thousands(roundi(float(offer.nm)))))
 		row.add_child(line)
-		var standing := Contracts.tier_of(contracts.opinion(company, int(offer.producer)))
+		var standing := Contracts.tier_of(contracts.opinion(company, int(offer.producer), str(offer.country)))
 		row.add_child(_dim("Worth %s%s · premium x%s over plain freight · stands till %s · needs %s standing (you're %s with them, %d)" % [Fmt.money(int(offer.value)),
 			" over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "", Fmt.decimal(float(offer.premium), 2), Fmt.calendar_short(int(offer.expires)),
-			Contracts.tier_name(str(offer.min_tier)), Contracts.tier_name(standing), roundi(contracts.opinion(company, int(offer.producer)))]))
+			Contracts.tier_name(str(offer.min_tier)), Contracts.tier_name(standing), roundi(contracts.opinion(company, int(offer.producer), str(offer.country)))]))
 		if str(offer.kind) == "tender":
 			var names := PackedStringArray()
 			for index: int in offer.get("bidders", []):
@@ -127,7 +127,7 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 func _bid_box(contracts: Contracts, company: Company, offer: Dictionary) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 6)
-	var standing := Contracts.tier_of(contracts.opinion(company, int(offer.producer)))
+	var standing := Contracts.tier_of(contracts.opinion(company, int(offer.producer), str(offer.country)))
 	var allowed := Contracts.tier_at_least(standing, str(offer.min_tier))
 	var spin := SpinBox.new()
 	spin.min_value = 0.01

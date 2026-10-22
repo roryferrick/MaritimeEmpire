@@ -44,7 +44,10 @@ const HANDLING := 0.1
 const FREIGHT_NM := 8000.0
 const GAP_FLOOR := 0.8
 ## A one-off's units: the company's biggest ship of the line's hold (x this); a recurring contract's a quarter: a few holds a month.
-const VOYAGE_HOLDS := 1.0
+const VOYAGE_HOLDS := 3.0
+## A voyage offer is sized up (to VOYAGE_HOLDS_MOST holds) till it's worth MIN_VOYAGE_VALUE.
+const VOYAGE_HOLDS_MOST := 8.0
+const MIN_VOYAGE_VALUE := 60000.0
 const RECURRING_HOLDS_A_MONTH := [1.5, 4.0]
 const QUARTERS := [2, 8]
 ## Standing: what a delivery, a quarter met, a contract done, a quarter short and a failure do.
@@ -100,10 +103,13 @@ static func country_standing(company: Company, country: String) -> float:
 
 
 ## A company's standing with a producer: its country's plus the producer's own memory.
-func opinion(company: Company, producer: int) -> float:
+func opinion(company: Company, producer: int, country := "") -> float:
 	var info := _producer(producer)
 	var own := float((company.relations.get("producers", {}) as Dictionary).get(str(producer), 0.0))
-	return clampf(country_standing(company, str(info.get("country", ""))) + own, -100.0, 100.0)
+	var home := str(info.get("country", ""))
+	if home.is_empty():
+		home = country  # (A global company: the country of the plant in question.)
+	return clampf(country_standing(company, home) + own, -100.0, 100.0)
 
 
 static func tier_of(value: float) -> String:
@@ -131,11 +137,12 @@ func best_tier(company: Company) -> String:
 
 
 ## Moves a company's standing with a producer and its country.
-func change_standing(company: Company, producer: int, amount: float, country_share := 0.5) -> void:
+func change_standing(company: Company, producer: int, amount: float, country := "", country_share := 0.5) -> void:
 	var info := _producer(producer)
 	var producers: Dictionary = company.relations.get_or_add("producers", {})
 	producers[str(producer)] = clampf(float(producers.get(str(producer), 0.0)) + amount * (1.0 - country_share), -100.0, 100.0)
-	var country := str(info.get("country", ""))
+	if not str(info.get("country", "")).is_empty():
+		country = str(info.get("country", ""))
 	if not country.is_empty():
 		var countries: Dictionary = company.relations.get_or_add("countries", {})
 		countries[country] = clampf(float(countries.get(country, 0.0)) + amount * country_share, -100.0, 100.0)
@@ -219,8 +226,10 @@ func _refresh_offers() -> void:
 	while made < wanted and tries < lanes.size():
 		var lane: Dictionary = lanes[tries]
 		tries += 1
+		if offers.any(func(open: Dictionary) -> bool: return int(open.producer) == int(lane.producer) and open.good == lane.good and open.from == lane.from and open.to == lane.to):
+			continue  # (One offer a lane at a time.)
 		var producer := int(lane.producer)
-		var standing := tier_of(opinion(company, producer))
+		var standing := tier_of(opinion(company, producer, str(lane.country)))
 		var recurring := rng.randf() < RECURRING_SHARE and tier_at_least(standing, "known")
 		var tender := tier_at_least(standing, "trusted") and rng.randf() < TENDER_SHARE
 		if tier == "unknown" and str(lane.country) != home:
@@ -247,6 +256,9 @@ func _lanes_in_need(world: WorldEconomy) -> Array:
 		var line := WorldEconomy.line_of(good)
 		if line.is_empty():
 			continue
+		var type_id := Progression.type_of_commodity(good)
+		if type_id.is_empty() or not (_state.company as Company).has_type(type_id):
+			continue  # (Only what the company's divisions ship.)
 		var exporters := []
 		var importers := []
 		for z in world.zones.size():
@@ -299,7 +311,10 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 		units = roundi(hold * rng.randf_range(float(RECURRING_HOLDS_A_MONTH[0]), float(RECURRING_HOLDS_A_MONTH[1])) * 3.0 * (TENDER_HOLDS if tender else 1.0))
 		quarters = rng.randi_range(int(QUARTERS[0]), int(QUARTERS[1])) + (2 if tender else 0)
 	else:
-		units = roundi(hold * VOYAGE_HOLDS)
+		var holds := VOYAGE_HOLDS
+		while rate * hold * holds < MIN_VOYAGE_VALUE and holds < VOYAGE_HOLDS_MOST:
+			holds += 1.0
+		units = roundi(hold * holds)
 	var value := rate * units * maxi(quarters, 1)
 	var now: int = _state.calendar_time()
 	var offer := {id = _next_id, kind = "recurring" if recurring else "voyage", producer = int(lane.producer), good = good, from = str(lane.from), to = str(lane.to), nm = float(lane.nm),
@@ -374,7 +389,7 @@ func _close_tender(offer: Dictionary) -> void:
 			winner = firm_index
 			winning_rate = float(offer.bids[key])
 	if float(offer.my_bid) > 0.0:
-		var score := float(offer.my_bid) / (1.0 + opinion(company, int(offer.producer)) / STANDING_WEIGHT)
+		var score := float(offer.my_bid) / (1.0 + opinion(company, int(offer.producer), str(offer.country)) / STANDING_WEIGHT)
 		if score < best_score:
 			best_score = score
 			winner = -1
@@ -386,7 +401,7 @@ func _close_tender(offer: Dictionary) -> void:
 		offer.value = roundi(winning_rate * int(offer.units) * maxi(int(offer.quarters), 1))
 		offer.kind = "recurring"
 		var contract := sign_offer(company, offer)
-		change_standing(company, int(offer.producer), REP_QUARTER)
+		change_standing(company, int(offer.producer), REP_QUARTER, str(offer.country))
 		if _state.news != null:
 			_state.news.add("company", "%s wins %s's tender for %s at %s a unit" % [company.name, producer, _good_word(str(offer.good)), Fmt.money(roundi(winning_rate))], {port = offer.from})
 		tender_closed.emit(contract, true, company.name, winning_rate)
@@ -440,9 +455,9 @@ func _is_important(company: Company, offer: Dictionary) -> bool:
 func can_sign(company: Company, offer: Dictionary) -> String:
 	if str(offer.kind) == "tender":
 		return "A tender: bid on it instead"
-	var standing := tier_of(opinion(company, int(offer.producer)))
+	var standing := tier_of(opinion(company, int(offer.producer), str(offer.country)))
 	if not tier_at_least(standing, str(offer.min_tier)):
-		return "%s wants a %s company for this (you're %s with them: %d)" % [producer_name(int(offer.producer)), tier_name(str(offer.min_tier)), tier_name(standing), roundi(opinion(company, int(offer.producer)))]
+		return "%s wants a %s company for this (you're %s with them: %d)" % [producer_name(int(offer.producer)), tier_name(str(offer.min_tier)), tier_name(standing), roundi(opinion(company, int(offer.producer), str(offer.country)))]
 	return ""
 
 
@@ -480,7 +495,8 @@ func sign_offer(company: Company, offer: Dictionary) -> Dictionary:
 		contract.quarter_end = now + int(QUARTER_DAYS * 86400.0)
 	else:
 		var days := float(contract.nm) / maxf(_slowest_speed(str(contract.good)) * 86400.0 / _state.calendar_seconds_per_second(), 1.0)
-		contract.due = now + int((days * 3.0 + 30.0) * 86400.0)
+		var trips := ceilf(float(contract.units) / maxf(_biggest_hold(company, WorldEconomy.line_of(str(contract.good)), str(contract.good)), 1.0))
+		contract.due = now + int((days * 2.0 * trips + days + 30.0) * 86400.0)
 	contracts.append(contract)
 	offers_changed.emit()
 	contracts_changed.emit()
@@ -581,7 +597,7 @@ func delivered(ship: Ship, port: String) -> void:
 	var company: Company = _state.all_companies()[int(contract.company)]
 	contract.delivered = int(contract.delivered) + ship.cargo_qty
 	contract.quarter_delivered = int(contract.quarter_delivered) + ship.cargo_qty
-	change_standing(company, int(contract.producer), REP_DELIVERY)
+	change_standing(company, int(contract.producer), REP_DELIVERY, str(contract.country))
 	if str(contract.kind) == "voyage" and int(contract.delivered) >= int(contract.units):
 		_finish(contract, company, true)
 	contracts_changed.emit()
@@ -603,11 +619,11 @@ func _run_contracts(now: int) -> void:
 				_state._add_money(company, -fee)
 				_state._record(null, "contract_fees", fee, company)
 				contract.fees = int(contract.fees) + fee
-				change_standing(company, int(contract.producer), REP_SHORT)
+				change_standing(company, int(contract.producer), REP_SHORT, str(contract.country))
 				if company == _state.company:
 					ActivityLog.add("%s short on %s for %s this quarter: a %s fee." % [Fmt.thousands(short), _good_word(str(contract.good)), producer_name(int(contract.producer)), Fmt.money(fee)], ActivityLog.Kind.BAD)
 			else:
-				change_standing(company, int(contract.producer), REP_QUARTER)
+				change_standing(company, int(contract.producer), REP_QUARTER, str(contract.country))
 				if company == _state.company:
 					ActivityLog.add("Quarter met on the %s contract for %s." % [_good_word(str(contract.good)), producer_name(int(contract.producer))], ActivityLog.Kind.GOOD)
 			contract.quarters_done = int(contract.quarters_done) + 1
@@ -630,7 +646,7 @@ func _run_contracts(now: int) -> void:
 
 func _finish(contract: Dictionary, company: Company, done: bool) -> void:
 	contract.status = "done" if done else "failed"
-	change_standing(company, int(contract.producer), REP_DONE if done else REP_FAILED)
+	change_standing(company, int(contract.producer), REP_DONE if done else REP_FAILED, str(contract.country))
 	for ship: Ship in _state.fleet(company):
 		if ship.contract_id == int(contract.id):
 			ship.contract_id = 0

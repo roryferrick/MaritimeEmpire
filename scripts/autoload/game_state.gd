@@ -1303,7 +1303,7 @@ func bid_tender(offer_id: int, rate: float) -> void:
 	var offer := contracts.offer_by_id(offer_id)
 	if offer.is_empty() or str(offer.kind) != "tender" or rate <= 0.0:
 		return
-	if not Contracts.tier_at_least(Contracts.tier_of(contracts.opinion(company, int(offer.producer))), str(offer.min_tier)):
+	if not Contracts.tier_at_least(Contracts.tier_of(contracts.opinion(company, int(offer.producer), str(offer.country))), str(offer.min_tier)):
 		return
 	if Net.command(&"bid_tender", [offer_id, rate]):
 		return
