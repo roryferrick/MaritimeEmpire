@@ -121,9 +121,10 @@ func reset() -> void:
 
 # --- Powers ---------------------------------------------------------------------
 
-## Seconds of play in a game week.
+## Seconds of play in a game week: a week of the old calendar (the powers'
+## cooldowns and effects were set by it), calendar.pace weeks of the new.
 func week_s() -> float:
-	return 7.0 * 86400.0 / float(_state.calendar_seconds_per_second())
+	return 7.0 * 86400.0 * _state.calendar_pace() / float(_state.calendar_seconds_per_second())
 
 
 ## What a power costs a company now: its base, scaling with the company's value

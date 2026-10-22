@@ -1038,7 +1038,7 @@ func _offer_for(kind_id: String) -> Dictionary:
 			offer.title = "%s: %s" % [works[_rng.randi() % works.size()], target_name(end)]
 			offer.needs = ["sonar"] if _rng.randf() < 0.6 else ["sonar", "lab"]
 			offer.depth = 200
-			offer.days = 3.0
+			offer.days = 12.0
 			offer.difficulty = 1
 		_:
 			var pool := site_ids().filter(func(id: String) -> bool:
@@ -1068,7 +1068,7 @@ func _offer_for(kind_id: String) -> Dictionary:
 			offer.difficulty = int(each.get("difficulty", 1))
 	var cheapest := cheapest_for(int(offer.depth), offer.needs)
 	var tier := int(cheapest.get("tier", 5))
-	var pay := float(cheapest.get("price", 1000000)) * float(setting("pay_rate", 0.03)) * (float(offer.days) + 8.0) * float(info.get("pay", 1.0)) * (0.8 + 0.1 * float(offer.difficulty)) * _rng.randf_range(0.9, 1.15)
+	var pay := float(cheapest.get("price", 1000000)) * float(setting("pay_rate", 0.03)) * (float(offer.days) + 32.0) * float(info.get("pay", 1.0)) * (0.8 + 0.1 * float(offer.difficulty)) * _rng.randf_range(0.9, 1.15)
 	offer.pay = _round_2(pay)
 	offer.tier = tier
 	offer.deadline = int(setting("deadline_days", 30)) + roundi(float(offer.days) * 2.0)

@@ -1,12 +1,12 @@
 {
 	"_comment": "Cargo & Ore industry (scripts/sim/industry.gd): every good the type trades has its building. Mines dig ore and logging camps fell timber at their resource ports, on claims shared by every company (claims: how many a port has; a company may hold most_claims of a port's); plants refine ore into metals and other goods for the breakbulk carriers; factories make the container ships' goods. Plants and factories go at any port the company has unlocked, one of each kind a port. A building makes output_a_month[kind] of its good (in its unit) into its stockpile (holding stock_months of it), from inputs (units of each input good a unit of output) out of its input store: what its company's ships unload there (up to stock_months of what it uses), else bought at the port's price as it needs them (so a building its own ships supply earns more). Its ships load its stockpile free; it can be sold there too. Cost: the building's monthly output value over its inputs at base prices x cost_months, rounded to the nearest $1M and kept within cost_range (no_input_factor more for a factory or plant that takes nothing shipped), unless the building sets its own cost; upkeep upkeep_a_month of it a calendar month, paid a day at a time. Closing one, close_share comes back. goods: the goods added for the type (GameData adds them to the markets at load, as Manufacturers' are): line is the ships that carry them (container, ore, breakbulk), regions their region prices (x base) over the line's default_regions, sources the ports where they're cheapest (a mine's or camp's ports are added at mine_price). The container ships' and ore carriers' new goods are priced so each line's average base stays as it was (the XP weight behind the level costs).",
 	"settings": {
-		"output_a_month": {"mine": 15000, "camp": 15000, "plant": 2500, "factory": 600},
+		"output_a_month": {"mine": 3750, "camp": 3750, "plant": 625, "factory": 150},
 		"stock_months": 3,
 		"cost_months": 14,
 		"cost_range": [5000000, 80000000],
 		"no_input_factor": 1.5,
-		"upkeep_a_month": 0.01,
+		"upkeep_a_month": 0.0025,
 		"close_share": 0.25,
 		"most_claims": 2,
 		"mine_price": 0.5,

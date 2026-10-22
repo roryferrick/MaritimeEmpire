@@ -296,6 +296,9 @@ var market := Market.new(self)
 var world := WorldEconomy.new(self)
 ## The world's AI shipping firms, on paper, carrying the zones' surpluses (see ShippingFirms).
 var firms := ShippingFirms.new(self)
+## Days the world runs before a new game begins, so ships are already at sea and
+## the zones' stocks have settled (warm_up_world()).
+const WARM_UP_DAYS := 90
 var weather := Weather.new(self)
 ## Divine Actions (the game mode chosen at founding: see Divine); off in most games.
 var divine := Divine.new(self)
@@ -494,6 +497,13 @@ func days_per_second() -> float:
 ## Calendar seconds that pass per second of play (at 1x).
 func calendar_seconds_per_second() -> float:
 	return float(GameData.config.get("calendar", {}).get("minutes_per_second", 20)) * 60.0
+
+
+## How much faster the calendar runs than the old one matched to real knots
+## (game_config calendar pace): durations a player waits for in real time are
+## stretched by it.
+func calendar_pace() -> float:
+	return float(GameData.config.get("calendar", {}).get("pace", 1.0))
 
 
 ## The game speeds this save allows: TIME_SPEEDS up to max_time_speed.
@@ -4027,6 +4037,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	industry.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
+	warm_up_world(WARM_UP_DAYS)
 	money_changed.emit(money)
 	SteamAchievements.note_game_created()
 	_begin_session()
@@ -5483,3 +5494,21 @@ func abandon_contract(contract_id: int) -> void:
 	if Net.command(&"abandon_contract", [contract_id]):
 		return
 	research.abandon(company, contract_id)
+
+
+## Runs the world and the firms for some days before play time 0 (a new game):
+## the clock is wound back and stepped up to 0, so the voyages at sea when the
+## game begins were dispatched in the days before it.
+func warm_up_world(days: int) -> void:
+	var day_s := 86400.0 / calendar_seconds_per_second()
+	var saved := play_time
+	play_time = saved - days * day_s
+	for i in days:
+		play_time += day_s
+		world._step_day()
+		firms._arrive(world)
+		if i % ShippingFirms.DISPATCH_DAYS == 0:
+			firms.dispatch_day()
+	play_time = saved
+	world.day = world._today()
+	firms._dispatch_day = world.day - ShippingFirms.DISPATCH_DAYS

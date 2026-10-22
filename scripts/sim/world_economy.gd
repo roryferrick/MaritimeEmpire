@@ -67,8 +67,9 @@ const ZONES_PER_STEP := 12
 ## Zones of one country share by land: each day this share of the gap between
 ## a zone's stock and its fair share (by use) of the country's moves.
 const INTERNAL_FLOW := 0.15
-## How much of the cargo on its way to a zone its price counts as already there.
-const INBOUND_LOOK := 0.75
+## How much of the cargo on its way to a zone its price counts as already there
+## (half: a shortage with ships on their way is half a shortage).
+const INBOUND_LOOK := 0.5
 var seed := 0
 
 

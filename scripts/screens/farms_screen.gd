@@ -170,7 +170,7 @@ func _rebuild_detail() -> void:
 		Farms.event_text(weather[0]).to_lower() if not weather[0].is_empty() else "a fair year", Farms.event_text(weather[1]).to_lower() if not weather[1].is_empty() else "a fair year"]))
 	if not Farms.can_farm(GameState.company):
 		_detail.add_child(_error("Only Agriculture companies farm: choose Agriculture as one of your company types to buy plots."))
-	_detail.add_child(_text("Plots: you may own %d of the %d here. Each plot grows one crop or grazes one herd; farm workers cost %s a plot every two weeks." % [
+	_detail.add_child(_text("Plots: you may own %d of the %d here. Each plot grows one crop or grazes one herd; farm workers cost %s a plot every pay period." % [
 		Farms.most_at(port_id), int(info.get("plots", 0)), Fmt.money(int(Farms.setting("wages_per_plot", 23000)))]))
 	var grid := HFlowContainer.new()
 	grid.add_theme_constant_override(&"h_separation", 12)

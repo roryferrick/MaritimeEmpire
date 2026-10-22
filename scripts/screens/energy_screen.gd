@@ -206,7 +206,7 @@ func _field_detail(field_id: String) -> void:
 	if not Energy.can_drill(GameState.company):
 		_detail.add_child(_error("Only Tankers companies drill: open a Tankers division."))
 	var gives := "crude oil, with a little LNG and LPG" if kind == "rig" else "LNG and LPG"
-	_detail.add_child(_text("Slots: you may own %d of the %d here. %s costs %s and gives %s; its crew costs %s every two weeks." % [Energy.most_at(field_id), int(info.get("slots", 0)),
+	_detail.add_child(_text("Slots: you may own %d of the %d here. %s costs %s and gives %s; its crew costs %s every pay period." % [Energy.most_at(field_id), int(info.get("slots", 0)),
 		_a(str(rig.name).to_lower()).capitalize().get_slice(" ", 0) + " " + str(rig.name).to_lower(), Fmt.money(int(rig.cost)), gives, Fmt.money(int(rig.wages))]))
 	var mine := energy.owned_by(GameState.company, field_id)
 	if not mine.is_empty():
@@ -428,7 +428,7 @@ func _building_card(port_id: String, building_id: String) -> Control:
 	var box := _card(str(info.name))
 	var outputs: Dictionary = info.get("outputs", {})
 	if not energy.plants_at(who, port_id).has(building_id):
-		box.add_child(_dim("%s: %s tons a day. Workers %s every two weeks." % [info.text, Fmt.thousands(int(info.rate)), Fmt.money(int(info.wages))]))
+		box.add_child(_dim("%s: %s tons a day. Workers %s every pay period." % [info.text, Fmt.thousands(int(info.rate)), Fmt.money(int(info.wages))]))
 		box.add_child(_action("Build %s" % Fmt.money_short(int(info.cost)), energy.build_error(who, building_id, port_id), func() -> void: GameState.build_plant(building_id, port_id)))
 		return box.get_parent()
 	var input := str(info.input)

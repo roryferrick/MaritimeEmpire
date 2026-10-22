@@ -28,16 +28,23 @@ const TAIL_SHARE := 0.1  # Of the fleet, in the small operators.
 ## voyage of MEAN_VOYAGE_NM and back (BACKHAUL of the way back empty), with
 ## SLACK spare; a firm's fleet is its share of each line in the line's models,
 ## big firms leaning to big ships.
-const MEAN_VOYAGE_NM := 4000.0
+const MEAN_VOYAGE_NM := 5000.0
 const BACKHAUL := 0.5
-const SLACK := 2.0
-## Dispatch: a zone exports a good above EXPORT_COVER days of cover and imports
-## below IMPORT_COVER; a voyage sails only where the price gap beats the freight
+const SLACK := 2.5
+## Dispatch: a zone exports a good above EXPORT_COVER days of cover and orders
+## more when what it has and what's coming fall under STOCK_DAYS plus the lead
+## time; a voyage sails only where the price gap beats the freight
 ## (HANDLING of the base price plus the base price per FREIGHT_NM sailed) by
 ## MARGIN; at most LOTS voyages a good a day; a lot is at most the line's
 ## biggest model's hold.
 const EXPORT_COVER := 40.0
-const IMPORT_COVER := 24.0
+## What a zone keeps on the quay (days of use), ordered a lead time ahead and FILL_DAYS more at a time.
+const STOCK_DAYS := 30.0
+const FILL_DAYS := 15.0
+## Importers looked at a call (frame).
+const IMPORTERS_PER_CALL := 12
+## Days between dispatches (voyages take weeks of the calendar: no need to look every day).
+const DISPATCH_DAYS := 8
 const HANDLING := 0.03
 const FREIGHT_NM := 40000.0
 const MARGIN := 0.02
@@ -206,14 +213,18 @@ func step(_delta: float) -> void:
 	if firms.is_empty() or world.zones.is_empty():
 		return
 	_arrive(world)
-	if _good_cursor < 0 and _dispatch_day < world.day:
+	if _good_cursor < 0 and world.day - _dispatch_day >= DISPATCH_DAYS:
 		_dispatch_day = world.day
 		_good_cursor = 0
 	if _good_cursor >= 0:
-		_dispatch_good(world, _good_cursor)
-		_good_cursor += 1
-		if _good_cursor >= world.goods.size():
-			_good_cursor = -1
+		if _job.is_empty():
+			_begin_good(world, _good_cursor)
+		_work(world, IMPORTERS_PER_CALL)
+		if _job.is_empty():
+			_good_cursor += 1
+			if _good_cursor >= world.goods.size():
+				_good_cursor = -1
+				_flush_batch()
 
 
 ## A whole day's dispatch at once (tests and probes).
@@ -221,8 +232,26 @@ func dispatch_day() -> void:
 	var world: WorldEconomy = _state.world
 	_dispatch_day = world.day
 	for g in world.goods.size():
-		_dispatch_good(world, g)
+		_begin_good(world, g)
+		_work(world, 1 << 30)
 	_good_cursor = -1
+	_flush_batch()
+
+
+## The dispatch's gathered lots sail: each batch a voyage of the line's biggest
+## ships (as many as its hold units take), at their speed.
+func _flush_batch() -> void:
+	var day_s: float = _state.calendar_seconds_per_second()
+	var now: float = _state.play_time
+	for key: String in _batch:
+		var lot_entry: Dictionary = _batch[key]
+		var model: Dictionary = _models[lot_entry.line][0]
+		var ships := maxi(ceili(float(lot_entry.hold) / float(model.capacity)), 1)
+		var days := float(lot_entry.nm) / maxf(float(model.get("speed_nm_per_s", 5.0)) * _nm_per_day_per_speed(), 1.0)
+		_insert_sorted(voyages, {firm = lot_entry.firm, model = model.id, ships = ships, line = lot_entry.line, goods = lot_entry.goods, hold = lot_entry.hold,
+			from = lot_entry.from, to = lot_entry.to, start = now, arrive = now + days * 86400.0 / day_s,
+			free = now + days * (1.0 + BACKHAUL) * 86400.0 / day_s, cost = lot_entry.cost}, "arrive")
+	_batch.clear()
 
 
 ## Voyages that have arrived deliver their goods and the firm is paid; ships
@@ -234,14 +263,20 @@ func _arrive(world: WorldEconomy) -> void:
 	while not voyages.is_empty() and float(voyages[0].arrive) <= now:
 		var v: Dictionary = voyages.pop_front()
 		var z := world.zone_of_port(v.to)
-		var g := world.good_index(v.good)
-		if z >= 0 and g >= 0:
-			var value := float(v.qty) * world.sell_price(v.to, v.good)
-			world.add_inbound(z, g, -float(v.qty))
-			world.deliver(z, g, float(v.qty), value)
-			var firm: Dictionary = firms[int(v.firm)]
-			firm.money = float(firm.money) + value - float(v.cost)
-			firm.carried = float(firm.carried) + float(v.qty)
+		var value := 0.0
+		var units := 0.0
+		for good: String in v.goods:
+			var g := world.good_index(good)
+			if z < 0 or g < 0:
+				continue
+			var qty := float(v.goods[good])
+			value += qty * world.sell_price(v.to, good)
+			units += qty
+			world.add_inbound(z, g, -qty)
+			world.deliver(z, g, qty, qty * world.sell_price(v.to, good))
+		var firm: Dictionary = firms[int(v.firm)]
+		firm.money = float(firm.money) + value - float(v.cost)
+		firm.carried = float(firm.carried) + units
 		_insert_sorted(_returning, [float(v.free), v.line, float(v.hold)], 0)
 	while not _returning.is_empty() and float(_returning[0][0]) <= now:
 		var home: Array = _returning.pop_front()
@@ -278,8 +313,30 @@ func _count_busy() -> void:
 		_busy[home[1]] = float(_busy.get(home[1], 0.0)) + float(home[2])
 
 
-## Matches the zones long of a good with those short of it and sends voyages.
-func _dispatch_good(world: WorldEconomy, g: int) -> void:
+## Days a line's typical voyage takes on the calendar (MEAN_VOYAGE_NM at the
+## line's mean speed): how far ahead a zone orders.
+func lead_days(line: String) -> float:
+	return MEAN_VOYAGE_NM / maxf(_mean_speed(line) * _nm_per_day_per_speed(), 1.0)
+
+
+## A dispatch's lots between the same two zones on one line, gathered into one
+## voyage of as many ships as they take ("from|to|line" -> {goods, hold, cost, from, to, line, nm}).
+var _batch := {}
+
+
+## The good being dispatched (a few importers a call, so no frame stalls):
+## {g, good, line, n, hold, base, lot, small_lot, models, prices, exporters, importers, index, free, sent}.
+var _job := {}
+
+
+## Sizes up a good's day: the zones long of it (stock on the quay over
+## EXPORT_COVER days of use or output), the zones short of it (stock and cargo
+## on its way under STOCK_DAYS plus the line's lead time of what they use;
+## filled FILL_DAYS further so one voyage lasts; a market too small for that to
+## be worth a ship gets the line's smallest ship's worth instead), and the
+## prices; nothing to do leaves _job empty.
+func _begin_good(world: WorldEconomy, g: int) -> void:
+	_job = {}
 	var good := world.goods[g]
 	var line := WorldEconomy.line_of(good)
 	if line.is_empty() or not capacity.has(line):
@@ -287,29 +344,38 @@ func _dispatch_good(world: WorldEconomy, g: int) -> void:
 	var g_count := world.goods.size()
 	var n := world.zones.size()
 	var hold := GameData.hold_of(good)
-	var base := float(GameData.commodity(good).get("base", 1.0))
 	var models: Array = _models[line]
-	var lot := float(models[0].capacity) / hold  # (One of the line's biggest ships' worth.)
-	var small_lot := float(models[-1].capacity) / hold  # (Its smallest's.)
+	var small_lot := float(models[-1].capacity) / hold
+	var nm_a_day := _mean_speed(line) * _nm_per_day_per_speed()
 	var exporters := []  # [zone, surplus units]
-	var importers := []  # [zone, deficit units]
+	var importers := []  # [zone, units wanted]
 	var prices := PackedFloat64Array()
 	prices.resize(n)
+	var short := []  # [zone, local use, held]
 	for z in n:
 		var i := z * g_count + g
 		prices[z] = world.price[i]
 		var use := world.use_for_price(i)
 		if use <= 0.0:
 			continue
-		var cover := (world.stock[i] + world.inbound[i]) / use
 		var local := world.need_base[i] + world.user_base[i]
-		if world.stock[i] > EXPORT_COVER * use:  # (On the quay, not what's on its way: that can't be loaded.)
+		if world.stock[i] > EXPORT_COVER * use:
 			exporters.append([z, world.stock[i] - EXPORT_COVER * use])
-		elif local > 0.0 and (world.stock[i] + world.inbound[i]) / local < IMPORT_COVER:
-			# Short of what it uses itself (a mine low on its own ore doesn't import it):
-			# filled up to the export line, so one voyage lasts; a market too small for
-			# that to be worth a ship gets the line's smallest ship's worth instead.
-			importers.append([z, maxf((EXPORT_COVER - cover) * local, small_lot - world.stock[i] - world.inbound[i])])
+		elif local > 0.0:
+			short.append([z, local, world.stock[i] + world.inbound[i]])
+	# A zone orders a lead time ahead: the voyage from its nearest source.
+	for each: Array in short:
+		var z: int = each[0]
+		var nearest := INF
+		for exporter: Array in exporters:
+			nearest = minf(nearest, _zone_nm[int(exporter[0]) * n + z])
+		if nearest == INF:
+			continue
+		var lead := nearest / maxf(nm_a_day, 1.0) + DISPATCH_DAYS
+		var local: float = each[1]
+		var held: float = each[2]
+		if held < (STOCK_DAYS + lead) * local:
+			importers.append([z, maxf((STOCK_DAYS + lead + FILL_DAYS) * local - held, small_lot - held)])
 	_debug_now = good == debug_good
 	if _debug_now:
 		debug.exporters = int(debug.get("exporters", 0)) + exporters.size()
@@ -319,18 +385,44 @@ func _dispatch_good(world: WorldEconomy, g: int) -> void:
 	if exporters.is_empty() or importers.is_empty():
 		return
 	importers.sort_custom(func(a: Array, b: Array) -> bool: return float(a[1]) > float(b[1]))
-	var free := float(capacity[line]) - busy(line)
-	var sent := 0
-	for importer: Array in importers:
+	_job = {g = g, good = good, line = line, n = n, hold = hold, base = float(GameData.commodity(good).get("base", 1.0)),
+		lot = float(models[0].capacity) / hold, small_lot = small_lot, models = models, prices = prices,
+		exporters = exporters, importers = importers, index = 0, free = float(capacity[line]) - busy(line), sent = 0}
+
+
+## Works through up to `count` of the job's importers, each filled from its
+## best sources in turn (a voyage of as many ships as it takes); the job is
+## done (emptied) when they're all seen, the line's ships are all out or LOTS
+## voyages have gone.
+func _work(world: WorldEconomy, count: int) -> void:
+	if _job.is_empty():
+		return
+	var g: int = _job.g
+	var good: String = _job.good
+	var line: String = _job.line
+	var n: int = _job.n
+	var hold: float = _job.hold
+	var base: float = _job.base
+	var lot: float = _job.lot
+	var small_lot: float = _job.small_lot
+	var models: Array = _job.models
+	var prices: PackedFloat64Array = _job.prices
+	var exporters: Array = _job.exporters
+	var importers: Array = _job.importers
+	var free: float = _job.free
+	var sent: int = _job.sent
+	var end: int = mini(int(_job.index) + count, importers.size())
+	for k in range(int(_job.index), end):
 		if sent >= LOTS or free <= 0.0:
 			_note("no_room")
+			end = importers.size()
 			break
+		var importer: Array = importers[k]
 		var to: int = importer[0]
 		var price_to := prices[to]
 		var wanted := float(importer[1])
 		if _debug_now:
 			_log("%s wants %.0f at x%.2f (free %.0f, sent %d)" % [world.zones[to].id, wanted, price_to / base, free, sent])
-		# Filled from its best sources in turn, each a voyage of as many ships as it takes.
 		for attempt in 4:
 			if wanted <= 0.0 or free <= 0.0 or sent >= LOTS:
 				break
@@ -362,32 +454,33 @@ func _dispatch_good(world: WorldEconomy, g: int) -> void:
 				_note("small")
 				break
 			var nm := _zone_nm[from * n + to]
-			var model := _model_for(models, qty * hold)
-			var ships := maxi(ceili(qty * hold / float(model.capacity)), 1)
 			var firm := _firm_for(world, from, line)
 			var got := world.take(from, g, qty, qty * prices[from])
 			if got <= 0.0:
 				exporters[best][1] = 0.0  # (Nothing there after all: the next source.)
 				_note("empty")
 				continue
-			var days := nm / maxf(float(model.get("speed_nm_per_s", 5.0)) * _nm_per_day_per_speed(), 1.0)
-			var day_s: float = _state.calendar_seconds_per_second()
-			var now: float = _state.play_time
 			var cost := got * prices[from] + got * base * (HANDLING + nm / FREIGHT_NM)
-			_insert_sorted(voyages, {firm = firm, model = model.id, ships = ships, line = line, good = good, qty = got, hold = got * hold,
-				from = world.zones[from].main, to = world.zones[to].main, start = now, arrive = now + days * 86400.0 / day_s,
-				free = now + days * (1.0 + BACKHAUL) * 86400.0 / day_s, cost = cost}, "arrive")
+			var key := "%d|%d|%s" % [from, to, line]
+			var lot_entry: Dictionary = _batch.get_or_add(key, {goods = {}, hold = 0.0, cost = 0.0, line = line, nm = nm, from = world.zones[from].main, to = world.zones[to].main, firm = firm})
+			lot_entry.goods[good] = float(lot_entry.goods.get(good, 0.0)) + got
+			lot_entry.hold = float(lot_entry.hold) + got * hold
+			lot_entry.cost = float(lot_entry.cost) + cost
 			world.add_inbound(to, g, got)
 			_busy[line] = float(_busy.get(line, 0.0)) + got * hold
 			if _debug_now:
 				debug.sent = int(debug.get("sent", 0)) + 1
-				debug.ships = int(debug.get("ships", 0)) + ships
 				debug.qty = float(debug.get("qty", 0.0)) + got
-				_log("  %s -> %s: %.0f %s in %d x %s" % [world.zones[from].id, world.zones[to].id, got, good, ships, model.id])
+				_log("  %s -> %s: %.0f %s" % [world.zones[from].id, world.zones[to].id, got, good])
 			exporters[best][1] = float(exporters[best][1]) - got
 			wanted -= got
 			free -= got * hold
 			sent += 1
+	_job.index = end
+	_job.free = free
+	_job.sent = sent
+	if end >= importers.size():
+		_job = {}
 
 
 func _note(what: String) -> void:
@@ -431,13 +524,16 @@ var _firm_sums := {}
 
 ## What's saved of a voyage, in this order (its line and hold units follow from
 ## its good; times and amounts whole numbers): there are thousands.
-const VOYAGE_KEYS := ["firm", "model", "ships", "good", "qty", "from", "to", "start", "arrive", "free", "cost"]
+const VOYAGE_KEYS := ["firm", "model", "ships", "goods", "from", "to", "start", "arrive", "free", "cost"]
 
 
 func to_dict() -> Dictionary:
 	var rows := []
 	for v: Dictionary in voyages:
-		rows.append([v.firm, v.model, v.ships, v.good, roundi(float(v.qty)), v.from, v.to, roundi(float(v.start)), roundi(float(v.arrive)), roundi(float(v.free)), roundi(float(v.cost))])
+		var goods := {}
+		for good: String in v.goods:
+			goods[good] = roundi(float(v.goods[good]))
+		rows.append([v.firm, v.model, v.ships, goods, v.from, v.to, roundi(float(v.start)), roundi(float(v.arrive)), roundi(float(v.free)), roundi(float(v.cost))])
 	return {seed = seed, dispatch_day = _dispatch_day, voyages = rows,
 		returning = _returning.map(func(home: Array) -> Array: return [roundi(float(home[0])), home[1], roundi(float(home[2]))]),
 		money = firms.map(func(firm: Dictionary) -> Array: return [snappedf(float(firm.money), 1.0), snappedf(float(firm.carried), 1.0)])}
@@ -452,8 +548,10 @@ func from_dict(data: Dictionary, world: WorldEconomy) -> void:
 		var v := {}
 		for k in mini(row.size(), VOYAGE_KEYS.size()):
 			v[VOYAGE_KEYS[k]] = row[k]
-		v.line = WorldEconomy.line_of(str(v.good))
-		v.hold = float(v.qty) * GameData.hold_of(str(v.good))
+		v.hold = 0.0
+		for good: String in v.goods:
+			v.line = WorldEconomy.line_of(good)
+			v.hold = float(v.hold) + float(v.goods[good]) * GameData.hold_of(good)
 		voyages.append(v)
 	_returning = data.get("returning", [])
 	_count_busy()

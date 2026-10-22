@@ -1396,7 +1396,7 @@
 			"max_owned": 8,
 			"map_size": [5.5, 2.3],
 			"map_color": "#f4f1ea",
-			"fishing": {"gear": ["troll"], "depth": ["inshore"], "crew": 4, "rate": 15, "trip_days": [3, 7], "trophy_chance": 0.035}
+			"fishing": {"gear": ["troll"], "depth": ["inshore"], "crew": 4, "rate": 3.75, "trip_days": [12, 28], "trophy_chance": 0.035}
 		},
 		{
 			"id": "model_44",
@@ -1421,7 +1421,7 @@
 			"max_owned": 8,
 			"map_size": [7.5, 2.8],
 			"map_color": "#ece6d6",
-			"fishing": {"gear": ["troll"], "depth": ["inshore", "offshore"], "crew": 6, "rate": 20, "trip_days": [4, 12], "trophy_chance": 0.01}
+			"fishing": {"gear": ["troll"], "depth": ["inshore", "offshore"], "crew": 6, "rate": 5, "trip_days": [16, 48], "trophy_chance": 0.01}
 		},
 		{
 			"id": "model_27",
@@ -1445,7 +1445,7 @@
 			"max_owned": 8,
 			"map_size": [9.5, 3.4],
 			"map_color": "#fbfbf8",
-			"fishing": {"gear": ["troll", "net"], "depth": ["inshore", "offshore"], "crew": 16, "rate": 33, "trip_days": [5, 21], "trophy_chance": 0.0}
+			"fishing": {"gear": ["troll", "net"], "depth": ["inshore", "offshore"], "crew": 16, "rate": 8.25, "trip_days": [20, 84], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_45",
@@ -1471,7 +1471,7 @@
 			"max_owned": 8,
 			"map_size": [15, 5],
 			"map_color": "#4f7aa3",
-			"fishing": {"gear": ["net"], "depth": ["offshore"], "crew": 28, "rate": 300, "trip_days": [10, 40], "trophy_chance": 0.0}
+			"fishing": {"gear": ["net"], "depth": ["offshore"], "crew": 28, "rate": 75, "trip_days": [40, 160], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_28",
@@ -1495,7 +1495,7 @@
 			"max_owned": 8,
 			"map_size": [22, 7.2],
 			"map_color": "#2f5a8a",
-			"fishing": {"gear": ["net", "trawl"], "depth": ["offshore", "deep"], "crew": 80, "rate": 1000, "trip_days": [20, 90], "trophy_chance": 0.0}
+			"fishing": {"gear": ["net", "trawl"], "depth": ["offshore", "deep"], "crew": 80, "rate": 250, "trip_days": [80, 360], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_29",
@@ -1520,7 +1520,7 @@
 			"max_owned": 8,
 			"map_size": [5.5, 2.4],
 			"map_color": "#d9dee2",
-			"fishing": {"gear": ["trap"], "depth": ["inshore"], "crew": 3, "traps": 30, "rate": 12, "trip_days": [2, 5], "trophy_chance": 0.0}
+			"fishing": {"gear": ["trap"], "depth": ["inshore"], "crew": 3, "traps": 30, "rate": 3, "trip_days": [8, 20], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_46",
@@ -1545,7 +1545,7 @@
 			"max_owned": 8,
 			"map_size": [8, 2.9],
 			"map_color": "#e8a87c",
-			"fishing": {"gear": ["trap"], "depth": ["inshore"], "crew": 6, "traps": 80, "rate": 20, "trip_days": [3, 12], "trophy_chance": 0.0}
+			"fishing": {"gear": ["trap"], "depth": ["inshore"], "crew": 6, "traps": 80, "rate": 5, "trip_days": [12, 48], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_30",
@@ -1569,7 +1569,7 @@
 			"max_owned": 8,
 			"map_size": [11, 3.8],
 			"map_color": "#c43c2c",
-			"fishing": {"gear": ["trap"], "depth": ["inshore", "offshore"], "crew": 18, "traps": 150, "rate": 33, "trip_days": [7, 30], "trophy_chance": 0.0}
+			"fishing": {"gear": ["trap"], "depth": ["inshore", "offshore"], "crew": 18, "traps": 150, "rate": 8.25, "trip_days": [28, 120], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_47",
@@ -1595,7 +1595,7 @@
 			"max_owned": 8,
 			"map_size": [13.5, 4.5],
 			"map_color": "#2f6e5a",
-			"fishing": {"gear": ["trap"], "depth": ["offshore", "deep"], "crew": 15, "traps": 200, "rate": 55, "trip_days": [14, 60], "trophy_chance": 0.0}
+			"fishing": {"gear": ["trap"], "depth": ["offshore", "deep"], "crew": 15, "traps": 200, "rate": 13.75, "trip_days": [56, 240], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_31",
@@ -1619,7 +1619,7 @@
 			"max_owned": 8,
 			"map_size": [17, 5.4],
 			"map_color": "#2b5f3a",
-			"fishing": {"gear": ["trap"], "depth": ["offshore", "deep"], "crew": 12, "traps": 250, "rate": 85, "trip_days": [30, 120], "trophy_chance": 0.0}
+			"fishing": {"gear": ["trap"], "depth": ["offshore", "deep"], "crew": 12, "traps": 250, "rate": 21.25, "trip_days": [120, 480], "trophy_chance": 0.0}
 		},
 		{
 			"id": "model_48",

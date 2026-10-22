@@ -8,20 +8,20 @@
 		"damage_at": 0.6,
 		"damage_odds": 0.35,
 		"hardened_odds": 0.5,
-		"repair_days": 2,
+		"repair_days": 8,
 		"repair_fee": 1500000,
 		"pipeline_nm": 300,
 		"pipeline_cost": 40000000,
 		"pipeline_per_nm": 100000,
 		"pipe_storage": 60000,
-		"rig_wait_days": 3,
+		"rig_wait_days": 12,
 		"rig_tier": 3,
 		"platform_tier": 4,
 		"pipeline_tier": 4
 	},
 	"rigs": {
-		"rig": {"name": "Oil rig", "field": "oil", "cost": 20000000, "output_t": 120000, "gas_share": 0.1, "storage": 20000, "wages": 60000},
-		"platform": {"name": "Gas platform", "field": "gas", "cost": 25000000, "output_t": 100000, "gas_share": 0.0, "storage": 20000, "wages": 60000}
+		"rig": {"name": "Oil rig", "field": "oil", "cost": 20000000, "output_t": 30000, "gas_share": 0.1, "storage": 20000, "wages": 60000},
+		"platform": {"name": "Gas platform", "field": "gas", "cost": 25000000, "output_t": 25000, "gas_share": 0.0, "storage": 20000, "wages": 60000}
 	},
 	"rig_upgrades": [
 		{"id": "wells", "name": "More wells", "cost": 8000000, "text": "+30% output", "output": 1.3},
@@ -29,13 +29,13 @@
 		{"id": "hardening", "name": "Storm hardening", "cost": 6000000, "text": "Storms damage it half as often"}
 	],
 	"buildings": [
-		{"id": "oil_refinery", "name": "Oil refinery", "input": "oil", "outputs": {"diesel": 0.95}, "rate": 1500, "cost": 30000000, "wages": 80000, "tank_days": 20, "tier": 2,
+		{"id": "oil_refinery", "name": "Oil refinery", "input": "oil", "outputs": {"diesel": 0.95}, "rate": 375, "cost": 30000000, "wages": 80000, "tank_days": 80, "tier": 2,
 			"text": "Turns crude oil into diesel"},
-		{"id": "gas_refinery", "name": "Gas refinery", "input": "diesel", "outputs": {"gasoline": 0.95}, "rate": 1200, "cost": 45000000, "wages": 100000, "tank_days": 20, "tier": 3,
+		{"id": "gas_refinery", "name": "Gas refinery", "input": "diesel", "outputs": {"gasoline": 0.95}, "rate": 300, "cost": 45000000, "wages": 100000, "tank_days": 80, "tier": 3,
 			"text": "Turns diesel into premium gasoline"},
-		{"id": "jet_plant", "name": "Jet fuel plant", "input": "gasoline", "outputs": {"jet_fuel": 0.95}, "rate": 1000, "cost": 70000000, "wages": 120000, "tank_days": 20, "tier": 5,
+		{"id": "jet_plant", "name": "Jet fuel plant", "input": "gasoline", "outputs": {"jet_fuel": 0.95}, "rate": 250, "cost": 70000000, "wages": 120000, "tank_days": 80, "tier": 5,
 			"text": "Turns premium gasoline into jet fuel"},
-		{"id": "h2_plant", "name": "Hydrogen & ammonia plant", "input": "gas", "outputs": {"hydrogen": 0.6, "ammonia": 1.0}, "rate": 800, "cost": 60000000, "wages": 100000, "tank_days": 20, "tier": 4,
+		{"id": "h2_plant", "name": "Hydrogen & ammonia plant", "input": "gas", "outputs": {"hydrogen": 0.6, "ammonia": 1.0}, "rate": 200, "cost": 60000000, "wages": 100000, "tank_days": 80, "tier": 4,
 			"text": "Turns LNG into hydrogen or ammonia (set at each plant)"}
 	],
 	"building_upgrades": [
