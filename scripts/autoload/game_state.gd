@@ -305,6 +305,8 @@ var news := News.new(self)
 var contracts := Contracts.new(self)
 ## The people: executives, heads, officers and the job market (saved with the game).
 var people := People.new(self)
+## Who owns the companies: shares, the board, the firms bought into, the IPO (see Ownership).
+var ownership := Ownership.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -435,6 +437,7 @@ func _step(delta: float) -> void:
 	traffic.step(delta)
 	contracts.step(delta)
 	people.step(delta)
+	ownership.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -744,6 +747,8 @@ func company_value(of: Company = null) -> float:
 	var settings := Hub.settings()
 	for i in range(1, who.hubs.size()):
 		value += float(settings.get("price", 5000000)) * pow(float(settings.get("price_growth", 2.0)), i - 1)
+	for key: String in who.stakes:  # (The stakes held in the paper firms, at the firms' value: see Ownership.)
+		value += ownership.firm_value(int(key)) * float(who.stakes[key]) / Ownership.TOTAL_SHARES
 	_values_kept[who] = [play_time, value]
 	return value
 ## company_value() for each company lately: Company -> [play time, value]; kept
@@ -1373,6 +1378,52 @@ func choose_successor(kind: String, key: String) -> void:
 		return
 	people.succeed(company, kind, key)
 	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
+
+# --- Ownership (see Ownership) --------------------------------------------------------------
+
+## Puts a motion to the board: "dividend" {share}, "issue" {share}, "buyback" {share}, "ipo" {}, "buy_block" {firm}.
+func propose_motion(kind: String, args: Dictionary) -> void:
+	if Net.command(&"propose_motion", [kind, args]):
+		return
+	var motion := {kind = kind, args = args, worth = 0.0, text = ""}
+	match kind:
+		"dividend":
+			motion.text = "a dividend of %d%% of each quarter's profit" % roundi(float(args.get("share", 0.0)) * 100.0)
+		"issue":
+			motion.worth = company_value() * float(args.get("share", 0.1))
+			motion.text = "selling %d%% of the company to a fund" % roundi(float(args.get("share", 0.1)) * 100.0)
+		"buyback":
+			motion.worth = company_value() * float(args.get("share", 0.05))
+			motion.text = "buying back %d%% of the shares" % roundi(float(args.get("share", 0.05)) * 100.0)
+		"ipo":
+			motion.text = "taking the company public"
+		"buy_block":
+			var firm_index := int(args.get("firm", -1))
+			if firm_index < 0 or not ownership.buy_block_error(company, firm_index).is_empty():
+				return
+			motion.worth = float(ownership.block_cost(company, firm_index))
+			motion.text = "buying %d%% of %s" % [roundi(Ownership.BLOCK * 100.0), str(firms.firms[firm_index].name)]
+		_:
+			return
+	ownership.propose(company, motion)
+
+
+func ipo_choose_bank(bank_id: String) -> void:
+	if Net.command(&"ipo_choose_bank", [bank_id]):
+		return
+	ownership.ipo_choose_bank(company, bank_id)
+
+
+func ipo_set_terms(low: float, high: float, share: float) -> void:
+	if Net.command(&"ipo_set_terms", [low, high, share]):
+		return
+	ownership.ipo_set_terms(company, low, high, share)
+
+
+func ipo_answer(choice: int) -> void:
+	if Net.command(&"ipo_answer", [choice]):
+		return
+	ownership.ipo_answer(company, choice)
 
 ## The player's answer to a contract's event card (Contracts.answer_event()).
 func answer_contract_event(contract_id: int, kind: String, accepted: bool) -> void:
@@ -4327,6 +4378,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	news.clear()
 	contracts.clear()
 	people.reset()
+	ownership.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
@@ -4336,6 +4388,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 		company.story = Backstories.story(options.start, str(company.ceo.get("name", "")))
 		money_changed.emit(money)
 	contracts.start_standing(company)  # (Known at home from the start: see Contracts.)
+	ownership.ensure(company)
 	_begin_session()
 	_start_warm_up(WARM_UP_DAYS)  # (Saved once it's run: see _warm_up_frame().)
 

@@ -338,6 +338,9 @@ func _make(record: Dictionary, key: String, home: bool, ports: Array, start: flo
 
 ## The Company standing for a firm (its name, colour and home port).
 func _company(firm_index: int) -> Company:
+	var controller: int = _state.ownership.controller_of(firm_index)  # (A firm a company controls sails in that company's colour: see Ownership.)
+	if controller >= 0 and controller < _state.all_companies().size():
+		return _state.all_companies()[controller]
 	if not _companies.has(firm_index):
 		var firm: Dictionary = (_state.firms as ShippingFirms).firms[firm_index]
 		_companies[firm_index] = Company.new(str(firm.name), COLORS[firm_index % COLORS.size()], str(firm.home))

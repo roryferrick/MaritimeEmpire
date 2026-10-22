@@ -6,7 +6,7 @@ extends Control
 ## (Markets, Hubs, Farms, Makers, Energy: see open_page()), the full-screen Route
 ## Assignment screen, and the Esc menu; Space pauses and T opens the chat.
 
-enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY, INDUSTRY, RESEARCH, CONTRACTS, PEOPLE }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY, INDUSTRY, RESEARCH, CONTRACTS, PEOPLE, OWNERSHIP }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -15,7 +15,7 @@ const ALERT_CHECK_SECONDS := 2.0  # (A look over every ship and model: a few ms.
 const ALERT_NAMES_SHOWN := 3
 ## The pages over the map (MapPage), opened by the buttons down its top left
 ## (WorldScreen.page_buttons): page id -> its Screen.
-const PAGE_SCREENS := {markets = Screen.MARKETS, contracts = Screen.CONTRACTS, people = Screen.PEOPLE, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY, industry = Screen.INDUSTRY, research = Screen.RESEARCH}
+const PAGE_SCREENS := {markets = Screen.MARKETS, contracts = Screen.CONTRACTS, people = Screen.PEOPLE, ownership = Screen.OWNERSHIP, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY, industry = Screen.INDUSTRY, research = Screen.RESEARCH}
 
 var _current_screen := Screen.WORLD
 
@@ -43,6 +43,7 @@ var _industry_screen := IndustryScreen.new()
 var _research_screen := ResearchScreen.new()
 var _contracts_screen := ContractsScreen.new()
 var _people_screen := PeopleScreen.new()
+var _ownership_screen := OwnershipScreen.new()
 ## The page open over the map, or null.
 var _page: MapPage = null
 ## Where the pages' screens are kept while shut (with the main screens).
@@ -65,8 +66,8 @@ static func find(from: Node) -> GameRoot:
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	for each: Control in [_farms_screen, _makers_screen, _energy_screen, _industry_screen, _research_screen, _contracts_screen, _people_screen]:
-		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen", _industry_screen: "IndustryScreen", _research_screen: "ResearchScreen", _contracts_screen: "ContractsScreen", _people_screen: "PeopleScreen"}.get(each, "EnergyScreen")
+	for each: Control in [_farms_screen, _makers_screen, _energy_screen, _industry_screen, _research_screen, _contracts_screen, _people_screen, _ownership_screen]:
+		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen", _industry_screen: "IndustryScreen", _research_screen: "ResearchScreen", _contracts_screen: "ContractsScreen", _people_screen: "PeopleScreen", _ownership_screen: "OwnershipScreen"}.get(each, "EnergyScreen")
 		each.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		%MarketsScreen.add_sibling(each)
 	_pages.farms = _farms_screen
@@ -76,6 +77,7 @@ func _ready() -> void:
 	_pages.research = _research_screen
 	_pages.contracts = _contracts_screen
 	_pages.people = _people_screen
+	_pages.ownership = _ownership_screen
 	_page_home = %MarketsScreen.get_parent()
 	for id: String in _pages:
 		(_pages[id] as Control).visible = false
@@ -134,6 +136,18 @@ func _ready() -> void:
 	GameState.people.succession_needed.connect(func(company: Company, why: String) -> void:
 		if company == GameState.company:
 			event_card.show_succession(company, why))
+	GameState.ownership.vote_result.connect(func(company: Company, motion: Dictionary, passed: bool, yes: float, total: float) -> void:
+		if company == GameState.company and yes < total:
+			event_card.show_vote(motion, passed, yes, total))
+	GameState.ownership.coup.connect(func(company: Company) -> void:
+		if company == GameState.company:
+			event_card.show_coup(company))
+	GameState.ownership.ipo_event.connect(func(company: Company, kind: String, info: Dictionary) -> void:
+		if company == GameState.company:
+			event_card.show_ipo(kind, info))
+	GameState.ownership.quarterly.connect(func(company: Company, report: Dictionary) -> void:
+		if company == GameState.company:
+			event_card.show_quarterly(report))
 	show_screen(Screen.WORLD)
 
 
@@ -264,6 +278,11 @@ func show_maker(maker_id: String) -> void:
 func show_port_on_map(port_id: String) -> void:
 	show_screen(Screen.WORLD)
 	(%WorldScreen.find_child("MapView") as MapView).focus_port(port_id)
+
+
+## Opens the Ownership page (the shares, the board, the firms, the IPO).
+func show_ownership() -> void:
+	open_page("ownership")
 
 
 ## Opens the People page (executives, heads, officers and the job market).

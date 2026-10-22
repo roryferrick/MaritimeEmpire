@@ -155,6 +155,47 @@ func show_succession(company: Company, why: String) -> void:
 		body = "The company needs a chief executive. Pick one of your executives to step up (their traits and skills become the company's), or bring someone in from outside: the board will accept a stranger, but the market knows nothing of them.", actions = actions})
 
 
+## The board voted (Ownership.vote_result).
+func show_vote(motion: Dictionary, passed: bool, yes: float, total: float) -> void:
+	_enqueue({kicker = "THE BOARD VOTES", title = "%s: %s" % ["Carried" if passed else "Defeated", str(motion.text).capitalize()], color = GOLD if passed else Color(0.95, 0.6, 0.5),
+		body = "%d%% of the shares for, %d%% against. %s" % [roundi(100.0 * yes / maxf(total, 1.0)), roundi(100.0 * (total - yes) / maxf(total, 1.0)), "It goes ahead." if passed else "The outside holders weren't for it; dividends and a rising price would warm them."]})
+
+
+## The board has thrown the CEO out (Ownership.coup): a successor is wanted.
+func show_coup(company: Company) -> void:
+	var actions := []
+	for role: String in People.ROLE_ORDER:
+		var person: Dictionary = company.executives.get(role, {})
+		if not person.is_empty() and actions.size() < 3:
+			actions.append(["%s (%s)" % [str(person.name), str(People.ROLES[role].short)], func() -> void: GameState.choose_successor("exec", role)])
+	actions.append(["Hire from outside", func() -> void: GameState.choose_successor("candidate", "")])
+	_enqueue({kicker = "NO CONFIDENCE", title = "The board has removed %s" % str(company.ceo.get("name", "the CEO")), color = Color(0.95, 0.5, 0.45),
+		body = "Holders of more than half the shares voted no confidence. The company goes on under a new chief executive: one of the executives, or someone from outside. You play on as the company.", actions = actions})
+
+
+## A roadshow investor's question, or listing day (Ownership.ipo_event).
+func show_ipo(kind: String, info: Dictionary) -> void:
+	if kind == "meeting":
+		var actions := []
+		var answers: Array = info.answers
+		for i in answers.size():
+			var choice := i
+			actions.append([str(answers[i]), func() -> void: GameState.ipo_answer(choice)])
+		_enqueue({kicker = "ROADSHOW", title = "A question from %s" % str(info.who), color = GOLD, body = str(info.question), actions = actions})
+	else:
+		var pop := float(info.pop)
+		_enqueue({kicker = "LISTING DAY", title = "%s: %s %d%%" % [str(info.exchange), "up" if pop >= 0.0 else "down", roundi(absf(pop) * 100.0)], color = GOLD if pop >= 0.0 else Color(0.95, 0.6, 0.5),
+			body = "Priced at %s a share; the first day closed at %s. %s shares sold, %s raised after %s's fee of %s." % [Fmt.money(roundi(float(info.settled))), Fmt.money(roundi(float(info.first_day))), Fmt.thousands(int(info.sold)), Fmt.money(int(info.raised)), str(info.bank), Fmt.money(int(info.fee))]})
+
+
+## A listed company's quarter (Ownership.quarterly).
+func show_quarterly(report: Dictionary) -> void:
+	var beat: bool = report.beat
+	_enqueue({kicker = "QUARTERLY RESULTS", title = "%s expectations" % ("Beat" if beat else "Missed"), color = GOLD if beat else Color(0.95, 0.6, 0.5),
+		body = "Profit %s against %s expected. The share price %s to %s (sentiment %s)%s." % [Fmt.money(roundi(float(report.profit))), Fmt.money(roundi(float(report.expected))), "rose" if beat else "fell", Fmt.money(roundi(float(report.price))), Fmt.decimal(float(report.sentiment), 2),
+			"; %s paid in dividends" % Fmt.money(int(report.dividend)) if int(report.dividend) > 0 else ""]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:
