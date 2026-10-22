@@ -127,6 +127,7 @@ func _ready() -> void:
 	_popup_host.get_parent().add_child(event_card)
 	add_child(HoverCards.new())  # (The nested hover cards, over everything: see HoverCards.)
 	GameState.contracts.offer_arrived.connect(func(offer: Dictionary) -> void: event_card.show_offer(offer))  # (An important offer: the card, pausing.)
+	GameState.contracts.tender_closed.connect(func(offer: Dictionary, won: bool, winner: String, rate: float) -> void: event_card.show_tender_result(offer, won, winner, rate))
 	show_screen(Screen.WORLD)
 
 

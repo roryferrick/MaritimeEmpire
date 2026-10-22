@@ -91,10 +91,29 @@ func show_offer(offer: Dictionary) -> void:
 Worth %s in all%s. %s" % [contracts.producer_name(int(offer.producer)), GameState.contract_summary(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)),
 		Fmt.thousands(roundi(float(offer.nm))), Fmt.money(int(offer.value)), " over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "",
 		"The offer stands till %s." % Fmt.calendar_short(int(offer.expires))]
+	if str(offer.kind) == "tender":
+		var names := PackedStringArray()
+		for index: int in offer.get("bidders", []):
+			names.append(str((GameState.firms as ShippingFirms).firms[index].name))
+		body = "%s puts out to tender: %s, %s to %s (%s nm).\n\nAsking %s a unit (%s in all). Bidding: %s. Bids are sealed and close %s; the producer takes the lowest, weighing its standing with each bidder." % [contracts.producer_name(int(offer.producer)), GameState.contract_summary(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)),
+			Fmt.thousands(roundi(float(offer.nm))), Fmt.money(roundi(float(offer.asking))), Fmt.money(int(offer.value)), ", ".join(names), Fmt.calendar_short(int(offer.closes))]
+		_enqueue({kicker = "TENDER", title = "%s: %s" % [str(GameData.commodity(str(offer.good)).get("name", offer.good)), GameData.port_name(str(offer.from))], body = body, color = GOLD,
+			actions = [["Bid", func() -> void: GameRoot.find(self).show_contracts()], ["Ignore", Callable()]]})
+		return
 	var id := int(offer.id)
 	_enqueue({kicker = "CONTRACT OFFER", title = "%s from %s" % [Contracts.KINDS.get(str(offer.kind), "Offer"), GameData.port_name(str(offer.from))], body = body, color = GOLD,
 		actions = [["Accept", func() -> void: GameState.sign_contract(id)], ["Decline", func() -> void: GameState.decline_offer(id)], ["Leave it", Callable()]]})
 
+
+
+## A tender the player bid on has closed (Contracts.tender_closed).
+func show_tender_result(offer: Dictionary, won: bool, winner: String, rate: float) -> void:
+	var good := str(GameData.commodity(str(offer.good)).get("name", offer.good))
+	if won:
+		_enqueue({kicker = "TENDER WON", title = "%s is yours" % good, body = "%s took your bid of %s a unit: %s, %s to %s. Assign ships to it on the Contracts page." % [GameState.contracts.producer_name(int(offer.producer)), Fmt.money(roundi(rate)), GameState.contract_summary(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to))], color = GOLD,
+			actions = [["Contracts page", func() -> void: GameRoot.find(self).show_contracts()], ["Later", Callable()]]})
+	else:
+		_enqueue({kicker = "TENDER LOST", title = "%s goes to %s" % [good, winner], body = "%s took %s's bid of %s a unit against your %s. Standing with the producer would have weighed your bid better." % [GameState.contracts.producer_name(int(offer.producer)), winner, Fmt.money(roundi(rate)), Fmt.money(roundi(float(offer.my_bid)))], color = Color(0.95, 0.6, 0.5)})
 
 
 func _enqueue(card: Dictionary) -> void:

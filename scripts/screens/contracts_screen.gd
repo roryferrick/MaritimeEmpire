@@ -84,19 +84,22 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 		title.add_theme_color_override(&"font_color", Color(0.98, 0.85, 0.55))
 		title.size_flags_horizontal = SIZE_EXPAND_FILL
 		head.add_child(title)
-		var error := contracts.can_sign(company, offer)
-		var accept := Button.new()
-		accept.text = "Accept"
-		accept.disabled = not error.is_empty()
-		accept.tooltip_text = error
 		var id := int(offer.id)
-		accept.pressed.connect(func() -> void: GameState.sign_contract(id))
-		head.add_child(accept)
-		var decline := Button.new()
-		decline.text = "Decline"
-		decline.flat = true
-		decline.pressed.connect(func() -> void: GameState.decline_offer(id))
-		head.add_child(decline)
+		if str(offer.kind) == "tender":
+			head.add_child(_bid_box(contracts, company, offer))
+		else:
+			var error := contracts.can_sign(company, offer)
+			var accept := Button.new()
+			accept.text = "Accept"
+			accept.disabled = not error.is_empty()
+			accept.tooltip_text = error
+			accept.pressed.connect(func() -> void: GameState.sign_contract(id))
+			head.add_child(accept)
+			var decline := Button.new()
+			decline.text = "Decline"
+			decline.flat = true
+			decline.pressed.connect(func() -> void: GameState.decline_offer(id))
+			head.add_child(decline)
 		row.add_child(head)
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override(&"separation", 4)
@@ -110,8 +113,39 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 		row.add_child(_dim("Worth %s%s · premium x%s over plain freight · stands till %s · needs %s standing (you're %s with them, %d)" % [Fmt.money(int(offer.value)),
 			" over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "", Fmt.decimal(float(offer.premium), 2), Fmt.calendar_short(int(offer.expires)),
 			Contracts.tier_name(str(offer.min_tier)), Contracts.tier_name(standing), roundi(contracts.opinion(company, int(offer.producer)))]))
+		if str(offer.kind) == "tender":
+			var names := PackedStringArray()
+			for index: int in offer.get("bidders", []):
+				names.append(str((GameState.firms as ShippingFirms).firms[index].name))
+			row.add_child(_dim("Tender: asking %s a unit, bids sealed till %s. Bidding against you: %s. The producer takes the lowest bid, weighing its standing with each bidder.%s" % [Fmt.money(roundi(float(offer.asking))), Fmt.calendar_short(int(offer.closes)), ", ".join(names),
+				" Your bid: %s a unit." % Fmt.money(roundi(float(offer.my_bid))) if float(offer.get("my_bid", -1.0)) > 0.0 else ""]))
 		box.add_child(row)
 	_body.add_child(box.get_parent())
+
+
+## The bid box on a tender: a rate per unit (the asking rate less a little to start) and Bid.
+func _bid_box(contracts: Contracts, company: Company, offer: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 6)
+	var standing := Contracts.tier_of(contracts.opinion(company, int(offer.producer)))
+	var allowed := Contracts.tier_at_least(standing, str(offer.min_tier))
+	var spin := SpinBox.new()
+	spin.min_value = 0.01
+	spin.max_value = float(offer.asking) * 3.0
+	spin.step = 0.01 if float(offer.asking) < 10.0 else 1.0
+	spin.prefix = "$"
+	spin.value = float(offer.my_bid) if float(offer.get("my_bid", -1.0)) > 0.0 else snappedf(float(offer.asking) * 0.95, spin.step)
+	spin.custom_minimum_size.x = 120.0
+	spin.tooltip_text = "Your rate per unit. Asking %s; plain freight about %s." % [Fmt.money(roundi(float(offer.asking))), Fmt.money(roundi(float(offer.plain)))]
+	row.add_child(spin)
+	var bid := Button.new()
+	bid.text = "Change bid" if float(offer.get("my_bid", -1.0)) > 0.0 else "Bid"
+	bid.disabled = not allowed
+	bid.tooltip_text = "" if allowed else "%s wants a %s company bidding (you're %s with them)." % [contracts.producer_name(int(offer.producer)), Contracts.tier_name(str(offer.min_tier)), Contracts.tier_name(standing)]
+	var id := int(offer.id)
+	bid.pressed.connect(func() -> void: GameState.bid_tender(id, spin.value))
+	row.add_child(bid)
+	return row
 
 
 # --- Signed ------------------------------------------------------------------------------

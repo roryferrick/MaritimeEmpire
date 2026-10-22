@@ -1294,8 +1294,21 @@ func sign_contract(offer_id: int) -> void:
 		return
 	if Net.command(&"sign_contract", [offer_id]):
 		return
-	var contract := contracts.sign(company, offer)
+	var contract := contracts.sign_offer(company, offer)
 	ActivityLog.add("Signed with %s: %s, %s to %s." % [contracts.producer_name(int(contract.producer)), contract_summary(contract), GameData.port_name(str(contract.from)), GameData.port_name(str(contract.to))], ActivityLog.Kind.GOOD)
+
+
+## Bids a rate per unit on a tender (till it closes; the last bid stands).
+func bid_tender(offer_id: int, rate: float) -> void:
+	var offer := contracts.offer_by_id(offer_id)
+	if offer.is_empty() or str(offer.kind) != "tender" or rate <= 0.0:
+		return
+	if not Contracts.tier_at_least(Contracts.tier_of(contracts.opinion(company, int(offer.producer))), str(offer.min_tier)):
+		return
+	if Net.command(&"bid_tender", [offer_id, rate]):
+		return
+	contracts.bid(offer, rate)
+	ActivityLog.add("Bid %s a unit on %s's tender for %s." % [Fmt.money(roundi(rate)) if rate >= 10.0 else "$%s" % Fmt.decimal(rate, 2), contracts.producer_name(int(offer.producer)), str(GameData.commodity(str(offer.good)).get("name", offer.good)).to_lower()], ActivityLog.Kind.INFO)
 
 
 func decline_offer(offer_id: int) -> void:

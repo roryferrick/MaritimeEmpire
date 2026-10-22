@@ -25,6 +25,8 @@ signal offers_changed
 signal contracts_changed
 ## An important offer for the player's company (the event card).
 signal offer_arrived(offer: Dictionary)
+## A tender closed that the player's company bid on: won or lost, and to whom at what rate.
+signal tender_closed(offer: Dictionary, won: bool, winner: String, rate: float)
 
 const TIERS := ["unknown", "known", "trusted", "renowned"]
 const TIER_NAMES := {unknown = "Unknown", known = "Known", trusted = "Trusted", renowned = "Renowned"}
@@ -58,7 +60,15 @@ const REP_FADE := 0.02
 const HOME_START := 20.0
 const IMPORTANT_SHARE := 0.1
 const IMPORTANT_LEAST := 500000.0
-const KINDS := {voyage = "Voyage", recurring = "Recurring"}
+const KINDS := {voyage = "Voyage", recurring = "Recurring", tender = "Tender"}
+## Tenders (from Trusted up): the share of new offers that are tenders, how long they take bids, how many firms bid, their bids' spread, how much standing weighs in the award (a bid / (1 + standing / STANDING_WEIGHT)), and the units beyond a recurring contract's.
+const TENDER_SHARE := 0.3
+const TENDER_DAYS := [14, 21]
+const TENDER_BIDDERS := [3, 6]
+const BID_SPREAD := [0.9, 1.15]
+const STANDING_WEIGHT := 400.0
+const TENDER_HOLDS := 2.5
+const RENOWNED_VALUE := 50000000.0
 
 var _state: Node  # GameState
 ## Open offers to the player's company: {id, kind, producer, good, from, to, nm, units, quarters, rate, premium, value, offered, expires, min_tier, country}.
@@ -178,6 +188,9 @@ func _fade_standing() -> void:
 
 
 func _expire_offers(now: int) -> void:
+	for offer: Dictionary in offers.duplicate():
+		if str(offer.kind) == "tender" and now >= int(offer.closes):
+			_close_tender(offer)
 	var kept := offers.filter(func(offer: Dictionary) -> bool: return int(offer.expires) > now)
 	if kept.size() != offers.size():
 		offers = kept
@@ -209,14 +222,15 @@ func _refresh_offers() -> void:
 		var producer := int(lane.producer)
 		var standing := tier_of(opinion(company, producer))
 		var recurring := rng.randf() < RECURRING_SHARE and tier_at_least(standing, "known")
+		var tender := tier_at_least(standing, "trusted") and rng.randf() < TENDER_SHARE
 		if tier == "unknown" and str(lane.country) != home:
 			continue  # (Unknown everywhere: only home shows an interest.)
-		var offer := _make_offer(company, lane, recurring, rng)
+		var offer := _make_offer(company, lane, recurring or tender, rng, tender)
 		if offer.is_empty():
 			continue
 		offers.append(offer)
 		made += 1
-		if _is_important(company, offer):
+		if _is_important(company, offer) or str(offer.kind) == "tender":
 			offer_arrived.emit(offer)
 	if made > 0:
 		offers_changed.emit()
@@ -267,7 +281,7 @@ func _lanes_in_need(world: WorldEconomy) -> Array:
 	return out
 
 
-func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: RandomNumberGenerator) -> Dictionary:
+func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: RandomNumberGenerator, tender := false) -> Dictionary:
 	var good := str(lane.good)
 	var hold := _biggest_hold(company, str(lane.line), good)
 	if hold <= 0.0:
@@ -282,8 +296,8 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 	var units: int
 	var quarters := 0
 	if recurring:
-		units = roundi(hold * rng.randf_range(float(RECURRING_HOLDS_A_MONTH[0]), float(RECURRING_HOLDS_A_MONTH[1])) * 3.0)
-		quarters = rng.randi_range(int(QUARTERS[0]), int(QUARTERS[1]))
+		units = roundi(hold * rng.randf_range(float(RECURRING_HOLDS_A_MONTH[0]), float(RECURRING_HOLDS_A_MONTH[1])) * 3.0 * (TENDER_HOLDS if tender else 1.0))
+		quarters = rng.randi_range(int(QUARTERS[0]), int(QUARTERS[1])) + (2 if tender else 0)
 	else:
 		units = roundi(hold * VOYAGE_HOLDS)
 	var value := rate * units * maxi(quarters, 1)
@@ -292,8 +306,98 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 		units = units, quarters = quarters, rate = snappedf(rate, 0.01), premium = snappedf(premium, 0.01), value = roundi(value), offered = now,
 		expires = now + rng.randi_range(int(EXPIRE_DAYS[0]), int(EXPIRE_DAYS[1])) * 86400, country = str(lane.country),
 		min_tier = "known" if recurring or value > 2000000.0 else "unknown"}
+	if tender:
+		offer.kind = "tender"
+		offer.min_tier = "renowned" if value > RENOWNED_VALUE else "trusted"
+		offer.closes = now + rng.randi_range(int(TENDER_DAYS[0]), int(TENDER_DAYS[1])) * 86400
+		offer.expires = int(offer.closes)
+		offer.asking = offer.rate
+		offer.plain = snappedf(base * (HANDLING + float(lane.nm) / FREIGHT_NM), 0.01)
+		offer.my_bid = -1.0
+		_pick_bidders(offer, rng)
 	_next_id += 1
 	return offer
+
+
+## The firms bidding on a tender (those based in the load port's country first,
+## then the biggest), each with its sealed bid: plain freight x its CEO's
+## margin, with noise, a little more where the market is urgent.
+func _pick_bidders(offer: Dictionary, rng: RandomNumberGenerator) -> void:
+	var firms: ShippingFirms = _state.firms
+	var order := range(firms.firms.size())
+	order.sort_custom(func(a: int, b: int) -> bool:
+		var fa: Dictionary = firms.firms[a]
+		var fb: Dictionary = firms.firms[b]
+		var ha: bool = fa.country == offer.country
+		var hb: bool = fb.country == offer.country
+		if ha != hb:
+			return ha
+		return float(fa.size) > float(fb.size))
+	var count := rng.randi_range(int(TENDER_BIDDERS[0]), int(TENDER_BIDDERS[1]))
+	var bidders := []
+	var bids := {}
+	for i: int in order.slice(0, count):
+		var firm: Dictionary = firms.firms[i]
+		bidders.append(i)
+		bids[str(i)] = snappedf(float(offer.plain) * Traits.ai_margin(firm.get("ceo", {})) * rng.randf_range(float(BID_SPREAD[0]), float(BID_SPREAD[1])) * (1.0 + float(offer.premium) - PREMIUM_LOW), 0.01)
+	offer.bidders = bidders
+	offer.bids = bids
+
+
+## A producer's standing with a paper firm: by the firm's size, more for one of its own country.
+func ai_standing(offer: Dictionary, firm_index: int) -> float:
+	var firms: ShippingFirms = _state.firms
+	var firm: Dictionary = firms.firms[firm_index]
+	var biggest := 0.0
+	for each: Dictionary in firms.firms:
+		biggest = maxf(biggest, float(each.size))
+	return 25.0 + 40.0 * float(firm.size) / maxf(biggest, 0.0001) + (10.0 if firm.country == offer.country else 0.0)
+
+
+## The player's company bids on a tender (GameState.bid_tender()).
+func bid(offer: Dictionary, rate: float) -> void:
+	offer.my_bid = snappedf(maxf(rate, 0.01), 0.01)
+	offers_changed.emit()
+
+
+## A tender closing: the lowest bid weighted by the producer's standing with the bidder wins.
+func _close_tender(offer: Dictionary) -> void:
+	var company: Company = _state.company
+	var best_score := INF
+	var winner := -2  # -1 the player, else a firm index, -2 nobody.
+	var winning_rate := 0.0
+	for key: String in offer.bids:
+		var firm_index := int(key)
+		var score := float(offer.bids[key]) / (1.0 + ai_standing(offer, firm_index) / STANDING_WEIGHT)
+		if score < best_score:
+			best_score = score
+			winner = firm_index
+			winning_rate = float(offer.bids[key])
+	if float(offer.my_bid) > 0.0:
+		var score := float(offer.my_bid) / (1.0 + opinion(company, int(offer.producer)) / STANDING_WEIGHT)
+		if score < best_score:
+			best_score = score
+			winner = -1
+			winning_rate = float(offer.my_bid)
+	var producer := producer_name(int(offer.producer))
+	var firms: ShippingFirms = _state.firms
+	if winner == -1:
+		offer.rate = winning_rate
+		offer.value = roundi(winning_rate * int(offer.units) * maxi(int(offer.quarters), 1))
+		offer.kind = "recurring"
+		var contract := sign_offer(company, offer)
+		change_standing(company, int(offer.producer), REP_QUARTER)
+		if _state.news != null:
+			_state.news.add("company", "%s wins %s's tender for %s at %s a unit" % [company.name, producer, _good_word(str(offer.good)), Fmt.money(roundi(winning_rate))], {port = offer.from})
+		tender_closed.emit(contract, true, company.name, winning_rate)
+		return
+	offers.erase(offer)
+	var winner_name := str(firms.firms[winner].name) if winner >= 0 else "nobody"
+	if _state.news != null and winner >= 0:
+		_state.news.add("company", "%s wins %s's tender for %s, %s to %s, at %s a unit" % [winner_name, producer, _good_word(str(offer.good)), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)), Fmt.money(roundi(winning_rate))], {port = offer.from, firm = winner})
+	if float(offer.my_bid) > 0.0:
+		tender_closed.emit(offer, false, winner_name, winning_rate)
+	offers_changed.emit()
 
 
 ## The longest leg (nm) a ship of the company carrying the good can sail on a tank, else the line's smallest model's.
@@ -334,6 +438,8 @@ func _is_important(company: Company, offer: Dictionary) -> bool:
 
 ## Whether a company may take an offer: its standing with the producer reaches the offer's tier.
 func can_sign(company: Company, offer: Dictionary) -> String:
+	if str(offer.kind) == "tender":
+		return "A tender: bid on it instead"
 	var standing := tier_of(opinion(company, int(offer.producer)))
 	if not tier_at_least(standing, str(offer.min_tier)):
 		return "%s wants a %s company for this (you're %s with them: %d)" % [producer_name(int(offer.producer)), tier_name(str(offer.min_tier)), tier_name(standing), roundi(opinion(company, int(offer.producer)))]
@@ -356,8 +462,8 @@ func contract_by_id(id: int) -> Dictionary:
 	return {}
 
 
-## Signs an offer for a company (GameState.sign_contract()).
-func sign(company: Company, offer: Dictionary) -> Dictionary:
+## Signs an offer for a company (GameState.sign_contract(); not `sign`: that is GDScript's own).
+func sign_offer(company: Company, offer: Dictionary) -> Dictionary:
 	offers.erase(offer)
 	var now: int = _state.calendar_time()
 	var contract := offer.duplicate(true)
