@@ -1311,6 +1311,15 @@ func bid_tender(offer_id: int, rate: float) -> void:
 	ActivityLog.add("Bid %s a unit on %s's tender for %s." % [Fmt.money(roundi(rate)) if rate >= 10.0 else "$%s" % Fmt.decimal(rate, 2), contracts.producer_name(int(offer.producer)), str(GameData.commodity(str(offer.good)).get("name", offer.good)).to_lower()], ActivityLog.Kind.INFO)
 
 
+## The player's answer to a contract's event card (Contracts.answer_event()).
+func answer_contract_event(contract_id: int, kind: String, accepted: bool) -> void:
+	var contract := contracts.contract_by_id(contract_id)
+	if contract.is_empty() or int(contract.company) != all_companies().find(company):
+		return
+	if Net.command(&"answer_contract_event", [contract_id, kind, accepted]):
+		return
+	contracts.answer_event(contract, kind, accepted)
+
 func decline_offer(offer_id: int) -> void:
 	var offer := contracts.offer_by_id(offer_id)
 	if offer.is_empty():
@@ -1361,7 +1370,11 @@ func contract_summary(contract: Dictionary) -> String:
 	var units := str(GameData.commodity(good).get("units", "units"))
 	var name := str(GameData.commodity(good).get("name", good))
 	name = name if name == name.to_upper() else name.to_lower()
-	if str(contract.kind) == "recurring":
+	if str(contract.kind) == "charter":
+		return "%d berths on %d voyages from %s at %s a berth" % [int(contract.get("berths", 0)), int(contract.units), GameData.port_name(str(contract.from)), Fmt.money(roundi(float(contract.rate)))]
+	if str(contract.kind) == "supply":
+		return "%s crates of %s a quarter for %d quarters, landed at %s at %s a crate" % [Fmt.thousands(int(contract.units)), name, int(contract.quarters), GameData.port_name(str(contract.to)), Fmt.money(roundi(float(contract.rate)))]
+	if str(contract.kind) in ["recurring", "tender"]:
 		return "%s %s of %s a quarter for %d quarters at %s a %s" % [Fmt.thousands(int(contract.units)), units, name, int(contract.quarters), Fmt.money(roundi(float(contract.rate))) if float(contract.rate) >= 10.0 else "$%s" % Fmt.decimal(float(contract.rate), 2), unit]
 	return "%s %s of %s at %s a %s" % [Fmt.thousands(int(contract.units)), units, name, Fmt.money(roundi(float(contract.rate))) if float(contract.rate) >= 10.0 else "$%s" % Fmt.decimal(float(contract.rate), 2), unit]
 
@@ -4961,6 +4974,9 @@ func _land_catch(ship: Ship, port: String) -> void:
 	var who := owner_of(ship)
 	var family := Fisheries.shared().family_of(species)
 	var value := roundi(crates * company_sell_price(port, family, who) * ship.catch_grade)
+	var under: Array = contracts.land_catch(who, port, family, crates, ship.catch_grade)  # (A supply deal here: those crates at its rate.)
+	if int(under[0]) > 0:
+		value = roundi((crates - int(under[0])) * company_sell_price(port, family, who) * ship.catch_grade) + int(under[1])
 	# Freezers are at the company's HQ and hubs only (anywhere else it sells).
 	var store := hub_at(port, who) != null and (ship.fish_landing == "store" or (ship.fish_landing == "auto" and _carrier_calls(port, who)))
 	if store:

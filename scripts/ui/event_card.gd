@@ -116,6 +116,31 @@ func show_tender_result(offer: Dictionary, won: bool, winner: String, rate: floa
 		_enqueue({kicker = "TENDER LOST", title = "%s goes to %s" % [good, winner], body = "%s took %s's bid of %s a unit against your %s. Standing with the producer would have weighed your bid better." % [GameState.contracts.producer_name(int(offer.producer)), winner, Fmt.money(roundi(rate)), Fmt.money(roundi(float(offer.my_bid)))], color = Color(0.95, 0.6, 0.5)})
 
 
+## Something on one of the player's contracts wants an answer (Contracts.contract_event).
+func show_contract_event(contract: Dictionary, kind: String, info: Dictionary) -> void:
+	var contracts: Contracts = GameState.contracts
+	var party := contracts.party_name(contract)
+	var good := str(GameData.commodity(str(contract.good)).get("name", contract.good)).to_lower()
+	var id := int(contract.id)
+	match kind:
+		"raise":
+			_enqueue({kicker = "A PRODUCER ASKS", title = "%s wants more %s" % [party, good], color = GOLD,
+				body = "Their market at %s has tightened (x%s of the usual price). They ask for %s more units this quarter and will pay %d%% over the contract rate for the whole quarter. Refusing costs a little standing." % [GameData.port_name(str(contract.to)), Fmt.decimal(float(info.get("ratio", 1.0)), 2), Fmt.thousands(int(info.get("extra", 0))), roundi((float(info.get("bonus", 1.2)) - 1.0) * 100.0)],
+				actions = [["Take it on", func() -> void: GameState.answer_contract_event(id, "raise", true)], ["Refuse", func() -> void: GameState.answer_contract_event(id, "raise", false)]]})
+		"pause":
+			_enqueue({kicker = "A PRODUCER ASKS", title = "%s asks to pause %s" % [party, good], color = GOLD,
+				body = "Their market at %s is glutted (x%s of the usual price). They ask to skip this quarter's volume, no fee either way; the contract runs on afterwards. Refusing costs a little standing, and the quarter counts as usual." % [GameData.port_name(str(contract.to)), Fmt.decimal(float(info.get("ratio", 1.0)), 2)],
+				actions = [["Pause the quarter", func() -> void: GameState.answer_contract_event(id, "pause", true)], ["Refuse", func() -> void: GameState.answer_contract_event(id, "pause", false)]]})
+		"at_risk":
+			_enqueue({kicker = "QUARTER AT RISK", title = "%s for %s" % [good.capitalize(), party], color = Color(0.95, 0.6, 0.5),
+				body = "%d days to the quarter's end and the ships on it can't carry what's left: about %s units short, a %s fee at that rate. Assign another ship or carry on." % [int(info.get("days", 0)), Fmt.thousands(int(info.get("short", 0))), Fmt.money(int(info.get("fee", 0)))],
+				actions = [["Contracts page", func() -> void: GameRoot.find(self).show_contracts()], ["Carry on", Callable()]]})
+		"short_quarter":
+			_enqueue({kicker = "A STERN LETTER", title = "%s short for %s" % [good.capitalize(), party], color = Color(0.95, 0.6, 0.5),
+				body = "The quarter closed %s units short. They will take the shortfall on top of next quarter's volume at no extra fee (a smaller mark against you), or the fee of %s now." % [Fmt.thousands(int(info.get("short", 0))), Fmt.money(int(info.get("fee", 0)))],
+				actions = [["Make it up next quarter", func() -> void: GameState.answer_contract_event(id, "short_quarter", true)], ["Pay the fee", func() -> void: GameState.answer_contract_event(id, "short_quarter", false)]]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

@@ -27,6 +27,8 @@ signal contracts_changed
 signal offer_arrived(offer: Dictionary)
 ## A tender closed that the player's company bid on: won or lost, and to whom at what rate.
 signal tender_closed(offer: Dictionary, won: bool, winner: String, rate: float)
+## Something happened on one of the player's contracts that wants an answer (the card): kind "raise", "pause", "at_risk" or "short_quarter", info by kind.
+signal contract_event(contract: Dictionary, kind: String, info: Dictionary)
 
 const TIERS := ["unknown", "known", "trusted", "renowned"]
 const TIER_NAMES := {unknown = "Unknown", known = "Known", trusted = "Trusted", renowned = "Renowned"}
@@ -63,7 +65,26 @@ const REP_FADE := 0.02
 const HOME_START := 20.0
 const IMPORTANT_SHARE := 0.1
 const IMPORTANT_LEAST := 500000.0
-const KINDS := {voyage = "Voyage", recurring = "Recurring", tender = "Tender"}
+const KINDS := {voyage = "Voyage", recurring = "Recurring", tender = "Tender", supply = "Supply deal", charter = "Group charter"}
+## Renewals: offered RENEWAL_DAYS before a recurring contract ends, re-struck from today's market, x LOYALTY for one met every quarter.
+const RENEWAL_DAYS := 30
+const LOYALTY := 1.05
+## Contract events (cards with choices): each new quarter, EVENT_CHANCE of a producer asking for RAISE_SHARE more units at RAISE_BONUS x the rate where its market is tight (over RAISE_AT), or to pause the quarter where it's glutted (under PAUSE_AT); refusing costs REP_REFUSE. A quarter at risk is warned WARN_DAYS out. A short quarter may be carried over (REP_CARRY) instead of paying the fee (REP_SHORT).
+const EVENT_CHANCE := 0.25
+const RAISE_SHARE := 0.5
+const RAISE_BONUS := 1.2
+const RAISE_AT := 1.3
+const PAUSE_AT := 0.8
+const REP_REFUSE := -1.0
+const REP_CARRY := -3.0
+const WARN_DAYS := 7
+## Flavours: a fish market's supply deal pays SUPPLY_PREMIUM x the landing price for SUPPLY_CRATES a quarter; a group charter books CHARTER_SHARE of a cruise ship's berths at CHARTER_PREMIUM x the fare for CHARTER_VOYAGES voyages; a maker's goods pay MAKER_LIKE more per point of liking over its start.
+const SUPPLY_PREMIUM := 1.25
+const SUPPLY_CRATES := [300, 1200]
+const CHARTER_SHARE := [0.2, 0.4]
+const CHARTER_PREMIUM := 1.3
+const CHARTER_VOYAGES := [2, 6]
+const MAKER_LIKE := 0.002
 ## Tenders (from Trusted up): the share of new offers that are tenders, how long they take bids, how many firms bid, their bids' spread, how much standing weighs in the award (a bid / (1 + standing / STANDING_WEIGHT)), and the units beyond a recurring contract's.
 const TENDER_SHARE := 0.3
 const TENDER_DAYS := [14, 21]
@@ -166,6 +187,13 @@ func producer_name(index: int) -> String:
 	return str(_producer(index).get("name", "a producer"))
 
 
+## Who an offer or contract is with: its producer, or a port's fish market (producer -1).
+func party_name(offer: Dictionary) -> String:
+	if int(offer.get("producer", -1)) < 0:
+		return "the %s fish market" % GameData.port_name(str(offer.to))
+	return producer_name(int(offer.producer))
+
+
 # --- Each day -----------------------------------------------------------------------------
 
 func step(_delta: float) -> void:
@@ -241,8 +269,81 @@ func _refresh_offers() -> void:
 		made += 1
 		if _is_important(company, offer) or str(offer.kind) == "tender":
 			offer_arrived.emit(offer)
+	if offers.size() < quota and company.has_type("seafood"):
+		made += _supply_offers(company, rng, quota - offers.size())
+	if offers.size() < quota and company.has_type("cruises"):
+		made += _charter_offers(company, rng, quota - offers.size())
 	if made > 0:
 		offers_changed.emit()
+
+
+## A fish market's supply deal at a port where the company bases boats (or its home): crates of a family a quarter at a premium over the landing price.
+func _supply_offers(company: Company, rng: RandomNumberGenerator, most: int) -> int:
+	var ports := {}
+	for ship: Ship in _state.fleet(company):
+		if ship.is_fishing() and not ship.base_port.is_empty():
+			ports[ship.base_port] = true
+	if ports.is_empty():
+		ports[company.home_port] = true
+	var families := {}
+	for info: Dictionary in Fisheries.shared().species.values():
+		families[str(info.family)] = true
+	var made := 0
+	for port_id: String in ports:
+		if made >= most or made >= 2:
+			break
+		var family: String = families.keys()[rng.randi() % families.size()]
+		if offers.any(func(open: Dictionary) -> bool: return str(open.kind) == "supply" and open.to == port_id and open.good == family):
+			continue
+		var price: float = _state.company_sell_price(port_id, family, company)
+		if price <= 0.0:
+			continue
+		var country: String = _state.world.country_of_port(port_id)
+		if not tier_at_least(tier_of(country_standing(company, country)), "known"):
+			continue
+		var units := rng.randi_range(int(SUPPLY_CRATES[0]), int(SUPPLY_CRATES[1]))
+		var quarters := rng.randi_range(int(QUARTERS[0]), 6)
+		var rate := snappedf(price * SUPPLY_PREMIUM, 0.01)
+		var now: int = _state.calendar_time()
+		offers.append({id = _next_id, kind = "supply", producer = -1, good = family, from = "", to = port_id, nm = 0.0, units = units, quarters = quarters, rate = rate, premium = SUPPLY_PREMIUM,
+			value = roundi(rate * units * quarters), offered = now, expires = now + rng.randi_range(int(EXPIRE_DAYS[0]), int(EXPIRE_DAYS[1])) * 86400, country = country, min_tier = "known"})
+		_next_id += 1
+		made += 1
+	return made
+
+
+## A group charter: a producer books a share of the berths on the voyages of a cruise ship of the company's, from its home port, at a premium over the fare.
+func _charter_offers(company: Company, rng: RandomNumberGenerator, most: int) -> int:
+	var cruises: Cruises = _state.cruises
+	var made := 0
+	for ship: Ship in _state.fleet(company):
+		if made >= most or made >= 2 or not ship.is_cruise():
+			continue
+		var home := cruises.home_of(ship)
+		if home.is_empty():
+			continue
+		if offers.any(func(open: Dictionary) -> bool: return str(open.kind) == "charter" and open.from == home):
+			continue
+		var berths := roundi(float(cruises.total(cruises.capacity(ship))) * rng.randf_range(float(CHARTER_SHARE[0]), float(CHARTER_SHARE[1])))
+		if berths <= 0:
+			continue
+		var cls: String = Cruises.CLASSES[0]
+		var fare := float(cruises.recommend(ship, cls).get("price", 0))
+		if fare <= 0.0:
+			fare = 120.0 * maxi(cruises.nights(ship), 3)
+		var country: String = _state.world.country_of_port(home)
+		var producers: Array = (_state.world as WorldEconomy).producers.companies
+		var producer := rng.randi() % maxi(producers.size(), 1)
+		if not tier_at_least(tier_of(opinion(company, producer, country)), "known"):
+			continue
+		var voyages := rng.randi_range(int(CHARTER_VOYAGES[0]), int(CHARTER_VOYAGES[1]))
+		var rate := snappedf(fare * CHARTER_PREMIUM, 1.0)
+		var now: int = _state.calendar_time()
+		offers.append({id = _next_id, kind = "charter", producer = producer, good = "", from = home, to = home, nm = 0.0, units = voyages, berths = berths, quarters = 0, rate = rate, premium = CHARTER_PREMIUM,
+			value = roundi(rate * berths * voyages), offered = now, expires = now + rng.randi_range(int(EXPIRE_DAYS[0]), int(EXPIRE_DAYS[1])) * 86400, country = country, min_tier = "known"})
+		_next_id += 1
+		made += 1
+	return made
 
 
 ## Where the economy wants shipping now: [{producer, good, from, to, nm, urgency, country}],
@@ -305,6 +406,8 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 	var rate := base * (HANDLING + float(lane.nm) / FREIGHT_NM) * premium
 	var gap: float = _state.market.sell_price(str(lane.to), good) - _state.market.buy_price(str(lane.from), good)
 	rate = maxf(rate, gap * GAP_FLOOR)
+	if GameData.commodity(good).get("maker", false):  # A maker's goods: the more it likes the company, the better the rate.
+		rate *= 1.0 + MAKER_LIKE * maxf(Manufacturers.likeness(company, good) - float(Manufacturers.setting("start", 20)), 0.0)
 	var units: int
 	var quarters := 0
 	if recurring:
@@ -491,7 +594,13 @@ func sign_offer(company: Company, offer: Dictionary) -> Dictionary:
 	contract.quarter_delivered = 0
 	contract.quarters_done = 0
 	contract.fees = 0
-	if str(contract.kind) == "recurring":
+	contract.quarter_units = int(contract.units)
+	contract.quarter_bonus = 1.0
+	contract.carry = 0
+	contract.short_quarters = 0
+	contract.warned_quarter = -1
+	contract.renewal_offered = false
+	if str(contract.kind) in ["recurring", "supply"]:
 		contract.quarter_end = now + int(QUARTER_DAYS * 86400.0)
 	else:
 		var days := float(contract.nm) / maxf(_slowest_speed(str(contract.good)) * 86400.0 / _state.calendar_seconds_per_second(), 1.0)
@@ -543,8 +652,8 @@ func of_ship(ship: Ship) -> Dictionary:
 
 ## What's still to carry this quarter (or in all, for a voyage).
 static func units_left(contract: Dictionary) -> int:
-	if str(contract.kind) == "recurring":
-		return maxi(int(contract.units) - int(contract.quarter_delivered), 0)
+	if str(contract.kind) in ["recurring", "supply"]:
+		return maxi(int(contract.get("quarter_units", contract.units)) - int(contract.quarter_delivered), 0)
 	return maxi(int(contract.units) - int(contract.delivered), 0)
 
 
@@ -585,7 +694,7 @@ func payment_for(ship: Ship, port: String) -> int:
 	var contract := contract_by_id(ship.cargo_contract)
 	if contract.is_empty() or port != str(contract.to):
 		return -1
-	return roundi(ship.cargo_qty * float(contract.rate))
+	return roundi(ship.cargo_qty * float(contract.rate) * float(contract.get("quarter_bonus", 1.0)))
 
 
 ## A delivery under contract counted (GameState._sell_cargo()).
@@ -610,28 +719,34 @@ func _run_contracts(now: int) -> void:
 		if str(contract.status) != "active":
 			continue
 		var company: Company = _state.all_companies()[int(contract.company)]
-		if str(contract.kind) == "recurring":
+		if str(contract.kind) in ["recurring", "supply"]:
+			_watch_quarter(contract, company, now)
 			if now < int(contract.quarter_end):
 				continue
 			var short := units_left(contract)
 			if short > 0:
+				contract.short_quarters = int(contract.short_quarters) + 1
 				var fee := roundi(short * float(contract.rate) * SHORTFALL_FEE)
-				_state._add_money(company, -fee)
-				_state._record(null, "contract_fees", fee, company)
-				contract.fees = int(contract.fees) + fee
-				change_standing(company, int(contract.producer), REP_SHORT, str(contract.country))
-				if company == _state.company:
-					ActivityLog.add("%s short on %s for %s this quarter: a %s fee." % [Fmt.thousands(short), _good_word(str(contract.good)), producer_name(int(contract.producer)), Fmt.money(fee)], ActivityLog.Kind.BAD)
+				if company == _state.company and int(contract.get("carry", 0)) == 0 and int(contract.quarters_done) + 1 < int(contract.quarters):
+					contract.pending_short = short  # (The letter: carry it over, or pay the fee: see answer_event().)
+					contract_event.emit(contract, "short_quarter", {short = short, fee = fee})
+				else:
+					_charge_short(contract, company, short, fee)
 			else:
 				change_standing(company, int(contract.producer), REP_QUARTER, str(contract.country))
 				if company == _state.company:
-					ActivityLog.add("Quarter met on the %s contract for %s." % [_good_word(str(contract.good)), producer_name(int(contract.producer))], ActivityLog.Kind.GOOD)
+					ActivityLog.add("Quarter met on the %s contract for %s." % [_good_word(str(contract.good)), party_name(contract)], ActivityLog.Kind.GOOD)
 			contract.quarters_done = int(contract.quarters_done) + 1
 			contract.quarter = int(contract.quarter) + 1
 			contract.quarter_delivered = 0
+			contract.quarter_units = int(contract.units) + int(contract.get("carry", 0))
+			contract.carry = 0
+			contract.quarter_bonus = 1.0
 			contract.quarter_end = int(contract.quarter_end) + int(QUARTER_DAYS * 86400.0)
 			if int(contract.quarters_done) >= int(contract.quarters):
 				_finish(contract, company, true)
+			elif company == _state.company and str(contract.kind) == "recurring":
+				_quarter_event(contract, company)
 			changed = true
 		elif now > int(contract.due):
 			var fee := roundi(float(contract.value) * FAILED_FEE)
@@ -643,6 +758,130 @@ func _run_contracts(now: int) -> void:
 	if changed:
 		contracts_changed.emit()
 
+
+func _charge_short(contract: Dictionary, company: Company, short: int, fee: int) -> void:
+	_state._add_money(company, -fee)
+	_state._record(null, "contract_fees", fee, company)
+	contract.fees = int(contract.fees) + fee
+	change_standing(company, int(contract.producer), REP_SHORT, str(contract.country))
+	if company == _state.company:
+		ActivityLog.add("%s short on %s for %s this quarter: a %s fee." % [Fmt.thousands(short), _good_word(str(contract.good)), party_name(contract), Fmt.money(fee)], ActivityLog.Kind.BAD)
+
+
+## A week from a quarter's end, a contract whose ships can't make its units is warned once; and a recurring contract in its last quarter gets its renewal offer.
+func _watch_quarter(contract: Dictionary, company: Company, now: int) -> void:
+	if company != _state.company:
+		return
+	var left := int(contract.quarter_end) - now
+	if left <= WARN_DAYS * 86400 and int(contract.get("warned_quarter", -1)) != int(contract.quarter):
+		contract.warned_quarter = int(contract.quarter)
+		var coming := 0
+		for ship: Ship in _state.fleet(company):
+			if ship.cargo_contract == int(contract.id):
+				coming += ship.cargo_qty
+		var short := units_left(contract) - coming
+		if short > 0 and str(contract.kind) == "recurring":
+			contract_event.emit(contract, "at_risk", {short = short, fee = roundi(short * float(contract.rate) * SHORTFALL_FEE), days = ceili(left / 86400.0)})
+	if str(contract.kind) == "recurring" and not bool(contract.get("renewal_offered", false)) and int(contract.quarters_done) == int(contract.quarters) - 1 and left <= RENEWAL_DAYS * 86400:
+		contract.renewal_offered = true
+		_offer_renewal(contract, company)
+
+
+## The renewal: the same lane, units and quarters, the rate re-struck from today's market (x LOYALTY for a contract met every quarter), standing till the contract ends.
+func _offer_renewal(contract: Dictionary, company: Company) -> void:
+	var world: WorldEconomy = _state.world
+	var good := str(contract.good)
+	var g := world.good_index(good)
+	var z := world.zone_of_port(str(contract.to))
+	var ratio := world.price[z * world.goods.size() + g] / maxf(world._base[g], 0.000001) if z >= 0 and g >= 0 else 1.0
+	var premium := lerpf(PREMIUM_LOW, PREMIUM_HIGH, clampf(ratio - 1.0, 0.0, 1.0))
+	var base := float(GameData.commodity(good).get("base", 1.0))
+	var rate := base * (HANDLING + float(contract.nm) / FREIGHT_NM) * premium
+	var gap: float = _state.market.sell_price(str(contract.to), good) - _state.market.buy_price(str(contract.from), good)
+	rate = maxf(rate, gap * GAP_FLOOR) * (LOYALTY if int(contract.short_quarters) == 0 else 1.0)
+	var now: int = _state.calendar_time()
+	var offer := {id = _next_id, kind = "recurring", producer = int(contract.producer), good = good, from = contract.from, to = contract.to, nm = float(contract.nm), units = int(contract.units), quarters = int(contract.quarters),
+		rate = snappedf(rate, 0.01), premium = snappedf(premium, 0.01), value = roundi(rate * int(contract.units) * int(contract.quarters)), offered = now, expires = int(contract.quarter_end), country = contract.country,
+		min_tier = "known", renewal_of = int(contract.id)}
+	_next_id += 1
+	offers.append(offer)
+	offers_changed.emit()
+	if company == _state.company:
+		ActivityLog.add("%s offers to renew the %s contract%s." % [party_name(contract), _good_word(good), " with a loyalty premium" if int(contract.short_quarters) == 0 else ""], ActivityLog.Kind.INFO)
+		if _is_important(company, offer):
+			offer_arrived.emit(offer)
+
+
+## A new quarter: sometimes the producer asks for more (its market tight) or a pause (glutted).
+func _quarter_event(contract: Dictionary, company: Company) -> void:
+	var world: WorldEconomy = _state.world
+	var g := world.good_index(str(contract.good))
+	var z := world.zone_of_port(str(contract.to))
+	if g < 0 or z < 0 or randf() >= EVENT_CHANCE:
+		return
+	var ratio := world.price[z * world.goods.size() + g] / maxf(world._base[g], 0.000001)
+	if ratio >= RAISE_AT:
+		contract_event.emit(contract, "raise", {extra = roundi(int(contract.units) * RAISE_SHARE), bonus = RAISE_BONUS, ratio = ratio})
+	elif ratio <= PAUSE_AT:
+		contract_event.emit(contract, "pause", {ratio = ratio})
+
+
+## The player's answer to a contract event (GameState.answer_contract_event()).
+func answer_event(contract: Dictionary, kind: String, accepted: bool) -> void:
+	var company: Company = _state.all_companies()[int(contract.company)]
+	match kind:
+		"raise":
+			if accepted:
+				contract.quarter_units = int(contract.get("quarter_units", contract.units)) + roundi(int(contract.units) * RAISE_SHARE)
+				contract.quarter_bonus = RAISE_BONUS
+			else:
+				change_standing(company, int(contract.producer), REP_REFUSE, str(contract.country))
+		"pause":
+			if accepted:
+				contract.quarter_units = 0
+			else:
+				change_standing(company, int(contract.producer), REP_REFUSE, str(contract.country))
+		"short_quarter":
+			var short := int(contract.get("pending_short", 0))
+			contract.erase("pending_short")
+			if accepted:
+				contract.carry = int(contract.get("carry", 0)) + short
+				contract.quarter_units = int(contract.quarter_units) + short
+				change_standing(company, int(contract.producer), REP_CARRY, str(contract.country))
+			else:
+				_charge_short(contract, company, short, roundi(short * float(contract.rate) * SHORTFALL_FEE))
+	contracts_changed.emit()
+
+
+## A catch landed at a port with a supply deal there for its family: the crates under contract and their pay (GameState._land_catch()).
+func land_catch(company: Company, port: String, family: String, crates: int, grade: float) -> Array:
+	for contract: Dictionary in contracts:
+		if str(contract.kind) != "supply" or str(contract.status) != "active" or contract.to != port or contract.good != family or int(contract.company) != _state.all_companies().find(company):
+			continue
+		var under := mini(crates, units_left(contract))
+		if under <= 0:
+			return [0, 0]
+		contract.delivered = int(contract.delivered) + under
+		contract.quarter_delivered = int(contract.quarter_delivered) + under
+		change_standing(company, int(contract.producer), REP_DELIVERY, str(contract.country))
+		contracts_changed.emit()
+		return [under, roundi(under * float(contract.rate) * grade)]
+	return [0, 0]
+
+
+## A cruise ship sailing from a port with a group charter there (Cruises._start_voyage()): [berths filled, their pay], the voyage counted.
+func charter_voyage(company: Company, home: String, room: int) -> Array:
+	for contract: Dictionary in contracts:
+		if str(contract.kind) != "charter" or str(contract.status) != "active" or contract.from != home or int(contract.company) != _state.all_companies().find(company):
+			continue
+		var berths := mini(int(contract.berths), room)
+		contract.delivered = int(contract.delivered) + 1
+		change_standing(company, int(contract.producer), REP_DELIVERY, str(contract.country))
+		if int(contract.delivered) >= int(contract.units):
+			_finish(contract, company, true)
+		contracts_changed.emit()
+		return [berths, roundi(berths * float(contract.rate))]
+	return [0, 0]
 
 func _finish(contract: Dictionary, company: Company, done: bool) -> void:
 	contract.status = "done" if done else "failed"
@@ -673,9 +912,11 @@ func progress_text(contract: Dictionary) -> String:
 			return "Done"
 		"failed":
 			return "Failed"
-	if str(contract.kind) == "recurring":
-		return "Quarter %d of %d: %s of %s %s · %d days left" % [int(contract.quarter) + 1, int(contract.quarters), Fmt.thousands(int(contract.quarter_delivered)), Fmt.thousands(int(contract.units)), units,
+	if str(contract.kind) in ["recurring", "supply"]:
+		return "Quarter %d of %d: %s of %s %s · %d days left" % [int(contract.quarter) + 1, int(contract.quarters), Fmt.thousands(int(contract.quarter_delivered)), Fmt.thousands(int(contract.get("quarter_units", contract.units))), units,
 			maxi(roundi((int(contract.quarter_end) - now) / 86400.0), 0)]
+	if str(contract.kind) == "charter":
+		return "%d of %d voyages sailed" % [int(contract.delivered), int(contract.units)]
 	return "%s of %s %s · due in %d days" % [Fmt.thousands(int(contract.delivered)), Fmt.thousands(int(contract.units)), units, maxi(roundi((int(contract.due) - now) / 86400.0), 0)]
 
 

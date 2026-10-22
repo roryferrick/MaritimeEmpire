@@ -80,7 +80,7 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 		row.add_theme_constant_override(&"separation", 2)
 		var head := HBoxContainer.new()
 		head.add_theme_constant_override(&"separation", 10)
-		var title := _text("%s · %s" % [Contracts.KINDS.get(str(offer.kind), "Offer"), contracts.producer_name(int(offer.producer))])
+		var title := _text("%s · %s%s" % [Contracts.KINDS.get(str(offer.kind), "Offer"), contracts.party_name(offer), " (renewal)" if offer.has("renewal_of") else ""])
 		title.add_theme_color_override(&"font_color", Color(0.98, 0.85, 0.55))
 		title.size_flags_horizontal = SIZE_EXPAND_FILL
 		head.add_child(title)
@@ -103,11 +103,14 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 		row.add_child(head)
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override(&"separation", 4)
-		line.add_child(_text(GameState.contract_summary(offer) + ","))
-		line.add_child(_port_button(str(offer.from)))
-		line.add_child(_text("to"))
-		line.add_child(_port_button(str(offer.to)))
-		line.add_child(_dim("(%s nm)" % Fmt.thousands(roundi(float(offer.nm)))))
+		if str(offer.kind) in ["supply", "charter"]:
+			line.add_child(_text(GameState.contract_summary(offer)))
+		else:
+			line.add_child(_text(GameState.contract_summary(offer) + ","))
+			line.add_child(_port_button(str(offer.from)))
+			line.add_child(_text("to"))
+			line.add_child(_port_button(str(offer.to)))
+			line.add_child(_dim("(%s nm)" % Fmt.thousands(roundi(float(offer.nm)))))
 		row.add_child(line)
 		var standing := Contracts.tier_of(contracts.opinion(company, int(offer.producer), str(offer.country)))
 		row.add_child(_dim("Worth %s%s · premium x%s over plain freight · stands till %s · needs %s standing (you're %s with them, %d)" % [Fmt.money(int(offer.value)),
@@ -161,7 +164,7 @@ func _add_contracts(contracts: Contracts, company: Company) -> void:
 		box.add_child(_contract_row(contracts, contract))
 	if not past.is_empty():
 		box.add_child(HSeparator.new())
-		box.add_child(_dim("Earlier: " + ", ".join(PackedStringArray(past.slice(-8).map(func(c: Dictionary) -> String: return "%s for %s (%s)" % [GameState.contract_summary(c), contracts.producer_name(int(c.producer)), str(c.status)])))))
+		box.add_child(_dim("Earlier: " + ", ".join(PackedStringArray(past.slice(-8).map(func(c: Dictionary) -> String: return "%s for %s (%s)" % [GameState.contract_summary(c), contracts.party_name(c), str(c.status)])))))
 	_body.add_child(box.get_parent())
 
 
@@ -170,22 +173,27 @@ func _contract_row(contracts: Contracts, contract: Dictionary) -> Control:
 	row.add_theme_constant_override(&"separation", 2)
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override(&"separation", 4)
-	var title := _text("%s for %s," % [GameState.contract_summary(contract), contracts.producer_name(int(contract.producer))])
+	var shipped := not str(contract.kind) in ["supply", "charter"]
+	var title := _text("%s for %s%s" % [GameState.contract_summary(contract), contracts.party_name(contract), "," if shipped else ""])
 	title.add_theme_color_override(&"font_color", Color(0.75, 0.9, 1.0))
 	head.add_child(title)
-	head.add_child(_port_button(str(contract.from)))
-	head.add_child(_text("to"))
-	head.add_child(_port_button(str(contract.to)))
+	if shipped:
+		head.add_child(_port_button(str(contract.from)))
+		head.add_child(_text("to"))
+		head.add_child(_port_button(str(contract.to)))
 	row.add_child(head)
 	var progress := ProgressBar.new()
 	progress.min_value = 0.0
-	progress.max_value = float(contract.units)
-	progress.value = float(contract.quarter_delivered if str(contract.kind) == "recurring" else contract.delivered)
+	progress.max_value = float(contract.get("quarter_units", contract.units)) if str(contract.kind) in ["recurring", "supply"] else float(contract.units)
+	progress.value = float(contract.quarter_delivered if str(contract.kind) in ["recurring", "supply"] else contract.delivered)
 	progress.show_percentage = false
 	progress.custom_minimum_size = Vector2(ROW_WIDTH, 10.0)
 	progress.tooltip_text = contracts.progress_text(contract)
 	row.add_child(progress)
 	row.add_child(_dim(contracts.progress_text(contract) + " · earned %s so far%s" % [Fmt.money(roundi(float(contract.delivered) * float(contract.rate))), "" if int(contract.fees) == 0 else " · fees %s" % Fmt.money(int(contract.fees))]))
+	if not shipped:
+		row.add_child(_dim("Your boats landing there fill it as they come in." if str(contract.kind) == "supply" else "Your cruise ship sailing from there carries the party each voyage."))
+		return row
 	var ships := HFlowContainer.new()
 	ships.add_theme_constant_override(&"h_separation", 6)
 	ships.add_child(_text("Ships:"))

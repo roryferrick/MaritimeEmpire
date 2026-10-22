@@ -553,6 +553,12 @@ func _start_voyage(ship: Ship) -> void:
 		tickets += count * price_now(ship, cls)
 	var count := total(guests)
 	var who: Company = _state.owner_of(ship)
+	# A group charter from this port (Contracts): its party fills empty berths at its rate.
+	var charter: Array = _state.contracts.charter_voyage(who, home_of(ship), maxi(int(total(capacity(ship))) - count, 0))
+	if int(charter[0]) > 0:
+		guests["standard"] = int(guests.get("standard", 0)) + int(charter[0])
+		count += int(charter[0])
+		tickets += int(charter[1])
 	var appeal := attraction(ship)
 	var recommended := 0.0
 	var paid := 0.0
