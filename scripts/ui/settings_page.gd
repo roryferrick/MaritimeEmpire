@@ -68,6 +68,11 @@ func _general_tab() -> Control:
 	box.add_child(_levels(look_names, Settings.SHIP_LOOKS.find(Settings.ship_look),
 		"Ships are drawn their true size in the world: zoomed well out, each is a small dot in its colour; or bigger dots, easier to see far off; or ships never smaller than a few pixels long, their art showing over the map zoomed out (they shrink back to their true size coming into port).",
 		func(level: int) -> void: Settings.ship_look = Settings.SHIP_LOOKS[level]))
+	box.add_child(_heading("Other companies' ships"))
+	var traffic_names: Array = Settings.TRAFFICS.map(func(level: String) -> String: return str(Settings.TRAFFIC_NAMES[level]))
+	box.add_child(_levels(traffic_names, Settings.TRAFFICS.find(Settings.traffic),
+		"The world's other shipping firms' ships, drawn where you look: none, or up to about 50, 150 or 400 at once (they sail their real voyages between the zones' ports and berth briefly; your ships always come first at a berth). Fewer costs less each frame.",
+		func(level: int) -> void: Settings.traffic = Settings.TRAFFICS[level]))
 	box.add_child(_heading("Routes"))
 	var routes_level := 0 if not GameState.show_active_routes else (1 if Settings.own_routes_only else 2)
 	box.add_child(_levels(["No routes", "Only my routes", "All routes"], routes_level,

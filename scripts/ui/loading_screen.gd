@@ -167,7 +167,10 @@ func _draw_page() -> void:
 	var font := _page.get_theme_font(&"font", &"HeaderLabel")  # (The headings' font: Cinzel.)
 	_page.draw_string(font, Vector2(0.0, size.y * 0.16), "Maritime Empire", HORIZONTAL_ALIGNMENT_CENTER, size.x, TITLE_SIZE, Color(1.0, 1.0, 1.0, 0.92))
 	var dots := ".".repeat(1 + int(fmod(_elapsed * 2.0, 3.0)))
-	_page.draw_string(font, Vector2(0.0, size.y * 0.9), "Loading" + dots, HORIZONTAL_ALIGNMENT_CENTER, size.x, NOTE_SIZE, Color(1.0, 1.0, 1.0, 0.7))
+	var note := "Loading" + dots
+	if GameState.warm_up_left > 0:  # A new game's world running up to its start (see GameState._warm_up_frame()).
+		note = "Setting the world in motion%s  day %d of %d" % [dots, GameState.warm_up_total - GameState.warm_up_left + 1, GameState.warm_up_total]
+	_page.draw_string(font, Vector2(0.0, size.y * 0.9), note, HORIZONTAL_ALIGNMENT_CENTER, size.x, NOTE_SIZE, Color(1.0, 1.0, 1.0, 0.7))
 
 
 ## A ship: its wake trailing astern, then its hull in its model's color and its details, bow the way it's going.

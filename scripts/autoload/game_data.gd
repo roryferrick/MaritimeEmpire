@@ -129,6 +129,15 @@ class SeaLane:
 	## point: within HEADING_BLEND of one it's turned part way towards the
 	## direction of the leg on the other side, so ships swing round rather
 	## than snapping to a new heading.
+	## Where the lane is `distance` nm along (projected), without the heading
+	## sample() works out: the ambient traffic's scan asks for thousands a second.
+	func point_at(distance: float) -> Vector2:
+		distance = clampf(distance, 0.0, length())
+		var i := clampi(miles.bsearch(distance), 1, points.size() - 1)
+		var span := miles[i] - miles[i - 1]
+		var t := (distance - miles[i - 1]) / span if span > 0.0 else 1.0
+		return points[i - 1].lerp(points[i], t)
+
 	func sample(distance: float) -> Array[Vector2]:
 		distance = clampf(distance, 0.0, length())
 		var i := miles.bsearch(distance)

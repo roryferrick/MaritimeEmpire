@@ -56,6 +56,15 @@ var own_routes_only := false:
 		own_routes_only = value
 		_save()
 		changed.emit()
+## How many of the other shipping firms' ships the map draws at once (the
+## ambient traffic: AmbientTraffic.CAPS), as a word: "off", "light", "busy" or "heavy".
+const TRAFFICS := ["off", "light", "busy", "heavy"]
+const TRAFFIC_NAMES := {off = "None", light = "Light", busy = "Busy (default)", heavy = "Heavy"}
+var traffic := "busy":
+	set(value):
+		traffic = value if value in TRAFFICS else "busy"
+		_save()
+		changed.emit()
 ## The birds drawn on the map (off: none drawn or clicked; their calls still play).
 var birds := true:
 	set(value):
@@ -90,6 +99,8 @@ func _ready() -> void:
 		var dark := str(config.get_value("general", "night", "full" if bool(config.get_value("general", "day_night", true)) else "off"))
 		night = dark if dark in NIGHTS else "full"
 		birds = bool(config.get_value("general", "birds", true))
+		var busy := str(config.get_value("general", "traffic", "busy"))
+		traffic = busy if busy in TRAFFICS else "busy"
 		own_routes_only = bool(config.get_value("general", "own_routes_only", false))
 		antialias = int(config.get_value("general", "antialias", 0))
 		for entry: Array in VOLUMES:
@@ -126,6 +137,7 @@ func _save() -> void:
 	config.set_value("general", "ship_look", ship_look)
 	config.set_value("general", "night", night)
 	config.set_value("general", "birds", birds)
+	config.set_value("general", "traffic", traffic)
 	config.set_value("general", "own_routes_only", own_routes_only)
 	config.set_value("general", "antialias", antialias)
 	for entry: Array in VOLUMES:

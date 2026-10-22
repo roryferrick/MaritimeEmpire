@@ -62,6 +62,16 @@ func free_berths(port_id: String) -> int:
 	return berth_count(port_id) - (_taken.get(port_id, {}) as Dictionary).size()
 
 
+## How many of the players' ships are waiting for a berth at a port (not the
+## ambient traffic's, which gives way to them: see AmbientTraffic).
+func waiting(port_id: String) -> int:
+	var count := 0
+	for ship: Ship in _queues.get(port_id, []):
+		if not ship.is_ghost():
+			count += 1
+	return count
+
+
 ## True if a model is one of the biggest ships, those that need a Medium or
 ## Large port (or an HQ or hub): they moor at a big berth (or a Medium port's).
 static func needs_big_berth(model: Dictionary) -> bool:

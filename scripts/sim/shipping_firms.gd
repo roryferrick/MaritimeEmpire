@@ -9,9 +9,12 @@ extends RefCounted
 ## short of it, where the price gap pays the freight, and sends voyages: each
 ## {firm, model, good, qty, from, to (ports), start, arrive, free (play time)}.
 ## A voyage takes its goods from the source zone's stockpile as it sails and
-## delivers them on arrival; the capacity it uses is free again after a half
-## trip home (a backhaul found half the time). The firms earn the margin less
-## the freight. Voyages at sea are what the map draws as ambient traffic.
+## delivers them on arrival; the capacity it uses is free again after the
+## trip home, empty (_returning, so the map can draw the homeward legs too). The
+## firms earn the margin less the freight. Voyages at sea are what the map draws
+## as ambient traffic (AmbientTraffic). A ship on a firm's books stands for a
+## CONVOY of hulls, so the world's fleet counts like the real one (about 50,000
+## ships in 2016) while the goods move in the game's hold units.
 ##
 ## The matching is spread over frames (a good a call) so no frame stalls; a
 ## day's dispatch finishes long before the next day.
@@ -25,12 +28,14 @@ const HOMES := {"GRC": 0.16, "JPN": 0.13, "CHN": 0.11, "DEU": 0.07, "SGP": 0.05,
 	"SAU": 0.01, "IDN": 0.01, "MYS": 0.01, "BRA": 0.01, "CAN": 0.01, "FRA": 0.01, "CHE": 0.01, "IRN": 0.01, "VNM": 0.005}
 const TAIL_SHARE := 0.1  # Of the fleet, in the small operators.
 ## Fleet sizing: the world's daily surplus per line, carried over a typical
-## voyage of MEAN_VOYAGE_NM and back (BACKHAUL of the way back empty), with
-## SLACK spare; a firm's fleet is its share of each line in the line's models,
-## big firms leaning to big ships.
+## voyage of MEAN_VOYAGE_NM and back (BACKHAUL of the way back sailed empty:
+## all of it, so a ship's seen sailing home), with SLACK spare; a firm's fleet
+## is its share of each line in the line's models, big firms leaning to big
+## ships, each ship on the books CONVOY hulls' worth of hold.
 const MEAN_VOYAGE_NM := 5000.0
-const BACKHAUL := 0.5
-const SLACK := 2.5
+const BACKHAUL := 1.0
+const SLACK := 1.9
+const CONVOY := 10.0
 ## Dispatch: a zone exports a good above EXPORT_COVER days of cover and orders
 ## more when what it has and what's coming fall under STOCK_DAYS plus the lead
 ## time; a voyage sails only where the price gap beats the freight
@@ -198,11 +203,11 @@ func _give_fleets(rng: RandomNumberGenerator) -> void:
 			while units > 0.0 and not models.is_empty():
 				# A tier by the firm's size with some spread; the biggest ship that fits the units left.
 				var pick := clampi(roundi(lerpf(2.0, 0.0, big) + rng.randfn(0.0, 0.7)), 0, models.size() - 1)  # (Tiers 3 to 5: the world's fleet is big ships.)
-				while pick < models.size() - 1 and float(models[pick].capacity) > units * 1.5:
+				while pick < models.size() - 1 and float(models[pick].capacity) * CONVOY > units * 1.5:
 					pick += 1
 				var model: Dictionary = models[pick]
 				fleet[model.id] = int(fleet.get(model.id, 0)) + 1
-				units -= float(model.capacity)
+				units -= float(model.capacity) * CONVOY
 
 
 # --- Each day -------------------------------------------------------------------------
@@ -246,7 +251,7 @@ func _flush_batch() -> void:
 	for key: String in _batch:
 		var lot_entry: Dictionary = _batch[key]
 		var model: Dictionary = _models[lot_entry.line][0]
-		var ships := maxi(ceili(float(lot_entry.hold) / float(model.capacity)), 1)
+		var ships := maxi(ceili(float(lot_entry.hold) / (float(model.capacity) * CONVOY)), 1)
 		var days := float(lot_entry.nm) / maxf(float(model.get("speed_nm_per_s", 5.0)) * _nm_per_day_per_speed(), 1.0)
 		_insert_sorted(voyages, {firm = lot_entry.firm, model = model.id, ships = ships, line = lot_entry.line, goods = lot_entry.goods, hold = lot_entry.hold,
 			from = lot_entry.from, to = lot_entry.to, start = now, arrive = now + days * 86400.0 / day_s,
@@ -256,8 +261,9 @@ func _flush_batch() -> void:
 
 ## Voyages that have arrived deliver their goods and the firm is paid; ships
 ## home again free their capacity. `voyages` is kept in order of arrival and
-## `_returning` ([free time, line, hold]) in order of coming free, so only the
-## front of each is looked at.
+## `_returning` ({free, line, hold, from, to, model, ships, firm, arrive}: the
+## homeward leg, from the port it delivered at back to its home port) in order
+## of coming free, so only the front of each is looked at.
 func _arrive(world: WorldEconomy) -> void:
 	var now: float = _state.play_time
 	while not voyages.is_empty() and float(voyages[0].arrive) <= now:
@@ -277,10 +283,10 @@ func _arrive(world: WorldEconomy) -> void:
 		var firm: Dictionary = firms[int(v.firm)]
 		firm.money = float(firm.money) + value - float(v.cost)
 		firm.carried = float(firm.carried) + units
-		_insert_sorted(_returning, [float(v.free), v.line, float(v.hold)], 0)
-	while not _returning.is_empty() and float(_returning[0][0]) <= now:
-		var home: Array = _returning.pop_front()
-		_busy[home[1]] = float(_busy.get(home[1], 0.0)) - float(home[2])
+		_insert_sorted(_returning, {free = float(v.free), line = v.line, hold = float(v.hold), from = v.to, to = v.from, model = v.model, ships = v.ships, firm = v.firm, arrive = float(v.arrive)}, "free")
+	while not _returning.is_empty() and float(_returning[0].free) <= now:
+		var home: Dictionary = _returning.pop_front()
+		_busy[home.line] = float(_busy.get(home.line, 0.0)) - float(home.hold)
 
 
 ## Puts an entry into a list kept in order of its `key` field (a Dictionary's
@@ -305,12 +311,18 @@ var _busy := {}
 var _returning: Array = []
 
 
+## The homeward legs ({free, line, hold, from, to, model, ships, firm, arrive}),
+## in order of coming free (the map draws them: AmbientTraffic).
+func returning() -> Array:
+	return _returning
+
+
 func _count_busy() -> void:
 	_busy.clear()
 	for v: Dictionary in voyages:
 		_busy[v.line] = float(_busy.get(v.line, 0.0)) + float(v.hold)
-	for home: Array in _returning:
-		_busy[home[1]] = float(_busy.get(home[1], 0.0)) + float(home[2])
+	for home: Dictionary in _returning:
+		_busy[home.line] = float(_busy.get(home.line, 0.0)) + float(home.hold)
 
 
 ## Days a line's typical voyage takes on the calendar (MEAN_VOYAGE_NM at the
@@ -525,6 +537,8 @@ var _firm_sums := {}
 ## What's saved of a voyage, in this order (its line and hold units follow from
 ## its good; times and amounts whole numbers): there are thousands.
 const VOYAGE_KEYS := ["firm", "model", "ships", "goods", "from", "to", "start", "arrive", "free", "cost"]
+## What's saved of a homeward leg, in this order.
+const RETURNING_KEYS := ["free", "line", "hold", "from", "to", "model", "ships", "firm", "arrive"]
 
 
 func to_dict() -> Dictionary:
@@ -535,7 +549,7 @@ func to_dict() -> Dictionary:
 			goods[good] = roundi(float(v.goods[good]))
 		rows.append([v.firm, v.model, v.ships, goods, v.from, v.to, roundi(float(v.start)), roundi(float(v.arrive)), roundi(float(v.free)), roundi(float(v.cost))])
 	return {seed = seed, dispatch_day = _dispatch_day, voyages = rows,
-		returning = _returning.map(func(home: Array) -> Array: return [roundi(float(home[0])), home[1], roundi(float(home[2]))]),
+		returning = _returning.map(func(home: Dictionary) -> Array: return [roundi(float(home.free)), home.line, roundi(float(home.hold)), home.from, home.to, home.model, home.ships, home.firm, roundi(float(home.arrive))]),
 		money = firms.map(func(firm: Dictionary) -> Array: return [snappedf(float(firm.money), 1.0), snappedf(float(firm.carried), 1.0)])}
 
 
@@ -553,7 +567,14 @@ func from_dict(data: Dictionary, world: WorldEconomy) -> void:
 			v.line = WorldEconomy.line_of(good)
 			v.hold = float(v.hold) + float(v.goods[good]) * GameData.hold_of(good)
 		voyages.append(v)
-	_returning = data.get("returning", [])
+	_returning = []
+	for row: Array in data.get("returning", []):
+		if row.size() < RETURNING_KEYS.size():
+			continue  # (A row from before the homeward legs were kept: its capacity comes free with the rest.)
+		var home := {}
+		for k in RETURNING_KEYS.size():
+			home[RETURNING_KEYS[k]] = row[k]
+		_returning.append(home)
 	_count_busy()
 	_dispatch_day = int(data.get("dispatch_day", -1))
 	var money: Array = data.get("money", [])

@@ -1109,6 +1109,9 @@ class RiverTier:
 func _exit_tree() -> void:
 	if GameState.anchor_route.get_object() == self:
 		GameState.anchor_route = Callable()
+	if GameState.traffic.view_test.get_object() == self:
+		GameState.traffic.view_test = Callable()
+		GameState.traffic.view_bounds = Callable()
 	if GameState.berth_route.get_object() == self:
 		GameState.berth_route = Callable()
 
@@ -1146,6 +1149,13 @@ func _ready() -> void:
 	GameState.ships_changed.connect(func() -> void:
 		_draw_order_dirty = true
 		_spots_dirty = true)
+	# The ambient traffic's ghosts come and go with the view (see AmbientTraffic).
+	GameState.traffic.view_test = _projected_in_view
+	GameState.traffic.view_bounds = _view_bounds
+	GameState.traffic.changed.connect(func() -> void:
+		_draw_order_dirty = true
+		_spots_dirty = true)
+	GameState.traffic.ghost_gone.connect(_forget_ship)
 	GameState.ship_changed.connect(func(_ship: Ship) -> void: _spots_dirty = true)
 
 	var data := GameData.world_map
@@ -3908,7 +3918,7 @@ func _draw_dock_layer() -> void:
 		return
 	_canvas = _dock_layer
 	var outline := _color(&"ship_outline")
-	for ship in GameState.ships:
+	for ship in GameState.drawn_ships():
 		if ship.is_docked() and not docks_shown():  # (Shown, docked ships are drawn with the others: see _draw_ships().)
 			_draw_ship(ship, outline)
 	_canvas = _overlay
@@ -6198,7 +6208,7 @@ func _update_spots() -> void:
 				if _dock_seen.has(ship):
 					_dock_seen[ship] = [_dock_seen[ship][0], -INF]
 	var alive := {}
-	for ship in GameState.ships:
+	for ship in GameState.drawn_ships():
 		if not ship.is_docked():
 			continue
 		alive[ship] = true
@@ -6374,6 +6384,34 @@ func _lanes_reaching(key: String, near: Rect2) -> Array[PackedVector2Array]:
 	_lanes_reaching_cache[key] = [epoch, lines]
 	return lines
 var _lanes_reaching_cache := {}
+
+## Whether a projected map point is near the view, as far out as ships are
+## drawn (the ambient traffic's scan: AmbientTraffic.view_test).
+func _projected_in_view(at: Vector2) -> bool:
+	return Rect2(Vector2.ZERO, size).grow((SHIP_CULL_MARGIN + PORT_MAX_REACH) * _ship_scale()).has_point(world_to_screen(at))
+
+## The projected map bounds the view covers (the ambient traffic's scan looks
+## only at the records binned under them: AmbientTraffic.view_bounds), from
+## nine points of the screen; the whole map when the globe's edge is on screen.
+func _view_bounds() -> Rect2:
+	if _radius() < size.length() / 2.0:
+		return Rect2(-180.0, -180.0, 360.0, 360.0)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for sy in [0.0, 0.5, 1.0]:
+		for sx in [0.0, 0.5, 1.0]:
+			var at := screen_to_world(Vector2(size.x * sx, size.y * sy))
+			lo = lo.min(at)
+			hi = hi.max(at)
+	return Rect2(lo, hi - lo)
+
+## Forgets what's kept about a ship that's gone (an ambient-traffic ghost
+## dropped: AmbientTraffic.ghost_gone), so nothing holds it.
+func _forget_ship(ship: Ship) -> void:
+	if _spot_slots.has(ship):
+		_free_spot(ship)
+	for kept: Dictionary in [_last_spot, _harbour_reach_cache, _harbour_curves, _moored_poses, _tug_finish, _glide_from, _wake_trails, _sea_states, _dock_seen, _bent_cache, _poses, _ship_hulls]:
+		kept.erase(ship)
 
 func _free_spot(ship: Ship) -> void:
 	var taken: Dictionary = _spot_tables.get(_spot_keys.get(ship, []), {})
@@ -8588,18 +8626,19 @@ func _ships_topmost_first() -> Array[Ship]:
 ## drawn on top of bigger ones; same-sized ships keep their fleet order. Kept
 ## until the fleet changes.
 func _ships_biggest_first() -> Array[Ship]:
-	if _draw_order.size() == GameState.ships.size() and not _draw_order_dirty:
+	var drawn := GameState.drawn_ships()  # (Every company's, and the ambient traffic's ghosts.)
+	if _draw_order.size() == drawn.size() and not _draw_order_dirty:
 		return _draw_order
 	_draw_order_dirty = false
 	_order_colors.clear()  # (Worked out again for the new order: see _fleet_pass().)
 	# (Sorted on keys worked out once: a comparison asking each ship's model costs.)
 	var keys := []
-	for i in GameState.ships.size():
-		keys.append([-float((GameState.ships[i] as Ship).model().get("map_size", [0])[0]), i])
+	for i in drawn.size():
+		keys.append([-float((drawn[i] as Ship).model().get("map_size", [0])[0]), i])
 	keys.sort()
 	var order: Array[Ship] = []
 	for key: Array in keys:
-		order.append(GameState.ships[key[1]])
+		order.append(drawn[key[1]])
 	_draw_order = order
 	return order
 

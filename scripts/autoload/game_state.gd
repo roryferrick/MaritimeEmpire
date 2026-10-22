@@ -296,6 +296,8 @@ var market := Market.new(self)
 var world := WorldEconomy.new(self)
 ## The world's AI shipping firms, on paper, carrying the zones' surpluses (see ShippingFirms).
 var firms := ShippingFirms.new(self)
+## The other firms' ships drawn on the map (see AmbientTraffic); not saved.
+var traffic := AmbientTraffic.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -365,6 +367,9 @@ func _process(delta: float) -> void:
 	if Net.is_client():
 		_client_frame(delta)  # The host runs the world.
 		return
+	if warm_up_left > 0:
+		_warm_up_frame()  # (A new game's world running up to its start, behind the loading screen.)
+		return
 	GameData.warm_next_month(0.5)
 	# Fast forward runs extra steps rather than one long one, so ships arrive,
 	# dock and break down as they would at 1x: as many as time_speed, each no
@@ -376,6 +381,9 @@ func _process(delta: float) -> void:
 	for step in steps:
 		_step(delta * time_speed / steps)
 	MapView._prof("sim", t_sim)
+	var t_tr := Time.get_ticks_usec()
+	traffic.scan()
+	MapView._prof("traffic.scan", t_tr)
 
 
 func _step(delta: float) -> void:
@@ -417,6 +425,7 @@ func _step(delta: float) -> void:
 	t_s = Time.get_ticks_usec()
 	firms.step(delta)
 	MapView._prof("sim.firms", t_s)
+	traffic.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -737,6 +746,19 @@ const VALUE_KEEP_S := 2.0
 ## The company a ship belongs to (this player's, if it has none yet).
 func owner_of(ship: Ship) -> Company:
 	return ship.company if ship.company != null else company
+
+
+## The ships the map draws: every company's and the ambient traffic's ghosts
+## (AmbientTraffic), made once a frame.
+func drawn_ships() -> Array[Ship]:
+	var frame := Engine.get_process_frames()
+	if frame != _drawn_frame or _drawn.size() != ships.size() + traffic.ghosts.size():
+		_drawn_frame = frame
+		_drawn = ships.duplicate()
+		_drawn.append_array(traffic.ghosts)
+	return _drawn
+var _drawn: Array[Ship] = []
+var _drawn_frame := -1
 
 
 ## A company's ships.
@@ -4037,11 +4059,10 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	industry.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
-	warm_up_world(WARM_UP_DAYS)
 	money_changed.emit(money)
 	SteamAchievements.note_game_created()
 	_begin_session()
-	save_game()
+	_start_warm_up(WARM_UP_DAYS)  # (Saved once it's run: see _warm_up_frame().)
 
 
 ## Loads a slot's save and starts a session saving to it. Returns why it
@@ -4210,6 +4231,7 @@ func world_dict() -> Dictionary:
 ## Ships and the Mammoths recovering them point at each other; break those
 ## links so the old ships are freed.
 func _clear_ships() -> void:
+	traffic.clear()
 	for ship in ships:
 		ship.rescuer = null
 		ship.rescuing = null
@@ -5496,19 +5518,48 @@ func abandon_contract(contract_id: int) -> void:
 	research.abandon(company, contract_id)
 
 
-## Runs the world and the firms for some days before play time 0 (a new game):
-## the clock is wound back and stepped up to 0, so the voyages at sea when the
-## game begins were dispatched in the days before it.
-func warm_up_world(days: int) -> void:
+## A new game's world runs WARM_UP_DAYS before play time 0 so ships are at sea
+## and stocks have settled when it begins: the clock is wound back and stepped
+## up to 0, a few days a frame behind the loading screen (which says how far
+## it is; GameRoot.is_warm() waits), the game saved once it's there.
+var warm_up_left := 0
+var warm_up_total := 0
+var _warm_up_to := 0.0
+## How long a frame of the warm-up may take (ms).
+const WARM_UP_FRAME_MS := 40.0
+
+
+func _start_warm_up(days: int) -> void:
+	warm_up_total = days
+	warm_up_left = days
+	_warm_up_to = play_time
+	play_time -= days * 86400.0 / calendar_seconds_per_second()
+
+
+## Steps the warm-up a day at a time till its frame's time is up (or, with no
+## limit, to the end).
+func _warm_up_frame(limit_ms := WARM_UP_FRAME_MS) -> void:
 	var day_s := 86400.0 / calendar_seconds_per_second()
-	var saved := play_time
-	play_time = saved - days * day_s
-	for i in days:
+	var start := Time.get_ticks_usec()
+	while warm_up_left > 0:
+		var i := warm_up_total - warm_up_left
 		play_time += day_s
 		world._step_day()
 		firms._arrive(world)
 		if i % ShippingFirms.DISPATCH_DAYS == 0:
 			firms.dispatch_day()
-	play_time = saved
+		warm_up_left -= 1
+		if Time.get_ticks_usec() - start >= limit_ms * 1000.0:
+			break
+	if warm_up_left > 0:
+		return
+	play_time = _warm_up_to
 	world.day = world._today()
 	firms._dispatch_day = world.day - ShippingFirms.DISPATCH_DAYS
+	save_game()
+
+
+## Runs the whole warm-up at once (tools and tests).
+func warm_up_world(days: int) -> void:
+	_start_warm_up(days)
+	_warm_up_frame(INF)

@@ -101,6 +101,9 @@ var bound_for := ""
 ## The leg _try_depart() meant bound_for for (its next stop then).
 var bound_step := ""
 var paused := false
+## One of the world's other shipping firms' ships, drawn as ambient traffic
+## (AmbientTraffic): not in GameState.ships, nothing of the player's.
+var ghost := false
 var docked_at := ""
 var from_port := ""
 var to_port := ""
@@ -714,6 +717,11 @@ func reference_port() -> String:
 
 func is_docked() -> bool:
 	return not docked_at.is_empty()
+
+
+## An ambient-traffic ship of another firm (see ghost).
+func is_ghost() -> bool:
+	return ghost
 
 
 ## Unloading and loading after arriving at a port.

@@ -220,6 +220,12 @@ func _open_pod_popup(pod_index: int) -> void:
 func open_ship_popup(ship: Ship) -> void:
 	var follow := func() -> Vector2:
 		return _map.get_global_transform() * _map.ship_screen_position(ship)
+	if ship.is_ghost():  # One of the other firms' ships (the ambient traffic): its card.
+		var card := TrafficPopup.new()
+		card.ship = ship
+		card.follow = follow
+		PopupHost.find(self).open(card)
+		return
 	PopupHost.find(self).show_ship(ship, follow)
 
 
