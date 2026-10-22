@@ -20,6 +20,8 @@ signal changed
 signal person_left(company: Company, role: String, name: String, why: String)
 ## A company's CEO retired or died: a successor is wanted (the card).
 signal succession_needed(company: Company, why: String)
+## A captain has resigned over low morale (a new officer has the ship).
+signal captain_resigned(company: Company, ship: Ship, name: String)
 
 ## The executive roles: id -> {name, skills (what the role draws on), effects
 ## {key: weight}: what a point of the role's skills over the base does}.
@@ -48,6 +50,25 @@ const NOTICE_MONTHS := 3
 const DEATH_AT_40 := 0.002
 const DEATH_AT_75 := 0.03
 const DAYS_A_YEAR := 365.25
+## Family: the CEO marries between MARRY_AGE with MARRY_CHANCE a month, has children (up to MAX_CHILDREN,
+## CHILD_CHANCE a month while the younger parent is under CHILD_AGE_LIMIT); a child is of age at ADULT_AGE.
+const MARRY_AGE := [25.0, 58.0]
+const MARRY_CHANCE := 0.05
+const CHILD_CHANCE := 0.04
+const CHILD_AGE_LIMIT := 45.0
+const MAX_CHILDREN := 3
+const ADULT_AGE := 21.0
+## Captains' morale: starts at MORALE_BASE and drifts back to it; under MORALE_RESIGN the captain leaves.
+const MORALE_BASE := 60.0
+const MORALE_RESIGN := 20.0
+const MORALE_BONUS := 15.0
+const BONUS_PAY := 15000
+const AWAY_DAYS := 120.0
+const MORALE_SWING := 0.05  # Wear and fuel at the best or worst morale.
+const MORALE_BREAKDOWNS := 0.3  # Breakdown odds at the worst morale.
+## Grudges: a poach costs GRUDGE of standing with the firm (Company.relations.firms), healing GRUDGE_HEAL a month.
+const GRUDGE := 20.0
+const GRUDGE_HEAL := 1.0
 
 var _state: Node  # GameState
 ## The job market: [{id, character, kind ("officer", "head", "exec"), role (an exec role for an exec, "" else), ask (a year), employer (a firm index, -1), min_tier}].
@@ -105,7 +126,22 @@ static func captain_factor(ship: Ship, key: String, up := false) -> float:
 	var skills := Traits.skills_of(ship.captains[0])
 	var skill := "seamanship" if key in ["speed", "fuel"] else ("engineering" if key in ["wear", "breakdowns"] else "leadership")
 	var b := clampf(PER_POINT * (float(skills.get(skill, Traits.BASE_SKILL)) - Traits.BASE_SKILL), -CAP, CAP)
-	return maxf(1.0 + b if up else 1.0 - b, 0.0)
+	var morale := (morale_of(ship.captains[0]) - 50.0) / 50.0  # (-1 to 1: a glad captain shaves wear and fuel, a sour one breaks more.)
+	var factor := maxf(1.0 + b if up else 1.0 - b, 0.0)
+	if key in ["wear", "fuel"]:
+		factor *= 1.0 - morale * MORALE_SWING
+	elif key == "breakdowns":
+		factor *= 1.0 + maxf(-morale, 0.0) * MORALE_BREAKDOWNS
+	return factor
+
+
+static func morale_of(person: Dictionary) -> float:
+	return clampf(float(person.get("morale", MORALE_BASE)), 0.0, 100.0)
+
+
+static func morale_word(person: Dictionary) -> String:
+	var morale := morale_of(person)
+	return "glad" if morale >= 75.0 else ("content" if morale >= 45.0 else ("sour" if morale >= MORALE_RESIGN else "about to quit"))
 
 
 # --- People of a company ------------------------------------------------------------------
@@ -265,7 +301,8 @@ func hire(company: Company, candidate: Dictionary, kind: String, key: String, bu
 		_state._record(null, "salaries", cost, company)
 		var firms: ShippingFirms = _state.firms
 		var firm: Dictionary = firms.firms[int(candidate.employer)]
-		firm.poached = int(firm.get("poached", 0)) + 1  # (The firm remembers: M4.)
+		var grudges: Dictionary = company.relations.get_or_add("firms", {})
+		grudges[str(candidate.employer)] = float(grudges.get(str(candidate.employer), 0.0)) - GRUDGE  # (The firm remembers: it underbids you on tenders at home and charges more for its blocks, till it heals.)
 		if _state.news != null:
 			_state.news.add("company", "%s poaches %s from %s" % [company.name, str(person.name), str(firm.name)], {firm = int(candidate.employer)})
 	candidates.erase(candidate)
@@ -331,6 +368,8 @@ func promote(company: Company, ship: Ship, index: int, role: String) -> String:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	ship.captains[index] = Characters.random_person(rng, "officer", "")
+	if index > 0 and not ship.captains.is_empty():  # (A mate promoted over the captain's head.)
+		ship.captains[0].morale = morale_of(ship.captains[0]) - 10.0
 	ship.invalidate_stats()
 	changed.emit()
 	return ""
@@ -389,6 +428,9 @@ func _age_everyone() -> void:
 					ActivityLog.add("%s, your %s, means to retire in %d months." % [str(person.name), str(entry.role).to_lower(), NOTICE_MONTHS], ActivityLog.Kind.INFO)
 			if age >= float(person.retire_at):
 				_leaves(company, entry, "retired")
+		_monthly_family(company, rng)
+		_monthly_morale(company, rng)
+		_heal_grudges(company)
 	changed.emit()
 
 
@@ -407,6 +449,160 @@ func _leaves(company: Company, entry: Dictionary, why: String) -> void:
 	person_left.emit(company, str(entry.role), name, why)
 
 
+# --- Family -----------------------------------------------------------------------------------
+
+## The CEO's family (Company.family: spouse, children, heir): marriage, births, the children growing up.
+func _monthly_family(company: Company, rng: RandomNumberGenerator) -> void:
+	var family: Dictionary = company.family
+	if family.is_empty():
+		family = {spouse = {}, children = [], heir = -1}
+		company.family = family
+	var ceo: Dictionary = company.ceo
+	var age := float(ceo.get("age", 45.0))
+	var spouse: Dictionary = family.spouse
+	if spouse.is_empty():
+		if age >= float(MARRY_AGE[0]) and age <= float(MARRY_AGE[1]) and rng.randf() < MARRY_CHANCE:
+			spouse = Characters.random_person(rng, "exec", str(ceo.get("nationality", "")))
+			spouse.age = clampf(age + rng.randf_range(-8.0, 8.0), 22.0, 80.0)
+			family.spouse = spouse
+			if company == _state.company:
+				ActivityLog.add("%s married %s." % [str(ceo.get("name", "")), str(spouse.name)], ActivityLog.Kind.GOOD)
+			if _state.news != null:
+				_state.news.add("company", "%s of %s marries %s" % [str(ceo.get("name", "")), company.name, str(spouse.name)], {})
+	else:
+		spouse.age = float(spouse.get("age", age)) + 1.0 / 12.0
+		var children: Array = family.children
+		if children.size() < MAX_CHILDREN and minf(age, float(spouse.age)) < CHILD_AGE_LIMIT and rng.randf() < CHILD_CHANCE:
+			var child := Characters.random_character(rng)
+			child.age = 0.0
+			child.nationality = str(ceo.get("nationality", ""))
+			child.name = "%s %s" % [str(child.name).get_slice(" ", 0), str(ceo.get("name", "")).get_slice(" ", 1)]  # (A first name of their own, the family's surname.)
+			children.append(child)
+			if company == _state.company:
+				ActivityLog.add("A child, %s, born to %s and %s." % [str(child.name), str(ceo.get("name", "")), str(spouse.name)], ActivityLog.Kind.GOOD)
+	for child: Dictionary in family.children:
+		var was := float(child.get("age", 0.0))
+		child.age = was + 1.0 / 12.0
+		if was < ADULT_AGE and float(child.age) >= ADULT_AGE:  # (Of age: traits and skills of their own, and in line for the shares.)
+			child.traits = Traits.random_traits(rng, 1 + rng.randi() % 3)
+			child.skills = Traits.random_skills(rng)
+			if company == _state.company:
+				ActivityLog.add("%s has come of age%s." % [str(child.name), "; they could be your heir" if heir_of(company).is_empty() else ""], ActivityLog.Kind.INFO)
+
+
+## A family for a new company's CEO by their age (GameState.new_game()): most over 30 are married, with children up to the age that allows.
+func start_family(company: Company, rng: RandomNumberGenerator) -> void:
+	var ceo: Dictionary = company.ceo
+	var age := float(ceo.get("age", 45.0))
+	var family := {spouse = {}, children = [], heir = -1}
+	company.family = family
+	if age < 30.0 or rng.randf() > 0.7:
+		return
+	var spouse := Characters.random_person(rng, "exec", str(ceo.get("nationality", "")))
+	spouse.age = clampf(age + rng.randf_range(-8.0, 8.0), 22.0, 80.0)
+	family.spouse = spouse
+	var oldest_possible := minf(age, float(spouse.age)) - 24.0
+	if oldest_possible <= 0.0:
+		return
+	var count := rng.randi_range(0, MAX_CHILDREN)
+	for i in count:
+		var child := Characters.random_character(rng)
+		child.age = rng.randf_range(0.0, oldest_possible)
+		child.nationality = str(ceo.get("nationality", ""))
+		child.name = "%s %s" % [str(child.name).get_slice(" ", 0), str(ceo.get("name", "")).get_slice(" ", 1)]
+		if float(child.age) >= ADULT_AGE:
+			child.traits = Traits.random_traits(rng, 1 + rng.randi() % 3)
+			child.skills = Traits.random_skills(rng)
+		(family.children as Array).append(child)
+
+
+## The heir: the child chosen (Company.family.heir) if of age, else the eldest child of age, else {}.
+func heir_of(company: Company) -> Dictionary:
+	var family: Dictionary = company.family
+	if family.is_empty():
+		return {}
+	var children: Array = family.children
+	var chosen := int(family.get("heir", -1))
+	if chosen >= 0 and chosen < children.size() and float(children[chosen].get("age", 0.0)) >= ADULT_AGE:
+		return children[chosen]
+	var eldest := {}
+	for child: Dictionary in children:
+		if float(child.get("age", 0.0)) >= ADULT_AGE and (eldest.is_empty() or float(child.age) > float(eldest.age)):
+			eldest = child
+	return eldest
+
+
+func set_heir(company: Company, index: int) -> void:
+	if company.family.is_empty() or index < -1 or index >= (company.family.children as Array).size():
+		return
+	company.family.heir = index
+	changed.emit()
+
+
+# --- Captains' morale --------------------------------------------------------------------------
+
+## Each month a captain's morale drifts to MORALE_BASE, less a long spell without a call at home and a worn ship; under MORALE_RESIGN they resign.
+func _monthly_morale(company: Company, rng: RandomNumberGenerator) -> void:
+	var now: int = _state.calendar_time()
+	for ship: Ship in _state.fleet(company):
+		if ship.captains.is_empty():
+			continue
+		var captain: Dictionary = ship.captains[0]
+		var morale := morale_of(captain)
+		morale += signf(MORALE_BASE - morale) * minf(absf(MORALE_BASE - morale), 2.0)
+		var long_away := ship.last_home_call > 0 and float(now - ship.last_home_call) > AWAY_DAYS * 86400.0
+		if long_away:
+			morale -= 2.0
+		if ship.maintenance < 0.4:
+			morale -= 3.0
+		captain.morale = clampf(morale, 0.0, 100.0)
+		if float(captain.morale) < MORALE_RESIGN:
+			var name := str(captain.get("name", ""))
+			ship.captains[0] = Characters.random_person(rng, "officer", "")
+			if company == _state.company:
+				ActivityLog.add("%s, captain of %s, has resigned: %s." % [name, ship.name, "too long from home" if long_away else "a worn ship and no thanks"], ActivityLog.Kind.BAD)
+			captain_resigned.emit(company, ship, name)
+		ship.invalidate_stats()
+
+
+## A breakdown sours the captain (GameState).
+static func note_breakdown(ship: Ship) -> void:
+	if not ship.captains.is_empty():
+		ship.captains[0].morale = morale_of(ship.captains[0]) - 8.0
+		ship.invalidate_stats()
+
+
+## A bonus for the captain: BONUS_PAY out, MORALE_BONUS up.
+func pay_bonus(company: Company, ship: Ship) -> String:
+	if ship.captains.is_empty():
+		return "No captain"
+	if company.money < BONUS_PAY or _state.in_debt(company):
+		return "Costs %s" % Fmt.money(BONUS_PAY)
+	_state._add_money(company, -BONUS_PAY)
+	_state._record(ship, "salaries", BONUS_PAY, company)
+	ship.captains[0].morale = clampf(morale_of(ship.captains[0]) + MORALE_BONUS, 0.0, 100.0)
+	ship.invalidate_stats()
+	changed.emit()
+	return ""
+
+
+# --- Grudges ------------------------------------------------------------------------------------
+
+## How sore a firm is with a company, 0 (not at all) to 1 (standing -100): see Contracts._pick_bidders(), Ownership.block_cost().
+static func soreness(company: Company, firm_index: int) -> float:
+	return clampf(-float((company.relations.get("firms", {}) as Dictionary).get(str(firm_index), 0.0)) / 100.0, 0.0, 1.0)
+
+
+func _heal_grudges(company: Company) -> void:
+	var firms: Dictionary = company.relations.get("firms", {})
+	for key: String in firms.keys():
+		var value := float(firms[key])
+		if absf(value) <= GRUDGE_HEAL:
+			firms.erase(key)
+		else:
+			firms[key] = value - signf(value) * GRUDGE_HEAL
+
+
 ## A new CEO: an executive (role) steps up, or a hire from the market (candidate id), or a random one.
 func succeed(company: Company, kind: String, key: String) -> void:
 	var old: Dictionary = company.ceo
@@ -421,6 +617,15 @@ func succeed(company: Company, kind: String, key: String) -> void:
 			if not candidate.is_empty():
 				next = (candidate.character as Dictionary).duplicate(true)
 				candidates.erase(candidate)
+		"heir":
+			next = heir_of(company)
+			if not next.is_empty():
+				(company.family.children as Array).erase(next)
+				company.family.heir = -1
+				company.family.spouse = {}  # (The heir's own family starts afresh; the old CEO's shares pass with the post.)
+				var founder: Dictionary = _state.ownership.founder(company)
+				if not founder.is_empty():
+					founder.name = str(next.name)
 	if next.is_empty():
 		var rng := RandomNumberGenerator.new()
 		rng.randomize()
@@ -428,6 +633,10 @@ func succeed(company: Company, kind: String, key: String) -> void:
 	next.erase("notice")
 	next.erase("retire_at")
 	company.ceo = next
+	if kind != "heir":  # (The founder's shares stay with the family, held in trust, when someone else takes the post.)
+		var founder: Dictionary = _state.ownership.founder(company)
+		if not founder.is_empty() and str(founder.name) == str(old.get("name", "")):
+			founder.name = "the %s family" % str(old.get("name", "")).get_slice(" ", 1)
 	company.story += " %s took over from %s in %d." % [str(next.name), str(old.get("name", "the founder")), Time.get_datetime_dict_from_unix_time(_state.calendar_time()).year]
 	if _state.news != null:
 		_state.news.add("company", "%s names %s chief executive" % [company.name, str(next.name)], {})

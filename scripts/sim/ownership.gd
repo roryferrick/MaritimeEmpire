@@ -38,6 +38,12 @@ const CONTROL := 0.5
 const FIRM_EARNINGS_YEARS := 4.0
 const VOTE_FREE_SHARE := 0.1  # A move worth less than this of the company's value needs no vote.
 const NO_CONFIDENCE_OPINION := -40.0
+## The paper firms buy into a listed player (_ai_stakes()): when the market is hot or the price cheap, a block at a time up to AI_CAP each, AI_CHANCE a month a firm with the cash.
+const AI_CAP := 0.2
+const AI_CHANCE := 0.06
+const AI_HOT := 1.2
+const AI_CHEAP := 0.8
+const AI_BUYBACK_PREMIUM := 0.2
 const QUARTER_DAYS := 91.3125
 const ROADSHOW_MEETINGS := 4
 const MEETING_DAYS := 7
@@ -225,11 +231,12 @@ func _buyback(company: Company, share: float) -> void:
 	var count := mini(roundi(float(shares.total) * share), outside)
 	if count <= 0:
 		return
-	var cost := roundi(count * price(company))
+	var cost := 0
 	for holder: Dictionary in shares.holders:
 		if holder.kind != "founder":
 			var part := roundi(count * float(holder.count) / outside)
 			holder.count = int(holder.count) - part
+			cost += roundi(part * price(company) * (1.0 + AI_BUYBACK_PREMIUM if holder.kind == "firm" else 1.0))  # (A firm sells back dear.)
 	shares.holders = shares.holders.filter(func(holder: Dictionary) -> bool: return int(holder.count) > 0)
 	shares.total = int(shares.total) - count
 	_state._add_money(company, -cost)
@@ -277,6 +284,8 @@ func _monthly(company: Company) -> void:
 		for holder: Dictionary in shares.holders:
 			if holder.kind != "founder":
 				holder.opinion = clampf(float(holder.opinion) + move * 40.0 - 0.5, -100.0, 100.0)
+	if bool(shares.listed) and company == _state.company:
+		_ai_stakes(company)
 	# No confidence: outside holders set against the CEO with more than half the shares.
 	var against := 0.0
 	for holder: Dictionary in shares.holders:
@@ -289,6 +298,46 @@ func _monthly(company: Company) -> void:
 		coup.emit(company)
 	changed.emit()
 
+
+## A firm with the cash buys a block of a listed player from the public when the market is hot (sentiment over AI_HOT) or cheap (under AI_CHEAP), up to AI_CAP each; it sits on the board as its CEO.
+func _ai_stakes(company: Company) -> void:
+	var shares := ensure(company)
+	var sentiment := float(shares.sentiment)
+	if sentiment < AI_HOT and sentiment > AI_CHEAP:
+		return
+	var public := {}
+	for holder: Dictionary in shares.holders:
+		if holder.kind == "public":
+			public = holder
+	var block := roundi(float(shares.total) * BLOCK)
+	if public.is_empty() or int(public.count) < block * 2:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var firms: ShippingFirms = _state.firms
+	var cost := block * price(company)
+	for i in firms.firms.size():
+		var firm: Dictionary = firms.firms[i]
+		if float(firm.money) < cost * 3.0 or rng.randf() >= AI_CHANCE:
+			continue
+		var holder := {}
+		for each: Dictionary in shares.holders:
+			if each.kind == "firm" and int(each.get("firm", -1)) == i:
+				holder = each
+		if not holder.is_empty() and share_of(company, holder) + BLOCK > AI_CAP + 0.0001:
+			continue
+		if holder.is_empty():
+			holder = {kind = "firm", firm = i, name = str(firm.name), character = firm.get("ceo", {}), count = 0, opinion = 5.0 if sentiment >= AI_HOT else -5.0}
+			shares.holders.append(holder)
+		holder.count = int(holder.count) + block
+		public.count = int(public.count) - block
+		firm.money = float(firm.money) - cost
+		var stake := share_of(company, holder)
+		ActivityLog.add("%s has bought %d%% of the company on the market and holds %d%%%s." % [str(firm.name), roundi(BLOCK * 100.0), roundi(stake * 100.0), "; it sits on your board" if stake >= BOARD_MIN else ""], ActivityLog.Kind.INFO)
+		if _state.news != null:
+			_state.news.add("company", "%s builds a %d%% stake in %s" % [str(firm.name), roundi(stake * 100.0), company.name], {firm = i})
+		if int(public.count) < block * 2:
+			break
 
 ## The quarter's profit, the dividend paid out of it, and a listed company's report against expectations.
 func _close_quarter(company: Company, now: int) -> void:
@@ -363,7 +412,7 @@ func stake_in(company: Company, firm_index: int) -> float:
 ## What the next BLOCK of a firm costs: its value's share, at a premium rising with the blocks held.
 func block_cost(company: Company, firm_index: int) -> int:
 	var held := roundi(stake_in(company, firm_index) / BLOCK)
-	return roundi(firm_value(firm_index) * BLOCK * (1.0 + BLOCK_PREMIUM * held))
+	return roundi(firm_value(firm_index) * BLOCK * (1.0 + BLOCK_PREMIUM * held) * (1.0 + People.soreness(company, firm_index)))  # (A firm you poached from charges more: see People.)
 
 
 func buy_block_error(company: Company, firm_index: int) -> String:

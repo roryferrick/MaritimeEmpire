@@ -130,6 +130,8 @@ var berth_half := -1
 ## Its officers (Characters: {name, look}): the captain first, then its mates
 ## (GameState.crew_of()), made up when it was bought.
 var captains: Array = []
+## When it last called at its company's home port (calendar time; 0 never): a captain long from home sours (People).
+var last_home_call := 0
 var berth_phase := BERTH_NONE
 var berth_time := 0.0
 var berth_since := 0.0
@@ -1480,6 +1482,7 @@ func to_dict() -> Dictionary:
 		"berth": berth,
 		"berth_half": berth_half,
 		"captains": captains,
+		"last_home_call": last_home_call,
 		"berth_phase": berth_phase,
 		"berth_time": berth_time,
 		"berth_duration": berth_duration,
@@ -1593,6 +1596,7 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.berth = int(data.get("berth", -1))
 	ship.berth_half = int(data.get("berth_half", -1))
 	ship.captains = data.get("captains", [])
+	ship.last_home_call = int(data.get("last_home_call", 0))
 	if ship.captains.is_empty():  # Saves from before officers: the same ones every time it loads.
 		ship.captains = Characters.officers_for(ship.model(), ship.id * 7919 + 17)
 	ship.berth_time = float(data.get("berth_time", 0.0))

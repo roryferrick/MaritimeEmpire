@@ -136,6 +136,9 @@ func _ready() -> void:
 	GameState.people.succession_needed.connect(func(company: Company, why: String) -> void:
 		if company == GameState.company:
 			event_card.show_succession(company, why))
+	GameState.people.captain_resigned.connect(func(company: Company, ship: Ship, name: String) -> void:
+		if company == GameState.company:
+			event_card.show_resignation(ship, name))
 	GameState.ownership.vote_result.connect(func(company: Company, motion: Dictionary, passed: bool, yes: float, total: float) -> void:
 		if company == GameState.company and yes < total:
 			event_card.show_vote(motion, passed, yes, total))

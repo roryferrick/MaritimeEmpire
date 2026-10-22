@@ -55,6 +55,7 @@ func _refresh() -> void:
 	_add_executives(company, people)
 	_add_heads(company, people)
 	_add_officers(company)
+	_add_family(company, people)
 	_add_market(company, people)
 
 
@@ -157,6 +158,33 @@ func _add_officers(company: Company) -> void:
 			box.add_child(_person_row(ship.captains[i], "%s of %s (%s)" % [Characters.rank(i), ship.name, str(ship.model().get("name", ""))], "officer", "%d|%d" % [ship.id, i], company))
 	if not any:
 		box.add_child(_dim("No ships, no officers yet."))
+	_body.add_child(box.get_parent())
+
+
+# --- The family ---------------------------------------------------------------------------------
+
+func _add_family(company: Company, people: People) -> void:
+	var box := _card("The family")
+	var family: Dictionary = company.family
+	var ceo: Dictionary = company.ceo
+	var spouse: Dictionary = family.get("spouse", {})
+	var children: Array = family.get("children", [])
+	if spouse.is_empty() and children.is_empty():
+		box.add_child(_dim("%s is unmarried. In time there may be a spouse and children; a child of age can be named heir, and takes the shares and the post when %s dies or retires." % [str(ceo.get("name", "The CEO")), str(ceo.get("name", "")).get_slice(" ", 0)]))
+		_body.add_child(box.get_parent())
+		return
+	if not spouse.is_empty():
+		box.add_child(_person_row(spouse, "spouse of %s" % str(ceo.get("name", "")), "", "", company))
+	var heir := people.heir_of(company)
+	for i in children.size():
+		var child: Dictionary = children[i]
+		var age := float(child.get("age", 0.0))
+		var row := _person_row(child, "%s, %s" % ["child" if age < People.ADULT_AGE else "of age", "heir" if child == heir else "not the heir"], "", "", company)
+		if age >= People.ADULT_AGE and child != heir:
+			var index := i
+			row.add_child(_flat_button("Make heir", func() -> void: GameState.set_heir(index)))
+		box.add_child(row)
+	box.add_child(_dim("The heir inherits the founder's shares and becomes chief executive, with their own traits and skills, when the CEO dies or retires; without one of age, an executive or a hire steps up."))
 	_body.add_child(box.get_parent())
 
 
@@ -276,8 +304,19 @@ func _person_row(person: Dictionary, post: String, kind: String, key: String, co
 		detail += " · %s a year" % Fmt.money(int(person.salary))
 	if person.get("notice", false):
 		detail += " · retiring soon"
+	if kind == "officer" and key.ends_with("|0"):
+		detail += " · %s (morale %d)" % [People.morale_word(person), roundi(People.morale_of(person))]
 	text.add_child(_dim(detail))
 	row.add_child(text)
+	if kind == "officer" and key.ends_with("|0"):
+		var bonus := Button.new()
+		bonus.text = "Bonus"
+		bonus.flat = true
+		bonus.add_theme_font_size_override(&"font_size", FONT_SIZE)
+		bonus.tooltip_text = "A %s bonus for the captain: morale +%d. Morale drifts back to %d; calls at home and a sound ship keep it up, breakdowns and being passed over pull it down; under %d the captain resigns." % [Fmt.money(People.BONUS_PAY), roundi(People.MORALE_BONUS), roundi(People.MORALE_BASE), roundi(People.MORALE_RESIGN)]
+		var ship_id := int(key.split("|")[0])
+		bonus.pressed.connect(func() -> void: GameState.pay_bonus(GameState.ship_by_id(ship_id)))
+		row.add_child(bonus)
 	if kind == "officer":
 		var promote := MenuButton.new()
 		promote.text = "Promote"

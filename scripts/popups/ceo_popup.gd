@@ -84,6 +84,16 @@ func _ready() -> void:
 		strings.append("%s hold %d%% of the company." % [str(company.investors.get("name", "Backers")).capitalize() if str(company.investors.get("name", "")).begins_with("the ") else str(company.investors.get("name", "Backers")), roundi(float(company.investors.get("stake", 0.0)) * 100.0)])
 	if company.loan > 0:
 		strings.append("%s owed to the bank." % Fmt.money(company.loan))
+	var family: Dictionary = company.family
+	if not family.is_empty():
+		var spouse: Dictionary = family.get("spouse", {})
+		var children: Array = family.get("children", [])
+		var heir: Dictionary = GameState.people.heir_of(company)
+		var names := PackedStringArray()
+		for child: Dictionary in children:
+			names.append("%s (%d%s)" % [str(child.name).get_slice(" ", 0), roundi(float(child.get("age", 0.0))), ", heir" if child == heir else ""])
+		if not spouse.is_empty() or not children.is_empty():
+			strings.append("%s%s." % ["Married to %s" % str(spouse.name) if not spouse.is_empty() else "Widowed or parted", "; children %s" % ", ".join(names) if not names.is_empty() else ""])
 	if not strings.is_empty():
 		content.add_child(_dim(" ".join(strings)))
 

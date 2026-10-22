@@ -61,6 +61,8 @@ var head_budgets := {}
 ## The share register and all that goes with it (see Ownership.ensure()), and the stakes held in the paper firms (firm index -> shares).
 var shares := {}
 var stakes := {}
+## The CEO's family (People._monthly_family()): {spouse, children, heir (an index into children or -1)}.
+var family := {}
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
 ## What its people wear, line by line, where it's changed the defaults
@@ -191,6 +193,7 @@ func to_dict() -> Dictionary:
 		"head_budgets": head_budgets,
 		"shares": shares,
 		"stakes": stakes,
+		"family": family,
 		"ceo": ceo,
 		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
@@ -258,6 +261,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.head_budgets = data.get("head_budgets", {}) if data.get("head_budgets") is Dictionary else {}
 	company.shares = data.get("shares", {}) if data.get("shares") is Dictionary else {}
 	company.stakes = data.get("stakes", {}) if data.get("stakes") is Dictionary else {}
+	company.family = data.get("family", {}) if data.get("family") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.

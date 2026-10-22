@@ -447,6 +447,7 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 ## margin, with noise, a little more where the market is urgent.
 func _pick_bidders(offer: Dictionary, rng: RandomNumberGenerator) -> void:
 	var firms: ShippingFirms = _state.firms
+	var player: Company = _state.company
 	var order := range(firms.firms.size())
 	order.sort_custom(func(a: int, b: int) -> bool:
 		var fa: Dictionary = firms.firms[a]
@@ -455,6 +456,10 @@ func _pick_bidders(offer: Dictionary, rng: RandomNumberGenerator) -> void:
 		var hb: bool = fb.country == offer.country
 		if ha != hb:
 			return ha
+		var sa := People.soreness(player, a) if ha else 0.0  # (A firm you poached from turns up at home to underbid you: see People.)
+		var sb := People.soreness(player, b) if hb else 0.0
+		if (sa > 0.0) != (sb > 0.0):
+			return sa > sb
 		return float(fa.size) > float(fb.size))
 	var count := rng.randi_range(int(TENDER_BIDDERS[0]), int(TENDER_BIDDERS[1]))
 	var bidders := []
@@ -462,7 +467,7 @@ func _pick_bidders(offer: Dictionary, rng: RandomNumberGenerator) -> void:
 	for i: int in order.slice(0, count):
 		var firm: Dictionary = firms.firms[i]
 		bidders.append(i)
-		bids[str(i)] = snappedf(float(offer.plain) * Traits.ai_margin(firm.get("ceo", {})) * rng.randf_range(float(BID_SPREAD[0]), float(BID_SPREAD[1])) * (1.0 + float(offer.premium) - PREMIUM_LOW), 0.01)
+		bids[str(i)] = snappedf(float(offer.plain) * Traits.ai_margin(firm.get("ceo", {})) * rng.randf_range(float(BID_SPREAD[0]), float(BID_SPREAD[1])) * (1.0 + float(offer.premium) - PREMIUM_LOW) * (1.0 - 0.5 * (People.soreness(player, i) if firm.country == offer.country else 0.0)), 0.01)
 	offer.bidders = bidders
 	offer.bids = bids
 

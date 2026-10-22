@@ -210,7 +210,7 @@ func _add_ipo(company: Company, own: Ownership, shares: Dictionary) -> void:
 
 func _add_firms(company: Company, own: Ownership) -> void:
 	var box := _card("The shipping firms")
-	box.add_child(_dim("A firm is worth its fleet at list price plus four years of its earnings so far. A block is %d%% of it, dearer with each block you hold; past %d%% you control it (its ships sail in your colour and you take its earnings each month), and running it comes later." % [roundi(Ownership.BLOCK * 100.0), roundi(Ownership.CONTROL * 100.0)]))
+	box.add_child(_dim("A firm is worth its fleet at list price plus four years of its earnings so far. A block is %d%% of it, dearer with each block you hold (and dearer still from a firm you poached people from); past %d%% you control it (its ships sail in your colour and you take its earnings each month), and running it comes later." % [roundi(Ownership.BLOCK * 100.0), roundi(Ownership.CONTROL * 100.0)]))
 	var firms: ShippingFirms = GameState.firms
 	var order := range(firms.firms.size())
 	order.sort_custom(func(a: int, b: int) -> bool:
@@ -225,7 +225,8 @@ func _add_firms(company: Company, own: Ownership) -> void:
 		grid.add_child(_cell(head, &"DimLabel"))
 	for i: int in order.slice(0, _firms_shown):
 		var firm: Dictionary = firms.firms[i]
-		grid.add_child(_cell(str(firm.name)))
+		var sore := People.soreness(company, i)
+		grid.add_child(_cell(str(firm.name) + (" (sore: you poached from them)" if sore > 0.0 else ""), &"ErrorLabel" if sore > 0.0 else &""))
 		grid.add_child(_cell(str(WorldEconomy.country(str(firm.country)).get("name", firm.country))))
 		grid.add_child(_cell("$" + Fmt.short(own.firm_value(i))))
 		var stake := own.stake_in(company, i)

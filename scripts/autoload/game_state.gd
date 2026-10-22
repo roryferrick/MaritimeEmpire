@@ -1379,6 +1379,23 @@ func choose_successor(kind: String, key: String) -> void:
 	people.succeed(company, kind, key)
 	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
 
+## Names the child who inherits the shares and the post (People.set_heir()); -1 for the eldest of age.
+func set_heir(index: int) -> void:
+	if Net.command(&"set_heir", [index]):
+		return
+	people.set_heir(company, index)
+
+
+## A bonus for a ship's captain (People.pay_bonus()).
+func pay_bonus(ship: Ship) -> void:
+	if ship == null or owner_of(ship) != company:
+		return
+	if Net.command(&"pay_bonus", [ship]):
+		return
+	if people.pay_bonus(company, ship).is_empty():
+		ActivityLog.add("A %s bonus for %s, captain of %s." % [Fmt.money(People.BONUS_PAY), str((ship.captains[0] as Dictionary).get("name", "")), ship.name], ActivityLog.Kind.INFO)
+
+
 # --- Ownership (see Ownership) --------------------------------------------------------------
 
 ## Puts a motion to the board: "dividend" {share}, "issue" {share}, "buyback" {share}, "ipo" {}, "buy_block" {firm}.
@@ -2479,6 +2496,7 @@ func _roll_breakdowns(delta: float) -> void:
 				continue  # (A fishing boat breaks down like a cargo ship, and is towed in like one.)
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
 			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
+			People.note_breakdown(ship)  # (The captain's morale.)
 			if ship.maintenance > 0.0:
 				makers.on_mishap(ship, false)  # (Lost, it's counted in _lose().)
 			ship_broke_down.emit(ship)
@@ -2502,6 +2520,8 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 	ship.ice_wait = ""
 	ship.at_risk = false
 	canal_traffic.leave(ship)
+	if port == owner_of(ship).home_port:
+		ship.last_home_call = calendar_time()  # (A call at home: see People, captains' morale.)
 	ship.delivery_canals.clear()
 	if paid and not ship.is_service():
 		ship.delivery_canals.assign(ship.canals_entered)
@@ -4389,6 +4409,9 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 		money_changed.emit(money)
 	contracts.start_standing(company)  # (Known at home from the start: see Contracts.)
 	ownership.ensure(company)
+	var rng_family := RandomNumberGenerator.new()
+	rng_family.randomize()
+	people.start_family(company, rng_family)  # (A spouse and children by the CEO's age: see People.)
 	_begin_session()
 	_start_warm_up(WARM_UP_DAYS)  # (Saved once it's run: see _warm_up_frame().)
 

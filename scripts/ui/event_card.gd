@@ -145,14 +145,23 @@ func show_contract_event(contract: Dictionary, kind: String, info: Dictionary) -
 func show_succession(company: Company, why: String) -> void:
 	var old := str(company.ceo.get("name", "The founder"))
 	var actions := []
+	var heir: Dictionary = GameState.people.heir_of(company)
+	if not heir.is_empty():
+		actions.append(["%s (heir)" % str(heir.name), func() -> void: GameState.choose_successor("heir", "")])
 	var ranked: Array = People.ROLE_ORDER.filter(func(role: String) -> bool: return not (company.executives.get(role, {}) as Dictionary).is_empty())
 	ranked.sort_custom(func(a: String, b: String) -> bool: return int(Traits.skills_of(company.executives[a]).leadership) > int(Traits.skills_of(company.executives[b]).leadership))
-	for role: String in ranked.slice(0, 3):
+	for role: String in ranked.slice(0, 3 - actions.size()):
 		var person: Dictionary = company.executives[role]
 		actions.append(["%s (%s)" % [str(person.name), str(People.ROLES[role].short)], func() -> void: GameState.choose_successor("exec", role)])
 	actions.append(["Hire from outside", func() -> void: GameState.choose_successor("candidate", "")])
 	_enqueue({kicker = "SUCCESSION", title = "%s has %s" % [old, "died" if why == "died" else "retired"], color = Color(0.95, 0.8, 0.5),
-		body = "The company needs a chief executive. Pick one of your executives to step up (their traits and skills become the company's), or bring someone in from outside: the board will accept a stranger, but the market knows nothing of them.", actions = actions})
+		body = "The company needs a chief executive. Pick the heir (the shares and the post pass to them) or one of your executives to step up (their traits and skills become the company's), or bring someone in from outside: the board will accept a stranger, but the market knows nothing of them.", actions = actions})
+
+
+## A captain has resigned (People.captain_resigned).
+func show_resignation(ship: Ship, name: String) -> void:
+	_enqueue({kicker = "RESIGNATION", title = "%s has left %s" % [name, ship.name], color = Color(0.95, 0.6, 0.5),
+		body = "Morale aboard fell too far: too long from home, a worn ship, no thanks. A new officer has the ship. Calls at home, repairs and a bonus now and then keep captains glad (the People page shows how each feels).", actions = [["People page", func() -> void: GameRoot.find(self).show_people()], ["Carry on", Callable()]]})
 
 
 ## The board voted (Ownership.vote_result).
