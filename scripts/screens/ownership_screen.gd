@@ -57,6 +57,7 @@ func _refresh() -> void:
 	_add_register(company, own, shares)
 	_add_motions(company, own, shares)
 	_add_ipo(company, own, shares)
+	_add_firm_cards(company, own)
 	_add_firms(company, own)
 
 
@@ -208,9 +209,76 @@ func _add_ipo(company: Company, own: Ownership, shares: Dictionary) -> void:
 	_body.add_child(box.get_parent())
 
 
+## A card for each firm the company controls: its figures, its focus and trade groups, the dividend, its orders.
+func _add_firm_cards(company: Company, own: Ownership) -> void:
+	var firms: ShippingFirms = GameState.firms
+	for key: String in company.stakes:
+		var i := int(key)
+		if own.stake_in(company, i) < Ownership.CONTROL:
+			continue
+		var firm: Dictionary = firms.firms[i]
+		var plan := own.ensure_plan(company, i)
+		var box := _card("%s (yours: %d%%)" % [str(firm.name), roundi(own.stake_in(company, i) * 100.0)])
+		var hulls := 0
+		for model_id: String in firm.fleet:
+			hulls += int(firm.fleet[model_id])
+		box.add_child(_dim("Based in %s. %d ships on the books (about %s hulls), %d at sea now, %d sailings last month. Cash %s; earned %s last month; worth %s." % [GameData.port_name(str(firm.home)), hulls, Fmt.thousands(roundi(hulls * ShippingFirms.CONVOY)), firms.voyages_of(i), int(firm.get("month_voyages", 0)), Fmt.money(roundi(float(firm.money))), Fmt.money(roundi(float(firm.get("last_month_earned", 0.0)))), "$" + Fmt.short(own.firm_value(i))]))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override(&"separation", 8)
+		row.add_child(_text("Focus"))
+		var focus := OptionButton.new()
+		focus.add_item("World-wide")
+		focus.add_item("Home: voyages out of %s only" % str(WorldEconomy.country(str(firm.country)).get("name", firm.country)))
+		focus.select(1 if str(plan.focus) == "home" else 0)
+		focus.item_selected.connect(func(index: int) -> void: GameState.set_firm_plan(i, "focus", "home" if index == 1 else "world"))
+		row.add_child(focus)
+		row.add_child(_text("Dividend"))
+		var dividend := SpinBox.new()
+		dividend.min_value = 0
+		dividend.max_value = 100
+		dividend.step = 5
+		dividend.suffix = "%"
+		dividend.value = roundi(float(plan.dividend) * 100.0)
+		dividend.value_changed.connect(func(v: float) -> void: GameState.set_firm_plan(i, "dividend", v / 100.0))
+		row.add_child(dividend)
+		row.add_child(_dim("of each month's earnings to you; the rest builds its cash"))
+		box.add_child(row)
+		var lines := {}
+		for model_id: String in firm.fleet:
+			lines[str(GameData.get_ship_model(model_id).get("category", ""))] = true
+		if lines.size() > 1:
+			var groups := HBoxContainer.new()
+			groups.add_theme_constant_override(&"separation", 8)
+			groups.add_child(_text("Trades"))
+			for line: String in lines:
+				var tick := CheckBox.new()
+				tick.text = People.group_name(line)
+				tick.add_theme_font_size_override(&"font_size", FONT_SIZE)
+				tick.button_pressed = (plan.groups as Array).is_empty() or line in plan.groups
+				tick.toggled.connect(func(_on: bool) -> void:
+					var chosen := []
+					for child in groups.get_children():
+						if child is CheckBox and (child as CheckBox).button_pressed:
+							chosen.append(child.get_meta(&"line"))
+					GameState.set_firm_plan(i, "groups", [] if chosen.size() == lines.size() else chosen))
+				tick.set_meta(&"line", line)
+				groups.add_child(tick)
+			box.add_child(groups)
+		var orders: Array = plan.orders
+		var order_row := HBoxContainer.new()
+		order_row.add_theme_constant_override(&"separation", 8)
+		if orders.is_empty():
+			order_row.add_child(_dim("No ship on order. It asks you when it has the cash for one."))
+		else:
+			order_row.add_child(_dim("On order: " + ", ".join(PackedStringArray(orders.map(func(o: Dictionary) -> String: return "%s from %s, due %s" % [str(GameData.get_ship_model(str(o.model)).get("name", "")), str(GameState.shipyards.yard(str(o.yard)).get("name", "")), Fmt.calendar_short(int(o.due))])))))
+		order_row.add_child(_flat_button("Order a ship now", func() -> void: GameState.request_firm_order(i)))
+		box.add_child(order_row)
+		_body.add_child(box.get_parent())
+
+
 func _add_firms(company: Company, own: Ownership) -> void:
 	var box := _card("The shipping firms")
-	box.add_child(_dim("A firm is worth its fleet at list price plus four years of its earnings so far. A block is %d%% of it, dearer with each block you hold (and dearer still from a firm you poached people from); past %d%% you control it (its ships sail in your colour and you take its earnings each month), and running it comes later." % [roundi(Ownership.BLOCK * 100.0), roundi(Ownership.CONTROL * 100.0)]))
+	box.add_child(_dim("A firm is worth its fleet at list price plus four years of its earnings so far. A block is %d%% of it, dearer with each block you hold (and dearer still from a firm you poached people from); past %d%% you control it (its ships sail in your colour and you take its earnings each month), and you run it from its card above." % [roundi(Ownership.BLOCK * 100.0), roundi(Ownership.CONTROL * 100.0)]))
 	var firms: ShippingFirms = GameState.firms
 	var order := range(firms.firms.size())
 	order.sort_custom(func(a: int, b: int) -> bool:

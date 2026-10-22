@@ -68,6 +68,8 @@ var _state: Node  # GameState
 var firms: Array = []
 ## Capacity per line (hold units) and what's busy; voyages at sea.
 var capacity := {}
+## The capacity as generated, before any ships the controlled firms' orders added (saved: see generate()).
+var _base_capacity := {}
 var voyages: Array = []
 ## The dispatch's progress through the day: the good it's up to (-1: done) and the day.
 var _good_cursor := -1
@@ -84,7 +86,7 @@ func _init(state: Node) -> void:
 
 # --- Making the firms ---------------------------------------------------------------
 
-func generate(world: WorldEconomy, new_seed: int) -> void:
+func generate(world: WorldEconomy, new_seed: int, saved_capacity := {}) -> void:
 	seed = new_seed
 	firms.clear()
 	voyages.clear()
@@ -92,7 +94,8 @@ func generate(world: WorldEconomy, new_seed: int) -> void:
 	rng.seed = new_seed + 1
 	_build_models()
 	_build_distances(world)
-	capacity = _world_capacity(world)
+	capacity = saved_capacity.duplicate() if not saved_capacity.is_empty() else _world_capacity(world)  # (A save keeps the capacity it was made with, so the fleets come back the same: see to_dict().)
+	_base_capacity = capacity.duplicate()
 	# Firm sizes: the named nations' shares split among their firms (a few big,
 	# many small: a power law), the tail among every other country with a port.
 	var taken := {}
@@ -269,6 +272,7 @@ func _flush_batch() -> void:
 		if Net.is_host():
 			sync_new.append(_row(v))  # (For the joined games: see take_sync().)
 		month_sailings += ships
+		firms[int(lot_entry.firm)].month_voyages = int(firms[int(lot_entry.firm)].get("month_voyages", 0)) + ships
 		month_calls[lot_entry.from] = int(month_calls.get(lot_entry.from, 0)) + ships
 		month_calls[lot_entry.to] = int(month_calls.get(lot_entry.to, 0)) + ships
 		if float(lot_entry.cost) > float(biggest.get("cost", 0.0)):
@@ -598,8 +602,37 @@ func _firm_for(world: WorldEconomy, from: int, _line: String) -> int:
 			sums.append(total)
 		_firm_sums[country] = sums
 	var pick := randf() * sums[-1]
-	return mini(sums.bsearch(pick), firms.size() - 1)
+	var index := mini(sums.bsearch(pick), firms.size() - 1)
+	for attempt in 3:  # (A firm a player runs keeps to its plan: its focus and its trade groups. See Ownership.plan_of().)
+		var plan: Dictionary = _state.ownership.plan_of(index)
+		if plan.is_empty():
+			break
+		var groups: Array = plan.get("groups", [])
+		var fits: bool = (str(plan.get("focus", "world")) != "home" or firms[index].country == country) and (groups.is_empty() or _line in groups)
+		if fits:
+			break
+		index = mini(sums.bsearch(randf() * sums[-1]), firms.size() - 1)
+	return index
 var _firm_sums := {}
+
+
+## Ships added to a firm's books (an order delivered: see Ownership), and to the line's capacity.
+func add_fleet(firm_index: int, model_id: String, count: int) -> void:
+	var firm: Dictionary = firms[firm_index]
+	firm.fleet[model_id] = int(firm.fleet.get(model_id, 0)) + count
+	var model := GameData.get_ship_model(model_id)
+	var line := str(model.get("category", ""))
+	if capacity.has(line):
+		capacity[line] = float(capacity[line]) + float(model.get("capacity", 0)) * CONVOY * count
+
+
+## Voyages at sea for a firm now.
+func voyages_of(firm_index: int) -> int:
+	var count := 0
+	for v: Dictionary in voyages:
+		if int(v.firm) == firm_index:
+			count += int(v.ships)
+	return count
 
 
 # --- Saving ----------------------------------------------------------------------------
@@ -618,7 +651,7 @@ func to_dict() -> Dictionary:
 		for good: String in v.goods:
 			goods[good] = roundi(float(v.goods[good]))
 		rows.append([v.firm, v.model, v.ships, goods, v.from, v.to, roundi(float(v.start)), roundi(float(v.arrive)), roundi(float(v.free)), roundi(float(v.cost))])
-	return {seed = seed, dispatch_day = _dispatch_day, voyages = rows,
+	return {seed = seed, dispatch_day = _dispatch_day, voyages = rows, capacity = _base_capacity,
 		returning = _returning.map(func(home: Dictionary) -> Array: return [roundi(float(home.free)), home.line, roundi(float(home.hold)), home.from, home.to, home.model, home.ships, home.firm, roundi(float(home.arrive))]),
 		money = firms.map(func(firm: Dictionary) -> Array: return [snappedf(float(firm.money), 1.0), snappedf(float(firm.carried), 1.0)])}
 
@@ -626,7 +659,7 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary, world: WorldEconomy) -> void:
 	if data.is_empty():
 		return
-	generate(world, int(data.get("seed", 0)))
+	generate(world, int(data.get("seed", 0)), data.get("capacity", {}) if data.get("capacity") is Dictionary else {})
 	voyages = []
 	for row: Array in data.get("voyages", []):
 		var v := {}

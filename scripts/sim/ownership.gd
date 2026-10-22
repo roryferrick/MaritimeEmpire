@@ -29,6 +29,8 @@ signal coup(company: Company)
 signal ipo_event(company: Company, kind: String, info: Dictionary)
 ## A listed company's quarterly report.
 signal quarterly(company: Company, report: Dictionary)
+## A controlled firm wants to order a ship from its own cash (a card: GameState.answer_firm_order()). proposal: {firm, model, yard, price, months}.
+signal firm_order_wanted(company: Company, proposal: Dictionary)
 
 const TOTAL_SHARES := 1000000
 const BOARD_MIN := 0.05
@@ -253,6 +255,7 @@ func step(_delta: float) -> void:
 		if now >= int(shares.quarter_end):
 			_close_quarter(company, now)
 		_step_ipo(company, now)
+		_step_plans(company, now)
 	if month != _month:
 		var first := _month < 0
 		_month = month
@@ -273,10 +276,14 @@ func _monthly(company: Company) -> void:
 		var earned := float(firm.money) - float(firm.get("paid_out_from", firm.money))
 		firm.paid_out_from = firm.money
 		var share := float(company.stakes[key]) / TOTAL_SHARES
+		if share >= CONTROL:  # (A firm the company runs pays the dividend set on its card: see plan_of().)
+			share = float(ensure_plan(company, int(key)).dividend)
+		firm.last_month_earned = earned
 		var part := roundi(earned * share)
 		if part > 0:
 			_state._add_money(company, part)
 			_state._record(null, "firm_earnings", -part, company)
+	_firm_orders(company)
 	# Opinions: a rising price pleases, a falling one grates; the board's patience with a CEO.
 	var history: Array = shares.history
 	if history.size() >= 2:
@@ -442,6 +449,145 @@ func _buy_block(company: Company, firm_index: int) -> void:
 	if _state.news != null:
 		_state.news.add("company", "%s %s %s" % [company.name, "takes control of" if took_control else "buys into", str(firm.name)], {firm = firm_index})
 	changed.emit()
+
+
+# --- Running the firms a company controls (DESIGN M4) --------------------------------------------
+
+## The plan for a firm the company controls (Company.firm_plans): focus ("world" or "home": only voyages
+## out of its home country), groups (the ship categories it takes; empty = all), dividend (the share
+## of its month's earnings paid to the company; the rest stays its cash), extra_fleet (ships added
+## by its orders: model -> count, put back on load), orders ([{model, yard, due, price}]).
+func ensure_plan(company: Company, firm_index: int) -> Dictionary:
+	var key := str(firm_index)
+	if not company.firm_plans.has(key):
+		company.firm_plans[key] = {focus = "world", groups = [], dividend = snappedf(stake_in(company, firm_index), 0.01), extra_fleet = {}, orders = [], asked = false}
+	return company.firm_plans[key]
+
+
+## The plan of whoever controls a firm, or {} (ShippingFirms._firm_for() asks for every lot).
+func plan_of(firm_index: int) -> Dictionary:
+	var key := str(firm_index)
+	for company: Company in _state.all_companies():
+		if company.firm_plans.has(key) and stake_in(company, firm_index) >= CONTROL:
+			return company.firm_plans[key]
+	return {}
+
+
+func set_plan(company: Company, firm_index: int, key: String, value: Variant) -> void:
+	if stake_in(company, firm_index) < CONTROL or not key in ["focus", "groups", "dividend"]:
+		return
+	var plan := ensure_plan(company, firm_index)
+	match key:
+		"dividend":
+			plan.dividend = clampf(float(value), 0.0, 1.0)
+		"focus":
+			plan.focus = "home" if str(value) == "home" else "world"
+		"groups":
+			plan.groups = (value as Array).duplicate() if value is Array else []
+	changed.emit()
+
+
+## The ship a firm would order next: the model it has most of, from the cheapest yard with a slot.
+func firm_proposal(firm_index: int) -> Dictionary:
+	var firms: ShippingFirms = _state.firms
+	var firm: Dictionary = firms.firms[firm_index]
+	var best := ""
+	var most := 0
+	for model_id: String in firm.fleet:
+		if int(firm.fleet[model_id]) > most:
+			most = int(firm.fleet[model_id])
+			best = model_id
+	if best.is_empty():
+		return {}
+	var model := GameData.get_ship_model(best)
+	var yards: Shipyards = _state.shipyards
+	var offers: Array = yards.yards_for(model).filter(func(o: Dictionary) -> bool: return int(o.free) > 0)
+	if offers.is_empty():
+		return {}
+	var offer: Dictionary = offers[0]
+	return {firm = firm_index, model = best, yard = str(offer.yard), price = int(offer.price) * ShippingFirms.CONVOY, months = float(offer.months)}  # (One ship on the books is a convoy of hulls: the price follows.)
+
+
+## Each month a controlled firm with the cash for a ship and no order out asks to order one (a card).
+func _firm_orders(company: Company) -> void:
+	if company != _state.company:
+		return
+	var firms: ShippingFirms = _state.firms
+	for key: String in company.stakes:
+		var i := int(key)
+		if stake_in(company, i) < CONTROL:
+			continue
+		var plan := ensure_plan(company, i)
+		if not (plan.orders as Array).is_empty() or bool(plan.get("asked", false)):
+			continue
+		var proposal := firm_proposal(i)
+		if proposal.is_empty() or float(firms.firms[i].money) < float(proposal.price) * 3.0:
+			continue
+		plan.asked = true
+		firm_order_wanted.emit(company, proposal)
+
+
+## The player asks a firm to order now (its card).
+func request_firm_order(company: Company, firm_index: int) -> String:
+	if stake_in(company, firm_index) < CONTROL:
+		return "Not yours to run"
+	var proposal := firm_proposal(firm_index)
+	if proposal.is_empty():
+		return "No yard has a slot for its ships"
+	var firms: ShippingFirms = _state.firms
+	if float(firms.firms[firm_index].money) < float(proposal.price):
+		return "It has %s; a ship costs %s" % [Fmt.money(roundi(float(firms.firms[firm_index].money))), Fmt.money(int(proposal.price))]
+	ensure_plan(company, firm_index).asked = true
+	firm_order_wanted.emit(company, proposal)
+	return ""
+
+
+## The answer to a firm's order card: approved, it pays the yard in full from its cash and the ship joins its books on delivery.
+func answer_firm_order(company: Company, firm_index: int, approve: bool) -> void:
+	var plan := ensure_plan(company, firm_index)
+	plan.asked = false
+	if not approve:
+		return
+	var proposal := firm_proposal(firm_index)
+	var firms: ShippingFirms = _state.firms
+	var firm: Dictionary = firms.firms[firm_index]
+	if proposal.is_empty() or float(firm.money) < float(proposal.price):
+		return
+	firm.money = float(firm.money) - float(proposal.price)
+	firm.paid_out_from = float(firm.get("paid_out_from", firm.money)) - float(proposal.price)  # (Spent on a ship, not earned less.)
+	(plan.orders as Array).append({model = proposal.model, yard = proposal.yard, due = _state.calendar_time() + roundi(float(proposal.months) * 30.4375 * 86400.0), price = proposal.price})
+	var yard: Dictionary = _state.shipyards.yard(str(proposal.yard))
+	ActivityLog.add("%s has ordered a %s from %s for %s, due %s." % [str(firm.name), str(GameData.get_ship_model(str(proposal.model)).get("name", "")), str(yard.get("name", "")), Fmt.money(int(proposal.price)), Fmt.calendar_short(int((plan.orders as Array)[-1].due))], ActivityLog.Kind.INFO)
+	if _state.news != null:
+		_state.news.add("company", "%s orders a %s from %s" % [str(firm.name), str(GameData.get_ship_model(str(proposal.model)).get("name", "")), str(yard.get("name", ""))], {firm = firm_index})
+	changed.emit()
+
+
+## A firm's orders due are delivered onto its books (and remembered for the next load).
+func _step_plans(company: Company, now: int) -> void:
+	var firms: ShippingFirms = _state.firms
+	for key: String in company.firm_plans:
+		var plan: Dictionary = company.firm_plans[key]
+		for order: Dictionary in (plan.orders as Array).duplicate():
+			if now < int(order.due):
+				continue
+			(plan.orders as Array).erase(order)
+			var model_id := str(order.model)
+			(plan.extra_fleet as Dictionary)[model_id] = int((plan.extra_fleet as Dictionary).get(model_id, 0)) + 1
+			firms.add_fleet(int(key), model_id, 1)
+			if company == _state.company:
+				ActivityLog.add("%s has taken delivery of a %s." % [str(firms.firms[int(key)].name), str(GameData.get_ship_model(model_id).get("name", ""))], ActivityLog.Kind.GOOD)
+			changed.emit()
+
+
+## After a load the firms are made again from the seed: the ships their orders added go back on their books.
+func apply_plans() -> void:
+	var firms: ShippingFirms = _state.firms
+	for company: Company in _state.all_companies():
+		for key: String in company.firm_plans:
+			var extra: Dictionary = (company.firm_plans[key] as Dictionary).get("extra_fleet", {})
+			for model_id: String in extra:
+				firms.add_fleet(int(key), model_id, int(extra[model_id]))
 
 
 # --- Going public --------------------------------------------------------------------------

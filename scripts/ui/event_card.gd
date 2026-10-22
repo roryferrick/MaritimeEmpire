@@ -213,6 +213,17 @@ func show_delivery(ship: Ship, order: Dictionary) -> void:
 		actions = [["Show on map", func() -> void: GameRoot.find(self).show_ship_on_map(ship)], ["Later", Callable()]]})
 
 
+## A firm the player controls wants to order a ship (Ownership.firm_order_wanted).
+func show_firm_order(proposal: Dictionary) -> void:
+	var firm: Dictionary = GameState.firms.firms[int(proposal.firm)]
+	var yard: Dictionary = GameState.shipyards.yard(str(proposal.yard))
+	var model := GameData.get_ship_model(str(proposal.model))
+	var index := int(proposal.firm)
+	_enqueue({kicker = "YOUR FIRM ASKS", title = "%s wants to order a %s" % [str(firm.name), str(model.get("name", ""))], color = GOLD,
+		body = "Its board would order from %s (%s) for %s of its own cash (%s in hand), delivered in %d months onto its books. More ships, more voyages and earnings; less cash for your dividend meanwhile." % [str(yard.get("name", "")), Shipyards.quality_word(float(yard.get("quality", 0.8))), Fmt.money(int(proposal.price)), Fmt.money(roundi(float(firm.money))), roundi(float(proposal.months))],
+		actions = [["Approve", func() -> void: GameState.answer_firm_order(index, true)], ["Not now", func() -> void: GameState.answer_firm_order(index, false)]]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

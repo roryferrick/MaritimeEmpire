@@ -136,6 +136,9 @@ func _ready() -> void:
 	GameState.people.succession_needed.connect(func(company: Company, why: String) -> void:
 		if company == GameState.company:
 			event_card.show_succession(company, why))
+	GameState.ownership.firm_order_wanted.connect(func(company: Company, proposal: Dictionary) -> void:
+		if company == GameState.company:
+			event_card.show_firm_order(proposal))
 	GameState.shipyards.delivered.connect(func(company: Company, ship: Ship, order: Dictionary) -> void:
 		if company == GameState.company:
 			event_card.show_delivery(ship, order))

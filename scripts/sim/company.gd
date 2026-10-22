@@ -65,6 +65,8 @@ var stakes := {}
 var family := {}
 ## Ships on order from the shipyards (Shipyards.place_order(): {id, model, name, yard, port, placed, due, price, deposit, late}).
 var orders := []
+## How the firms this company controls are run (Ownership.ensure_plan(): firm index -> {focus, groups, dividend, extra_fleet, orders}).
+var firm_plans := {}
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
 ## What its people wear, line by line, where it's changed the defaults
@@ -197,6 +199,7 @@ func to_dict() -> Dictionary:
 		"stakes": stakes,
 		"family": family,
 		"orders": orders,
+		"firm_plans": firm_plans,
 		"ceo": ceo,
 		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
@@ -266,6 +269,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.stakes = data.get("stakes", {}) if data.get("stakes") is Dictionary else {}
 	company.family = data.get("family", {}) if data.get("family") is Dictionary else {}
 	company.orders = data.get("orders", []) if data.get("orders") is Array else []
+	company.firm_plans = data.get("firm_plans", {}) if data.get("firm_plans") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.

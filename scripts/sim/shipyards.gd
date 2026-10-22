@@ -83,6 +83,10 @@ func slots_taken(yard_id: String) -> int:
 		for order: Dictionary in company.orders:
 			if str(order.yard) == yard_id:
 				count += 1
+		for key: String in company.firm_plans:  # (The firms it runs order too: see Ownership.)
+			for order: Dictionary in (company.firm_plans[key] as Dictionary).get("orders", []):
+				if str(order.yard) == yard_id:
+					count += 1
 	return count
 
 

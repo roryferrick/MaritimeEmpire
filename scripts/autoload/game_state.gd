@@ -1388,6 +1388,28 @@ func choose_successor(kind: String, key: String) -> void:
 	people.succeed(company, kind, key)
 	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
 
+# --- Running controlled firms (see Ownership) ----------------------------------------------------
+
+func set_firm_plan(firm_index: int, key: String, value: Variant) -> void:
+	if Net.command(&"set_firm_plan", [firm_index, key, value]):
+		return
+	ownership.set_plan(company, firm_index, key, value)
+
+
+func request_firm_order(firm_index: int) -> void:
+	if Net.command(&"request_firm_order", [firm_index]):
+		return
+	var error := ownership.request_firm_order(company, firm_index)
+	if not error.is_empty():
+		ActivityLog.add("%s: %s." % [str(firms.firms[firm_index].name), error], ActivityLog.Kind.INFO)
+
+
+func answer_firm_order(firm_index: int, approve: bool) -> void:
+	if Net.command(&"answer_firm_order", [firm_index, approve]):
+		return
+	ownership.answer_firm_order(company, firm_index, approve)
+
+
 # --- Shipyards (see Shipyards) ------------------------------------------------------------------
 
 func place_order(model_id: String, ship_name: String, yard_id: String) -> void:
@@ -4653,6 +4675,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	contracts.from_dict(data.get("contracts", {}))
 	people.from_dict(data.get("people", {}))
 	shipyards.from_dict(data.get("shipyards", {}))
+	ownership.apply_plans()  # (The ships the controlled firms' orders added: see Ownership.)
 	history.load(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, world)  # (Joining a game: none; the host's history isn't sent.)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
