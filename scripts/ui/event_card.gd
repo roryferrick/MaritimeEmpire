@@ -17,6 +17,7 @@ var _title := Label.new()
 var _body := Label.new()
 var _picture := CenterContainer.new()
 var _button := Button.new()
+var _actions := HBoxContainer.new()
 var _queue: Array[Dictionary] = []  # [{kicker, title, body, color, site (a research site to picture)}]
 ## The speed the game ran at before the card paused it (0: it was paused already).
 var _was_speed := 0
@@ -50,6 +51,9 @@ func _ready() -> void:
 	_button.custom_minimum_size = Vector2(140, 38)
 	_button.pressed.connect(_continue)
 	box.add_child(_button)
+	_actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	_actions.add_theme_constant_override(&"separation", 10)
+	box.add_child(_actions)
 	visible = false
 
 
@@ -77,6 +81,22 @@ func show_discovery(site_id: String, first: bool, ship_name: String, points: flo
 	_enqueue({kicker = "FIRST DISCOVERY" if first else "DISCOVERY", title = str(site.get("name", site_id)), body = body, color = GOLD if first else Color.from_string(str(category.get("color", "#9a7bd8")), LEVEL_COLOR).lightened(0.3), site = site_id})
 
 
+## An important contract offer (Contracts.offer_arrived): the producer, the
+## work and the pay, with Accept, Decline and Leave it (it stays on the
+## Contracts page). Only for the player's own company.
+func show_offer(offer: Dictionary) -> void:
+	var contracts: Contracts = GameState.contracts
+	var body := "%s offers %s, %s to %s (%s nm).
+
+Worth %s in all%s. %s" % [contracts.producer_name(int(offer.producer)), GameState.contract_summary(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)),
+		Fmt.thousands(roundi(float(offer.nm))), Fmt.money(int(offer.value)), " over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "",
+		"The offer stands till %s." % Fmt.calendar_short(int(offer.expires))]
+	var id := int(offer.id)
+	_enqueue({kicker = "CONTRACT OFFER", title = "%s from %s" % [Contracts.KINDS.get(str(offer.kind), "Offer"), GameData.port_name(str(offer.from))], body = body, color = GOLD,
+		actions = [["Accept", func() -> void: GameState.sign_contract(id)], ["Decline", func() -> void: GameState.decline_offer(id)], ["Leave it", Callable()]]})
+
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:
@@ -95,6 +115,21 @@ func _show_next() -> void:
 	for child in _picture.get_children():
 		child.queue_free()
 	_picture.visible = card.has("site")
+	for child in _actions.get_children():
+		_actions.remove_child(child)
+		child.queue_free()
+	_actions.visible = card.has("actions")
+	_button.visible = not card.has("actions")
+	for action: Array in card.get("actions", []):
+		var choice := Button.new()
+		choice.text = action[0]
+		choice.custom_minimum_size = Vector2(120, 38)
+		var then: Callable = action[1]
+		choice.pressed.connect(func() -> void:
+			if then.is_valid():
+				then.call()
+			_continue())
+		_actions.add_child(choice)
 	if card.has("site"):
 		var art := SiteArt.new(str(card.site))
 		art.custom_minimum_size = Vector2(WIDTH - 40.0, 190.0)
@@ -106,6 +141,8 @@ func _show_next() -> void:
 			if _was_speed > 0:
 				GameState.time_speed = 0
 	_button.grab_focus()
+	if _actions.visible and _actions.get_child_count() > 0:
+		(_actions.get_child(0) as Button).grab_focus()
 
 
 func _continue() -> void:

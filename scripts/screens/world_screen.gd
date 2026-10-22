@@ -490,7 +490,7 @@ func _place_side_buttons() -> void:
 ## for GameRoot's alert dot on Hubs.
 var page_buttons := {}
 var _page_column := VBoxContainer.new()
-const PAGES := [["markets", "Intelligence: the countries, the companies, the markets and their history, and the news"], ["hubs", "Hubs: your HQ and hubs, their upgrades and warehouses"],
+const PAGES := [["markets", "Intelligence: the countries, the companies, the markets and their history, and the news"], ["contracts", "Contracts: the producers' offers, the contracts you've signed and your standing with them"], ["hubs", "Hubs: your HQ and hubs, their upgrades and warehouses"],
 	["farms", "Farms: your plots at the farm ports and the farm store"], ["makers", "Makers: the car and boat makers, how much they like you, and your factories"],
 	["energy", "Energy: the oil and gas fields, your rigs and platforms, and your refineries"], ["industry", "Industry: your mines, plants and factories, and the claims at the resource ports"],
 	["research", "Research: the contracts board, your expeditions, the Atlas of the sites under the sea, and your ships' gear"]]

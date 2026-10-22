@@ -106,6 +106,7 @@ func _build_size() -> void:
 	_add_energy_line()
 	_add_plants_line()
 	_add_professions_line()
+	_add_offers_line()
 	_update_birds()
 	_update_size()
 
@@ -160,6 +161,33 @@ func _add_industry_line() -> void:
 			GameRoot.find(self).show_industry(first)
 			queue_free())
 		row.add_child(open)
+	%SizeBox.add_child(row)
+
+
+## The producers' offers that load here (Contracts), and a button to the page.
+func _add_offers_line() -> void:
+	var contracts: Contracts = GameState.contracts
+	var here: Array = contracts.offers.filter(func(offer: Dictionary) -> bool: return str(offer.from) == port_id)
+	if here.is_empty():
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	var label := Label.new()
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = SIZE_EXPAND_FILL
+	label.add_theme_color_override(&"font_color", Color(0.98, 0.85, 0.55))
+	var parts := PackedStringArray()
+	for offer: Dictionary in here.slice(0, 3):
+		parts.append("%s to %s (%s)" % [str(GameData.commodity(str(offer.good)).get("name", offer.good)), GameData.port_name(str(offer.to)), Fmt.money_short(int(offer.value))])
+	label.text = "Offers loading here: " + ", ".join(parts) + ("" if here.size() <= 3 else " and %d more" % (here.size() - 3))
+	row.add_child(label)
+	var open := Button.new()
+	open.text = "Contracts"
+	open.size_flags_vertical = SIZE_SHRINK_CENTER
+	open.pressed.connect(func() -> void:
+		GameRoot.find(self).show_contracts()
+		queue_free())
+	row.add_child(open)
 	%SizeBox.add_child(row)
 
 

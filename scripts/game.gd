@@ -6,7 +6,7 @@ extends Control
 ## (Markets, Hubs, Farms, Makers, Energy: see open_page()), the full-screen Route
 ## Assignment screen, and the Esc menu; Space pauses and T opens the chat.
 
-enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY, INDUSTRY, RESEARCH }
+enum Screen { WORLD, SHIPS, MARKETS, FINANCES, HUBS, SHOP, FARMS, MAKERS, ENERGY, INDUSTRY, RESEARCH, CONTRACTS }
 
 const GROUP := &"game_root"
 ## How often to check whether any ship needs the player.
@@ -15,7 +15,7 @@ const ALERT_CHECK_SECONDS := 2.0  # (A look over every ship and model: a few ms.
 const ALERT_NAMES_SHOWN := 3
 ## The pages over the map (MapPage), opened by the buttons down its top left
 ## (WorldScreen.page_buttons): page id -> its Screen.
-const PAGE_SCREENS := {markets = Screen.MARKETS, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY, industry = Screen.INDUSTRY, research = Screen.RESEARCH}
+const PAGE_SCREENS := {markets = Screen.MARKETS, contracts = Screen.CONTRACTS, hubs = Screen.HUBS, farms = Screen.FARMS, makers = Screen.MAKERS, energy = Screen.ENERGY, industry = Screen.INDUSTRY, research = Screen.RESEARCH}
 
 var _current_screen := Screen.WORLD
 
@@ -41,6 +41,7 @@ var _makers_screen := MakersScreen.new()
 var _energy_screen := EnergyScreen.new()
 var _industry_screen := IndustryScreen.new()
 var _research_screen := ResearchScreen.new()
+var _contracts_screen := ContractsScreen.new()
 ## The page open over the map, or null.
 var _page: MapPage = null
 ## Where the pages' screens are kept while shut (with the main screens).
@@ -63,8 +64,8 @@ static func find(from: Node) -> GameRoot:
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	for each: Control in [_farms_screen, _makers_screen, _energy_screen, _industry_screen, _research_screen]:
-		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen", _industry_screen: "IndustryScreen", _research_screen: "ResearchScreen"}.get(each, "EnergyScreen")
+	for each: Control in [_farms_screen, _makers_screen, _energy_screen, _industry_screen, _research_screen, _contracts_screen]:
+		each.name = {_farms_screen: "FarmsScreen", _makers_screen: "MakersScreen", _industry_screen: "IndustryScreen", _research_screen: "ResearchScreen", _contracts_screen: "ContractsScreen"}.get(each, "EnergyScreen")
 		each.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		%MarketsScreen.add_sibling(each)
 	_pages.farms = _farms_screen
@@ -72,6 +73,7 @@ func _ready() -> void:
 	_pages.energy = _energy_screen
 	_pages.industry = _industry_screen
 	_pages.research = _research_screen
+	_pages.contracts = _contracts_screen
 	_page_home = %MarketsScreen.get_parent()
 	for id: String in _pages:
 		(_pages[id] as Control).visible = false
@@ -124,6 +126,7 @@ func _ready() -> void:
 	# Over the popups and the tutorial: the last of the siblings.
 	_popup_host.get_parent().add_child(event_card)
 	add_child(HoverCards.new())  # (The nested hover cards, over everything: see HoverCards.)
+	GameState.contracts.offer_arrived.connect(func(offer: Dictionary) -> void: event_card.show_offer(offer))  # (An important offer: the card, pausing.)
 	show_screen(Screen.WORLD)
 
 
@@ -254,6 +257,11 @@ func show_maker(maker_id: String) -> void:
 func show_port_on_map(port_id: String) -> void:
 	show_screen(Screen.WORLD)
 	(%WorldScreen.find_child("MapView") as MapView).focus_port(port_id)
+
+
+## Opens the Contracts page (the offers, the signed contracts, the standing).
+func show_contracts() -> void:
+	open_page("contracts")
 
 
 ## Opens the newspaper over the map (Gazette), at the latest issue or a week's.

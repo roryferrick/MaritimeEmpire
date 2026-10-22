@@ -27,6 +27,12 @@ func _draw() -> void:
 				draw_rect(Rect2(at.call(0.1 + i * 0.21, 0.9 - h), Vector2(0.15, h) * side), color)
 			draw_polyline(PackedVector2Array([at.call(0.08, 0.52), at.call(0.35, 0.36), at.call(0.55, 0.44), at.call(0.84, 0.14)]), color, line, true)
 			draw_colored_polygon(PackedVector2Array([at.call(0.92, 0.06), at.call(0.88, 0.26), at.call(0.72, 0.12)]), color)
+		"contracts":
+			# A signed sheet: a page with lines of text and a seal at the foot.
+			draw_rect(Rect2(at.call(0.2, 0.08), Vector2(0.6, 0.84) * side), color)
+			for k in 4:
+				draw_rect(Rect2(at.call(0.28, 0.2 + k * 0.13), Vector2(0.44 if k < 3 else 0.26, 0.05) * side), Color(0.12, 0.16, 0.24))
+			draw_circle(at.call(0.64, 0.78), side * 0.09, Color(0.85, 0.3, 0.3))
 		"hubs":
 			# A quayside crane: a tower, a jib out to the left with its hook, and the quay.
 			draw_rect(Rect2(at.call(0.58, 0.18), Vector2(0.12, 0.66) * side), color)

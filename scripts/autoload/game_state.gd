@@ -301,6 +301,8 @@ var traffic := AmbientTraffic.new(self)
 ## The world's price history (its own file beside the save) and the news (saved with the game).
 var history := WorldHistory.new(self)
 var news := News.new(self)
+## The producers' contracts and the companies' standing (saved with the game).
+var contracts := Contracts.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -429,6 +431,7 @@ func _step(delta: float) -> void:
 	firms.step(delta)
 	MapView._prof("sim.firms", t_s)
 	traffic.step(delta)
+	contracts.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -1281,6 +1284,73 @@ func build_facility(hub: Hub, id: String) -> void:
 		store.cold = true  # (The farm store there is a cold store now: see Farms.)
 	ActivityLog.add("Built a %s at %s." % [str(info.name).to_lower(), hub.title()], ActivityLog.Kind.GOOD)
 	hubs_changed.emit()
+
+
+# --- Contracts (see Contracts) -------------------------------------------------------------
+
+func sign_contract(offer_id: int) -> void:
+	var offer := contracts.offer_by_id(offer_id)
+	if offer.is_empty() or not contracts.can_sign(company, offer).is_empty():
+		return
+	if Net.command(&"sign_contract", [offer_id]):
+		return
+	var contract := contracts.sign(company, offer)
+	ActivityLog.add("Signed with %s: %s, %s to %s." % [contracts.producer_name(int(contract.producer)), contract_summary(contract), GameData.port_name(str(contract.from)), GameData.port_name(str(contract.to))], ActivityLog.Kind.GOOD)
+
+
+func decline_offer(offer_id: int) -> void:
+	var offer := contracts.offer_by_id(offer_id)
+	if offer.is_empty():
+		return
+	if Net.command(&"decline_offer", [offer_id]):
+		return
+	contracts.decline(offer)
+
+
+## Puts one of the company's ships to a contract: routed load port to delivery port.
+## Why a ship can't take a contract, or "".
+func contract_ship_error(contract: Dictionary, ship: Ship) -> String:
+	if contract.is_empty() or str(contract.status) != "active" or int(contract.company) != all_companies().find(company) or owner_of(ship) != company or ship.is_service():
+		return "Not one of yours for this contract"
+	if not str(contract.good) in ship.model().get("cargo", []):
+		return "It doesn't carry %s" % str(GameData.commodity(str(contract.good)).get("name", contract.good)).to_lower()
+	if not ship.can_sail(str(contract.from), str(contract.to)):
+		return "It can't make %s to %s on a tank" % [GameData.port_name(str(contract.from)), GameData.port_name(str(contract.to))]
+	return ""
+
+
+func assign_contract_ship(contract_id: int, ship: Ship) -> void:
+	var contract := contracts.contract_by_id(contract_id)
+	if not contract_ship_error(contract, ship).is_empty():
+		return
+	if Net.command(&"assign_contract_ship", [contract_id, ship]):
+		return
+	contracts.assign_ship(contract, ship)
+	var route: Array[String] = [str(contract.from), str(contract.to)]
+	if route_error(route, ship).is_empty():
+		assign_route(ship, route)
+	ship_changed.emit(ship)
+
+
+func unassign_contract_ship(ship: Ship) -> void:
+	if owner_of(ship) != company:
+		return
+	if Net.command(&"unassign_contract_ship", [ship]):
+		return
+	contracts.unassign_ship(ship)
+	ship_changed.emit(ship)
+
+
+## "40,000 t of iron ore a quarter for 4 quarters at $3.20 a t" or "12,000 t of wheat at $2.10 a t".
+func contract_summary(contract: Dictionary) -> String:
+	var good := str(contract.good)
+	var unit := str(GameData.commodity(good).get("unit", "unit"))
+	var units := str(GameData.commodity(good).get("units", "units"))
+	var name := str(GameData.commodity(good).get("name", good))
+	name = name if name == name.to_upper() else name.to_lower()
+	if str(contract.kind) == "recurring":
+		return "%s %s of %s a quarter for %d quarters at %s a %s" % [Fmt.thousands(int(contract.units)), units, name, int(contract.quarters), Fmt.money(roundi(float(contract.rate))) if float(contract.rate) >= 10.0 else "$%s" % Fmt.decimal(float(contract.rate), 2), unit]
+	return "%s %s of %s at %s a %s" % [Fmt.thousands(int(contract.units)), units, name, Fmt.money(roundi(float(contract.rate))) if float(contract.rate) >= 10.0 else "$%s" % Fmt.decimal(float(contract.rate), 2), unit]
 
 
 ## Pulls down the building on one of a hub's industry plots, for some of its price back.
@@ -2307,6 +2377,9 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 		var origin := ship.cargo_from if not ship.cargo_from.is_empty() and GameData.distance_nm(ship.cargo_from, port) < INF else ship.from_port
 		var sale := ship.cargo_qty * company_sell_price(port, ship.cargo_id, owner_of(ship)) * ship.cargo_value_factor(play_time, days_per_second())
 		ship.cargo_payment = roundi(sale + trade_bonus(origin, port, sale - ship.cargo_cost, ship.model_id, owner_of(ship)))
+		var under := contracts.payment_for(ship, port)  # (Contract cargo delivered: the contract's rate instead.)
+		if under >= 0:
+			ship.cargo_payment = under
 		ship.cargo_leg_nm = GameData.distance_nm(origin, port) if paid and origin != port else 0.0
 	ship.unloaded = ship.is_service() and not ship.is_fishing() or refuel_stop
 	ship.docked_at = port
@@ -2548,6 +2621,8 @@ func _sell_cargo(ship: Ship) -> void:
 	MapView._prof("sell.trade", t_s)
 	port_sizes.add_traffic(ship.docked_at, ship.cargo_payment)
 	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + ship.cargo_qty
+	if ship.cargo_contract > 0:
+		contracts.delivered(ship, ship.docked_at)
 	var fee := port_fee(ship.docked_at, ship.cargo_payment - ship.cargo_cost, who, Progression.type_of_model(ship.model()))
 	if fee > 0:
 		_add_money(who, -fee)
@@ -2585,6 +2660,10 @@ func _load_cargo(ship: Ship, to: String) -> String:
 		MapView._prof("load.store", t_st)
 		if not stored.is_empty():
 			return stored[0]
+	if ship.contract_id > 0:  # Its contract's cargo first, free (the producer's): see Contracts.load_ship().
+		var under := contracts.load_ship(ship, to)
+		if not under.is_empty():
+			return under[0]
 	if owner_of(ship).farm_stores.has(ship.docked_at):  # (Its farm's harvest, free: see Farms.load_ship().)
 		var farmed := farms.load_ship(ship, to)
 		if not farmed.is_empty():
@@ -4152,6 +4231,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	industry.reset()
 	history.clear()
 	news.clear()
+	contracts.clear()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
@@ -4160,6 +4240,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 		Backstories.apply(self, options.start)  # (Its money, debt, backers, ships, standing and the CEO's traits.)
 		company.story = Backstories.story(options.start, str(company.ceo.get("name", "")))
 		money_changed.emit(money)
+	contracts.start_standing(company)  # (Known at home from the start: see Contracts.)
 	_begin_session()
 	_start_warm_up(WARM_UP_DAYS)  # (Saved once it's run: see _warm_up_frame().)
 
@@ -4227,6 +4308,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	world.from_dict(data.get("world", {}))
 	firms.from_dict(data.get("firms", {}), world)
 	news.from_dict(data.get("news", {}))
+	contracts.from_dict(data.get("contracts", {}))
 	history.load(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, world)  # (Joining a game: none; the host's history isn't sent.)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
@@ -4355,6 +4437,7 @@ func world_dict() -> Dictionary:
 		"world": world.to_dict(),
 		"firms": firms.to_dict(),
 		"news": news.to_dict(),
+		"contracts": contracts.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
 			var ship_data := ship.to_dict()

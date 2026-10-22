@@ -669,6 +669,7 @@ func _collect() -> Dictionary:
 		divine = GameState.divine.to_dict().duplicate(true), ports = GameState.port_sizes.to_dict().duplicate(true),
 		farms = GameState.farms.to_dict().duplicate(true),
 		industry = GameState.industry.to_dict().duplicate(true),
+		contracts = GameState.contracts.to_dict().duplicate(true),
 		energy = GameState.energy.to_dict().duplicate(true),
 		research = GameState.research.to_dict().duplicate(true),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
@@ -686,6 +687,7 @@ func _state_of(world: Dictionary) -> Dictionary:
 		weather = world.get("weather", {}), market = world.get("market", {}), divine = world.get("divine", {}),
 		farms = world.get("farms", {}),
 		industry = world.get("industry", {}),
+		contracts = world.get("contracts", {}),
 		energy = world.get("energy", {}),
 		research = world.get("research", {}),
 		ports = world.get("port_sizes", {}),
@@ -726,6 +728,10 @@ func _broadcast() -> void:
 	if industry != _sent.get("industry", {}):
 		update.industry = industry
 		_sent.industry = industry.duplicate(true)
+	var deals := GameState.contracts.to_dict()
+	if deals != _sent.get("contracts", {}):
+		update.contracts = deals
+		_sent.contracts = deals.duplicate(true)
 	var energy := GameState.energy.to_dict()
 	if energy != _sent.get("energy", {}):
 		update.energy = energy
@@ -859,6 +865,8 @@ func _sync(packed: Array) -> void:
 	if update.has("industry"):
 		GameState.industry.from_dict(update.industry)
 		GameState.industry_changed.emit()
+	if update.has("contracts"):
+		GameState.contracts.from_dict(update.contracts)
 	if update.has("energy"):
 		GameState.energy.from_dict(update.energy)
 		GameState.energy_changed.emit()

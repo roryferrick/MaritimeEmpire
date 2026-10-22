@@ -73,6 +73,11 @@ func _general_tab() -> Control:
 	box.add_child(_levels(traffic_names, Settings.TRAFFICS.find(Settings.traffic),
 		"The world's other shipping firms' ships, drawn where you look: none, or up to about 50, 150 or 400 at once (they sail their real voyages between the zones' ports and berth briefly; your ships always come first at a berth). Fewer costs less each frame.",
 		func(level: int) -> void: Settings.traffic = Settings.TRAFFICS[level]))
+	box.add_child(_heading("Contract offers that pause the game"))
+	var bar_names: Array = Settings.OFFER_BARS.map(func(level: String) -> String: return str(Settings.OFFER_BAR_NAMES[level]))
+	box.add_child(_levels(bar_names, Settings.OFFER_BARS.find(Settings.offer_bar_level),
+		"An offer worth a tenth of your company's value or more stops the game with a card. Low halves that bar, High triples it; the Contracts page lists every offer either way.",
+		func(level: int) -> void: Settings.offer_bar_level = Settings.OFFER_BARS[level]))
 	box.add_child(_heading("Routes"))
 	var routes_level := 0 if not GameState.show_active_routes else (1 if Settings.own_routes_only else 2)
 	box.add_child(_levels(["No routes", "Only my routes", "All routes"], routes_level,

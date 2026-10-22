@@ -161,6 +161,9 @@ var cargo_from := ""
 var cargo_qty := 0
 var cargo_cost := 0
 var cargo_payment := 0
+## The contract it's assigned to (Contracts; 0 for none), and the contract its cargo aboard is under.
+var contract_id := 0
+var cargo_contract := 0
 var cargo_leg_nm := 0.0
 ## A farm's livestock aboard: its breed ("" for plain stock and everything
 ## else), which its sale is worth more or less for (Farms.breed_value()).
@@ -1489,6 +1492,8 @@ func to_dict() -> Dictionary:
 		"cargo_qty": cargo_qty,
 		"cargo_cost": cargo_cost,
 		"cargo_payment": cargo_payment,
+		"contract_id": contract_id,
+		"cargo_contract": cargo_contract,
 		"cargo_leg_nm": cargo_leg_nm,
 		"cargo_breed": cargo_breed,
 		"cargo_fresh": cargo_fresh,
@@ -1604,6 +1609,8 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.cargo_qty = int(data.get("cargo_qty", 0))
 	ship.cargo_cost = int(data.get("cargo_cost", 0))
 	ship.cargo_payment = int(data.get("cargo_payment", 0))
+	ship.contract_id = int(data.get("contract_id", 0))
+	ship.cargo_contract = int(data.get("cargo_contract", 0))
 	ship.cargo_leg_nm = float(data.get("cargo_leg_nm", 0.0))
 	ship.cargo_breed = str(data.get("cargo_breed", ""))
 	ship.cargo_fresh = float(data.get("cargo_fresh", 1.0))

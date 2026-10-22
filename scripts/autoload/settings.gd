@@ -65,6 +65,17 @@ var traffic := "busy":
 		traffic = value if value in TRAFFICS else "busy"
 		_save()
 		changed.emit()
+## How big an offer must be to pause the game with a card (x Contracts.IMPORTANT_SHARE of the company's value): "low", "normal" or "high".
+const OFFER_BARS := ["low", "normal", "high"]
+const OFFER_BAR_NAMES := {low = "Low (more pop-ups)", normal = "Normal", high = "High (only the biggest)"}
+const OFFER_BAR_VALUES := {low = 0.5, normal = 1.0, high = 3.0}
+var offer_bar_level := "normal":
+	set(value):
+		offer_bar_level = value if value in OFFER_BARS else "normal"
+		_save()
+		changed.emit()
+var offer_bar: float:
+	get: return float(OFFER_BAR_VALUES.get(offer_bar_level, 1.0))
 ## The birds drawn on the map (off: none drawn or clicked; their calls still play).
 var birds := true:
 	set(value):
@@ -101,6 +112,8 @@ func _ready() -> void:
 		birds = bool(config.get_value("general", "birds", true))
 		var busy := str(config.get_value("general", "traffic", "busy"))
 		traffic = busy if busy in TRAFFICS else "busy"
+		var bar := str(config.get_value("general", "offer_bar", "normal"))
+		offer_bar_level = bar if bar in OFFER_BARS else "normal"
 		own_routes_only = bool(config.get_value("general", "own_routes_only", false))
 		antialias = int(config.get_value("general", "antialias", 0))
 		for entry: Array in VOLUMES:
@@ -138,6 +151,7 @@ func _save() -> void:
 	config.set_value("general", "night", night)
 	config.set_value("general", "birds", birds)
 	config.set_value("general", "traffic", traffic)
+	config.set_value("general", "offer_bar", offer_bar_level)
 	config.set_value("general", "own_routes_only", own_routes_only)
 	config.set_value("general", "antialias", antialias)
 	for entry: Array in VOLUMES:
