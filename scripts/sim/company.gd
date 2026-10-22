@@ -50,6 +50,8 @@ var bank_reserve := 0
 var loan := 0
 ## The backers' stake from the backstory start ({stake, name}), {} for none (the share market comes in M3).
 var investors := {}
+## The backstory's story (Backstories.story()), told again on the CEO's card.
+var story := ""
 ## Standing from the backstory: {countries: {id: value}, firms: {firm index: value}} (used when reputation arrives in M2).
 var relations := {}
 ## The CEO (Characters: {name, look}), made on the New Company screen.
@@ -170,6 +172,7 @@ func to_dict() -> Dictionary:
 		"bank_reserve": bank_reserve,
 		"loan": loan,
 		"investors": investors,
+		"story": story,
 		"relations": relations,
 		"ceo": ceo,
 		"uniforms": uniforms,
@@ -225,6 +228,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.bank_reserve = int(data.get("bank_reserve", 0))
 	company.loan = int(data.get("loan", 0))
 	company.investors = data.get("investors", {}) if data.get("investors") is Dictionary else {}
+	company.story = str(data.get("story", ""))
 	company.relations = data.get("relations", {}) if data.get("relations") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}

@@ -4121,6 +4121,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	SteamAchievements.note_game_created()
 	if options.get("start") is Dictionary and not (options.start as Dictionary).is_empty():
 		Backstories.apply(self, options.start)  # (Its money, debt, backers, ships, standing and the CEO's traits.)
+		company.story = Backstories.story(options.start, str(company.ceo.get("name", "")))
 		money_changed.emit(money)
 	_begin_session()
 	_start_warm_up(WARM_UP_DAYS)  # (Saved once it's run: see _warm_up_frame().)

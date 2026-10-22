@@ -518,9 +518,9 @@ func _refresh_market() -> void:
 			var sell := GameState.market.sell_price(port_id, commodity.id)
 			var ratio := sell / GameData.world_price(commodity.id)
 			var variation := &"GainLabel" if ratio < MARKET_CHEAP else (&"ErrorLabel" if ratio > MARKET_EXPENSIVE else &"")
-			_add_market_cell(grid, commodity.name, &"")
-			_add_market_cell(grid, Fmt.money(roundi(GameState.market.buy_price(port_id, commodity.id))), variation)
-			_add_market_cell(grid, Fmt.money(roundi(sell)), variation)
+			var good_id := str(commodity.id)
+			for cell: Label in [_add_market_cell(grid, commodity.name, &""), _add_market_cell(grid, Fmt.money(roundi(GameState.market.buy_price(port_id, good_id))), variation), _add_market_cell(grid, Fmt.money(roundi(sell)), variation)]:
+				PriceCards.attach(cell, port_id, good_id)  # (Hover: why the price is what it is, and more behind each line.)
 		_market_box.add_child(grid)
 
 
@@ -538,12 +538,13 @@ static func _market_line(commodity_id: String) -> String:
 	return str(_market_line_of.get(commodity_id, ""))
 
 
-func _add_market_cell(grid: GridContainer, text: String, variation: StringName) -> void:
+func _add_market_cell(grid: GridContainer, text: String, variation: StringName) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.theme_type_variation = variation
 	label.add_theme_font_size_override(&"font_size", MARKET_FONT_SIZE)
 	grid.add_child(label)
+	return label
 
 
 ## "Gulls: Herring Gull (16), Yellow-legged Gull (8)": the gulls living at the

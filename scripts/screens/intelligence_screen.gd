@@ -559,7 +559,9 @@ func _add_zone_table() -> void:
 		var name := _flat_button(world.zone_label(z), func() -> void: show_chart(_good, z))
 		grid.add_child(name)
 		var ratio: float = row[1]
-		grid.add_child(_cell("x%s" % Fmt.decimal(ratio, 2), &"GainLabel" if ratio >= 1.25 else (&"ErrorLabel" if ratio <= 0.7 else &"")))
+		var price_cell := _cell("x%s" % Fmt.decimal(ratio, 2), &"GainLabel" if ratio >= 1.25 else (&"ErrorLabel" if ratio <= 0.7 else &""))
+		PriceCards.attach(price_cell, str(zone.main), _good)
+		grid.add_child(price_cell)
 		grid.add_child(_cell("%s days" % Fmt.thousands(roundi(minf(float(row[2]), 9999.0))) if float(row[2]) != INF else "—"))
 		grid.add_child(_cell("%s %s" % [Fmt.short(float(row[3])), unit]))
 		grid.add_child(_cell(Fmt.short(float(row[4]))))
@@ -695,6 +697,8 @@ func _build_news() -> void:
 	feed.size_flags_stretch_ratio = 1.4
 	columns.add_child(feed)
 	feed.add_child(_heading("The world"))
+	var paper := _flat_button("Read this week's Maritime Gazette", func() -> void: GameRoot.find(self).open_gazette())
+	feed.add_child(paper)
 	var kinds := []
 	for kind: String in _news_kinds:
 		if _news_kinds[kind]:

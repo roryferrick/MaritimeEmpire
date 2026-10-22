@@ -123,6 +123,7 @@ func _ready() -> void:
 		_popup_host.get_parent().move_child(tutorial, _popup_host.get_index())
 	# Over the popups and the tutorial: the last of the siblings.
 	_popup_host.get_parent().add_child(event_card)
+	add_child(HoverCards.new())  # (The nested hover cards, over everything: see HoverCards.)
 	show_screen(Screen.WORLD)
 
 
@@ -254,6 +255,15 @@ func show_port_on_map(port_id: String) -> void:
 	show_screen(Screen.WORLD)
 	(%WorldScreen.find_child("MapView") as MapView).focus_port(port_id)
 
+
+## Opens the newspaper over the map (Gazette), at the latest issue or a week's.
+func open_gazette(week := -1) -> void:
+	show_screen(Screen.WORLD)
+	var paper := Gazette.new()
+	paper.week = week
+	var page := MapPage.new(paper)
+	page.closed.connect(func(back: Control) -> void: back.queue_free())
+	%WorldScreen.add_child(page)
 
 ## Switches to the World map, centered on an inland city.
 func show_city_on_map(city_id: String) -> void:

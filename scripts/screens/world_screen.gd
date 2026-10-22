@@ -70,6 +70,7 @@ func _ready() -> void:
 	_map.divine_target.connect(_on_divine_target)
 	_add_page_buttons()
 	_add_ticker()
+	_add_ceo_button()
 	if _map.ambience != null:  # The bird that's calling, top left (see SoundTracker), beside the page buttons.
 		var tracker := SoundTracker.new(_map)
 		add_child(tracker)
@@ -519,6 +520,37 @@ func _add_page_buttons() -> void:
 	GameState.company_types_changed.connect(_update_page_buttons)
 
 
+## The CEO's round headshot at the top of the page buttons: opens their card (CeoPopup).
+const CEO_BUTTON := 56.0
+var _ceo_button := Button.new()
+var _ceo_portrait := Portrait.new(GameState.company.ceo if GameState.company else {}, true)
+
+
+func _add_ceo_button() -> void:
+	_ceo_button.flat = true
+	_ceo_button.focus_mode = Control.FOCUS_NONE
+	_ceo_button.custom_minimum_size = Vector2.ONE * CEO_BUTTON
+	_ceo_button.tooltip_text = "Your CEO: traits, skills and the story so far."
+	var ring := StyleBoxFlat.new()
+	ring.bg_color = Color(0.09, 0.14, 0.26, 0.95)
+	ring.set_corner_radius_all(int(CEO_BUTTON / 2.0))
+	ring.border_color = Color(0.89, 0.71, 0.24)
+	ring.set_border_width_all(2)
+	for state: StringName in [&"normal", &"hover", &"pressed", &"focus"]:
+		_ceo_button.add_theme_stylebox_override(state, ring)
+	_ceo_portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 4)
+	_ceo_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ceo_button.add_child(_ceo_portrait)
+	_ceo_button.pressed.connect(func() -> void:
+		var popup := CeoPopup.new()
+		var at := _ceo_button.get_global_rect()
+		popup.follow = func() -> Vector2: return Vector2(at.end.x + 10.0, at.position.y + at.size.y / 2.0)
+		popup.gap = 0.0
+		PopupHost.find(self).open(popup))
+	_page_column.add_child(_ceo_button)
+	_page_column.move_child(_ceo_button, 0)
+	GameState.logo_changed.connect(func() -> void: _ceo_portrait.character = GameState.company.ceo)
+
 ## The news ticker along the bottom of the map: the latest headlines (News)
 ## sliding by, each a click from the Intelligence page's News tab.
 const TICKER_HEIGHT := 24.0
@@ -543,7 +575,16 @@ func _add_ticker() -> void:
 	_ticker_text.add_theme_font_size_override(&"font_size", 13)
 	_ticker_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ticker_text.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var paper := Button.new()
+	paper.text = "Gazette"
+	paper.flat = true
+	paper.focus_mode = Control.FOCUS_NONE
+	paper.tooltip_text = "Read this week's Maritime Gazette."
+	paper.add_theme_font_size_override(&"font_size", 13)
+	paper.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	paper.pressed.connect(func() -> void: GameRoot.find(self).open_gazette())
 	_ticker.add_child(_ticker_text)
+	_ticker.add_child(paper)
 	add_child(_ticker)
 	GameState.news.added.connect(func(_item: Dictionary) -> void: _refresh_ticker())
 	_refresh_ticker()
