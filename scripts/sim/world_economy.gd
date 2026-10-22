@@ -647,6 +647,136 @@ func _drift_currencies() -> void:
 		entry.imports = float(entry.imports) * fade
 
 
+# --- Professions (DESIGN_LIVING_WORLD.md M1: the pops' trades, shown on the cards) ----------
+
+## The professions, [name, colour], and the order they're shown in.
+const PROFESSIONS := {dockers = ["dockers", "#c98f4a"], sailors = ["sailors", "#4a7fc9"], fishers = ["fishers", "#5ab4d6"], farmers = ["farmers", "#8fbf5a"],
+	miners = ["miners", "#8a7a6a"], factory = ["factory hands", "#b05a5a"], clerks = ["clerks", "#a98fd0"], traders = ["traders", "#e0c060"]}
+const PROFESSION_ORDER := ["farmers", "fishers", "miners", "factory", "dockers", "sailors", "clerks", "traders"]
+## Weights: a plant's yearly output in US its trade's profession by this; a port's size (1-100) its dockers and sailors; the middle and upper strata their clerks and traders.
+const PROFESSION_PER_DOLLAR := {farming = 1.0 / 18000.0, fishing = 1.0 / 25000.0, mining = 1.0 / 120000.0, energy = 1.0 / 300000.0, metals = 1.0 / 150000.0, chemicals = 1.0 / 200000.0, forestry = 1.0 / 60000.0, manufacturing = 1.0 / 90000.0}
+const PROFESSION_OF_TRADE := {farming = "farmers", fishing = "fishers", mining = "miners", energy = "miners", metals = "factory", chemicals = "factory", forestry = "factory", manufacturing = "factory"}
+const DOCKERS_PER_SIZE := 900.0
+const SAILORS_PER_SIZE := 500.0
+const CLERKS_OF_MIDDLE := 0.05
+const TRADERS_OF_UPPER := 0.06
+var _professions_cache := {}
+var _professions_day := -1
+
+
+## A zone's working people by profession, as shares: {id: share} (the rest of
+## its people, in services and at home, aren't counted). From its plants by
+## trade, its ports' sizes and its strata.
+func professions_of_zone(z: int) -> Dictionary:
+	if _professions_day != day:
+		_professions_cache.clear()
+		_professions_day = day
+	var key := "zone/%d" % z
+	if _professions_cache.has(key):
+		return _professions_cache[key]
+	var zone: Dictionary = zones[z]
+	var counts := {}
+	for port_id: String in zone.ports:
+		var size := float(GameData.get_port(port_id).get("size", 10))
+		counts.dockers = float(counts.get("dockers", 0.0)) + size * DOCKERS_PER_SIZE
+		counts.sailors = float(counts.get("sailors", 0.0)) + size * SAILORS_PER_SIZE
+		for index: int in producers.plants_at(port_id):
+			_count_plant(producers.plants[index], counts)
+	var strata := [0.0, 0.0, 0.0]
+	for place: Dictionary in places:
+		if place.country != zone.country:
+			continue
+		var share := 0.0
+		for pair: Array in place.zones:
+			if int(pair[0]) == z:
+				share = float(pair[1])
+		if share <= 0.0:
+			continue
+		var split: Array = strata_of(place)
+		for k in 3:
+			strata[k] += float(split[k]) * share
+		if place.kind == "city":
+			for index: int in producers.plants_at(str(place.id)):
+				_count_plant(producers.plants[index], counts, share)
+	counts.clerks = float(counts.get("clerks", 0.0)) + strata[1] * CLERKS_OF_MIDDLE
+	counts.traders = float(counts.get("traders", 0.0)) + strata[2] * TRADERS_OF_UPPER
+	var out := _shares(counts)
+	_professions_cache[key] = out
+	return out
+
+
+## A country's, over its zones by their people.
+func professions_of_country(country_id: String) -> Dictionary:
+	var counts := {}
+	for z in zones.size():
+		if zones[z].country != country_id:
+			continue
+		var people := 0.0
+		for place: Dictionary in places:
+			if place.country == country_id:
+				for pair: Array in place.zones:
+					if int(pair[0]) == z:
+						people += (float(place.urban) + float(place.rural)) * float(pair[1])
+		var shares := professions_of_zone(z)
+		for id: String in shares:
+			counts[id] = float(counts.get(id, 0.0)) + float(shares[id]) * people
+	return _shares(counts)
+
+
+## An inland city's: its own plants and its strata.
+func professions_of_city(city_id: String) -> Dictionary:
+	var at := int(_place_index.get("city/%s" % city_id, -1))
+	if at < 0:
+		return {}
+	var counts := {}
+	for index: int in producers.plants_at(city_id):
+		_count_plant(producers.plants[index], counts)
+	var split: Array = strata_of(places[at])
+	counts.clerks = float(split[1]) * CLERKS_OF_MIDDLE
+	counts.traders = float(split[2]) * TRADERS_OF_UPPER
+	return _shares(counts)
+
+
+func _count_plant(plant: Dictionary, counts: Dictionary, share := 1.0) -> void:
+	var trade := Producers.trade_of(str(plant.good))
+	var id := str(PROFESSION_OF_TRADE.get(trade, "factory"))
+	var value := float(plant.capacity) * float(GameData.commodity(str(plant.good)).get("base", 1.0))
+	counts[id] = float(counts.get(id, 0.0)) + value * float(PROFESSION_PER_DOLLAR.get(trade, 1.0 / 100000.0)) * share
+
+
+static func _shares(counts: Dictionary) -> Dictionary:
+	var total := 0.0
+	for id: String in counts:
+		total += float(counts[id])
+	var out := {}
+	if total <= 0.0:
+		return out
+	for id: String in counts:
+		out[id] = float(counts[id]) / total
+	return out
+
+
+# --- Keeping a joined game's world up to date (Net) ------------------------------------------
+
+## The parts that move every day, small enough to send often: stocks, cargo on
+## its way, prices and the currencies.
+func light_dict() -> Dictionary:
+	return {stock = stock.to_byte_array(), inbound = inbound.to_byte_array(), price = price.to_byte_array(), currency = currency, day = day}  # (Bytes: zstd packs them well.)
+
+
+func apply_light(data: Dictionary) -> void:
+	var size := zones.size() * goods.size()
+	var got_stock: PackedFloat64Array = (data.get("stock", PackedByteArray()) as PackedByteArray).to_float64_array()
+	if got_stock.size() != size:
+		return
+	stock = got_stock
+	inbound = (data.get("inbound", PackedByteArray()) as PackedByteArray).to_float64_array()
+	price = (data.get("price", PackedByteArray()) as PackedByteArray).to_float64_array()
+	currency = data.get("currency", currency)
+	day = int(data.get("day", day))
+	changed.emit()
+
+
 # --- Trading ---------------------------------------------------------------------
 
 ## What a port pays for a unit of a good now (0 for a port outside every zone).

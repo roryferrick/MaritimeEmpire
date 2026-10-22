@@ -734,6 +734,19 @@ func _broadcast() -> void:
 	if research != _sent.get("research", {}):
 		update.research = research
 		_sent.research = research.duplicate(true)
+	_world_clock += SYNC_S
+	if _world_clock >= WORLD_SYNC_S:
+		_world_clock = 0.0
+		update.world_light = GameState.world.light_dict()
+		var rows: Array = GameState.firms.take_sync()
+		if not rows.is_empty():
+			update.voyages = rows
+		var news_rows: Array = GameState.news.take_sync()
+		if not news_rows.is_empty():
+			update.news = news_rows
+		if GameState.history.months.size() != _history_months_sent:
+			_history_months_sent = GameState.history.months.size()
+			_send_history()
 	_full_clock += SYNC_S
 	var full_round := _full_clock >= FULL_SYNC_S
 	if full_round:
@@ -853,6 +866,12 @@ func _sync(packed: Array) -> void:
 		GameState.research.from_dict(update.research)
 	if update.has("ports"):
 		GameState.port_sizes.apply_update(update.ports)
+	if update.has("world_light"):
+		GameState.world.apply_light(update.world_light)
+	if update.has("voyages"):
+		GameState.firms.apply_rows(update.voyages)
+	if update.has("news"):
+		GameState.news.apply_rows(update.news)
 	if update.has("companies"):
 		_apply_companies(update.companies)
 	if update.has("hot"):
@@ -1237,6 +1256,36 @@ static func _unpack(packed: Array) -> Dictionary:
 	var bytes: PackedByteArray = (packed[1] as PackedByteArray).decompress(int(packed[0]), FileAccess.COMPRESSION_ZSTD)
 	var data: Variant = bytes_to_var(bytes)
 	return data if data is Dictionary else {}
+
+
+## How often the living world's light parts go to joined games (s), and the history parts.
+const WORLD_SYNC_S := 10.0
+var _world_clock := 0.0
+var _history_months_sent := 0
+var _history_bytes := PackedByteArray()
+
+
+## Host: the price history whole, to every joined game, in START_PART_BYTES parts.
+func _send_history() -> void:
+	var bytes := GameState.history.to_bytes()
+	for id: int in players:
+		if id == 1:
+			continue
+		for start in range(0, bytes.size(), START_PART_BYTES):
+			_history_part.rpc_id(id, bytes.slice(start, start + START_PART_BYTES))
+		_history_done.rpc_id(id)
+
+
+@rpc("authority", "reliable")
+func _history_part(bytes: PackedByteArray) -> void:
+	_history_bytes.append_array(bytes)
+
+
+@rpc("authority", "reliable")
+func _history_done() -> void:
+	if is_client() and GameState.in_session:
+		GameState.history.from_bytes(_history_bytes, GameState.world)
+	_history_bytes = PackedByteArray()
 
 
 ## Host: whether anyone has joined and is playing (no updates to send if not;

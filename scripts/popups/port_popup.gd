@@ -50,6 +50,7 @@ var _trade_grid := GridContainer.new()
 func _ready() -> void:
 	super()
 	_build_size()
+	GameState.note_action("opened_port")
 	%CloseButton.pressed.connect(queue_free)
 	GameState.ships_changed.connect(_refresh_ships)
 	GameState.ship_changed.connect(_refresh_ships.unbind(1))
@@ -104,6 +105,7 @@ func _build_size() -> void:
 	_add_industry_line()
 	_add_energy_line()
 	_add_plants_line()
+	_add_professions_line()
 	_update_birds()
 	_update_size()
 
@@ -159,6 +161,17 @@ func _add_industry_line() -> void:
 			queue_free())
 		row.add_child(open)
 	%SizeBox.add_child(row)
+
+
+## The zone's working people by trade (WorldEconomy.professions_of_zone()).
+func _add_professions_line() -> void:
+	var world: WorldEconomy = GameState.world
+	var z := world.zone_of_port(port_id)
+	if z < 0:
+		return
+	var bar := ProfessionsBar.new(world.professions_of_zone(z))
+	bar.tooltip_text = "The %s market's working people by trade, from its plants, ports and classes." % world.zone_label(z)
+	%SizeBox.add_child(bar)
 
 
 ## The world's other producers' plants here (Producers; drawn as the port's

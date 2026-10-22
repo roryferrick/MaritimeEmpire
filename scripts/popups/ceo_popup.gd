@@ -20,6 +20,7 @@ func _init() -> void:
 func _ready() -> void:
 	super()
 	var company := GameState.company
+	GameState.note_action("opened_ceo")
 	var ceo: Dictionary = company.ceo
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 14)

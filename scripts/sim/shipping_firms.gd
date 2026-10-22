@@ -262,9 +262,12 @@ func _flush_batch() -> void:
 		var model: Dictionary = _models[lot_entry.line][0]
 		var ships := maxi(ceili(float(lot_entry.hold) / (float(model.capacity) * CONVOY)), 1)
 		var days := float(lot_entry.nm) / maxf(float(model.get("speed_nm_per_s", 5.0)) * _nm_per_day_per_speed(), 1.0)
-		_insert_sorted(voyages, {firm = lot_entry.firm, model = model.id, ships = ships, line = lot_entry.line, goods = lot_entry.goods, hold = lot_entry.hold,
+		var v := {firm = lot_entry.firm, model = model.id, ships = ships, line = lot_entry.line, goods = lot_entry.goods, hold = lot_entry.hold,
 			from = lot_entry.from, to = lot_entry.to, start = now, arrive = now + days * 86400.0 / day_s,
-			free = now + days * (1.0 + BACKHAUL) * 86400.0 / day_s, cost = lot_entry.cost}, "arrive")
+			free = now + days * (1.0 + BACKHAUL) * 86400.0 / day_s, cost = lot_entry.cost}
+		_insert_sorted(voyages, v, "arrive")
+		if Net.is_host():
+			sync_new.append(_row(v))  # (For the joined games: see take_sync().)
 		month_sailings += ships
 		month_calls[lot_entry.from] = int(month_calls.get(lot_entry.from, 0)) + ships
 		month_calls[lot_entry.to] = int(month_calls.get(lot_entry.to, 0)) + ships
@@ -328,6 +331,48 @@ static func _insert_sorted(list: Array, entry: Variant, key: Variant) -> void:
 ## This month's sailings and calls by port (for the News' monthly figures, which reset them).
 var month_sailings := 0
 var month_calls := {}
+
+# --- Keeping a joined game's voyages up to date (Net) ----------------------------------------
+
+## The voyages dispatched since the host last sent them (rows as to_dict() keeps them).
+var sync_new: Array = []
+
+
+func take_sync() -> Array:
+	var out := sync_new
+	sync_new = []
+	return out
+
+
+## A voyage as a saved row (VOYAGE_KEYS).
+func _row(v: Dictionary) -> Array:
+	var goods := {}
+	for good: String in v.goods:
+		goods[good] = roundi(float(v.goods[good]))
+	return [v.firm, v.model, v.ships, goods, v.from, v.to, roundi(float(v.start)), roundi(float(v.arrive)), roundi(float(v.free)), roundi(float(v.cost))]
+
+
+## A joined game: the host's new voyages, into the list in order.
+func apply_rows(rows: Array) -> void:
+	for row: Array in rows:
+		var v := {}
+		for k in mini(row.size(), VOYAGE_KEYS.size()):
+			v[VOYAGE_KEYS[k]] = row[k]
+		v.hold = 0.0
+		for good: String in v.goods:
+			v.line = WorldEconomy.line_of(good)
+			v.hold = float(v.hold) + float(v.goods[good]) * GameData.hold_of(good)
+		_insert_sorted(voyages, v, "arrive")
+
+
+## A joined game: voyages that have arrived turn homeward and homeward legs that
+## are done go (no goods move: the host's world does that).
+func prune_arrived(now: float) -> void:
+	while not voyages.is_empty() and float(voyages[0].arrive) <= now:
+		var v: Dictionary = voyages.pop_front()
+		_insert_sorted(_returning, {free = float(v.free), line = v.line, hold = float(v.hold), from = v.to, to = v.from, model = v.model, ships = v.ships, firm = v.firm, arrive = float(v.arrive)}, "free")
+	while not _returning.is_empty() and float(_returning[0].free) <= now:
+		_returning.pop_front()
 
 ## Hold units of a line's capacity out on voyages now (kept as voyages come and go).
 func busy(line: String) -> float:

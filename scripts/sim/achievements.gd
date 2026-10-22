@@ -66,6 +66,16 @@ const BADGES := [
 	["atlas_canyon", "Into the blue", "Survey every canyon, cave and blue hole"],
 	["atlas_wildlife", "Leviathan", "Survey every wildlife site and mystery"],
 	["challenger", "Full ocean depth", "Survey the Challenger Deep"],
+	["first_ship", "Shipowner", "Own a ship"],
+	["first_local_sale", "Sold at the gate", "Sell a plant's output locally"],
+	["first_facility", "Bricks and mortar", "Build a facility at a hub"],
+	["full_service", "Full service", "Build every facility at one hub"],
+	["first_gazette", "Front page", "Read the Maritime Gazette"],
+	["market_insight", "Market insight", "Read a price's card"],
+	["competition", "The competition", "Look at another firm's ship"],
+	["well_informed", "Well informed", "Open the Intelligence page"],
+	["clean_slate", "Clean slate", "Pay off the debt you started with"],
+	["globetrotter", "Globetrotter", "Trade in 10 countries"],
 ]
 ## Research sites surveyed for each star (0: all of them), and first discoveries.
 const ATLAS_STARS := [10, 60, 0]
@@ -158,6 +168,30 @@ static func badge_done(company: Company, badge_id: String) -> bool:
 			return company.achievements.has("loan") and company.loan <= 0
 		"challenger":
 			return Research.is_done(company, "challenger_deep")
+		"first_ship":
+			return not GameState.fleet(company).is_empty()
+		"first_local_sale":
+			return company.local_sales > 0
+		"first_facility":
+			return company.hubs.any(func(hub: Hub) -> bool: return not hub.facilities.is_empty())
+		"full_service":
+			return company.hubs.any(func(hub: Hub) -> bool: return hub.facilities.size() >= Hub.facility_list().size())
+		"first_gazette":
+			return company.actions_done.has("read_gazette")
+		"market_insight":
+			return company.actions_done.has("hovered_price")
+		"competition":
+			return company.actions_done.has("clicked_ghost")
+		"well_informed":
+			return company.actions_done.has("opened_intelligence")
+		"clean_slate":
+			return company.start_debt > 0 and company.loan <= 0
+		"globetrotter":
+			var countries := {}
+			for port_id: String in company.port_trade:
+				countries[GameState.world.country_of_port(port_id)] = true
+			countries.erase("")
+			return countries.size() >= 10
 	if badge_id.begins_with("atlas_"):  # A whole category of research sites (see Research).
 		var counts := Research.progress(company, badge_id.trim_prefix("atlas_"))
 		return int(counts[1]) > 0 and int(counts[0]) >= int(counts[1])

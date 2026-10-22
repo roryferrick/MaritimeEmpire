@@ -14,6 +14,8 @@ var income := 0.0
 ## Its warehouses: one on each plot beside the marina (a commodity id, or ""
 ## for an empty plot), INDUSTRY_SLOTS of them, all open.
 var industries := ["", "", ""]
+## The facilities built here (facility ids: see Hub.facility()).
+var facilities: Array[String] = []
 
 const INDUSTRY_SLOTS := 3
 
@@ -49,15 +51,56 @@ func industry_bonus(commodity_id: String, kind: String) -> float:
 
 
 ## Its monthly upkeep: game_config hubs.upkeep_month for its port's size band
-## (none for the HQ).
+## (none for the HQ), plus its facilities'.
 func upkeep() -> int:
+	var total := 0
+	for id in facilities:
+		total += int(Hub.facility(id).get("upkeep_month", 0))
 	if is_hq:
-		return 0
-	return int(Hub.settings().get("upkeep_month", {}).get(GameState.port_sizes.band(port_id), 0))
+		return total
+	return total + int(Hub.settings().get("upkeep_month", {}).get(GameState.port_sizes.band(port_id), 0))
+
+
+## The facilities there are (game_config hubs.facilities), and one by id.
+static func facility_list() -> Array:
+	return settings().get("facilities", [])
+
+
+static func facility(id: String) -> Dictionary:
+	for each: Dictionary in facility_list():
+		if each.id == id:
+			return each
+	return {}
+
+
+func has_facility(id: String) -> bool:
+	return facilities.has(id)
+
+
+## What a facility here gives: its value (x hq_multiplier at the HQ), 0 without it.
+func facility_effect(id: String) -> float:
+	if not has_facility(id):
+		return 0.0
+	return float(facility(id).get("value", 0.0)) * (float(settings().get("hq_multiplier", 1.5)) if is_hq else 1.0)
+
+
+## The summed effect of its facilities of a kind ("dock" for a ship category, "fuel", "repairs", "price" for a family...).
+func effect_of(kind: String, about := "") -> float:
+	var total := 0.0
+	for id in facilities:
+		var info := facility(id)
+		if str(info.get("effect", "")) != kind:
+			continue
+		if kind == "dock" and not about in info.get("categories", []):
+			continue
+		if kind == "price" and str(info.get("family", "")) != about:
+			continue
+		total += facility_effect(id)
+	return total
 
 
 func to_dict() -> Dictionary:
-	return {"port_id": port_id, "is_hq": is_hq, "deliveries": deliveries, "income": income, "industries": industries}
+	return {"port_id": port_id, "is_hq": is_hq, "deliveries": deliveries, "income": income, "industries": industries, "facilities": facilities}
 
 
 static func from_dict(data: Dictionary) -> Hub:
@@ -67,6 +110,7 @@ static func from_dict(data: Dictionary) -> Hub:
 	var built: Array = data.get("industries", [])
 	for slot in INDUSTRY_SLOTS:
 		hub.industries[slot] = str(built[slot]) if slot < built.size() else ""
+	hub.facilities.assign(data.get("facilities", []))
 	return hub
 
 

@@ -30,6 +30,7 @@ func _ready() -> void:
 	style.bg_color = PAPER
 	style.set_content_margin_all(28.0)
 	paper.add_theme_stylebox_override(&"panel", style)
+	GameState.note_action("read_gazette")
 	paper.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	add_child(paper)
 	var scroll := ScrollContainer.new()

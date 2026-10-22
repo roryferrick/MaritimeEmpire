@@ -18,7 +18,7 @@ extends PanelContainer
 const CHECK_SECONDS := 0.25
 const WIDTH := 460.0
 const MARGIN := 12.0
-const TIP_GAP_S := 25.0
+const TIP_GAP_S := 8.0
 const PORTRAIT_PX := 76.0
 
 var _title := Label.new()
@@ -117,6 +117,7 @@ func _finish() -> void:
 ## finished without Got it once this is true)}.
 func _tips_list() -> Array[Dictionary]:
 	var seen := func(id: String) -> bool: return GameState.tutorial_done.has(id)
+	var done_action := func(id: String) -> bool: return GameState.company.actions_done.has(id)
 	var always := func() -> bool: return true
 	return [
 		{id = "welcome", who = "dick", title = "Welcome to %s" % GameState.company_name, show = always,
@@ -145,14 +146,14 @@ func _tips_list() -> Array[Dictionary]:
 			text = func() -> String: return "Ships burn fuel and wear down at sea, and the more worn they are, the slower they go. The Refuel and Repair switches in a ship's popup top them up at every stop.\n\nA ship that can't make its next leg waits in port, and the Ships tab gets a red dot whenever a ship needs you; hover it to see why."},
 		{id = "prices", who = "marissa", title = "Finding better trades", show = func() -> bool: return seen.call("upkeep"),
 			text = func() -> String: return "The Prices picker in the top right of the map colors every port by a commodity's price: green where it's cheap to buy, red where it sells high.\n\nThe Markets button at the top left of the map lists the best trades, anywhere and close by, and a port's popup shows all its prices."},
-		{id = "grow", who = "sonny", title = "Grow your fleet", show = func() -> bool: return seen.call("prices"),
+		{id = "grow", who = "sonny", title = "Grow your fleet", show = func() -> bool: return seen.call("prices") and _sales_count() >= 3,
 			text = func() -> String: return "More ships, more profit. The Shop tab gets a red dot when you can afford another. Give each one its own route, or send several round a good loop.\n\nThe Finances tab shows where your money comes from and where it goes, and which ships earn the most."},
 		{id = "hubs", who = "sonny", title = "Hubs",
 			show = func() -> bool: return seen.call("grow") and GameState.hubs.size() < 2 and GameState.money >= GameState.hub_price() * 2,
 			done = func() -> bool: return GameState.hubs.size() >= 2,
 			text = func() -> String: return "We could afford a hub. Click a port and open its Hub tab to build one there (the next costs %s, and each pays a monthly upkeep).\n\nNew ships can launch from a hub, our trade there pays no port fee, and it has plots for warehouses. A hub is permanent, so pick a busy port on your routes." % Fmt.money(GameState.hub_price())},
 		{id = "breakdowns", who = "joe", title = "Breakdowns",
-			show = func() -> bool: return seen.call("upkeep"),
+			show = func() -> bool: return seen.call("upkeep") and GameState.fleet().any(func(ship: Ship) -> bool: return ship.maintenance < 0.75),
 			text = func() -> String: return "Ships can break down at sea, more often the more worn they are, so keep Repair on.\n\nA ship that breaks down completely or runs out of fuel is lost at sea until a recovery boat carries it to port. Recovery boats are in the Shop's Service tab."},
 		{id = "storms", who = "joe", title = "Storms",
 			show = func() -> bool: return seen.call("map") and GameState.weather.active() and not GameState.weather.storms.is_empty(),
@@ -219,11 +220,44 @@ Once we're bigger, the offshore fields: put up a rig, send a tanker on rig runs 
 			show = func() -> bool: return seen.call("research_gear") and not Research.record_of(GameState.company).done.is_empty(),
 			done = func() -> bool: return not GameState.research.taken_by(GameState.company).is_empty(),
 			text = func() -> String: return "Our first site's in the Atlas. Expeditions cost fuel and wages, so take contracts too: universities, cable layers, salvors and film crews post them on the Contracts board, and every company sees the same board, first come first served.\n\nMind the deadline: a missed one loses the pay and costs a penalty. Finish a quarter of a category's sites for its first perk, half for the second, all of them for the third."},
+		{id = "traffic", who = "sonny", title = "The competition", show = func() -> bool: return seen.call("trading") and not GameState.traffic.ghosts.is_empty(),
+			done = func() -> bool: return done_action.call("clicked_ghost"),
+			text = func() -> String: return "Those other ships on the lanes are the world's shipping firms, two hundred of them, carrying what the markets call for. Click one: its card says who it sails for, what it carries and where it's bound.
+
+They berth at the ports too, but our ships always come first at a pier."},
+		{id = "gazette", who = "marissa", title = "The morning paper", show = func() -> bool: return seen.call("trading") and GameState.news.items.size() >= 4,
+			done = func() -> bool: return done_action.call("read_gazette"),
+			text = func() -> String: return "The ticker along the bottom of the map carries the news: markets tightening or glutting, the big sailings, the month's figures. The Gazette button on it opens the week's paper.
+
+A scarce market is a chance: a ship that gets there first sells high."},
+		{id = "ceo", who = "dick", title = "Your own card", show = func() -> bool: return seen.call("map") and _sales_count() >= 1,
+			done = func() -> bool: return done_action.call("opened_ceo"),
+			text = func() -> String: return "The round button above the page buttons is you. It opens your card: your traits and what they do for the company, your skills, and the story of how we started.
+
+More people come later: officers, executives, the board. For now it's you and us."},
+		{id = "local_sales", who = "sonny", title = "Selling at the gate", show = func() -> bool: return seen.call("trading") and _owns_plants() and GameState.company.local_sales == 0,
+			done = func() -> bool: return GameState.company.local_sales > 0,
+			text = func() -> String: return "A plant of ours makes goods every day. They wait in its store for our ships, or the Sell locally switch on its page sells each day's output into the local market at the going price less a tenth for handling.
+
+Ship it when the far ports pay well; sell at the gate when they don't."},
 		{id = "achievements", who = "marissa", title = "A milestone",
 			show = func() -> bool: return seen.call("map") and Achievements.score(GameState.company).x > 0,
 			text = func() -> String: return "You've earned your first achievement star. The trophy button at the top right of the map keeps them all: stars for cargo delivered of each kind, for the fleet, the company's value, the bank, the field guide, and badges for the rest.\n\nThey're the big milestones. Each one takes real work, so keep at it; the next is always listed with how far along we are."},
 	]
 
+
+## How many sales the company has made (its deliveries by commodity).
+func _sales_count() -> int:
+	var total := GameState.company.earlier_containers
+	for commodity_id: String in GameState.company.delivered:
+		total += int(GameState.company.delivered[commodity_id])
+	return total
+
+
+## Whether the company owns any plant whose output could sell locally.
+func _owns_plants() -> bool:
+	var company := GameState.company
+	return not GameState.industry.owned_by(company).is_empty() or not GameState.farms.owned_by(company).is_empty() or not company.factories.is_empty() or not GameState.energy.plant_ports(company).is_empty()
 
 ## A cargo ship of the fleet with birds following it (the first), or null.
 func _followed_ship() -> Ship:

@@ -1249,7 +1249,39 @@ func sell_locally(who: Company, port_id: String, good: String, amount: float, ki
 		world.deliver(z, g, amount)
 	_add_money(who, value)
 	_record(null, kind, -value, who)
+	who.local_sales += 1
 	return value
+
+# --- Hub facilities (see Hub.facility_list()) ----------------------------------------
+
+func build_facility_error(hub: Hub, id: String) -> String:
+	var info := Hub.facility(id)
+	if info.is_empty() or not hubs.has(hub):
+		return "No such facility"
+	if hub.has_facility(id):
+		return "Built already"
+	if in_debt() or money < int(info.get("price", 0)):
+		return "Not enough money (%s)" % Fmt.money(int(info.get("price", 0)))
+	return ""
+
+
+## Builds a facility at one of the company's hubs (game_config hubs.facilities).
+func build_facility(hub: Hub, id: String) -> void:
+	if not build_facility_error(hub, id).is_empty():
+		return
+	if Net.command(&"build_facility", [hub, id]):
+		return
+	var info := Hub.facility(id)
+	var price := int(info.get("price", 0))
+	money -= price
+	_record(null, "hubs", price)
+	hub.facilities.append(id)
+	if str(info.get("effect", "")) == "cold":
+		var store: Dictionary = company.farm_stores.get_or_add(hub.port_id, {items = {}, cold = false})
+		store.cold = true  # (The farm store there is a cold store now: see Farms.)
+	ActivityLog.add("Built a %s at %s." % [str(info.name).to_lower(), hub.title()], ActivityLog.Kind.GOOD)
+	hubs_changed.emit()
+
 
 ## Pulls down the building on one of a hub's industry plots, for some of its price back.
 func demolish_industry(hub: Hub, slot: int) -> void:
@@ -1285,7 +1317,7 @@ func company_buy_price(port_id: String, commodity_id: String, of: Company = null
 
 func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
-	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(GameData.family_of(commodity_id), "sell") if hub else 0.0)) * divine.price_factor(port_id, true) \
+	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(GameData.family_of(commodity_id), "sell") + hub.effect_of("price", GameData.family_of(commodity_id)) if hub else 0.0)) * divine.price_factor(port_id, true) \
 		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price") * Research.perk(of if of != null else company, "price") * Traits.factor(of if of != null else company, "price")  # (The type's stars: see Ratings; the research perks: see Research.)
 
 
@@ -3742,7 +3774,8 @@ func _repair(ship: Ship, amount: float) -> void:
 	amount = minf(amount, 1.0 - ship.maintenance)
 	if amount <= 0.0:
 		return
-	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * Research.perk(owner_of(ship), "repairs")
+	var dock_hub := hub_at(ship.docked_at, owner_of(ship))
+	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * Research.perk(owner_of(ship), "repairs") * (1.0 - (dock_hub.effect_of("repairs") if dock_hub != null else 0.0))  # (A drydock at the company's hub: see Hub.effect_of().)
 	var paid := _spend(ship, cost, "repair")
 	ship.stop_repair_cost += paid
 	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
@@ -3759,7 +3792,8 @@ func _refuel(ship: Ship, amount: float) -> void:
 		amount -= free
 		if amount <= 0.001:
 			return
-	var cost := amount * market.fuel_price(ship.docked_at)
+	var bunkering_hub := hub_at(ship.docked_at, owner_of(ship))
+	var cost := amount * market.fuel_price(ship.docked_at) * (1.0 - (bunkering_hub.effect_of("fuel") if bunkering_hub != null else 0.0))  # (A bunkering station at the company's hub.)
 	var paid := _spend(ship, cost, "fuel")
 	ship.stop_fuel_cost += paid
 	ship.fuel = minf(ship.fuel + amount * paid / cost, ship.fuel_tank())
@@ -4004,6 +4038,9 @@ func begin_client_session() -> void:
 ## this player's storm and season warnings are looked at as in single player.
 func _client_frame(delta: float) -> void:
 	play_time += delta * time_speed
+	firms.prune_arrived(play_time)  # (The host's voyages, kept to those still at sea; the ghosts drawn from them.)
+	traffic.step(delta * time_speed)
+	traffic.scan()
 	for ship in ships:
 		if ship.berth_phase == Ship.BERTH_IN or ship.berth_phase == Ship.BERTH_OUT:
 			ship.berth_time += delta * time_speed  # Coming alongside or pulling out, smoothly between updates.
@@ -4126,6 +4163,14 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	_begin_session()
 	_start_warm_up(WARM_UP_DAYS)  # (Saved once it's run: see _warm_up_frame().)
 
+
+## Notes something the player did, for the tutorial's pacing and the
+## milestones (Company.actions_done: "opened_port", "opened_intelligence",
+## "hovered_price", "read_gazette", "clicked_ghost", "opened_ceo"...).
+func note_action(id: String) -> void:
+	if company == null or company.actions_done.has(id):
+		return
+	company.actions_done.append(id)
 
 ## A ship given, not bought (a backstory start's): docked at a port, in the company's fleet.
 func grant_ship(model_id: String, ship_name: String, port_id: String) -> Ship:

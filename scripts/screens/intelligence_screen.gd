@@ -91,6 +91,7 @@ func _ready() -> void:
 func show_tab(id: String) -> void:
 	if id.is_empty() or not TABS.any(func(tab: Array) -> bool: return tab[0] == id):
 		return
+	GameState.note_action("opened_intelligence")
 	_tab = id
 	for i in _tabs.get_child_count():
 		(_tabs.get_child(i) as Button).button_pressed = TABS[i][0] == id
@@ -117,6 +118,7 @@ func _refresh() -> void:
 	if not is_visible_in_tree():
 		return
 	var t_x := Time.get_ticks_usec()
+	GameState.note_action("opened_intelligence")
 	_clear(_body)
 	match _tab:
 		"countries":
@@ -227,6 +229,8 @@ func _country_card(id: String) -> Control:
 			for k in 3:
 				strata[k] += float(split[k])
 	box.add_child(_dim("People: %s lower, %s middle, %s upper" % [Fmt.short(strata[0]), Fmt.short(strata[1]), Fmt.short(strata[2])]))
+	box.add_child(_dim("Working people by trade:"))
+	box.add_child(ProfessionsBar.new(world.professions_of_country(id)))
 	# Its zones and their ports.
 	var g_count := world.goods.size()
 	var made := {}

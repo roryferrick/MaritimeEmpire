@@ -54,6 +54,7 @@ func _ready() -> void:
 		content.add_child(_text("%s people: %s lower, %s middle, %s upper" % [Fmt.short(people), Fmt.short(float(strata[0])), Fmt.short(float(strata[1])), Fmt.short(float(strata[2]))]))
 	else:
 		content.add_child(_text("%s people" % Fmt.short(float(city.get("population", 0)))))
+	content.add_child(ProfessionsBar.new(world.professions_of_city(city_id)))
 	var ports := PackedStringArray()
 	for serving: Array in city.get("ports", []):
 		ports.append("%s %d%%" % [GameData.port_name(str(serving[0])), roundi(float(serving[1]) * 100.0)])

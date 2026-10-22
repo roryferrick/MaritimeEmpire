@@ -163,5 +163,17 @@
 			{"id": "tropics", "name": "The tropics", "lat": [-20, 30], "lon": [-180, 180], "months": [1.05, 1.05, 1.05, 1.0, 0.95, 0.95, 1.0, 0.95, 0.9, 0.95, 1.0, 1.1]}
 		]
 	},
-	"hubs": {"price": 5000000, "price_growth": 2.0, "upkeep_month": {"small": 1250, "medium": 2500, "large": 5000, "giant": 10000}, "hq_multiplier": 1.5, "industry": {"price": 15000000, "refund": 0.5, "buy_discount": 0.05, "sell_bonus": 0.05}}
+	"_facilities_comment": "Hub facilities (Hub.facilities, GameState.build_facility(); DESIGN_LIVING_WORLD.md M1): one of each may be built at a hub for price, paying upkeep_month, each with one effect at that port for the company's ships (the HQ's hq_multiplier times a hub's): dock (that much shorter stops for the categories), fuel (cheaper fuel), repairs (cheaper repairs), price (dearer sales of the family's goods), passengers (a bigger pool of cruise guests booking there), cold (the farm store there is a cold store).",
+	"hubs": {"price": 5000000, "price_growth": 2.0, "upkeep_month": {"small": 1250, "medium": 2500, "large": 5000, "giant": 10000}, "hq_multiplier": 1.5, "industry": {"price": 15000000, "refund": 0.5, "buy_discount": 0.05, "sell_bonus": 0.05},
+		"facilities": [
+			{"id": "container_terminal", "name": "Container terminal", "price": 12000000, "upkeep_month": 6000, "effect": "dock", "value": 0.3, "categories": ["container"], "text": "Gantry cranes along the quay: container ships load and unload a third faster here."},
+			{"id": "bulk_conveyor", "name": "Bulk conveyor", "price": 9000000, "upkeep_month": 4500, "effect": "dock", "value": 0.3, "categories": ["ore", "grain", "breakbulk"], "text": "Conveyors and grabs for the bulk carriers: ore, grain and breakbulk ships turn round a third faster."},
+			{"id": "tank_farm", "name": "Tank farm", "price": 10000000, "upkeep_month": 5000, "effect": "dock", "value": 0.3, "categories": ["tanker", "gas"], "text": "Tanks and manifolds on the quay: tankers and gas carriers pump out a third faster."},
+			{"id": "roro_ramp", "name": "Ro-ro ramp", "price": 6000000, "upkeep_month": 3000, "effect": "dock", "value": 0.3, "categories": ["vehicles", "boat_carriers"], "text": "A ramp and a marshalling yard: car and boat carriers drive off a third faster."},
+			{"id": "cold_store", "name": "Cold store", "price": 3000000, "upkeep_month": 2000, "effect": "cold", "value": 1.0, "categories": [], "text": "Refrigerated sheds: your farm store here keeps its produce fresh for longer, and the catch landed here keeps."},
+			{"id": "fish_market", "name": "Fish market", "price": 4000000, "upkeep_month": 2000, "effect": "price", "value": 0.08, "family": "seafood", "categories": [], "text": "An auction hall by the quay: your catch and seafood cargo sell for more here."},
+			{"id": "cruise_terminal", "name": "Cruise terminal", "price": 15000000, "upkeep_month": 7500, "effect": "passengers", "value": 0.3, "categories": [], "text": "A proper terminal with check-in halls: a third more guests book cruises from here."},
+			{"id": "bunkering", "name": "Bunkering station", "price": 8000000, "upkeep_month": 4000, "effect": "fuel", "value": 0.1, "categories": [], "text": "Your own bunker barges and tanks: fuel costs a tenth less here."},
+			{"id": "drydock", "name": "Drydock", "price": 25000000, "upkeep_month": 10000, "effect": "repairs", "value": 0.25, "categories": [], "text": "A graving dock and workshops: repairs cost a quarter less here (and the refits of the future are done here)."}
+		]}
 }

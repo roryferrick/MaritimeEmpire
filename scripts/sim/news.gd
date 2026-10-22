@@ -41,7 +41,29 @@ func add(kind: String, text: String, about := {}) -> void:
 	if items.size() > MOST:
 		items.pop_front()
 	added.emit(item)
+	if Net.is_host():
+		sync_new.append([int(item.time), kind, text, about])
 
+
+## The items added since the host last sent them (Net), as saved rows.
+var sync_new: Array = []
+
+
+func take_sync() -> Array:
+	var out := sync_new
+	sync_new = []
+	return out
+
+
+## A joined game: the host's new items.
+func apply_rows(rows: Array) -> void:
+	for row: Array in rows:
+		if row.size() >= 4:
+			var item := {time = int(row[0]), kind = str(row[1]), text = str(row[2]), about = row[3]}
+			items.append(item)
+			if items.size() > MOST:
+				items.pop_front()
+			added.emit(item)
 
 ## The newest first, of the kinds given (all with none).
 func latest(count: int, kinds := []) -> Array:

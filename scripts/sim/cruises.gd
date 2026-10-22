@@ -431,6 +431,9 @@ func demand(ship: Ship) -> Dictionary:
 	var month := month_now()
 	var area := area_of(home)
 	var pool: float = float(settings().get("pool_per_size", 30)) * _state.port_sizes.size(home) * season_factor(area, month) if not home.is_empty() else 0.0
+	var hub: Hub = _state.hub_at(home, _state.owner_of(ship)) if not home.is_empty() else null
+	if hub != null:
+		pool *= 1.0 + hub.effect_of("passengers")  # (A cruise terminal at the company's hub: see Hub.effect_of().)
 	var berths := 0.0
 	var mine := float(total(capacity(ship)))
 	var others := 0

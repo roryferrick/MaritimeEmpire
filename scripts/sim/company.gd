@@ -111,6 +111,11 @@ var finance_window: Array = []
 var tutorials := false
 var tutorials_on := true
 var tutorial_done: Array[String] = []
+## What the player has done, for the tutorial's pacing and the milestones (GameState.note_action()).
+var actions_done: Array[String] = []
+## Local sales made by its plants (GameState.sell_locally()), and the debt its backstory began with.
+var local_sales := 0
+var start_debt := 0
 ## Achievements earned (Achievements: id -> stars, 1 for a badge), and the
 ## animals seen on the map (Achievements.discover(): the field guide's checks).
 var achievements := {}
@@ -195,6 +200,9 @@ func to_dict() -> Dictionary:
 		"tutorials": tutorials,
 		"tutorials_on": tutorials_on,
 		"tutorial_done": tutorial_done,
+		"actions_done": actions_done,
+		"local_sales": local_sales,
+		"start_debt": start_debt,
 		"achievements": achievements,
 		"discovered": discovered,
 		"show_active_routes": show_active_routes,
@@ -229,6 +237,9 @@ static func from_dict(data: Dictionary) -> Company:
 	company.loan = int(data.get("loan", 0))
 	company.investors = data.get("investors", {}) if data.get("investors") is Dictionary else {}
 	company.story = str(data.get("story", ""))
+	company.actions_done.assign(data.get("actions_done", []))
+	company.local_sales = int(data.get("local_sales", 0))
+	company.start_debt = int(data.get("start_debt", 0))
 	company.relations = data.get("relations", {}) if data.get("relations") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}

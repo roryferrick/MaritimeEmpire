@@ -25,6 +25,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	GameState.note_action("clicked_ghost")
 	super()
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override(&"separation", 6)

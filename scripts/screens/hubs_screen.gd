@@ -82,6 +82,8 @@ func _hub_card(hub: Hub) -> Control:
 
 	box.add_child(HSeparator.new())
 	box.add_child(IndustryPanel.new(hub))
+	box.add_child(HSeparator.new())
+	box.add_child(_facilities(hub))
 
 	box.add_child(HSeparator.new())
 	var traffic := Label.new()
@@ -95,6 +97,70 @@ func _hub_card(hub: Hub) -> Control:
 	_live[hub] = [traffic]
 	return box.get_parent()
 
+
+## The hub's facilities (Hub.facility_list()): each built (its effect, its
+## upkeep) or with a Build button and what it would do.
+func _facilities(hub: Hub) -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 4)
+	var title := Label.new()
+	title.text = "Facilities"
+	box.add_child(title)
+	var note := Label.new()
+	note.theme_type_variation = &"DimLabel"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.text = "One of each may be built here, each with its monthly upkeep%s." % (" (the HQ's work x%s as hard)" % Fmt.decimal(float(Hub.settings().get("hq_multiplier", 1.5)), 1) if hub.is_hq else "")
+	box.add_child(note)
+	for info: Dictionary in Hub.facility_list():
+		var id := str(info.id)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override(&"separation", 8)
+		var name := Label.new()
+		name.text = str(info.name)
+		name.custom_minimum_size.x = 150.0
+		name.tooltip_text = str(info.text)
+		name.mouse_filter = Control.MOUSE_FILTER_PASS
+		row.add_child(name)
+		var detail := Label.new()
+		detail.theme_type_variation = &"DimLabel"
+		detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail.add_theme_font_size_override(&"font_size", 13)
+		if hub.has_facility(id):
+			detail.text = "Built · %s · upkeep %s a month" % [_effect_text(hub, info), Fmt.money(int(info.get("upkeep_month", 0)))]
+			detail.theme_type_variation = &"GainLabel"
+			row.add_child(detail)
+		else:
+			detail.text = str(info.text)
+			row.add_child(detail)
+			var build := Button.new()
+			build.text = "Build %s" % Fmt.money_short(int(info.get("price", 0)))
+			build.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			var error := GameState.build_facility_error(hub, id)
+			build.disabled = not error.is_empty()
+			build.tooltip_text = error if not error.is_empty() else "%s, then %s a month." % [Fmt.money(int(info.get("price", 0))), Fmt.money(int(info.get("upkeep_month", 0)))]
+			build.pressed.connect(func() -> void: GameState.build_facility(hub, id))
+			row.add_child(build)
+		box.add_child(row)
+	return box
+
+
+static func _effect_text(hub: Hub, info: Dictionary) -> String:
+	var value := hub.facility_effect(str(info.id))
+	match str(info.get("effect", "")):
+		"dock":
+			return "stops %d%% shorter" % roundi(value * 100.0)
+		"fuel":
+			return "fuel %d%% cheaper" % roundi(value * 100.0)
+		"repairs":
+			return "repairs %d%% cheaper" % roundi(value * 100.0)
+		"price":
+			return "%s sells %d%% dearer" % [str(info.get("family", "")), roundi(value * 100.0)]
+		"passengers":
+			return "%d%% more guests book here" % roundi(value * 100.0)
+		"cold":
+			return "the store here keeps cold"
+	return ""
 
 func _note_card(title_text: String, body: String, highlight: bool) -> Control:
 	var box := _card()

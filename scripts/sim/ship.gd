@@ -618,7 +618,11 @@ func refill_phase_seconds() -> float:
 ## In a Divine Actions game, the port's blessings and
 ## curses (its birds, a plague of gulls, the lamps by night, the first snow).
 func _hub_stop_factor() -> float:
-	return GameState.divine.stop_factor(self) if is_docked() else 1.0
+	if not is_docked():
+		return 1.0
+	var hub := GameState.hub_at(docked_at, GameState.owner_of(self))  # (A terminal for its kind at its company's hub here: a shorter stop. See Hub.effect_of().)
+	var terminal := hub.effect_of("dock", str(model().get("category", ""))) if hub != null else 0.0
+	return GameState.divine.stop_factor(self) * clampf(1.0 - terminal, 0.3, 1.0)
 
 
 ## A leg within the ship's range that it fits (the Seaway) and can sail on one

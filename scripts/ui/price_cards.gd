@@ -20,6 +20,7 @@ static func attach(control: Control, port_id: String, good: String) -> void:
 
 static func price(port_id: String, good: String) -> Control:
 	var world: WorldEconomy = GameState.world
+	GameState.note_action("hovered_price")
 	var box := _box()
 	var name := str(GameData.commodity(good).get("name", good))
 	var unit := str(GameData.commodity(good).get("unit", "unit"))

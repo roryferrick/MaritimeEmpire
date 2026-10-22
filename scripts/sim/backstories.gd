@@ -222,6 +222,7 @@ static func apply(state: Node, start: Dictionary) -> void:
 	var company: Company = state.company
 	company.money = int(start.get("money", company.money))
 	company.loan = int(start.get("debt", 0))
+	company.start_debt = company.loan
 	company.investors = (start.get("investors", {}) as Dictionary).duplicate()
 	var relations: Dictionary = (start.get("relations", {}) as Dictionary).duplicate(true)
 	var countries: Dictionary = relations.get_or_add("countries", {})
