@@ -9,7 +9,7 @@ extends RefCounted
 ## fixed turn of its track; track is where it has been ([lon, lat] every
 ## TRACK_S of play, from where it formed), track_at its age at the last point.
 ##
-## From company level min_company_level (see active()) they act on ships: at a
+## In a save with storms (see active()) they act on ships: at a
 ## point, a storm's strength is its intensity (rising then falling over its
 ## life) times how near the core it is, and that slows ships (factors()),
 ## wears them, and over a port, closes it if it's a tropical storm strong
@@ -61,10 +61,10 @@ func _level() -> Dictionary:
 	return level
 
 
-## True once storms act on ships: a save with storms, from min_company_level;
+## True when storms act on ships: a save with storms;
 ## in a Divine Actions game from the start (its storms are called down at any level).
 func active() -> bool:
-	return _state.divine.on or (_state.storms != "none" and _state.world_level() >= int(_settings().get("min_company_level", 1)))
+	return _state.divine.on or _state.storms != "none"
 
 
 ## Forms, moves, builds up and fades the storms (in saves with storms).

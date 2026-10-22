@@ -27,14 +27,10 @@ const TILE_GAP := 6
 ## GameData.category_color()), with this much padding inside.
 const GROUP_TINT := 0.1
 const GROUP_PADDING := 8
-## The mega upgrade button and badge beside each model's name.
-const MEGA_FONT_SIZE := 13
-const MEGA_COLOR := Color(1.0, 0.82, 0.3)
-## "Upgrade all": its width, and the extra gap before it (on top of the header's own).
-const UPGRADE_ALL_WIDTH := 250.0
+## The Mute button's text size, beside each model's name.
+const MUTE_FONT_SIZE := 13
 ## The header's buttons' text size.
 const HEADER_FONT_SIZE := 15
-const UPGRADE_ALL_GAP := 16.0
 ## The service ships' lines (the Service tab) and every line's heading.
 const SERVICE_LINES := ["recovery", "tug", "icebreaker"]
 const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", breakbulk = "Breakbulk carriers", grain = "Grain carriers", livestock = "Livestock carriers", produce = "Fresh produce carriers",
@@ -63,14 +59,6 @@ var _tab_names: Array[String] = []
 var _tab_lines: Array = []
 var _line_heads := {}
 var _group_lines := {}
-## Spends every ship's upgrade points (see GameState.upgrade_all()).
-var _upgrade_all := Button.new()
-## The red dot on "Upgrade all" while any ship has points to spend.
-var _upgrade_all_alert := AlertDot.new(4.0, Vector2(5, 5))
-## Each model's own "Upgrade" button beside its Mute: model id -> [button, red dot].
-var _model_upgrades := {}
-## Model id -> [its "Mega upgrade" button, that button's red dot, its "★ Mega" badge].
-var _megas := {}
 ## Ship -> its tile.
 var _tiles := {}
 ## Ships changed since the tab last caught up (as keys), and whether anything did.
@@ -94,25 +82,13 @@ func _ready() -> void:
 	%FilterOption.item_selected.connect(_apply_filter.unbind(1))
 	GameState.ships_changed.connect(func() -> void: _needs_rebuild = true)
 	GameState.ship_changed.connect(_on_ship_changed)
-	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
-	GameState.mega_upgraded.connect(func(_model_id: String) -> void: _dirty = true)
 	GameState.company_types_changed.connect(func() -> void: _dirty = true)  # (A type taken shows its tab.)
 	visibility_changed.connect(func() -> void:
 		_dirty = true
 		if is_visible_in_tree() and %SortOption.get_selected_id() == Sort.EARNINGS:
 			_needs_rebuild = true)
-	_upgrade_all.pressed.connect(GameState.upgrade_all)
-	_upgrade_all.custom_minimum_size.x = UPGRADE_ALL_WIDTH
-	for control: Control in [%SortOption, %FilterOption, _upgrade_all]:
+	for control: Control in [%SortOption, %FilterOption]:
 		control.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)  # (Cinzel runs wide: a size down to fit the row.)
-	_upgrade_all.clip_text = true  # So it never widens the header past the screen.
-	var gap := Control.new()  # Extra room between the Show filter and Upgrade all.
-	gap.custom_minimum_size.x = UPGRADE_ALL_GAP
-	%Header.add_child(gap)
-	%Header.move_child(gap, %CountLabel.get_index())
-	%Header.add_child(_upgrade_all)
-	_upgrade_all.add_child(_upgrade_all_alert)
-	%Header.move_child(_upgrade_all, %CountLabel.get_index())
 	var grounds := Button.new()  # Where the fishing and crabbing boats go (FishingScreen).
 	grounds.text = "Fishing Grounds"
 	grounds.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)
@@ -132,7 +108,7 @@ func _ready() -> void:
 	_rebuild()
 
 
-## Ship changes (and money, for the mega buttons) are only noted as they come;
+## Ship changes are only noted as they come;
 ## the tab catches up once a frame, and only while it's open.
 func _process(delta: float) -> void:
 	var t_x := Time.get_ticks_usec()
@@ -152,9 +128,6 @@ func _process_timed(delta: float) -> void:
 			if _tiles.has(ship):
 				_tiles[ship].refresh()
 		_apply_filter()
-		_update_upgrade_all()
-		_update_model_upgrades()
-		_update_megas()
 	_changed_ships.clear()
 	_dirty = false
 
@@ -169,7 +142,6 @@ func _rebuild() -> void:
 		%Groups.remove_child(child)
 		child.queue_free()
 	_groups.clear()
-	_megas.clear()
 	_line_heads.clear()
 	_group_lines.clear()
 	_tiles.clear()
@@ -198,57 +170,6 @@ func _rebuild() -> void:
 	_tabs.visible = %Header.visible
 	_apply_filter()
 	_size_tiles()
-	_update_megas()
-	_update_upgrade_all()
-	_update_model_upgrades()
-
-
-## "Upgrade all (12): $4.2M" (what every unspent point would cost); greyed out
-## while even the cheapest would dip into the bank reserve.
-func _update_upgrade_all() -> void:
-	var points := GameState.unspent_skill_points()
-	var cheapest := GameState.cheapest_upgrade_cost()
-	var affordable := points > 0 and GameState.money - cheapest >= GameState.bank_reserve
-	_upgrade_all.text = "Upgrade all (%d): $%s" % [points, Fmt.short(GameState.upgrade_all_cost())] if points > 0 else "Upgrade all"
-	_upgrade_all.disabled = not affordable
-	_upgrade_all.tooltip_text = "Buy the fleet's upgrades, cheapest first, as far as the money goes (keeping the bank reserve). Each ship's go to speed, efficiency, durability, speed..."
-	if points > 0 and not affordable:
-		_upgrade_all.tooltip_text = "The cheapest upgrade costs %s." % Fmt.money(cheapest)
-	_upgrade_all_alert.visible = affordable
-
-
-## Each model's "Upgrade 3: $1.2M" beside its Mute (its ships' unspent
-## points, cheapest first, as far as the money goes); hidden while it has
-## none, greyed out while even the cheapest would dip into the bank reserve.
-func _update_model_upgrades() -> void:
-	for model_id: String in _model_upgrades:
-		var button: Button = _model_upgrades[model_id][0]
-		var points := GameState.unspent_skill_points(model_id)
-		button.visible = points > 0
-		if points == 0:
-			continue
-		var cheapest := GameState.cheapest_upgrade_cost(model_id)
-		var affordable := GameState.money - cheapest >= GameState.bank_reserve
-		button.text = "Upgrade %d: $%s" % [points, Fmt.short(GameState.upgrade_all_cost(model_id))]
-		button.disabled = not affordable
-		button.tooltip_text = "Buy these ships' upgrades, cheapest first, as far as the money goes (keeping the bank reserve)." if affordable \
-			else "The cheapest upgrade costs %s." % Fmt.money(cheapest)
-		(_model_upgrades[model_id][1] as Control).visible = affordable
-
-
-## Shows each model's "Mega upgrade" button once it qualifies (all its ships
-## owned, all at the top level; red dot if affordable, greyed with the reason if
-## not), or its "★ Mega" badge once bought.
-func _update_megas() -> void:
-	for model_id: String in _megas:
-		var entry: Array = _megas[model_id]
-		var button: Button = entry[0]
-		var error := GameState.mega_error(model_id)
-		button.visible = GameState.mega_ready(model_id)
-		button.disabled = not error.is_empty()
-		button.tooltip_text = error if not error.is_empty() else "Every ship of this model gets 50% more speed and 50% more profit. Once per model."
-		entry[1].visible = error.is_empty()
-		entry[2].visible = GameState.has_mega(model_id)
 
 
 ## Every tile is the same width, a row of up to COLUMNS (fewer if they'd be
@@ -288,30 +209,9 @@ func _add_group(model: Dictionary) -> GridContainer:
 	title.text = model.get("name", model.id)
 	title.add_theme_color_override(&"font_color", color)
 	title_row.add_child(title)
-	var mega := Button.new()
-	mega.add_theme_font_size_override(&"font_size", MEGA_FONT_SIZE)
-	mega.text = "Mega upgrade: %s" % Fmt.money(GameState.mega_cost(model.id))
-	mega.pressed.connect(GameState.buy_mega.bind(model.id))
-	var mega_alert := AlertDot.new(4.0, Vector2(5, 5))
-	mega.add_child(mega_alert)
-	title_row.add_child(mega)
-	var badge := Label.new()
-	badge.text = "★ Mega: %s" % GameState.mega_effect(model.id)
-	badge.add_theme_font_size_override(&"font_size", MEGA_FONT_SIZE)
-	badge.add_theme_color_override(&"font_color", MEGA_COLOR)
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title_row.add_child(badge)
-	_megas[model.id] = [mega, mega_alert, badge]
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(spacer)
-	var upgrade := Button.new()  # This model's upgrades (see _update_model_upgrades()).
-	upgrade.add_theme_font_size_override(&"font_size", MEGA_FONT_SIZE)
-	upgrade.pressed.connect(GameState.upgrade_all.bind(model.id))
-	var upgrade_alert := AlertDot.new(4.0, Vector2(5, 5))
-	upgrade.add_child(upgrade_alert)
-	title_row.add_child(upgrade)
-	_model_upgrades[model.id] = [upgrade, upgrade_alert]
 	title_row.add_child(_mute_button(model.id))
 	var grid := GridContainer.new()
 	grid.columns = COLUMNS
@@ -329,7 +229,7 @@ func _mute_button(model_id: String) -> Button:
 	var button := Button.new()
 	button.toggle_mode = true
 	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override(&"font_size", MEGA_FONT_SIZE)
+	button.add_theme_font_size_override(&"font_size", MUTE_FONT_SIZE)
 	button.button_pressed = GameState.muted_models.has(model_id)
 	var show_state := func(muted: bool) -> void:
 		button.text = "Muted" if muted else "Mute"

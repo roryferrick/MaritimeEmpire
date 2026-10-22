@@ -3,9 +3,8 @@ extends Control
 ## The main map: ports, ships, canal locks, storms and sea animals, with their
 ## popups, the page buttons down its top left (Markets, Hubs, Farms, Makers:
 ## GameRoot.open_page()), and the price picker in the top right (a ship line's prices over the
-## ports), with Choose a company type (CompanyTypeDialog) and Unlock a region
-## buttons over it while a type can be chosen or a market region unlocked (see
-## _add_region_choice()). The Routes and Tutorial switches are on
+## ports), with Open a division (CompanyTypeDialog) over it while there's a
+## company type the company hasn't bought into (see _add_division_button()). The Routes and Tutorial switches are on
 ## the Settings page (Esc menu: see SettingsPage); the map follows them.
 
 const ZOOM_BUTTON_SIZE := Vector2(44, 44)
@@ -27,17 +26,8 @@ static var _catch_icons := {}  # Commodity id -> its picture (or null): see _cat
 @onready var _map: MapView = $MapView
 var _price_button := Button.new()
 var _price_menu := PopupPanel.new()
-## Unlocking a market region: a button at the top of the map panel while one
-## can be unlocked opens the choice, where the map outlines the regions and
-## lights up the locked one under the mouse, a banner says what to do, and each
-## locked region has a button at its middle (click it, or the region, then
-## again to unlock it: _armed is the one clicked once).
-var _unlock_button := Button.new()
-## Choosing another company type (CompanyTypeDialog): shown above Unlock a region while one can be chosen.
+## Buying into another company type (CompanyTypeDialog): shown while one is left.
 var _type_button := Button.new()
-var _choose_layer := Control.new()
-var _region_buttons := {}  # Region id -> its Button.
-var _armed := ""
 
 
 func _ready() -> void:
@@ -67,7 +57,7 @@ func _ready() -> void:
 	_add_price_picker()
 	_add_factories_switch()
 	_add_research_switch()
-	_add_region_choice()
+	_add_division_button()
 	_add_zoom_buttons()
 	_add_side_buttons()
 	_add_field_guide_button()
@@ -90,21 +80,7 @@ func _process(_delta: float) -> void:
 	MapView._prof("proc.world_screen", t_x)
 
 func _process_timed(_delta: float) -> void:
-	_type_button.visible = GameState.company_types_available() > 0
-	var available := GameState.regions_available()
-	_unlock_button.visible = available > 0 and not _map.choosing_region
-	_unlock_button.text = "Unlock a region (%d)" % available if available > 1 else "Unlock a region"
-	if not _map.choosing_region:
-		return
-	if available <= 0:
-		_stop_choosing()
-		return
-	var area := Rect2(Vector2.ZERO, _map.size)
-	for region_id: String in _region_buttons:
-		var button: Button = _region_buttons[region_id]
-		var at := _map.region_screen_position(region_id)
-		button.visible = not GameState.is_region_unlocked(region_id) and area.has_point(at)
-		button.position = at - button.size / 2.0
+	_type_button.visible = GameState.company.company_types.size() < Progression.company_types().size()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -112,9 +88,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		_stop_divine()
 		get_viewport().set_input_as_handled()
 		return
-	if _map.choosing_region and event.is_action_pressed(&"ui_cancel"):
-		_stop_choosing()
-		get_viewport().set_input_as_handled()
 
 
 ## The Industry switch in the map panel (Vehicles and Cargo & Ore companies:
@@ -147,7 +120,7 @@ func look_at_lon_lat(lon_lat: Vector2) -> void:
 ## with): the sites under the sea it knows of, and the search areas of the
 ## hidden ones (MapView.show_research).
 func _add_research_switch() -> void:
-	var shown := func() -> bool: return Research.can_research(GameState.company) and not GameState.company.all_types()
+	var shown := func() -> bool: return Research.can_research(GameState.company)
 	var switch := CheckButton.new()
 	switch.text = "Research"
 	switch.tooltip_text = "Mark the research sites under the sea: the ones you know of (ticked once done) and the search areas where hidden ones may lie."
@@ -164,87 +137,14 @@ func _add_research_switch() -> void:
 			_map.show_research = true)  # (Drawn again: a site found or done.)
 	%MapControls.add_child(switch)
 
-## The Unlock a region button (first in the map panel), the banner and the
-## regions' buttons shown while choosing.
-func _add_region_choice() -> void:
-	_unlock_button.tooltip_text = "Pick a new market region on the map: its ports open to your ships."
-	_unlock_button.pressed.connect(_start_choosing)
-	%MapControls.add_child(_unlock_button)
-	%MapControls.move_child(_unlock_button, 0)
-	_type_button.text = "Choose a company type"
-	_type_button.tooltip_text = "Branch out into another company type: its smallest ships open now, the bigger ones as you level up."
+## The Open a division button (first in the map panel).
+func _add_division_button() -> void:
+	_type_button.text = "Open a division"
+	_type_button.tooltip_text = "Buy into another company type (%s): all its ships can be bought from then on." % Fmt.money(GameState.division_price())
 	_type_button.visible = false
 	_type_button.pressed.connect(func() -> void: CompanyTypeDialog.open(self))
 	%MapControls.add_child(_type_button)
 	%MapControls.move_child(_type_button, 0)
-	_choose_layer.set_anchors_preset(PRESET_FULL_RECT)
-	_choose_layer.mouse_filter = MOUSE_FILTER_IGNORE
-	_choose_layer.visible = false
-	add_child(_choose_layer)
-	var banner := PanelContainer.new()
-	banner.theme_type_variation = &"MapPopup"
-	banner.set_anchors_and_offsets_preset(PRESET_CENTER_BOTTOM, PRESET_MODE_MINSIZE, 12)
-	banner.grow_horizontal = GROW_DIRECTION_BOTH
-	banner.grow_vertical = GROW_DIRECTION_BEGIN
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override(&"separation", 12)
-	var text := Label.new()
-	text.text = "Choose a region to unlock: hover over the map to see each one,\nthen click it or its button, and click again to unlock it."
-	row.add_child(text)
-	var cancel := Button.new()
-	cancel.text = "Cancel"
-	cancel.size_flags_vertical = SIZE_SHRINK_CENTER
-	cancel.pressed.connect(_stop_choosing)
-	row.add_child(cancel)
-	banner.add_child(row)
-	_choose_layer.add_child(banner)
-	_map.region_clicked.connect(_pick_region)
-	for region: Dictionary in GameData.markets.get("regions", []):
-		var region_id := str(region.id)
-		var button := Button.new()
-		button.mouse_entered.connect(func() -> void: _map.hovered_region = region_id)
-		button.mouse_exited.connect(func() -> void:
-			if _map.hovered_region == region_id and _armed != region_id:
-				_map.hovered_region = "")
-		button.pressed.connect(_pick_region.bind(region_id))
-		_choose_layer.add_child(button)
-		_region_buttons[region_id] = button
-
-
-func _start_choosing() -> void:
-	PopupHost.find(self).close()
-	_armed = ""
-	_label_region_buttons()
-	_map.choosing_region = true
-	_choose_layer.visible = true
-
-
-func _stop_choosing() -> void:
-	_map.choosing_region = false
-	_choose_layer.visible = false
-	_armed = ""
-
-
-## A region's button (or area) clicked: the first time it's armed (lit up,
-## its button asking to click again), the second it's unlocked.
-func _pick_region(region_id: String) -> void:
-	if _armed != region_id:
-		_armed = region_id
-		_map.hovered_region = region_id
-		_label_region_buttons()
-		return
-	var error := GameState.unlock_region(region_id)
-	if not error.is_empty():
-		ActivityLog.add(error, ActivityLog.Kind.BAD)
-	_stop_choosing()
-
-
-func _label_region_buttons() -> void:
-	for region: Dictionary in GameData.markets.get("regions", []):
-		var button: Button = _region_buttons[str(region.id)]
-		button.text = "Click again to unlock %s" % region.name if region.id == _armed else str(region.name)
-		button.tooltip_text = "Unlock %s" % region.name
-		button.reset_size()
 
 
 ## The port's popup; while it's open the price boxes (if shown) are worked out
@@ -555,7 +455,7 @@ func _open_birds_popup(about: Dictionary, _flock: Dictionary) -> void:
 
 ## The field guide, achievements and Divine Actions buttons: a column down the
 ## right side under the Routes panel, moved down as the panel grows (its
-## tutorial row, the region button).
+## tutorial row, the division button).
 var _side_buttons := VBoxContainer.new()
 
 

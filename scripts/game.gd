@@ -48,15 +48,10 @@ var _page_home: Node = null
 
 ## Shown on the Ships tab while any ship needs the player (see
 ## Ship.attention_reason()), and on the Shop tab while any ship can be bought.
-## The cards for the big moments (levels, achievements), over everything.
+## The cards for the big moments (achievements, ratings), over everything.
 var event_card := EventCard.new()
 var _ships_alert := AlertDot.new()
 var _shop_alert := AlertDot.new()
-## On the map's Hubs button while a hub has upgrade points to spend or can be founded.
-var _hubs_alert := AlertDot.new()
-var _hubs_tip := ""  # (The Hubs button's own tooltip, with the alert's notes added under it.)
-## On the World tab while a market region can be unlocked (on the map).
-var _world_alert := AlertDot.new()
 var _alert_clock := 0.0
 ## The Esc menu while it's open.
 var _escape_menu: EscapeMenu = null
@@ -103,17 +98,10 @@ func _ready() -> void:
 	GameState.recovery_sent.connect(_on_recovery_sent)
 	GameState.ship_at_risk.connect(_on_ship_at_risk)
 	GameState.ship_sold.connect(_on_ship_sold)
-	GameState.company_leveled.connect(_on_company_leveled)
 	GameState.rating_changed.connect(_on_rating_changed)
-	GameState.ship_leveled.connect(_on_ship_leveled)
 	%ShipsButton.add_child(_ships_alert)
 	%ShopButton.add_child(_shop_alert)
-	(%WorldScreen.page_buttons.hubs as Button).add_child(_hubs_alert)
-	_hubs_tip = (%WorldScreen.page_buttons.hubs as Button).tooltip_text
-	%WorldButton.add_child(_world_alert)
-	GameState.hub_leveled.connect(_on_hub_leveled)
 	GameState.hub_built.connect(_on_hub_built)
-	GameState.mega_upgraded.connect(_on_mega_upgraded)
 	GameState.port_band_changed.connect(_on_port_band_changed)
 	GameState.research_discovered.connect(_on_research_discovered)
 	GameState.research_mishap.connect(func(ship: Ship, what: String) -> void:
@@ -148,35 +136,19 @@ func _process_timed(delta: float) -> void:
 	if _alert_clock >= ALERT_CHECK_SECONDS:
 		_alert_clock = 0.0
 		_alert_phase = 0
-	if _alert_phase < 3:  # (One part a frame: each is a look over the hubs, the models or the fleet.)
+	if _alert_phase < 2:  # (One part a frame: each is a look over the models or the fleet.)
 		_update_alerts(_alert_phase)
 		_alert_phase += 1
 
 
 ## Red dots on the Ships tab if any ship needs the player (the tooltip says
 ## why), and on the Shop tab if anything can be bought.
-var _alert_phase := 3
+var _alert_phase := 2
 func _update_alerts(phase: int) -> void:
-	var t_a := Time.get_ticks_usec()
-	if phase != 0:
-		if phase == 1:
-			_update_shop_alert()
-		else:
-			_update_ships_alert()
-		return
-	var hub_notes := PackedStringArray()
-	for hub in GameState.hubs:
-		if GameState.hub_can_upgrade(hub):
-			hub_notes.append("%s has an upgrade you can buy" % hub.title())
-	if GameState.hubs_available() > 0:
-		hub_notes.append("a new hub can be founded (click a port)")
-	_hubs_alert.visible = not hub_notes.is_empty()
-	_world_alert.visible = GameState.regions_available() > 0
-	%WorldButton.tooltip_text = "A new region can be unlocked: Unlock a region, on the map" if _world_alert.visible else ""
-	var hubs_button: Button = %WorldScreen.page_buttons.hubs
-	hubs_button.tooltip_text = _hubs_tip + ("
-" + "; ".join(hub_notes) if not hub_notes.is_empty() else "")
-	MapView._prof("alerts.hubs", t_a)
+	if phase == 0:
+		_update_shop_alert()
+	else:
+		_update_ships_alert()
 
 func _update_shop_alert() -> void:
 	var t_a := Time.get_ticks_usec()
@@ -184,10 +156,8 @@ func _update_shop_alert() -> void:
 	for model: Dictionary in GameData.ship_models:
 		if GameState.buy_error(model.id).is_empty():
 			buyable.append(model.get("name", model.id))
-	_shop_alert.visible = not buyable.is_empty() or GameState.company_types_available() > 0
+	_shop_alert.visible = not buyable.is_empty()
 	%ShopButton.tooltip_text = "You can buy: %s" % ", ".join(buyable) if not buyable.is_empty() else ""
-	if GameState.company_types_available() > 0:  # (A new company type to choose: on a locked tab.)
-		%ShopButton.tooltip_text = ("You can choose a new company type. " + %ShopButton.tooltip_text).strip_edges()
 	MapView._prof("alerts.shop", t_a)
 
 func _update_ships_alert() -> void:
@@ -412,7 +382,7 @@ func _on_cargo_loaded(ship: Ship, _port_id: String, commodity_id: String, quanti
 		commodity.get("name", commodity_id), GameData.port_name(to_port), Fmt.money(cost)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 
 
-## "Ever Bright entered the Panama Canal: toll $4,200 (+50% XP on this delivery)";
+## "Ever Bright entered the Panama Canal: toll $4,200 (+50% profit on this delivery)";
 ## a convoy canal says the ship joined its convoy.
 func _on_canal_entered(ship: Ship, canal: Dictionary, toll: int) -> void:
 	if not GameState.is_mine(ship):
@@ -423,9 +393,9 @@ func _on_canal_entered(ship: Ship, canal: Dictionary, toll: int) -> void:
 	var parts := PackedStringArray()
 	if toll > 0:
 		parts.append("toll %s" % Fmt.money(toll))
-	var bonus := roundi(float(canal.get("xp_bonus", 0.0)) * 100.0)
+	var bonus := roundi(float(canal.get("profit_bonus", 0.0)) * 100.0)
 	if bonus > 0:
-		parts.append("+%d%% XP on this delivery" % bonus)
+		parts.append("+%d%% profit on this delivery" % bonus)
 	var text := "%s %s" % [ship.name, what]
 	if not parts.is_empty():
 		text += ": %s" % ", ".join(parts)
@@ -512,42 +482,13 @@ func _on_rating_changed(who: Company, type_id: String, star: int, up: bool) -> v
 	event_card.show_rating(type_name, star, up)
 
 
-func _on_company_leveled(level: int, unlocks: Array[String]) -> void:
-	var text := "Company level %d!" % level
-	if not unlocks.is_empty():
-		text += " Unlocked: %s" % ", ".join(unlocks)
-	ActivityLog.add(text, ActivityLog.Kind.GOOD)
-	event_card.show_level(level, unlocks)
-
-
-func _on_ship_leveled(ship: Ship, level: int) -> void:
-	if not GameState.is_mine(ship):
-		return  # Another player's (see Net).
-	ActivityLog.add("%s reached level %d: an upgrade to spend" % [ship.name, level], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
-
-
-func _on_hub_leveled(hub: Hub, level: int) -> void:
-	if not GameState.hubs.has(hub):
-		return  # Another player's.
-	ActivityLog.add("%s reached level %d: an upgrade to spend" % [hub.title(), level], ActivityLog.Kind.GOOD)
-
-
 func _on_hub_built(hub: Hub) -> void:
 	if not GameState.hubs.has(hub):
 		return  # Another player's.
 	ActivityLog.add("Founded a hub at %s" % GameData.port_name(hub.port_id), ActivityLog.Kind.GOOD)
 
 
-func _on_mega_upgraded(model_id: String) -> void:
-	if Net.acting_peer != 0:
-		return  # A joined player's upgrade: theirs to hear about.
-	var model_name: String = GameData.get_ship_model(model_id).get("name", model_id)
-	ActivityLog.add("Mega upgrade: every %s now has %s" % [model_name, GameState.mega_effect(model_id)], ActivityLog.Kind.GOOD)
-
-
 func _on_port_band_changed(port_id: String, band: String, grew: bool) -> void:
-	if not GameState.is_port_unlocked(port_id):
-		return  # Its region is locked: its name isn't known yet.
 	ActivityLog.add("%s %s to %s" % [GameData.port_name(port_id), "grew" if grew else "shrank", band.capitalize()],
 		ActivityLog.Kind.GOOD if grew else ActivityLog.Kind.INFO)
 
@@ -617,13 +558,13 @@ func _tell(text: String, title: String, then := Callable()) -> void:
 
 
 ## One of this player's research ships finished a site (see Research): the log and its card.
-func _on_research_discovered(ship: Ship, site_id: String, first: bool, xp: float) -> void:
+func _on_research_discovered(ship: Ship, site_id: String, first: bool, points: float) -> void:
 	if not GameState.is_mine(ship):
 		return
 	var site := Research.site(site_id)
-	ActivityLog.add("%s surveyed %s%s (+%s XP)." % [ship.name, site.get("name", site_id), ", the first company ever" if first else "", Fmt.thousands(roundi(xp))],
+	ActivityLog.add("%s surveyed %s%s (+%s research points)." % [ship.name, site.get("name", site_id), ", the first company ever" if first else "", Fmt.thousands(roundi(points))],
 		ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
-	event_card.show_discovery(site_id, first, ship.name, xp)
+	event_card.show_discovery(site_id, first, ship.name, points)
 
 
 ## A contract of this player's done (paid) or failed (its penalty).

@@ -77,7 +77,7 @@ const _DAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const _MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-## A Unix time as "Sat 1 Jan 2000, 14:30".
+## A Unix time as "Fri 1 Jan 2016, 14:30".
 static func calendar(unix_time: int) -> String:
 	var summer := is_british_summer_time(unix_time)
 	var d := Time.get_datetime_dict_from_unix_time(unix_time + (3600 if summer else 0))

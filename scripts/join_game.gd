@@ -263,7 +263,7 @@ func _show_choice(info: Dictionary) -> void:
 		for entry: Dictionary in free:
 			var button := Button.new()
 			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			button.text = "%s  ·  level %d  ·  %s  ·  home %s" % [entry.name, int(entry.level), Fmt.money(int(entry.money)), GameData.port_name(entry.home_port)]
+			button.text = "%s  ·  worth %s  ·  %s  ·  home %s" % [entry.name, Fmt.money_short(int(entry.get("value", 0))), Fmt.money(int(entry.money)), GameData.port_name(entry.home_port)]
 			GameState.apply_company_text_color(button, entry.color)
 			button.pressed.connect(Net.choose_company.bind({company = int(entry.index)}))
 			_page.add_child(button)

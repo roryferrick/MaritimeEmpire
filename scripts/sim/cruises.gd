@@ -9,8 +9,7 @@ extends RefCounted
 ## each port of call it pays a port fee per guest and earns excursion
 ## commission (arrived()); a port of call a storm has closed is sailed past.
 ## Back home its guests' onboard spending comes in, its supplies, amenity upkeep
-## and entertainment are paid, it earns XP for its guest-miles and the voyage
-## gets a review; then it books its next voyage.
+## and entertainment are paid, and the voyage gets a review; then it books its next voyage.
 ##
 ## Everything a player sees has its parts shown: recommend() returns the
 ## recommended price with each factor, demand() the booking ceiling and pool,
@@ -639,8 +638,6 @@ func _finish_voyage(ship: Ship) -> void:
 	if supplies > 0:
 		_state._add_money(who, -supplies)
 		_state._record(ship, "supplies", supplies)
-	if guests > 0:
-		_state._gain_xp(ship, Progression.xp_for_delivery(guests, float(voyage.nm)) * float(s.get("xp_factor", 0.4)))
 	# The review: experience, the itinerary (less the ports missed), value for money and how it went.
 	var fill := float(voyage.fill)
 	var exp := float(experience(ship, fill).value)
@@ -790,8 +787,6 @@ func terminal_error(company: Company, port_id: String) -> String:
 		return "Your HQ and hubs need no terminal."
 	if company.terminals.has(port_id):
 		return "You have a terminal there already."
-	if not _state.is_port_unlocked(port_id):
-		return "Unlock its market region first."
 	if company.money < terminal_cost(company):
 		return "A cruise terminal there costs %s." % Fmt.money(terminal_cost(company))
 	return ""

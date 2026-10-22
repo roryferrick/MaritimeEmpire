@@ -39,9 +39,9 @@ func _ready() -> void:
 	close.flat = true
 	close.pressed.connect(queue_free)
 	header.add_child(close)
-	_add_to(content, "Convoys every %s each way · %d%% speed · toll %d%% of a leg's pay · +%d%% XP" % [
+	_add_to(content, "Convoys every %s each way · %d%% speed · toll %d%% of a leg's pay · +%d%% profit" % [
 		Fmt.duration(float(canal.get("convoy_interval_s", 90))), roundi(float(canal.get("speed_factor", 1.0)) * 100.0),
-		roundi(float(canal.get("toll_share", 0.0)) * 100.0), roundi(float(canal.get("xp_bonus", 0.0)) * 100.0)], &"DimLabel")
+		roundi(float(canal.get("toll_share", 0.0)) * 100.0), roundi(float(canal.get("profit_bonus", 0.0)) * 100.0)], &"DimLabel")
 	content.add_child(HSeparator.new())
 	_body.add_theme_constant_override(&"separation", 4)
 	content.add_child(_body)

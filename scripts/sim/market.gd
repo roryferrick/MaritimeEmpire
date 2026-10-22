@@ -108,7 +108,7 @@ func unit_profit(commodity_id: String, from_port: String, to_port: String, model
 ## three: markets.json hold), and fresh cargo's counts what it loses on the
 ## way. `memo` (when given) keeps the prices and bonuses
 ## it looks up for the next call, for a caller asking about many legs while
-## nothing can change them (RivalAI, within a think).
+## nothing can change them.
 func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Company = null, memo: Variant = null) -> Array:
 	var best := ""
 	var best_profit := 0.0

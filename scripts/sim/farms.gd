@@ -666,8 +666,6 @@ func buy_error(who: Company, key: String) -> String:
 		return "No such plot"
 	if owner_of(key) != null:
 		return "Owned by %s" % owner_of(key).name
-	if not who.regions.is_empty() and not who.regions.has(str(GameData.port_region(port_id).get("id", ""))):
-		return "Unlock %s first" % GameData.port_region(port_id).get("name", "its region")
 	if owned_by(who, port_id).size() >= most_at(port_id):
 		return "You can own at most %d of the %d plots here" % [most_at(port_id), int(port_info(port_id).get("plots", 0))]
 	if _state.in_debt(who) or who.money < land_price(key):
@@ -727,8 +725,6 @@ func listing_error(who: Company, key: String) -> String:
 	if not can_farm(who):
 		return "Only Agriculture companies farm"
 	var port_id := port_of(key)
-	if not who.regions.is_empty() and not who.regions.has(str(GameData.port_region(port_id).get("id", ""))):
-		return "Unlock %s first" % GameData.port_region(port_id).get("name", "its region")
 	if owned_by(who, port_id).size() >= most_at(port_id):
 		return "You can own at most %d of the %d plots here" % [most_at(port_id), int(port_info(port_id).get("plots", 0))]
 	if _state.in_debt(who) or who.money < int(entry.listing):
@@ -967,7 +963,7 @@ func rating_part(who: Company) -> Dictionary:
 		elif not str(entry.get("breed", "")).is_empty():
 			farmed += 1
 			fit += breed_fit(port_of(key), entry.breed)
-	var expected := minf(1.0 + who.level() / 10.0, 10.0)
+	var expected := minf(1.0 + Ratings.maturity(who, "agriculture") / 10.0, 10.0)
 	var fits := fit / farmed if farmed > 0 else 0.0
 	var harvested := float(who.farm_tally.get("harvested", 0.0))
 	var spoiled := float(who.farm_tally.get("spoiled", 0.0))
@@ -1012,85 +1008,3 @@ func look(port_id: String) -> Array:
 			colour = colour.lerp(Color("#eef2f6"), 0.8)
 		fields.append([colour, _state.company_color_value(who.color) if who != null else null, orchard, not breed_id.is_empty(), Color.from_string(str(breed(breed_id).get("color", "#ffffff")), Color.WHITE)])
 	return fields
-
-
-# --- AI rivals ---------------------------------------------------------------------------------------
-
-## A rival farming simply (RivalAI, now and then): with money to spare, a plot
-## at a farm port in its regions where its ships can carry what it grows,
-## planted with the crop that fits best of what its ships carry (or stocked
-## with the best breed for its livestock carriers); and a listed plot it can
-## afford. Returns news ("bought a farm at Valencia").
-func run_rival(rival: Company, spare: int) -> Array:
-	var news := []
-	if not can_farm(rival) or rival.level() < 3:
-		return news
-	var carries := {}
-	for ship: Ship in _state.fleet(rival):
-		for commodity: String in ship.model().get("cargo", []):
-			carries[commodity] = true
-	if carries.is_empty():
-		return news
-	for key in owned_by(rival):
-		var entry := plot(key)
-		if str(entry.get("crop", "")).is_empty() and str(entry.get("breed", "")).is_empty():
-			var choice := _best_use(key, carries)
-			if choice.begins_with("breed:"):
-				stock(rival, key, choice.substr(6))
-			elif not choice.is_empty():
-				plant(rival, key, choice)
-	var most := mini(1 + rival.level() / 12, 6)
-	if owned_by(rival).size() >= most:
-		return news
-	var best_key := ""
-	var best_score := 0.0
-	for key: String in plots:
-		if int(plots[key].get("listing", 0)) > 0 and listing_error(rival, key).is_empty() and int(plots[key].listing) <= mini(spare, roundi(land_price(key) * 1.3)):
-			best_key = key
-			break
-	if not best_key.is_empty():
-		buy_listing(rival, best_key)
-		news.append("bought a farm at %s" % GameData.port_name(port_of(best_key)))
-		return news
-	for port_id in port_ids():
-		if not rival.regions.is_empty() and not rival.regions.has(str(GameData.port_region(port_id).get("id", ""))):
-			continue
-		for key in keys_at(port_id):
-			if not buy_error(rival, key).is_empty() or land_price(key) > spare:
-				continue
-			var use := _best_use(key, carries)
-			if use.is_empty():
-				continue
-			var score := fertility(key) * _use_fit(key, use) / land_price(key)
-			if score > best_score:
-				best_score = score
-				best_key = key
-	if best_key.is_empty():
-		return news
-	buy(rival, best_key)
-	var choice := _best_use(best_key, carries)
-	if choice.begins_with("breed:"):
-		stock(rival, best_key, choice.substr(6))
-	else:
-		plant(rival, best_key, choice)
-	news.append("bought a farm at %s" % GameData.port_name(port_of(best_key)))
-	return news
-
-
-## The best fitting crop (or "breed:id") for a plot among what a rival's ships carry.
-func _best_use(key: String, carries: Dictionary) -> String:
-	var best := ""
-	var best_fit := 0.0
-	for crop_id in crop_ids():
-		if carries.has(crop_id) and crop_fit(port_of(key), crop_id) > best_fit:
-			best_fit = crop_fit(port_of(key), crop_id)
-			best = crop_id
-	for each: Dictionary in data().get("breeds", []):
-		if carries.has(str(each.species)) and breed_fit(port_of(key), each.id) * float(each.value) > best_fit:
-			best_fit = breed_fit(port_of(key), each.id) * float(each.value)
-			best = "breed:" + str(each.id)
-	return best
-
-
-func _use_fit(key: String, use: String) -> float:
-	return breed_fit(port_of(key), use.substr(6)) if use.begins_with("breed:") else crop_fit(port_of(key), use)

@@ -55,7 +55,7 @@ func _ready() -> void:
 	title.theme_type_variation = &"HeaderLabel"
 	title.text = "Research"
 	left_box.add_child(title)
-	left_box.add_child(_dim("Contracts pay. Your own expeditions to the sites under the sea pay nothing, but earn XP, fill the Atlas and win perks for the whole company."))
+	left_box.add_child(_dim("Contracts pay. Your own expeditions to the sites under the sea pay nothing, but earn research points (banked for developing your own technology), fill the Atlas and win perks for the whole company."))
 	_summary.add_theme_font_size_override(&"font_size", FONT_SIZE - 1)
 	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left_box.add_child(_summary)
@@ -361,7 +361,7 @@ func _ship_detail(ship: Ship) -> void:
 		var error := research.trip_error(GameState.company, ship, Research.end_of(site_id))
 		var site := Research.site(site_id)
 		_detail.add_child(_dim("%s m down · needs %s · %s days on station%s" % [Fmt.thousands(int(site.depth_m)), _gear_names(site.needs), Fmt.decimal(float(site.days), 1),
-			" · done already (a quarter of the XP again)" if Research.is_done(GameState.company, site_id) else (" · no one's been: first discovery bonus" if not research.firsts.has(site_id) else "")]))
+			" · done already (a quarter of the research points again)" if Research.is_done(GameState.company, site_id) else (" · no one's been: first discovery bonus" if not research.firsts.has(site_id) else "")]))
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override(&"separation", 8)
 		var send := Button.new()
@@ -457,7 +457,7 @@ func _move_ports(ship: Ship) -> Array:
 	var near := []
 	for port: Dictionary in GameData.ports:
 		var id := str(port.id)
-		if id == ship.docked_at or out.has(id) or not GameState.is_region_unlocked(str(GameData.port_region(id).get("id", ""))):
+		if id == ship.docked_at or out.has(id):
 			continue
 		var miles := GameData.distance_nm(ship.docked_at, id)
 		if miles < ship.range_nm():
@@ -598,7 +598,7 @@ func _site_detail(site_id: String) -> void:
 		var first_name: String = all[first_index].name if first_index >= 0 and first_index < all.size() else "a company"
 		_detail.add_child(_dim("First discovered by %s." % ("you" if first_index == all.find(who) else first_name)))
 	else:
-		_detail.add_child(_dim("No company has been yet: the first earns half as much XP again."))
+		_detail.add_child(_dim("No company has been yet: the first earns half as many research points again."))
 	if Research.is_done(who, site_id):
 		var entry: Dictionary = (Research.record_of(who).done as Dictionary)[site_id]
 		var by := str(entry.get("ship", ""))

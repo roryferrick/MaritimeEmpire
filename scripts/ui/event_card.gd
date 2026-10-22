@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name EventCard
 extends PanelContainer
-## A card in the middle of the screen for the big moments: a company level
-## reached (with what it unlocked) and an achievement earned. The game pauses
+## A card in the middle of the screen for the big moments: a rating star
+## gained or lost, an achievement earned and a research discovery. The game pauses
 ## while one shows and carries on at the speed it was at when Continue is
 ## pressed (Space or Enter too); more than one at once queue up, one card each.
 ## In multiplayer the host's clock runs for everyone, so the card shows without
@@ -53,14 +53,6 @@ func _ready() -> void:
 	visible = false
 
 
-## A company level reached: "Level 12" and what it unlocked.
-func show_level(level: int, unlocks: Array[String]) -> void:
-	var body := "Unlocked: %s" % ", ".join(unlocks) if not unlocks.is_empty() else "Keep trading to unlock more ships, ports and upgrades."
-	if unlocks.has("a new company type to choose"):
-		body += "\n\nBranch out: choose your new company type with the Choose a company type button on the World map or in the Shop."
-	_enqueue({kicker = "COMPANY LEVEL UP", title = "Level %d" % level, body = body, color = LEVEL_COLOR})
-
-
 ## A company type's rating reached a new whole star (up) or fell to one (see Ratings).
 func show_rating(type_name: String, star: int, up: bool) -> void:
 	var body := "Your %s ships' condition, reliability and reach earned it. Their cargo sells a little better and pays lower port fees as the stars rise." % type_name if up \
@@ -77,11 +69,11 @@ func show_achievement(name: String, stars: int, unit := "") -> void:
 
 ## A research site discovered by one of this company's ships (see Research):
 ## its picture and facts, and whether it was first there.
-func show_discovery(site_id: String, first: bool, ship_name: String, xp: float) -> void:
+func show_discovery(site_id: String, first: bool, ship_name: String, points: float) -> void:
 	var site := Research.site(site_id)
 	var category := Research.category(str(site.get("category", "")))
 	var body := "%s · %s m down · %s\n\n%s" % [str(category.get("name", "")), Fmt.thousands(int(site.get("depth_m", 0))), str(site.get("when", "")), str(site.get("fact", ""))]
-	body += "\n\n%s surveyed it%s: +%s XP." % [ship_name, ", the first company ever" if first else "", Fmt.thousands(roundi(xp))]
+	body += "\n\n%s surveyed it%s: +%s research points." % [ship_name, ", the first company ever" if first else "", Fmt.thousands(roundi(points))]
 	_enqueue({kicker = "FIRST DISCOVERY" if first else "DISCOVERY", title = str(site.get("name", site_id)), body = body, color = GOLD if first else Color.from_string(str(category.get("color", "#9a7bd8")), LEVEL_COLOR).lightened(0.3), site = site_id})
 
 

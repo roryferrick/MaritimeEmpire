@@ -99,7 +99,7 @@ static func catalog() -> Array:
 	for line: Dictionary in Achievements.lines():
 		for k in 3:
 			out.append({api = api_name(str(line.id), k + 1), name = "%s %s" % [line.name, "★".repeat(k + 1)],
-				description = GEM_DESCRIPTIONS[k] if line.id == "hidden_gems" else "%s %s" % [Fmt.thousands(int(line.stars[k])), line.unit],
+				description = GEM_DESCRIPTIONS[k] if line.id == "hidden_gems" else ("%s %s" % [Fmt.money(int(line.stars[k])), line.unit] if line.id in ["money", "value"] else "%s %s" % [Fmt.thousands(int(line.stars[k])), line.unit]),
 				hidden = line.id == "hidden_gems"})
 	for badge: Array in Achievements.BADGES:
 		out.append({api = api_name(str(badge[0])), name = str(badge[1]), description = str(badge[2]), hidden = false})

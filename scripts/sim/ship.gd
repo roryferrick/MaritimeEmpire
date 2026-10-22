@@ -51,9 +51,6 @@ const OPEN_SEA_ZONE := [INF, 1.0, 1.0]
 
 ## A ship sells for this fraction of its price, times its maintenance.
 const SELL_FRACTION := 0.5
-## attention_reason() for skill points to spend: the one reason that isn't a
-## problem (Ship tiles show it as a green "+2", not a red warning).
-const UPGRADES_REASON := "upgrades to spend"
 ## Kinds of ship (see _kind()).
 const KIND_CARGO := 0
 const KIND_RECOVERY := 1
@@ -154,7 +151,7 @@ var claim_retry := 0.0
 var refill_billed := 0.0
 ## Cargo aboard (see Market): the commodity id ("" when empty), how many units,
 ## and what they cost to buy. On arrival, cargo_payment is what they sell for
-## (paid when unloading finishes) and cargo_leg_nm the leg they came (for XP).
+## (paid when unloading finishes) and cargo_leg_nm the leg they came.
 var cargo_id := ""
 ## Where the cargo aboard was bought.
 var cargo_from := ""
@@ -205,7 +202,7 @@ var canal_queue_since := 0.0
 var canals_entered: Array[String] = []
 var leg_toll := 0
 ## Tolls paid on the leg that ended at this stop (counted in the stop's
-## profit), and the canals whose XP bonus the cargo being unloaded earns.
+## profit), and the canals the cargo being unloaded came through.
 var stop_toll := 0
 var delivery_canals: Array[String] = []
 
@@ -229,9 +226,6 @@ var weather_wait := ""
 var load_check_time := 0.0
 ## The money a full hold needed at its last look (see GameState._load_cargo()).
 var load_need := 0
-## level_info(), and the XP it was worked out for.
-var _level_info := {}
-var _level_xp := -1.0
 ## Cached top_speed(), fuel_per_s() and wear_per_s() (see _refresh_stats()).
 var _top_speed := 0.0
 var _fuel_per_s := 0.0
@@ -301,10 +295,6 @@ var sea_time := 0.0
 ## and canal tolls), in dollars. A
 ## recovery boat's own running costs go on its own ledger.
 var ledger := {"income": 0.0, "cargo": 0.0, "fuel": 0.0, "repair": 0.0, "tolls": 0.0, "port_fees": 0.0, "wages": 0.0}
-## Total XP from deliveries (cargo ships only), and skill levels bought with
-## the points its levels give: "speed", "durability", "efficiency".
-var xp := 0.0
-var skills := {"speed": 0, "durability": 0, "efficiency": 0, "range": 0}
 ## The Mammoth sent to recover this ship, if any.
 var rescuer: Ship = null
 
@@ -319,7 +309,7 @@ var job_segments: Array = []
 var align_time := 0.0
 var tow_port := ""
 ## Recovery boat only: the current job's miles, all told and carrying the lost
-## ship, for the XP it earns when it drops the ship off (see GameState._deliver()).
+## ship (see GameState._deliver()).
 var job_nm := 0.0
 var carry_nm := 0.0
 ## Recovery boat only: the HQ or hub port it's based at, returns to after a
@@ -490,18 +480,9 @@ func _kind() -> int:
 			_kind_cache = KIND_CARGO
 	return _kind_cache
 
-## The skill paths its upgrade points go on: a tug's range in place of
-## durability (it never breaks down).
-func skill_names() -> Array[String]:
-	if is_tug():
-		return ["speed", "range", "efficiency"]
-	return ["speed", "efficiency", "durability"]
-
-
-## Tug only: how far along a lane from its port it fetches lost ships, more
-## with the range skill.
+## Tug only: how far along a lane from its port it fetches lost ships.
 func reach_nm() -> float:
-	return float(model().get("reach_nm", 0)) * (1.0 + _skill_bonus("range"))
+	return float(model().get("reach_nm", 0))
 
 
 ## Whether a full tank at full maintenance gets this ship from one port to
@@ -548,7 +529,7 @@ func profit() -> float:
 		+ float(ledger.get("research_pay", 0.0)) - float(ledger.get("research_gear", 0.0))  # (A research ship's contracts and gear: see Research.)
 
 
-## Top speed, including the speed skill and the model's mega upgrade.
+## Top speed, with its company's research perks.
 func top_speed() -> float:
 	if _stats_dirty:
 		_refresh_stats()
@@ -573,36 +554,29 @@ func fuel_tank() -> float:
 	return float(model().get("fuel_tank", 0))
 
 
-## Fuel burned per second at sea, less the efficiency skill (and a recovery
-## boat's mega upgrade).
+## Fuel burned per second at sea.
 func fuel_per_s() -> float:
 	if _stats_dirty:
 		_refresh_stats()
 	return _fuel_per_s
 
 
-## Maintenance lost per second of running at sea, less the durability skill.
+## Maintenance lost per second of running at sea.
 func wear_per_s() -> float:
 	if _stats_dirty:
 		_refresh_stats()
 	return _wear_per_s
 
 
-## Top speed, fuel burn and wear depend on the model, skills and mega upgrade,
-## which change rarely, so they're worked out once and kept until
-## invalidate_stats() (called when a skill is spent or a mega upgrade bought).
+## Top speed, fuel burn and wear depend on the model, its company's research
+## perks and the birds following it, which change rarely, so they're worked out
+## once and kept until invalidate_stats().
 func _refresh_stats() -> void:
 	var data := model()
-	var settings: Dictionary = GameData.config.get("mega", {})
-	var has_mega := GameState.owner_of(self).has_mega(model_id)
-	var mega := 1.0 + (float(settings.get("speed_bonus", 0.5)) if has_mega else 0.0)
-	# A recovery boat's mega upgrade also cuts its fuel burn (a cargo ship's
-	# raises its profit instead; see GameState.trade_bonus()).
-	var mega_fuel := 1.0 - (float(settings.get("recovery_fuel_saving", 0.5)) if has_mega and is_recovery() else 0.0)
 	var who := GameState.owner_of(self)  # (Its company's research perks too: see Research.perk().)
-	_top_speed = float(data.get("speed_nm_per_s", 0)) * (1.0 + _skill_bonus("speed")) * mega * Research.perk(who, "speed")
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - _skill_bonus("efficiency")) * mega_fuel * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel")
-	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * (1.0 - _skill_bonus("durability")) * Research.perk(who, "wear")
+	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed")
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel")
+	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear")
 	_stats_dirty = false
 
 
@@ -611,41 +585,16 @@ func invalidate_stats() -> void:
 	_leg_from = "?"  # The harbor speed zones follow the top speed.
 
 
-## How much the durability skill cuts the chance of a random breakdown (0..1).
-func breakdown_resistance() -> float:
-	return _skill_bonus("durability")
-
-
 ## Chance of a random breakdown in one roll (see game_config breakdowns): higher
 ## the more worn the ship is, times the model's sturdiness (breakdown_factor)
-## and the ship's age at sea, less its durability skill.
+## and the ship's age at sea.
 func breakdown_chance() -> float:
 	var settings: Dictionary = GameData.config.get("breakdowns", {})
 	var worn := 1.0 - clampf(maintenance, 0.0, 1.0)
 	var chance := lerpf(float(settings.get("chance_at_full", 0.0005)), float(settings.get("chance_at_empty", 0.005)), worn)
 	var age := minf(1.0 + float(settings.get("age_per_hour_at_sea", 0.1)) * sea_time / 3600.0,
 		float(settings.get("max_age_factor", 2.0)))
-	return chance * float(model().get("breakdown_factor", 1.0)) * age * (1.0 - breakdown_resistance()) * Research.perk(GameState.owner_of(self), "breakdowns")
-
-
-## {level, xp (into the level), cost (of the level)}.
-func level_info() -> Dictionary:
-	if xp != _level_xp:  # Worked out again only when the XP changes.
-		_level_info = Progression.ship_level(model(), xp)
-		_level_xp = xp
-	return _level_info
-
-
-func level() -> int:
-	return int(level_info().level)
-
-
-func skill_points() -> int:
-	return level() - int(skills.speed) - int(skills.durability) - int(skills.efficiency) - int(skills.range)
-
-
-func _skill_bonus(skill: String) -> float:
-	return int(skills.get(skill, 0)) * Progression.skill_step(skill)
+	return chance * float(model().get("breakdown_factor", 1.0)) * age * Research.perk(GameState.owner_of(self), "breakdowns")
 
 
 ## Cost of restoring 100% maintenance (from 0%).
@@ -663,10 +612,10 @@ func refill_phase_seconds() -> float:
 	return float(model().get("refill_phase_s", 5)) * _hub_stop_factor()
 
 
-## The hub's speed bonus, and in a Divine Actions game the port's blessings and
+## In a Divine Actions game, the port's blessings and
 ## curses (its birds, a plague of gulls, the lamps by night, the first snow).
 func _hub_stop_factor() -> float:
-	return (1.0 - GameState.owner_of(self).hub_bonus(docked_at, "speed")) * GameState.divine.stop_factor(self) if is_docked() else 1.0
+	return GameState.divine.stop_factor(self) if is_docked() else 1.0
 
 
 ## A leg within the ship's range that it fits (the Seaway) and can sail on one
@@ -904,8 +853,6 @@ func attention_reason() -> String:
 		return "no expedition" if is_research() else "no route"
 	if is_docked() and paused:
 		return "paused"
-	if skill_points() > 0:
-		return UPGRADES_REASON
 	return ""
 
 
@@ -1573,8 +1520,6 @@ func to_dict() -> Dictionary:
 		"lost_order": lost_order,
 		"sea_time": sea_time,
 		"ledger": ledger,
-		"xp": xp,
-		"skills": skills,
 	}
 
 
@@ -1698,10 +1643,6 @@ static func from_dict(data: Dictionary) -> Ship:
 	var saved_ledger: Dictionary = data.get("ledger", {})
 	for key: String in ship.ledger:
 		ship.ledger[key] = float(saved_ledger.get(key, 0.0))
-	ship.xp = float(data.get("xp", 0.0))
-	var saved_skills: Dictionary = data.get("skills", {})
-	for key: String in ship.skills:
-		ship.skills[key] = int(saved_skills.get(key, 0))
 	ship.set_meta(&"rescuing", data.get("rescuing", ""))
 	return ship
 
@@ -1733,12 +1674,10 @@ func apply_update(data: Dictionary) -> void:
 		match key:
 			"rescuing", "company":
 				pass
-			"ledger", "skills":
+			"ledger":
 				var target: Dictionary = get(key)
 				for part: String in value:
 					target[part] = value[part]
-				if key == "skills":
-					invalidate_stats()
 			"route", "pending_route", "canals_entered", "delivery_canals":
 				(get(key) as Array).assign(value)
 			"leg_key", "leg_current", "leg_month":

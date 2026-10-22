@@ -237,7 +237,7 @@ func _port_choices(current: String) -> Array:
 	var near: Array = (fish.grounds[ground_id].get("ports", []) as Array).duplicate()
 	near.sort_custom(func(a: String, b: String) -> bool: return fish.miles_to(a, ground_id) < fish.miles_to(b, ground_id))
 	for port: String in near:
-		if seen.has(port) or not GameState.is_port_unlocked(port):
+		if seen.has(port):
 			continue
 		out.append([port, "%s (by the ground) · %s nm" % [GameData.port_name(port), Fmt.thousands(roundi(fish.miles_to(port, ground_id)))]])
 		seen[port] = true

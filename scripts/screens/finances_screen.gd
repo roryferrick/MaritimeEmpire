@@ -5,7 +5,7 @@ extends Control
 ## companies (every company in the game side by side). The Company page: the "Keep in the bank" setting (money cargo purchases leave alone), company
 ## totals (last 10 minutes and all time), everything the fleet has delivered
 ## (by unit and commodity), a card for the canals the fleet has used
-## (crossings, tolls and bonus XP), and a sortable table of each ship's
+## (crossings and tolls), and a sortable table of each ship's
 ## lifetime profit, grouped by ship line (each with a total row); click a
 ## ship's name to open its popup.
 ## Refreshes once a second while visible.
@@ -28,7 +28,7 @@ const COLUMNS := [
 const TOTAL_ROWS := [
 	["Cargo sales", "income", false], ["Cargo bought", "cargo", true], ["Fuel", "fuel", true], ["Repairs", "repair", true],
 	["Canal tolls", "tolls", true], ["Port fees", "port_fees", true], ["Crew wages", "wages", true], ["Loan interest", "interest", true],
-	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hub upgrades", "hubs", true], ["Ship upgrades", "upgrades", true], ["Mega upgrades", "mega", true], ["Logo changes", "logo", true], ["Cruise supplies", "supplies", true],
+	["Ships bought", "bought", true], ["Ships sold", "sold", false], ["Hubs founded", "hubs", true], ["Hub upkeep", "hub_upkeep", true], ["Divisions opened", "divisions", true], ["Ship refits", "upgrades", true], ["Logo changes", "logo", true], ["Cruise supplies", "supplies", true],
 	["Farm land bought", "land", true], ["Farm land sold", "land_sold", false], ["Farm costs (planting, herds, wages, upgrades)", "farms", true], ["Farm store sales", "farm_sales", false],
 	["Factories (building, upkeep)", "factories", true], ["Factory stock sales", "factory_sales", false], ["Industry (building, upkeep, inputs)", "industry", true], ["Industry stock sales", "industry_sales", false],
 	["Rigs, refineries and pipelines built", "energy_built", true], ["Rigs and refineries sold", "energy_sold", false], ["Energy costs (crews, workers, repairs)", "energy", true], ["Energy tank sales", "energy_sales", false],
@@ -52,7 +52,7 @@ const DELIVERED_UNITS := {container = "Containers", ton = "Tons", pallet = "Pall
 const BAND_TINT := 0.1
 const BAND_MARGIN := 2.0
 ## The Compare companies table's columns, and how big (px) each company's CEO's face is in it.
-const COMPARE_COLUMNS: Array[String] = ["#", "Company", "Type", "Ratings", "Level", "Money", "Ships", "Hubs", "Profit (10 min)", "Profit (all) ▼", "Delivered"]
+const COMPARE_COLUMNS: Array[String] = ["#", "Company", "Type", "Ratings", "Value", "Money", "Ships", "Hubs", "Profit (10 min)", "Profit (all) ▼", "Delivered"]
 const CEO_FACE_SIZE := 34.0
 ## How big (px) the company type's icon is in the Type column (CompanyTypeIcon).
 const TYPE_ICON_SIZE := 24.0
@@ -283,15 +283,15 @@ static func _type_of_good(id: String) -> String:
 	return type_id
 
 
-## Crossings, tolls and bonus XP for each canal the fleet has been through.
+## Crossings and tolls for each canal the fleet has been through.
 func _fill_canals() -> void:
 	var lines := PackedStringArray()
 	for canal in GameData.canals:
 		var stats: Dictionary = GameState.canal_stats.get(canal.id, {})
 		if stats.is_empty():
 			continue
-		lines.append("%s: %s crossings · tolls %s · bonus XP %s" % [canal.name, Fmt.thousands(int(stats.get("crossings", 0))),
-			Fmt.money(-roundi(float(stats.get("tolls", 0.0)))), Fmt.thousands(roundi(float(stats.get("xp", 0.0))))])
+		lines.append("%s: %s crossings · tolls %s" % [canal.name, Fmt.thousands(int(stats.get("crossings", 0))),
+			Fmt.money(-roundi(float(stats.get("tolls", 0.0))))])
 	_canal_label.text = "\n".join(lines)
 	_canal_card.visible = not lines.is_empty()
 
@@ -533,7 +533,7 @@ func _show_page(page: String) -> void:
 ## A row per company, ranked by operating profit all time (the most first),
 ## numbered: its CEO's face (their name on hover), its logo and
 ## its name (in its color; this player's marked), the company type it started
-## as (icon and name; every type it has on hover), level, money, ships, hubs,
+## as (icon and name; every type it has on hover), value, money, ships, hubs,
 ## operating profit over the last 10 minutes and all time, and units
 ## delivered.
 func _fill_comparison() -> void:
@@ -560,12 +560,12 @@ func _fill_comparison() -> void:
 		logo.custom_minimum_size = Vector2.ONE * LOGO_SIZE
 		logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		cell.add_child(logo)
-		var name := _add_label(cell, each.name + ("  (you)" if each == GameState.company else "  (AI · %s)" % RivalAI.LEVEL_NAMES.get(each.ai, "") if each.is_ai() else ""))
+		var name := _add_label(cell, each.name + ("  (you)" if each == GameState.company else ""))
 		name.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		name.add_theme_color_override(&"font_color", GameState.company_color_value(each.color))
 		_compare_grid.add_child(_type_cell(each))
 		_compare_grid.add_child(_ratings_cell(each))
-		_add_label(_compare_grid, str(each.level()))
+		_add_label(_compare_grid, Fmt.money_short(roundi(GameState.company_value(each))))
 		_add_label(_compare_grid, Fmt.money(each.money))
 		_add_label(_compare_grid, str(GameState.fleet(each).size()))
 		_add_label(_compare_grid, str(maxi(each.hubs.size() - 1, 0)))
@@ -601,7 +601,7 @@ func _ratings_cell(each: Company) -> Control:
 
 
 ## A company's starting type in the comparison: its icon and name, with every
-## type it has (and the level it took each at) on hover.
+## type it has on hover.
 func _type_cell(each: Company) -> Control:
 	var cell := HBoxContainer.new()
 	cell.add_theme_constant_override(&"separation", 6)
@@ -614,8 +614,8 @@ func _type_cell(each: Company) -> Control:
 	label.add_theme_color_override(&"font_color", CompanyTypeIcon.type_color(each.start_type()))
 	var lines := PackedStringArray()
 	for type_id: String in each.company_types:
-		lines.append("%s (from level %d)" % [Progression.type_name(type_id), each.type_level(type_id)])
-	cell.tooltip_text = "Every company type" if each.all_types() else "Company types: " + ", ".join(lines)
+		lines.append(Progression.type_name(type_id))
+	cell.tooltip_text = "Company types: " + ", ".join(lines)
 	label.mouse_filter = Control.MOUSE_FILTER_PASS
 	label.tooltip_text = cell.tooltip_text
 	return cell

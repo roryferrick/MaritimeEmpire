@@ -104,9 +104,9 @@ func _rebuild_list() -> void:
 		child.queue_free()
 	var farms := GameState.farms
 	var ports := Farms.port_ids()
-	# The company's own first, then the unlocked, then the rest; by name within.
+	# The company's own first, then the rest; by name within.
 	var rank := func(id: String) -> int:
-		return (0 if not farms.owned_by(GameState.company, id).is_empty() else (1 if GameState.is_port_unlocked(id) else 2))
+		return 0 if not farms.owned_by(GameState.company, id).is_empty() else 1
 	ports.sort_custom(func(a: String, b: String) -> bool:
 		return GameData.port_name(a) < GameData.port_name(b) if rank.call(a) == rank.call(b) else rank.call(a) < rank.call(b))
 	for id in ports:
@@ -133,9 +133,6 @@ func _rebuild_list() -> void:
 		if not weather[0].is_empty():
 			notes.append(Farms.event_text(weather[0]).to_lower())
 		button.text = "%s\n%s" % [GameData.port_name(id), " · ".join(notes)]
-		if not GameState.is_port_unlocked(id):
-			button.modulate = Color(1, 1, 1, 0.55)
-			button.tooltip_text = "In %s, a region you haven't unlocked" % GameData.port_region(id).get("name", "")
 		button.pressed.connect(func() -> void:
 			port_id = id
 			_dirty = true)

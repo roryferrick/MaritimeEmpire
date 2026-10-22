@@ -249,11 +249,11 @@ func _running_cost(from_port: String, to_port: String) -> float:
 		mile = zone[0]
 	var fuel_cost := _ship.fuel_per_s() * seconds * GameState.market.fuel_price(to_port)
 	var repair_cost := minf(wear, 1.0) * _ship.full_repair_cost() * GameState.port_sizes.cost_factor(to_port)
-	return (fuel_cost + repair_cost) * (1.0 - GameState.hub_bonus(to_port, "costs"))
+	return fuel_cost + repair_cost
 
 
 ## Each canal on a leg, e.g. " · Panama Canal: toll 20% of cargo value, +50%
-## XP", plus the longest convoy wait and any cargo unloaded to pass, any
+## profit", plus the longest convoy wait and any cargo unloaded to pass, any
 ## seasonal closure it's subject to, and rough seas; "" for none.
 func _canal_text(from_port: String, to_port: String) -> String:
 	var text := ""
@@ -263,8 +263,8 @@ func _canal_text(from_port: String, to_port: String) -> String:
 		var share := float(canal.get("toll_share", 0.0))
 		if share > 0.0:
 			parts.append("toll %d%% of cargo value" % roundi(share * 100.0))
-		if float(canal.get("xp_bonus", 0.0)) > 0.0:
-			parts.append("+%d%% XP" % roundi(float(canal.xp_bonus) * 100.0))
+		if float(canal.get("profit_bonus", 0.0)) > 0.0:
+			parts.append("+%d%% profit" % roundi(float(canal.profit_bonus) * 100.0))
 		if canal.get("type", "") == "convoy":
 			parts.append("up to %s waiting for a convoy" % Fmt.duration(float(canal.get("convoy_interval_s", 90))))
 		var lighten := float(canal.get("lighten", {}).get(_ship.model_id, 0.0))

@@ -95,7 +95,7 @@ func _refresh() -> void:
 	elif GameState.storms == "none":
 		_row("Ships", "This game has no storms", &"DimLabel")
 	else:
-		_row("Ships", "Storms act on ships from company level %d" % int(settings.get("min_company_level", 1)), &"DimLabel")
+		_row("Ships", "Slows and wears ships near its center", &"DimLabel")
 
 	# The cloud as drawn, its size and course.
 	var eye := tropical and intensity > MapView.STORM_EYE_FROM

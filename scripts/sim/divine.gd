@@ -4,7 +4,7 @@ extends RefCounted
 ## Divine Actions: a game mode chosen when a company is founded (GameState.divine
 ## on), unrealistic and unfair by design. Two halves:
 ## - Powers a company buys (POWERS; the Divine panel on the World map, or a
-##   rival AI: RivalAI._divine()), each with a price (most scaling with the
+##   rival AI), each with a price (most scaling with the
 ##   company's level), a cooldown, and a target picked on the map: a point (the
 ##   three storms, Calm seas), a port (Plague of gulls, Deluge, Sea change,
 ##   Lightning strike), a ship (the Kraken) or nothing (Fair winds). Storms are
@@ -19,13 +19,13 @@ extends RefCounted
 ##   the most); frigatebirds following a ship steal a little of its sale;
 ##   whales and dolphins near a ship shield it from a storm's wear; sharks near
 ##   a lost ship hurry its rescuers; a port's lamps turn ships round faster by
-##   night; cherry blossom (April, Japan) doubles delivery XP; the first snow
+##   night; cherry blossom (April, Japan) lifts sale prices there; the first snow
 ##   (1 to 7 December, ports north of 50) slows northern stops; and a comet
 ##   one day a year lifts everyone's sale prices.
 ## Everything here is worked out by the host (GameState) and saved with the game;
 ## joined players see the effects as they come in the host's updates.
 
-## Each power: name, base price, whether it scales with level (price()),
+## Each power: name, base price, whether it scales with company value (price()),
 ## target (point, port, ship, none), cooldown in game weeks, the effect's
 ## length in game weeks (for those that last), yearly (once a calendar year),
 ## and what it does.
@@ -39,7 +39,7 @@ const POWERS := {
 	kraken = {name = "The Kraken", base = 150000000, scaled = true, target = "ship", cooldown_weeks = 1.0, blurb = "A rival's ship at sea is taken: lost where it is, for a tug or recovery boat to fetch."},
 	deluge = {name = "Deluge", base = 80000000, scaled = true, target = "port", cooldown_weeks = 1.0, effect_weeks = 1.0, blurb = "A port's market is flooded for a week: its prices halve, for everyone."},
 	sea_change = {name = "Sea change", base = 60000000, scaled = true, target = "port", cooldown_weeks = 1.0, effect_weeks = 4.0, blurb = "A great flock settles on a port of your choice for a month: it counts as 40 more birds blessing it."},
-	lightning = {name = "Lightning strike", base = 120000000, scaled = true, target = "port", cooldown_weeks = 1.0, blurb = "Lightning strikes a rival's hub at a port: it drops a level."},
+	lightning = {name = "Lightning strike", base = 120000000, scaled = true, target = "port", cooldown_weeks = 1.0, blurb = "Lightning strikes a rival's hub at a port: one of its warehouses burns down (or, with none, a big repair bill)."},
 }
 ## The powers in the order the panel lists them.
 const ORDER := ["squall", "tempest", "wrath", "fair_winds", "calm_seas", "plague", "deluge", "sea_change", "kraken", "lightning"]
@@ -66,6 +66,10 @@ const LAMPS_STOP := 0.8
 const SNOW_STOP := 1.3
 const SNOW_LAT := 50.0
 const COMET_SELL := 1.1
+## What a lightning strike on a hub with no warehouses costs its owner.
+const LIGHTNING_REPAIR := 5000000
+## Sale prices in Japan in April, cherry blossom time.
+const BLOSSOM_SELL := 1.1
 const SEA_CHANGE_BIRDS := 40
 const FAIR_WINDS_SPEED := 1.5
 const PLAGUE_STOP := 2.0
@@ -122,13 +126,13 @@ func week_s() -> float:
 	return 7.0 * 86400.0 / float(_state.calendar_seconds_per_second())
 
 
-## What a power costs a company now: its base, scaling with the company's level
-## for most (1 + level / 50).
+## What a power costs a company now: its base, scaling with the company's value
+## for most (1 + value / $500M).
 func price(power: String, who: Company) -> int:
 	var info: Dictionary = POWERS[power]
 	if not bool(info.get("scaled", false)):
 		return int(info.base)
-	return int(float(info.base) * (1.0 + who.level() / 50.0))
+	return int(float(info.base) * (1.0 + maxf(_state.company_value(who), 0.0) / 500000000.0))
 
 
 ## When (play time) a company can use a power again (-INF: now).
@@ -229,7 +233,12 @@ func act(power: String, target: Variant, who: Company) -> String:
 			text = "set the Kraken on %s's %s" % [victim.name, ship.name]
 		"lightning":
 			var hub: Hub = _rival_hub_at(str(target), who)
-			hub.level = maxi(hub.level - 1, 0)
+			var burnt := hub.industries.rfind_custom(func(each: String) -> bool: return not each.is_empty())
+			if burnt >= 0:
+				hub.industries[burnt] = ""  # (Its last warehouse burns down.)
+			else:
+				_state._add_money(_hub_owner(hub), -LIGHTNING_REPAIR)
+				_state._record(null, "repair", LIGHTNING_REPAIR, _hub_owner(hub))
 			_state.hubs_changed.emit()
 			effects.append({kind = "lightning", company = who.name, port = str(target), ship = -1, until = now + LIGHTNING_SHOW_S, since = now})
 			where = GameData.port_name(str(target))
@@ -446,16 +455,14 @@ func price_factor(port_id: String, selling: bool) -> float:
 		factor *= DELUGE_PRICES
 	if selling and comet_up():
 		factor *= COMET_SELL
+	if selling and _blossom(port_id):
+		factor *= BLOSSOM_SELL
 	return factor
 
 
-## Extra delivery XP (a share) at a port from the omens: cherry blossom in Japan in April doubles it.
-func xp_bonus(port_id: String) -> float:
-	if not on or port_id.is_empty():
-		return 0.0
-	if str(GameData.get_port(port_id).get("country", "")) == "Japan" and int(Time.get_datetime_dict_from_unix_time(_state.calendar_time()).month) == 4:
-		return 1.0
-	return 0.0
+## Cherry blossom: a port in Japan in April.
+func _blossom(port_id: String) -> bool:
+	return not port_id.is_empty() and str(GameData.get_port(port_id).get("country", "")) == "Japan" and int(Time.get_datetime_dict_from_unix_time(_state.calendar_time()).month) == 4
 
 
 ## Whether the comet is up today: one day a calendar year, by the year.

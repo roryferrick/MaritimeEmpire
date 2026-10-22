@@ -4,9 +4,9 @@ extends RefCounted
 ## Every port's size, 1 to 100 (see game_config port_sizes): Small, Medium,
 ## Large or Giant by band. Each starts at its ports.json size. It grows with
 ## the cargo value the player's ships load and unload there (more value
-## needed the bigger it is, and never faster than max_growth_per_hour), and
-## from company level shrink_from_level a port above shrink_floor slowly
-## shrinks back towards it, traffic making up for the shrinking.
+## needed the bigger it is, and never faster than max_growth_per_hour). (Ports
+## shrinking comes back with the new economy, by trade and population:
+## DESIGN_LIVING_WORLD.md.)
 ##
 ## Size sets how much the player's trades move prices there (and how fast they
 ## recover), what fuel and repairs cost, and which ships can dock (ship_models
@@ -145,10 +145,6 @@ func step(delta: float) -> void:
 	_clock = 0.0
 	var settings := _settings()
 	var most := float(settings.get("max_growth_per_hour", 5.0)) * seconds / 3600.0
-	var floor_size := float(settings.get("shrink_floor", 51))
-	var shrink := 0.0
-	if _state.world_level() >= int(settings.get("shrink_from_level", 46)):
-		shrink = float(settings.get("shrink_per_hour", 0.833)) * seconds / 3600.0
 	var top := float(settings.get("max", 100))
 	for port_id: String in _sizes:
 		var before: float = _sizes[port_id]
@@ -156,8 +152,6 @@ func step(delta: float) -> void:
 		if grow > 0.0:
 			_pending[port_id] = float(_pending[port_id]) - grow
 		var after := minf(before + grow, top)
-		if after > floor_size:
-			after = maxf(after - shrink, floor_size)
 		_rates[port_id] = (after - before) * 3600.0 / seconds
 		if after == before:
 			continue

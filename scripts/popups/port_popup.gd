@@ -5,8 +5,8 @@ extends AnchoredPopup
 ## it's going and what the size does), then tabs, one showing at a time: its
 ## market (each commodity's buy and sell price, green where it's cheap
 ## compared with the world average and red where expensive), its HQ or hub
-## (level, XP and upgrade tree) or a button to found a hub there when one is
-## available, the player's trade there (what it has bought and sold, each
+## (its upkeep and traffic) or a button to found a hub there (at the next
+## hub's price), the player's trade there (what it has bought and sold, each
 ## commodity ranked by what an industry building for it would be worth here:
 ## see GameState.port_trade_summary()), and the player's ships docked there
 ## with their bars.
@@ -35,7 +35,6 @@ var _tab_keys: Array[String] = []
 var _ship_count := 0
 
 var _build_confirm_until := 0.0
-var _xp_label: Label = null
 var _clock := 0.0
 var _size_label := Label.new()
 var _size_bar := ProgressBar.new()
@@ -55,7 +54,6 @@ func _ready() -> void:
 	GameState.ships_changed.connect(_refresh_ships)
 	GameState.ship_changed.connect(_refresh_ships.unbind(1))
 	GameState.hubs_changed.connect(_refresh_hub)
-	GameState.company_leveled.connect(_refresh_hub.unbind(2))
 	%Tabs.tab_changed.connect(_on_tab_changed)
 	_build_trade()
 	_refresh_hub()
@@ -68,7 +66,6 @@ func _process(delta: float) -> void:
 	_clock += delta
 	if _clock >= REFRESH_SECONDS:
 		_clock = 0.0
-		_update_hub_xp()
 		_update_size()
 		_update_birds()
 		_refresh_market()
@@ -311,15 +308,14 @@ func _update_size() -> void:
 	_size_effects.text = "\n".join(lines)
 
 
-## The tabs under the size: Market, the HQ or hub (or "Build a hub" while one
-## is available; no tab otherwise) and the ships docked here with their count.
+## The tabs under the size: Market, the HQ or hub (or "Build a hub") and the ships docked here with their count.
 ## The one picked last (in any port popup) stays picked.
 func _update_tabs() -> void:
 	var tabs := [["market", "Market"]]
 	var hub := GameState.hub_at(port_id)
 	if hub:
 		tabs.append(["hub", "Headquarters" if hub.is_hq else "Hub"])
-	elif GameState.hubs_available() > 0:
+	else:
 		tabs.append(["hub", "Build a hub"])
 	tabs.append(["trade", "Your trade"])
 	tabs.append(["ships", "Ships (%d)" % _ship_count])
@@ -361,14 +357,15 @@ func _refresh_hub() -> void:
 	for child in %HubBox.get_children():
 		%HubBox.remove_child(child)
 		child.queue_free()
-	_xp_label = null
 	var hub := GameState.hub_at(port_id)
 	if hub:
 		_show_hub(hub)
-	elif GameState.hubs_available() > 0:
+	else:
 		var build := Button.new()
-		build.text = "Build a hub here (%d available)" % GameState.hubs_available()
-		build.tooltip_text = "Hubs level up from deliveries unloaded here and boost every ship that docks. It's permanent."
+		build.text = "Build a hub here (%s)" % Fmt.money(GameState.hub_price())
+		var error := GameState.build_hub_error(port_id)
+		build.disabled = not error.is_empty()
+		build.tooltip_text = error if not error.is_empty() else "A hub launches ships, lowers port fees on your trade here and has plots for warehouses. Upkeep %s a month. It's permanent." % Fmt.money(Hub.new(port_id).upkeep())
 		build.pressed.connect(_on_build_pressed.bind(build))
 		%HubBox.add_child(build)
 	_update_tabs()
@@ -376,32 +373,16 @@ func _refresh_hub() -> void:
 
 func _show_hub(hub: Hub) -> void:
 	var title := Label.new()
-	title.text = "%s · level %d" % ["Headquarters" if hub.is_hq else "Hub", hub.level]
+	title.text = "Headquarters" if hub.is_hq else "Hub"
 	%HubBox.add_child(title)
-	_xp_label = Label.new()
-	_xp_label.theme_type_variation = &"DimLabel"
-	%HubBox.add_child(_xp_label)
-	_update_hub_xp()
-	var company := Label.new()
-	company.theme_type_variation = &"GainLabel"
-	company.text = hub.company_xp_text()
-	%HubBox.add_child(company)
-	%HubBox.add_child(HubTree.new(hub))
-	var points := hub.upgrade_points()
-	if points > 0:
-		var hint := Label.new()
-		hint.theme_type_variation = &"GainLabel"
-		hint.text = "%d upgrade point%s to spend" % [points, "" if points == 1 else "s"]
-		%HubBox.add_child(hint)
-
-
-func _update_hub_xp() -> void:
-	if not is_instance_valid(_xp_label):
-		return
-	var hub := GameState.hub_at(port_id)
-	var cost := GameState.hub_level_cost(hub)
-	_xp_label.text = "Max level" if cost <= 0.0 else "%s / %s XP to level %d" % [
-		Fmt.thousands(floori(hub.xp)), Fmt.thousands(ceili(cost)), hub.level + 1]
+	var detail := Label.new()
+	detail.theme_type_variation = &"DimLabel"
+	detail.text = "%s · %s deliveries here, %s earned" % ["No upkeep" if hub.is_hq else "Upkeep %s a month" % Fmt.money(hub.upkeep()), Fmt.thousands(hub.deliveries), Fmt.money(roundi(hub.income))]
+	%HubBox.add_child(detail)
+	var soon := Label.new()
+	soon.theme_type_variation = &"DimLabel"
+	soon.text = "Facilities to buy (berths, cranes, a fuel depot, a repair yard, offices) come soon."
+	%HubBox.add_child(soon)
 
 
 ## First click asks for confirmation; a second click founds the hub.

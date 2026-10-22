@@ -2,7 +2,7 @@
 class_name Seasons
 extends RefCounted
 ## Seasonal closures (game_config seasons), for saves founded with them
-## (GameState.seasons), from company level min_company_level (see active()).
+## (GameState.seasons), from the start (see active()).
 ##
 ## A closure shuts a canal's locks or some ports between two dates of every
 ## year (wrapping past the new year when it starts later in the year than it
@@ -40,9 +40,9 @@ func ice_zones() -> Array:
 	return _settings().get("ice_zones", [])
 
 
-## True once closures apply: a save with them, from min_company_level.
+## True when closures apply: a save with them.
 func active() -> bool:
-	return _state.seasons and _state.world_level() >= int(_settings().get("min_company_level", 1))
+	return _state.seasons
 
 
 ## True if a closure or ice zone ({from, to}: [month, day]) is in season at a

@@ -3,7 +3,7 @@ class_name IndustryPanel
 extends VBoxContainer
 ## A hub's industry (on the Hubs page, and in the popup from clicking its
 ## plots on the map): its Hub.INDUSTRY_SLOTS plots beside the marina, each
-## closed (opening at a hub level), empty (Build: pick one of the commodities'
+## empty (Build: pick one of the commodities'
 ## buildings, see IndustryPicker) or built (its building, what it does here,
 ## and Pull down for some of its price back). Rebuilt when the hubs change.
 
@@ -34,15 +34,15 @@ func _rebuild() -> void:
 	var title := Label.new()
 	title.text = "Warehouses"
 	add_child(title)
-	add_child(_text("Room for %d buildings beside the marina, one more at hub levels %s. Each is one commodity's: here it's %s to buy, %s to sell, and deliveries of it to or from here earn %s XP." % [
-		Hub.INDUSTRY_SLOTS, _levels_text(), _percent(-_bonus("buy")), _percent(_bonus("sell")), _percent(_bonus("xp"))]))
+	add_child(_text("Room for %d buildings beside the marina. Each is one commodity's: here it's %s to buy and %s to sell." % [
+		Hub.INDUSTRY_SLOTS, _percent(-_bonus("buy")), _percent(_bonus("sell"))]))
 	for slot in Hub.INDUSTRY_SLOTS:
 		add_child(_slot_row(slot))
 
 
 ## A boost a building gives at this hub (the HQ's are stronger).
 func _bonus(kind: String) -> float:
-	var key: String = {buy = "buy_discount", sell = "sell_bonus", xp = "xp_bonus"}[kind]
+	var key: String = {buy = "buy_discount", sell = "sell_bonus"}[kind]
 	return float(Hub.industry_settings().get(key, 0.0)) * (float(Hub.settings().get("hq_multiplier", 1.5)) if hub.is_hq else 1.0)
 
 
@@ -50,18 +50,10 @@ static func _percent(share: float) -> String:
 	return "%s%d%%" % ["+" if share >= 0.0 else "-", roundi(absf(share) * 100.0)]
 
 
-static func _levels_text() -> String:
-	var levels := PackedStringArray()
-	for slot in Hub.INDUSTRY_SLOTS:
-		levels.append(str(Hub.industry_slot_level(slot)))
-	return ", ".join(levels.slice(0, -1)) + " and " + levels[-1]
-
-
 func _slot_row(slot: int) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 10)
 	var commodity: String = hub.industries[slot]
-	var open := hub.level >= Hub.industry_slot_level(slot)
 	var picture := TextureRect.new()
 	picture.custom_minimum_size = Vector2.ONE * ICON_SIZE
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -77,14 +69,11 @@ func _slot_row(slot: int) -> Control:
 	var detail: Label
 	if not commodity.is_empty():
 		name.text = GameState.industry_name(commodity)
-		detail = _text("%s here: %s to buy, %s to sell, %s XP" % [GameData.commodity(commodity).get("name", commodity),
-			_percent(-_bonus("buy")), _percent(_bonus("sell")), _percent(_bonus("xp"))])
-	elif open:
+		detail = _text("%s here: %s to buy, %s to sell" % [GameData.commodity(commodity).get("name", commodity),
+			_percent(-_bonus("buy")), _percent(_bonus("sell"))])
+	else:
 		name.text = "Empty plot"
 		detail = _text("Build any commodity's building here for %s." % Fmt.money(GameState.industry_price()))
-	else:
-		name.text = "Closed plot"
-		detail = _text("Opens at hub level %d." % Hub.industry_slot_level(slot))
 	if slot == focus:
 		name.theme_type_variation = &"GainLabel"
 	text.add_child(name)
@@ -98,7 +87,7 @@ func _slot_row(slot: int) -> Control:
 		down.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		down.pressed.connect(_confirm_pull_down.bind(slot))
 		row.add_child(down)
-	elif mine and open:
+	elif mine:
 		var build := Button.new()
 		build.text = "Build (%s)" % Fmt.short(GameState.industry_price())
 		build.size_flags_vertical = Control.SIZE_SHRINK_CENTER

@@ -43,28 +43,16 @@ signal recovery_sent(ship: Ship, boat: Ship, cost: int, auto: bool)
 signal ship_at_risk(ship: Ship)
 ## A ship was sold.
 signal ship_sold(ship: Ship, price: int)
-## The company earned XP (from a delivery).
-signal company_xp_changed(total_xp: float)
-## The company reached a new level; unlocks lists what it opened up.
-signal company_leveled(level: int, unlocks: Array[String])
-## A ship reached a new level and has a skill point to spend.
-signal ship_leveled(ship: Ship, level: int)
-## The HQ or a hub was built, upgraded or leveled up.
+## The HQ or a hub was built or changed.
 signal hubs_changed
-## An HQ or hub reached a new level and has an upgrade point to spend.
-signal hub_leveled(hub: Hub, level: int)
 ## A new hub was founded at a port.
 signal hub_built(hub: Hub)
-## A market region was unlocked (this player's, or a company's in multiplayer).
-signal regions_changed
 ## A company took another company type (this player's, or a company's in multiplayer).
 signal company_types_changed
 ## A company changed its logo.
 signal logo_changed
 ## A company's rating in a type reached a new whole star (up) or fell to one (see Ratings).
 signal rating_changed(company: Company, type_id: String, star: int, up: bool)
-## A model got its mega upgrade.
-signal mega_upgraded(model_id: String)
 ## A port grew or shrank into a new size band (see PortSizes).
 signal port_band_changed(port_id: String, band: String, grew: bool)
 ## The fast-forward speed changed.
@@ -74,7 +62,7 @@ signal time_speed_changed(speed: int)
 const SAVE_SLOTS := 3
 ## The one save from before slots; it becomes slot 1.
 const LEGACY_SAVE_PATH := "user://savegame.json"
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
 const MAX_NAME_LENGTH := 24
 const MAX_COMPANY_NAME_LENGTH := 32
 ## Seconds of spare fuel a ship must have beyond what its next leg needs.
@@ -83,7 +71,7 @@ const DEPARTURE_MARGIN_S := 1.0
 const MIN_RECOVERY_SPEED_FACTOR := 0.05
 ## The finances window: money is tallied in buckets this many seconds long,
 ## kept for as long as the longest window: WINDOW_SECONDS (the company's
-## recent figures: Finances, the XP rate, the AI rivals) or the ships' own,
+## recent figures: Finances) or the ships' own,
 ## SHIP_EARNINGS_DAYS of calendar time (each ship's earnings on the Ships tab).
 const BUCKET_SECONDS := 30.0
 const WINDOW_SECONDS := 600.0
@@ -91,7 +79,7 @@ const SHIP_EARNINGS_DAYS := 30.0
 ## How often lost ships with auto-recovery on look for a free boat.
 const AUTO_RECOVERY_INTERVAL := 0.5
 ## Kinds of money tallied in the finances.
-const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "upgrades", "mega", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales", "energy_built", "energy_sold", "energy", "energy_sales", "industry", "industry_sales", "research_pay", "research_gear", "research_penalty"]
+const MONEY_KINDS: Array[String] = ["income", "cargo", "fuel", "repair", "tolls", "port_fees", "wages", "interest", "bought", "sold", "hubs", "hub_upkeep", "divisions", "upgrades", "logo", "supplies", "land", "land_sold", "farms", "farm_sales", "factories", "factory_sales", "energy_built", "energy_sold", "energy", "energy_sales", "industry", "industry_sales", "research_pay", "research_gear", "research_penalty"]
 ## Game speeds the top bar button cycles through (0 = paused).
 const TIME_SPEEDS: Array[int] = [0, 1, 2, 4, 8]
 ## The longest step fast forward takes (s of play): at 4x and 8x a frame runs
@@ -178,7 +166,7 @@ const TUG_ANCHOR_S := 10.0
 const TUG_HANDOFF_SHARE := 0.9
 
 ## Every company in the game (one in single player; see Company), and the one
-## this player controls. The money, hubs, company_xp... below are its: the
+## this player controls. The money, hubs... below are its: the
 ## screens use those, while the sim works with each ship's own company.
 var companies: Array[Company] = []
 var company := Company.new()
@@ -202,14 +190,9 @@ var company_color: String:
 	set(value): company.color = value
 var first_prices_used: Array[String]:
 	get: return company.first_prices_used
-var mega_upgrades: Array[String]:
-	get: return company.mega_upgrades
 var home_port: String:
 	get: return company.home_port
 	set(value): company.home_port = value
-var company_xp: float:
-	get: return company.xp
-	set(value): company.xp = value
 var show_active_routes: bool:
 	get: return company.show_active_routes
 	set(value): company.show_active_routes = value
@@ -229,8 +212,6 @@ var tutorial_done: Array[String]:
 var bank_reserve: int:
 	get: return company.bank_reserve
 	set(value): company.bank_reserve = value
-var regions: Array[String]:
-	get: return company.regions
 var hubs: Array[Hub]:
 	get: return company.hubs
 var totals: Dictionary:
@@ -320,8 +301,6 @@ var icebreaking := Icebreaking.new(self)
 var port_sizes := PortSizes.new(self)
 ## Every port's berths and queue (see Docks).
 var docks := Docks.new(self)
-## The AI rivals: each thinks for itself, now and then (see RivalAI).
-var rivals := RivalAI.new(self)
 ## Every company's star ratings by company type (see Ratings).
 var ratings := Ratings.new(self)
 ## Cruise ships' voyages, bookings, prices and refits (see Cruises).
@@ -351,9 +330,6 @@ signal industry_changed
 ## see native/README.md), and whether to use it (tests compare the two).
 var _ship_stepper: Object = null
 var use_ship_stepper := true
-## The AI rival acting just now (meanwhile it's `company`; its actions
-## don't go in this player's activity log and nothing saves), or null.
-var ai_acting: Company = null
 
 
 func _ready() -> void:
@@ -427,9 +403,6 @@ func _step(delta: float) -> void:
 	t_s = Time.get_ticks_usec()
 	_roll_breakdowns(delta)
 	MapView._prof("sim.breakdowns", t_s)
-	t_s = Time.get_ticks_usec()
-	rivals.step(delta)
-	MapView._prof("sim.rivals", t_s)
 	ratings.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
@@ -657,23 +630,14 @@ var _tug_discount_key := []
 ## Why the player can't buy another of this model, or "" if they can.
 func buy_error(model_id: String) -> String:
 	var model := GameData.get_ship_model(model_id)
-	var level := company_level()
-	if Progression.unlock_level(model) == Progression.LOCKED:
+	if not Progression.can_buy_model(model):
 		return locked_type_note(Progression.type_of_model(model))
-	if level < Progression.unlock_level(model):
-		return "Unlocks at company level %d." % Progression.unlock_level(model)
 	if model.get("tug", false):
 		if tug_ports().is_empty():
 			return "Tugs are based at the ports on your ships' routes: give a ship a route first."
 		if owned_count(model_id) >= tug_slots():
 			return "Each port on your routes takes %d tugs, and all %d tug slots are full. Routes to more ports give more." % [tugs_per_port(), tug_slots()]
 		return "You can't afford this ship." if money < ship_price(model_id) else ""
-	var slots := Progression.model_slots(model, level)
-	if owned_count(model_id) >= slots:
-		var next := Progression.next_slot_level(model, level)
-		if next < 0:
-			return "You already own the maximum of %d %s ships." % [slots, model.get("name", model_id)]
-		return "All %d %s slots are full. Level %d gives another." % [slots, model.get("name", model_id), next]
 	if money < ship_price(model_id):
 		return "You can't afford this ship."
 	if not hubs.any(func(hub: Hub) -> bool: return can_launch_at(model_id, hub.port_id)):
@@ -683,66 +647,6 @@ func buy_error(model_id: String) -> String:
 		return "Your HQ and hubs can't launch a %s, which needs a %s port or an HQ or hub." % [
 			model.get("name", model_id), str(model.get("min_port", "")).capitalize()]
 	return ""
-
-
-## True once a model's mega upgrade is bought.
-func has_mega(model_id: String) -> bool:
-	return mega_upgrades.has(model_id)
-
-
-## A model's mega upgrade: game_config mega.cost_factor x its price.
-func mega_cost(model_id: String) -> int:
-	return int(GameData.get_ship_model(model_id).get("price", 0)) * int(GameData.config.get("mega", {}).get("cost_factor", 80))
-
-
-## What a model's mega upgrade does: "+50% speed and profit" for cargo ships,
-## "+50% speed, -50% fuel" for recovery boats (from game_config mega).
-func mega_effect(model_id: String) -> String:
-	var settings: Dictionary = GameData.config.get("mega", {})
-	var speed := roundi(float(settings.get("speed_bonus", 0.5)) * 100.0)
-	if GameData.get_ship_model(model_id).get("recovery", false):
-		return "+%d%% speed, -%d%% fuel" % [speed, roundi(float(settings.get("recovery_fuel_saving", 0.5)) * 100.0)]
-	var profit := roundi(float(settings.get("profit_bonus", 0.5)) * 100.0)
-	return "+%d%% speed and profit" % speed if profit == speed else "+%d%% speed, +%d%% profit" % [speed, profit]
-
-
-## True when a model qualifies for its mega upgrade: all max_owned ships owned,
-## every one at the top level, and not bought yet (it may still cost too much).
-func mega_ready(model_id: String) -> bool:
-	var model := GameData.get_ship_model(model_id)
-	if has_mega(model_id):
-		return false
-	var line := fleet().filter(func(ship: Ship) -> bool: return ship.model_id == model_id)
-	return line.size() >= int(model.get("max_owned", 8)) and line.all(func(ship: Ship) -> bool: return ship.level() >= Progression.ship_max_level())
-
-
-## Why the mega upgrade can't be bought now, or "".
-func mega_error(model_id: String) -> String:
-	var model := GameData.get_ship_model(model_id)
-	if has_mega(model_id):
-		return "Already upgraded."
-	if not mega_ready(model_id):
-		return "Own %d %s ships, all at level %d." % [int(model.get("max_owned", 8)), model.get("name", model_id), Progression.ship_max_level()]
-	if money < mega_cost(model_id):
-		return "You can't afford this (%s short)." % Fmt.money(mega_cost(model_id) - money)
-	return ""
-
-
-func buy_mega(model_id: String) -> void:
-	if not mega_error(model_id).is_empty():
-		return
-	if Net.command(&"buy_mega", [model_id]):
-		return
-	var cost := mega_cost(model_id)
-	money -= cost
-	_record(null, "mega", cost)
-	mega_upgrades.append(model_id)
-	mega_upgraded.emit(model_id)
-	for ship in fleet():
-		if ship.model_id == model_id:
-			ship.invalidate_stats()
-			ship_changed.emit(ship)
-	save_game()
 
 
 ## True if this player's company has found a hidden gem (a HIDDEN_GEMS id).
@@ -787,20 +691,27 @@ func apply_company_text_color(control: Control, color_id := company_color) -> vo
 		control.add_theme_constant_override(&"outline_size", 4)
 
 
-## This player's company level.
-func company_level() -> int:
-	return company.level()
-
-
-## The highest company level in the game: when the world's own features
-## (storms, seasonal closures) start (in single player, the company's level).
-## AI rivals don't count: the world's features follow the people playing.
-func world_level() -> int:
-	var best := company.level()
-	for other in companies:
-		if not other.is_ai():
-			best = maxi(best, other.level())
-	return best
+## A company's value (this player's if null): its money less its loan, plus
+## what its ships would sell for and what it paid for its hubs after the HQ.
+## (Its farms, plants and other buildings join with the new economy.)
+func company_value(of: Company = null) -> float:
+	var who := of if of != null else company
+	var kept: Array = _values_kept.get(who, [])
+	if not kept.is_empty() and play_time >= float(kept[0]) and play_time - float(kept[0]) < VALUE_KEEP_S:
+		return float(kept[1])
+	var value := float(who.money - who.loan)
+	for ship in ships:
+		if owner_of(ship) == who:
+			value += ship.sell_price()
+	var settings := Hub.settings()
+	for i in range(1, who.hubs.size()):
+		value += float(settings.get("price", 5000000)) * pow(float(settings.get("price_growth", 2.0)), i - 1)
+	_values_kept[who] = [play_time, value]
+	return value
+## company_value() for each company lately: Company -> [play time, value]; kept
+## VALUE_KEEP_S, as the map asks every frame (its HQ building: see MapView).
+var _values_kept := {}
+const VALUE_KEEP_S := 2.0
 
 
 ## The company a ship belongs to (this player's, if it has none yet).
@@ -881,6 +792,7 @@ func _check_payday() -> void:
 		if ship.is_cruise():
 			wages = roundi(wages * cruises.crew_factor(ship))  # (Its Crew service level.)
 		var who := owner_of(ship)
+		wages = roundi(wages * Research.perk(who, "wages"))  # (The Trenches perk: see Research.)
 		_add_money(who, -wages)
 		_record(ship, "wages", wages)
 		var tally: Array = paid.get_or_add(who, [0, 0, ship])
@@ -890,6 +802,7 @@ func _check_payday() -> void:
 		wages_paid.emit(paid[who][2], paid[who][0], paid[who][1])
 	farms.pay_wages()  # (The farm workers', at the same time.)
 	energy.pay_wages()  # (The rigs' crews and the refinery workers' too.)
+	_pay_hub_upkeep()
 	# Interest on loans, paid at the same time.
 	for who in all_companies():
 		var interest := loan_interest(who.loan)
@@ -898,6 +811,19 @@ func _check_payday() -> void:
 			_record(null, "interest", interest, who)
 			if who == company:
 				ActivityLog.add("Paid %s interest on your %s loan." % [Fmt.money(interest), Fmt.money(who.loan)], ActivityLog.Kind.INFO)
+
+
+## Every HQ's and hub's upkeep (Hub.upkeep(), a month's worth) for the pay
+## period just ended, paid with the wages.
+func _pay_hub_upkeep() -> void:
+	var share := float(GameData.config.get("crew", {}).get("period_days", 14)) / (365.25 / 12.0)
+	for who in all_companies():
+		var total := 0
+		for hub in who.hubs:
+			total += roundi(hub.upkeep() * share)
+		if total > 0:
+			_add_money(who, -total)
+			_record(null, "hub_upkeep", total, who)
 
 
 # --- Loans -------------------------------------------------------------------
@@ -983,128 +909,11 @@ func _add_money(to: Company, amount: int) -> void:
 		money_changed.emit(to.money)
 
 
-## What a ship's next level of a skill costs: game_config skill_costs first
-## share of the model's price, plus step more for each level the skill already
-## has (5%, 7.5% ... 27.5% for the 10th).
-func skill_cost(ship: Ship, skill: String) -> int:
-	return _skill_price(ship.model(), int(ship.skills.get(skill, 0)))
-
-
-## What a skill level costs for a model when the skill is at `level`.
-func _skill_price(model: Dictionary, level: int) -> int:
-	var settings: Dictionary = GameData.config.get("skill_costs", {})
-	var share := float(settings.get("first", 0.1)) + float(settings.get("step", 0.05)) * level
-	return roundi(float(model.get("price", 0)) * share)
-
-
-## Why a ship can't take the next level of a skill now, or "".
-func skill_error(ship: Ship, skill: String) -> String:
-	if not ship.skill_names().has(skill):
-		return "Not an upgrade for this ship."
-	if int(ship.skills.get(skill, 0)) >= Progression.skill_max_level():
-		return "Maxed out."
-	if ship.skill_points() <= 0:
-		return "No upgrade points to spend."
-	if owner_of(ship).money < skill_cost(ship, skill):
-		return "You can't afford this (%s short)." % Fmt.money(skill_cost(ship, skill) - owner_of(ship).money)
-	return ""
-
-
-## Spends one of a ship's skill points on "speed", "durability" or
-## "efficiency", paying skill_cost().
-func level_skill(ship: Ship, skill: String) -> void:
-	if not skill_error(ship, skill).is_empty():
-		return
-	if Net.command(&"level_skill", [ship, skill]):
-		return
-	_buy_skill(ship, skill)
-	ship_changed.emit(ship)
-
-
-func _buy_skill(ship: Ship, skill: String) -> void:
-	var cost := skill_cost(ship, skill)
-	_add_money(owner_of(ship), -cost)
-	_record(null, "upgrades", cost, owner_of(ship))
-	ship.skills[skill] = int(ship.skills[skill]) + 1
-	ship.invalidate_stats()
-
-
-## Every unspent skill point in the fleet as [cost, ship, skill], cheapest
-## first. Each ship's points go round-robin to its lowest skill (ties broken in
-## Ship.skill_names() order: speed 1, efficiency 1, durability 1, speed 2...), which is
-## also its cheapest, so buying in this order keeps every ship's order.
-func _upgrade_plan(model_id := "") -> Array:
-	var plan := []
-	for ship in fleet():
-		if not model_id.is_empty() and ship.model_id != model_id:
-			continue
-		var levels := ship.skills.duplicate()
-		for point in ship.skill_points():
-			var best := ""
-			for skill in ship.skill_names():
-				if int(levels[skill]) < Progression.skill_max_level() and (best.is_empty() or int(levels[skill]) < int(levels[best])):
-					best = skill
-			if best.is_empty():
-				break
-			plan.append([_skill_price(ship.model(), int(levels[best])), ship, best])
-			levels[best] = int(levels[best]) + 1
-	plan.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
-	return plan
-
-
-## What spending every unspent skill point would cost.
-func upgrade_all_cost(model_id := "") -> int:
-	var total := 0
-	for entry: Array in _upgrade_plan(model_id):
-		total += int(entry[0])
-	return total
-
-
-## The cheapest unspent upgrade in the fleet, or 0 if there's none.
-func cheapest_upgrade_cost(model_id := "") -> int:
-	var plan := _upgrade_plan(model_id)
-	return int(plan[0][0]) if not plan.is_empty() else 0
-
-
-## Buys the fleet's unspent upgrades (or one model's), cheapest first (see _upgrade_plan()), for
-## as long as the money lasts without dipping into the bank_reserve. Returns
-## how many were bought.
-func upgrade_all(model_id := "") -> int:
-	if Net.command(&"upgrade_all", [model_id]):
-		return 0
-	var bought := 0
-	var changed := {}
-	for entry: Array in _upgrade_plan(model_id):
-		if money - int(entry[0]) < bank_reserve:
-			break
-		_buy_skill(entry[1], entry[2])
-		changed[entry[1]] = true
-		bought += 1
-	for ship: Ship in changed:
-		ship_changed.emit(ship)
-	return bought
-
-
-## Unspent skill points across the fleet.
-func unspent_skill_points(model_id := "") -> int:
-	var points := 0
-	for ship in fleet():
-		if model_id.is_empty() or ship.model_id == model_id:
-			points += maxi(ship.skill_points(), 0)
-	return points
-
-
 # --- Headquarters and hubs ---------------------------------------------
 
 ## The HQ or hub a company (this player's by default) has at a port, or null.
 func hub_at(port_id: String, of: Company = null) -> Hub:
 	return (of if of != null else company).hub_at(port_id)
-
-
-## A company's hub bonus for ships at a port (0 if it has no hub there): "xp",
-## "costs", "speed" or "pay".
-func hub_bonus(port_id: String, path: String, of: Company = null) -> float:
-	return (of if of != null else company).hub_bonus(port_id, path)
 
 
 ## Every company in the game (just this player's before any are listed).
@@ -1114,28 +923,10 @@ func all_companies() -> Array[Company]:
 	return companies
 
 
-## Hubs the company can still place.
-func hubs_available() -> int:
-	return maxi(Progression.hub_slots(company_level()) - hubs.size(), 0)
-
-
-## True if a port's market region is unlocked (for this player's company).
-func is_port_unlocked(port_id: String) -> bool:
-	return is_region_unlocked(str(GameData.port_region(port_id).get("id", "")))
-
-
-func is_region_unlocked(region_id: String) -> bool:
-	return region_id.is_empty() or regions.has(region_id)
-
-
-## Company types a company (this player's if null) can still take: one more
-## every few company levels (Progression.type_slots()). None for a company
-## from before types, which has them all.
-func company_types_available(of: Company = null) -> int:
-	var who := of if of != null else company
-	if who.all_types():
-		return 0
-	return maxi(Progression.type_slots(who.level()) - who.company_types.size(), 0)
+## What buying into another company type (a division) costs: game_config
+## company_types.division_price.
+func division_price() -> int:
+	return int(GameData.config.get("company_types", {}).get("division_price", 5000000))
 
 
 func choose_company_type_error(type_id: String, of: Company = null) -> String:
@@ -1146,51 +937,38 @@ func choose_company_type_error(type_id: String, of: Company = null) -> String:
 		return "%s is coming soon." % Progression.type_name(type_id)
 	if who.has_type(type_id):
 		return "Your company already has it."
-	if company_types_available(who) <= 0:
-		return "A new company type comes every %d company levels." % Progression.type_pick_every()
+	if who.money < division_price():
+		return "A new division costs %s (%s short)." % [Fmt.money(division_price()), Fmt.money(division_price() - who.money)]
 	return ""
 
 
-## Takes another company type, for good: its lines' first tier opens now and
-## the rest follow (Progression.unlock_level()). Returns why it couldn't, or "".
+## Buys into another company type (a division), for good: all its ships can
+## be bought from now on. Returns why it couldn't, or "".
 func choose_company_type(type_id: String) -> String:
 	var error := choose_company_type_error(type_id)
 	if not error.is_empty():
 		return error
 	if Net.command(&"choose_company_type", [type_id]):
 		return ""
+	var price := division_price()
+	money -= price
+	_record(null, "divisions", price)
 	take_company_type(company, type_id)
-	ActivityLog.add("Your company is now in %s too: its %s open now, the bigger ships as you level up." % [
-		Progression.type_name(type_id), _first_tier_names(type_id, company)], ActivityLog.Kind.GOOD)
+	ActivityLog.add("Your company opened a %s division for %s: its ships can be bought now." % [Progression.type_name(type_id), Fmt.money(price)], ActivityLog.Kind.GOOD)
 	save_game()
 	return ""
 
 
-## Gives a company a type at its current level (RivalAI picks this way too).
+## Gives a company a type, noting the play time it was taken.
 func take_company_type(who: Company, type_id: String) -> void:
-	who.company_types[type_id] = who.level()
+	who.company_types[type_id] = play_time
 	company_types_changed.emit()
 	ships_changed.emit()
 
 
-## "Mini Bulker and Scooter 20": the type's ships open now for a company.
-func _first_tier_names(type_id: String, who: Company) -> String:
-	var names := PackedStringArray()
-	for model: Dictionary in GameData.ship_models:
-		if Progression.type_of_model(model) == type_id and Progression.unlock_level(model, who) <= who.level():
-			names.append(str(model.name))
-	return " and ".join(names) if names.size() <= 2 else ", ".join(names.slice(0, names.size() - 1)) + " and " + names[-1]
-
-
 ## Why a model of a type the company lacks can't be bought.
-func locked_type_note(type_id: String, of: Company = null) -> String:
-	var who := of if of != null else company
-	var next := Progression.next_type_level(who.level())
-	if company_types_available(who) > 0:
-		return "Comes with the %s company type: choose a new type to unlock it." % Progression.type_name(type_id)
-	if next < 0:
-		return "Comes with the %s company type." % Progression.type_name(type_id)
-	return "Comes with the %s company type: you can choose a new type at company level %d." % [Progression.type_name(type_id), next]
+func locked_type_note(type_id: String) -> String:
+	return "Comes with the %s company type: open a %s division (%s) to buy it." % [Progression.type_name(type_id), Progression.type_name(type_id), Fmt.money(division_price())]
 
 
 ## A cruise ship's free settings (Cruises): any of prices {class: $},
@@ -1300,85 +1078,20 @@ func set_logo(new_logo: Dictionary) -> String:
 	return ""
 
 
-## Regions the company can still unlock (one every few company levels: see
-## Progression.region_slots()).
-func regions_available() -> int:
-	var locked: int = GameData.markets.get("regions", []).size() - regions.size()
-	return clampi(Progression.region_slots(company_level()) - regions.size(), 0, maxi(locked, 0))
-
-
-## "Shanghai is in East Asia, which you haven't unlocked yet." if it is, or "".
-func locked_port_error(port_id: String) -> String:
-	if is_port_unlocked(port_id):
-		return ""
-	return "%s is in %s, which you haven't unlocked yet." % [GameData.port_name(port_id), GameData.port_region(port_id).get("name", "a region")]
-
-
-## Why a region can't be unlocked now, or "".
-func unlock_region_error(region_id: String) -> String:
-	if is_region_unlocked(region_id):
-		return "It's already unlocked."
-	if not GameData.markets.get("regions", []).any(func(region: Dictionary) -> bool: return region.id == region_id):
-		return "There's no such region."
-	if regions_available() <= 0:
-		var every := int(GameData.config.get("regions", {}).get("every_company_levels", 5))
-		return "A new region unlocks every %d company levels." % every
-	return ""
-
-
-## Unlocks a market region, for good: its ports can be seen, clicked, routed
-## to and built on. Returns why it couldn't, or "".
-func unlock_region(region_id: String) -> String:
-	var error := unlock_region_error(region_id)
-	if not error.is_empty():
-		return error
-	if Net.command(&"unlock_region", [region_id]):
-		return ""
-	regions.append(region_id)
-	ActivityLog.add("Unlocked %s: its ports are open to your ships." % _region_name(region_id), ActivityLog.Kind.GOOD)
-	regions_changed.emit()
-	save_game()
-	return ""
-
-
-func _region_name(region_id: String) -> String:
-	for region: Dictionary in GameData.markets.get("regions", []):
-		if region.id == region_id:
-			return str(region.name)
-	return region_id
-
-
-## Saves from before regions: each company gets its home port's region and
-## every region its hubs and ships use (a ship's route, the port it's at or
-## sailing between), so nothing it has is cut off.
-func _fit_regions_to_fleet() -> void:
-	for each in all_companies():
-		if not each.regions.is_empty():
-			continue
-		var ports: Array[String] = [each.home_port]
-		for hub in each.hubs:
-			ports.append(hub.port_id)
-		for ship in ships:
-			if owner_of(ship) == each:
-				ports.append_array(ship.route)
-				ports.append_array(ship.pending_route)
-				ports.append_array([ship.docked_at, ship.from_port, ship.to_port, ship.base_port])
-		for port_id in ports:
-			var region_id := str(GameData.port_region(port_id).get("id", ""))
-			if not region_id.is_empty() and not each.regions.has(region_id):
-				each.regions.append(region_id)
-
-
 ## Why a hub can't be built at a port, or "".
 func build_hub_error(port_id: String) -> String:
-	if not is_port_unlocked(port_id):
-		return locked_port_error(port_id)
 	if hub_at(port_id):
 		return "There's already a hub here."
-	if hubs_available() <= 0:
-		var every := int(Hub.settings().get("every_company_levels", 15))
-		return "A new hub unlocks every %d company levels." % every
+	if money < hub_price():
+		return "A new hub costs %s (%s short)." % [Fmt.money(hub_price()), Fmt.money(hub_price() - money)]
 	return ""
+
+
+## What the next hub costs: hubs.price for the first after the HQ, each
+## next hubs.price_growth times the last.
+func hub_price() -> int:
+	var settings := Hub.settings()
+	return roundi(float(settings.get("price", 5000000)) * pow(float(settings.get("price_growth", 2.0)), maxi(hubs.size() - 1, 0)))
 
 
 ## Founds a hub at a port, for good. Returns why it couldn't, or "".
@@ -1388,6 +1101,9 @@ func build_hub(port_id: String) -> String:
 		return error
 	if Net.command(&"build_hub", [port_id]):
 		return ""
+	var price := hub_price()
+	money -= price
+	_record(null, "hubs", price)
 	var hub := Hub.new(port_id)
 	hubs.append(hub)
 	_rebalance_recovery_boats()
@@ -1397,42 +1113,11 @@ func build_hub(port_id: String) -> String:
 	return ""
 
 
-## Why a hub can't take its next point in a path right now, or "".
-func upgrade_hub_error(hub: Hub, path: String) -> String:
-	if int(hub.upgrades.get(path, 0)) >= Hub.max_path_level():
-		return "This path is maxed."
-	if hub.upgrade_points() <= 0:
-		return "No upgrade points: the hub gets one each level."
-	if money < hub.upgrade_cost(path):
-		return "Costs %s." % Fmt.money(hub.upgrade_cost(path))
-	return ""
-
-
-## Whether any of a hub's paths can be upgraded right now (points and money).
-func hub_can_upgrade(hub: Hub) -> bool:
-	return Hub.PATHS.any(func(path: Array) -> bool: return upgrade_hub_error(hub, path[0]).is_empty())
-
-
-## Spends one of a hub's upgrade points on a path, and its price.
-func upgrade_hub(hub: Hub, path: String) -> void:
-	if not upgrade_hub_error(hub, path).is_empty():
-		return
-	if Net.command(&"upgrade_hub", [hub, path]):
-		return
-	var cost := hub.upgrade_cost(path)
-	money -= cost
-	_record(null, "hubs", cost)
-	hub.upgrades[path] = int(hub.upgrades[path]) + 1
-	hubs_changed.emit()
-
-
 ## Why a building for a commodity can't go on a hub's industry plot right
 ## now, or "".
 func build_industry_error(hub: Hub, slot: int, commodity_id: String) -> String:
 	if slot < 0 or slot >= Hub.INDUSTRY_SLOTS:
 		return "No such plot."
-	if hub.level < Hub.industry_slot_level(slot):
-		return "Opens at hub level %d." % Hub.industry_slot_level(slot)
 	if not hub.industries[slot].is_empty():
 		return "Something's built there already."
 	if GameData.commodity(commodity_id).is_empty():
@@ -1509,17 +1194,6 @@ func company_sell_price(port_id: String, commodity_id: String, of: Company = nul
 		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price") * Research.perk(of if of != null else company, "price")  # (The type's stars: see Ratings; the research perks: see Research.)
 
 
-## Extra XP (e.g. 0.5 for +50%) a delivery of a commodity earns from a
-## company's buildings for it where it was loaded and where it's unloaded.
-func industry_xp_bonus(commodity_id: String, from_port: String, to_port: String, of: Company = null) -> float:
-	var bonus := 0.0
-	for port_id in [from_port, to_port]:
-		var hub := hub_at(port_id, of) if not port_id.is_empty() else null
-		if hub:
-			bonus += hub.industry_bonus(GameData.family_of(commodity_id), "xp")
-	return bonus
-
-
 ## Spreads recovery boats evenly across the HQ and hubs, model by model: each
 ## port gets its share (the ports with the most boats already keep any extra
 ## one), boats already at a port within its share stay, and the rest are
@@ -1577,28 +1251,6 @@ func _rebalance_boats_of(who: Company) -> void:
 ## A company's (this player's by default) recovery boats based at a port.
 func recovery_boats_at(port_id: String, of: Company = null) -> Array:
 	return fleet(of).filter(func(ship: Ship) -> bool: return ship.is_recovery() and ship.base_port == port_id)
-
-
-## XP a hub needs for its next level (0 at the max level).
-func hub_level_cost(hub: Hub, of: Company = null) -> float:
-	var who := of if of != null else company
-	return Progression.hub_level_cost(hub.level, who.level(), who) if hub.level < Hub.max_level() else 0.0
-
-
-func _gain_hub_xp(hub: Hub, amount: float, of: Company = null) -> void:
-	if hub.level >= Hub.max_level():
-		return
-	hub.xp += amount
-	var leveled := false
-	while hub.level < Hub.max_level() and hub.xp >= hub_level_cost(hub, of):
-		hub.xp -= hub_level_cost(hub, of)
-		hub.level += 1
-		leveled = true
-		hub_leveled.emit(hub, hub.level)
-	if hub.level >= Hub.max_level():
-		hub.xp = 0.0
-	if leveled:
-		hubs_changed.emit()
 
 
 ## Why a ship name can't be used, or "" if it's fine (renaming_ship may keep its
@@ -1667,9 +1319,6 @@ func route_error(route: Array[String], ship: Ship) -> String:
 			return "A ship can't visit the same port twice in a row."
 	if route[-1] == route[0]:
 		return "The route loops back to %s, so it can't also end there." % GameData.port_name(route[0])
-	for port_id in route:
-		if not is_port_unlocked(port_id):
-			return locked_port_error(port_id)
 	for i in route.size():
 		var from := route[i]
 		var to := route[(i + 1) % route.size()]
@@ -1697,7 +1346,7 @@ const REFUEL_STOP_NM := 120.0
 ## port the first time it's asked for.
 var _lane_neighbours := {}
 ## Kept refuel trees (refuel_tree()), dropped when the month changes (the
-## currents change how long legs take) or the regions do.
+## currents change how long legs take).
 var _refuel_trees := {}
 var _refuel_trees_key := []
 
@@ -1717,15 +1366,6 @@ func _lane_neighbours_of(port_id: String) -> Array:
 	return _lane_neighbours[port_id]
 
 
-## True if a company may use a port as a stop (its region unlocked; the AI
-## rivals go anywhere).
-func port_open_to(who: Company, port_id: String) -> bool:
-	if not who.ai.is_empty():
-		return true
-	var region := str(GameData.port_region(port_id).get("id", ""))
-	return region.is_empty() or who.regions.has(region)
-
-
 ## Every port a ship can get to from `from` stepping port to port and
 ## refuelling at each: {nm: {port: miles there, refuel stops counted},
 ## prev: {port: the stop before it}, stops: {port: refuel stops on the way},
@@ -1735,12 +1375,11 @@ func port_open_to(who: Company, port_id: String) -> bool:
 ## ship's whole tree is tens of ms). The ports in done are settled (their nm,
 ## prev and stops final); the rest are only reached so far, till it's done.
 func refuel_tree(ship: Ship, from: String, until := "") -> Dictionary:
-	var who := owner_of(ship)
-	var month_key := [GameData.month, regions.size(), companies.size()]
+	var month_key := [GameData.month, companies.size()]
 	if month_key != _refuel_trees_key:
 		_refuel_trees.clear()
 		_refuel_trees_key = month_key
-	var key := [ship.model_id, ship.top_speed(), ship.fuel_per_s(), ship.wear_per_s(), who.regions.size() if who.ai.is_empty() else -1, from]
+	var key := [ship.model_id, ship.top_speed(), ship.fuel_per_s(), ship.wear_per_s(), from]
 	var tree: Dictionary = _refuel_trees.get(key, {})
 	if tree.is_empty():
 		tree = {nm = {from: 0.0}, prev = {}, stops = {from: 0}, done = {}, open = {from: true}, bad = {}}
@@ -1797,7 +1436,7 @@ func refuel_tree(ship: Ship, from: String, until := "") -> Dictionary:
 				continue
 			var ok: Variant = usable.get(there)
 			if ok == null:
-				ok = port_open_to(who, there) and ship.fits_port(there)
+				ok = ship.fits_port(there)
 				usable[there] = ok
 			if not ok or not ship.fits_lane(here, there):
 				continue
@@ -1894,8 +1533,6 @@ func can_launch_at(model_id: String, port_id: String) -> bool:
 func _reach_error(ship: Ship, from: String, to: String) -> String:
 	if not ship.fits_port(to) or not ship.fits_lane(from, to):
 		return _range_error(ship, from, to)
-	if not port_open_to(owner_of(ship), to):
-		return locked_port_error(to)
 	return "%s can't be reached from %s, even refuelling on the way: no chain of ports within this ship's %s nm range leads there." % [
 		GameData.port_name(to), GameData.port_name(from), Fmt.thousands(roundi(ship.range_nm()))]
 
@@ -2445,15 +2082,14 @@ func divine_act(power: String, target: Variant) -> String:
 	var who := company
 	var why := divine.error(power, target, who)
 	if not why.is_empty():
-		if ai_acting == null:
-			ActivityLog.add(why, ActivityLog.Kind.BAD)
+		ActivityLog.add(why, ActivityLog.Kind.BAD)
 		return ""
 	var text := divine.act(power, target, who)
 	var hit_me := divine.hits(power, target, company if Net.acting_for == null else Net.acting_for)
 	ActivityLog.add("%s %s." % [who.name, text], ActivityLog.Kind.BAD if hit_me and who != company else ActivityLog.Kind.INFO, company_color_value(who.color))
 	money_changed.emit(money)
 	if power == "lightning":
-		regions_changed.emit()
+		hubs_changed.emit()
 	return text
 
 
@@ -2490,7 +2126,7 @@ func _batter_anchored() -> void:
 		ship_changed.emit(ship)
 
 
-## From the breakdowns min_company_level on, every interval_s each ship at sea
+## Every interval_s each ship at sea
 ## (not service ships, not in a canal, and not waiting out weather or ice or
 ## in an icebreaker's convoy) rolls its own
 ## Ship.breakdown_chance(); on a hit it loses hit of its maintenance, and is
@@ -2501,10 +2137,7 @@ func _roll_breakdowns(delta: float) -> void:
 	_breakdown_clock += delta
 	while _breakdown_clock >= interval:
 		_breakdown_clock -= interval
-		var from_level := int(settings.get("min_company_level", 6))
 		for ship in ships:
-			if owner_of(ship).level() < from_level:
-				continue  # Each company's ships break down from its own level.
 			if ship.is_service() and not ship.is_fishing() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or not ship.weather_wait.is_empty() or ship.escort != null or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
 				continue  # (A fishing boat breaks down like a cargo ship, and is towed in like one.)
 			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
@@ -2539,8 +2172,7 @@ func _arrive_timed(ship: Ship, port: String, paid := true) -> void:
 	ship.leg_toll = 0
 	ship.canals_entered.clear()
 	# The cargo sells here, at this port's price, when unloading finishes; the
-	# leg's bonuses and the hub's Pay upgrade add to a profitable trade's profit.
-	# XP counts the leg it came, none if a recovery boat carried it back.
+	# leg's bonuses add to a profitable trade's profit.
 	ship.cargo_payment = 0
 	ship.cargo_leg_nm = 0.0
 	if not ship.cargo_id.is_empty() and not refuel_stop:
@@ -2758,7 +2390,7 @@ func _sell_cargo(ship: Ship) -> void:
 	var stolen := roundi(ship.cargo_payment * divine.stolen(ship))
 	if stolen > 0:  # The frigatebirds following it take their cut (Divine).
 		ship.cargo_payment -= stolen
-		if who == company and ai_acting == null:
+		if who == company:
 			ActivityLog.add("The frigatebirds following %s made off with %s of its sale at %s." % [ship.name, Fmt.money(stolen), GameData.port_name(ship.docked_at)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
 	# What its company's sites at the port take as inputs goes into their store, at
 	# the port's buy price (what they'd have paid for it there): see Industry.
@@ -2795,25 +2427,10 @@ func _sell_cargo(ship: Ship) -> void:
 	cargo_sold.emit(ship, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_cost, ship.cargo_payment, ship.stop_toll, fee)
 	MapView._prof("sell.sold", t_e)
 	var hub := hub_at(ship.docked_at, who)
-	var xp := Progression.xp_for_cargo(ship.cargo_qty, ship.cargo_id, ship.cargo_leg_nm)
-	# Cargo that came through canals earns their XP bonuses on top of the hub's.
-	var canal_bonus := 0.0
-	for canal_id in ship.delivery_canals:
-		var canal := GameData.get_canal(canal_id)
-		var bonus := float(canal.get("xp_bonus", 0.0))
-		canal_bonus += bonus
-		if bonus > 0.0:
-			var stats: Dictionary = who.canal_stats.get_or_add(canal_id, {crossings = 0, tolls = 0.0, xp = 0.0})
-			stats.xp = float(stats.xp) + xp * bonus
 	ship.delivery_canals.clear()
-	var building_xp := industry_xp_bonus(ship.cargo_id, ship.cargo_from, ship.docked_at, who)
-	building_xp += divine.xp_bonus(ship.docked_at)  # (The omens: cherry blossom.)
-	_gain_xp(ship, xp, 1.0 + (hub.bonus("xp") if hub else 0.0) + canal_bonus + building_xp,
-		1.0 + (hub.company_xp_bonus() if hub else 0.0) + canal_bonus + building_xp)
 	if hub:
 		hub.deliveries += 1
 		hub.income += ship.cargo_payment
-		_gain_hub_xp(hub, xp * (1.0 + canal_bonus), who)
 	ship.cargo_id = ""
 	ship.cargo_qty = 0
 	ship.cargo_cost = 0
@@ -2824,8 +2441,7 @@ func _sell_cargo(ship: Ship) -> void:
 ## Market.best_cargo()): a full hold (less what a canal makes it leave behind),
 ## or as much as its company's money allows while keeping its fuel reserve
 ## (see fuel_reserve()) and bank_reserve, unless full loads are on, when it
-## buys nothing short of a full hold. Nothing if no cargo makes a profit. A
-## full load taken out of a hub by a ship that arrived empty gives the hub XP.
+## buys nothing short of a full hold. Nothing if no cargo makes a profit.
 ## Returns the cargo it chose (bought or not, for lack of money), or "" if none pays.
 func _load_cargo(ship: Ship, to: String) -> String:
 	if ship.is_service() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
@@ -2892,34 +2508,8 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	var t_e := Time.get_ticks_usec()
 	cargo_loaded.emit(ship, ship.docked_at, best[0], quantity, cost, to)
 	MapView._prof("load.loaded", t_e)
-	# A ship that came in empty and leaves with a full hold (a one-way route out of
-	# a hub) earns the hub the XP the load will earn where it's delivered.
-	var hub := hub_at(ship.docked_at, who)
-	if hub and ship.stop_sale == 0 and quantity >= room:
-		_gain_hub_xp(hub, Progression.xp_for_cargo(quantity, best[0], GameData.distance_nm(ship.docked_at, to)), who)
 	ship_changed.emit(ship)
 	return best[0]
-
-
-## Adds delivery XP to the ship's company (times company_multiplier, from a
-## hub's company XP bonus) and to the ship (times ship_multiplier, from its
-## ship XP upgrade), announcing this player's level-ups.
-func _gain_xp(ship: Ship, amount: float, ship_multiplier := 1.0, company_multiplier := 1.0) -> void:
-	var who := owner_of(ship)
-	amount *= ratings.factor(who, Progression.type_of_model(ship.model()), "xp") * Research.perk(who, "xp")  # (The type's stars: see Ratings; the research perks: see Research.)
-	var company_before := who.level()
-	var ship_before := ship.level()
-	who.xp += amount * company_multiplier
-	ship.xp += amount * ship_multiplier
-	var bucket := _current_bucket(who)
-	bucket.fleet["xp"] = float(bucket.fleet.get("xp", 0.0)) + amount * company_multiplier
-	if who == company:
-		company_xp_changed.emit(company_xp)
-		for level in range(company_before + 1, company_level() + 1):
-			company_leveled.emit(level, Progression.unlocks_at(level, who))
-	if ship.level() > ship_before:
-		ship_leveled.emit(ship, ship.level())
-		ship_changed.emit(ship)
 
 
 ## Fuel a ship must have to set off on a leg: enough for the leg, allowing for
@@ -3657,28 +3247,20 @@ func _advance_tug_job(tug: Ship, delta: float) -> void:
 
 
 ## Hands the towed ship over at the tugs' port (paid as usual if that's where
-## it was going) and gives each tug its XP; they stay with it to bring it
+## it was going); they stay with it to bring it
 ## alongside its berth (or to its spot at the anchorage) before they let go.
 func _deliver_tugs(lead: Ship, team: Array[Ship]) -> void:
 	var lost := lead.rescuing
 	var port := lead.tow_port
 	var to_destination := port == lost.to_port
 	ship_recovered.emit(lost, lead, port, to_destination)  # While the team's still together, for its names.
-	var settings: Dictionary = GameData.config.get("recovery_xp", {})
-	var cargo: Array = lost.model().get("cargo", [])
 	for tug in team:
-		var boat := tug.job_nm * float(settings.get("per_nm", 1.0))
-		var company := 0.0
-		if tug == lead and not cargo.is_empty():
-			company = Progression.xp_for_cargo(lost.capacity(), cargo[0], tug.carry_nm) * float(settings.get("company_share", 1.0))
 		# On to work it in (still holding it: see JOB_BERTH in _advance_tug_job()).
 		tug.job_phase = Ship.JOB_BERTH
 		tug.job_segments.clear()
 		tug.align_time = 0.0
 		tug.job_nm = 0.0
 		tug.carry_nm = 0.0
-		if boat > 0.0:
-			_gain_xp(tug, boat, 1.0, company / boat)
 	lost.rescuer = lead
 	lost.lost_reason = ""
 	_arrive(lost, port, to_destination)
@@ -3717,19 +3299,18 @@ func _release_tugs(lead: Ship, team: Array[Ship]) -> void:
 # --- Canals ----------------------------------------------------------------
 
 ## Extra money on a profitable trade from a leg's bonuses: the profit x (the
-## leg's sale factor (rough seas, upper lakes) x the destination hub's Pay
-## upgrade x the model's mega upgrade, if it has one - 1). Nothing on a loss.
+## leg's sale factor (rough seas, upper lakes) plus its canals' bonuses - 1).
+## Nothing on a loss.
 func trade_bonus(from_port: String, to_port: String, profit: float, model_id := "", of: Company = null) -> float:
 	if profit <= 0.0:
 		return 0.0
 	return profit * (trade_bonus_factor(from_port, to_port, model_id, of) - 1.0)
 
 
-## What a leg's bonuses multiply a profitable trade's profit by (see trade_bonus()).
-func trade_bonus_factor(from_port: String, to_port: String, model_id := "", of: Company = null) -> float:
-	var who := of if of != null else company
-	var mega := 1.0 + (float(GameData.config.get("mega", {}).get("profit_bonus", 0.5)) if who.has_mega(model_id) else 0.0)
-	return GameData.sale_factor(from_port, to_port) * (1.0 + who.hub_bonus(to_port, "pay")) * mega
+## What a leg's bonuses multiply a profitable trade's profit by (see trade_bonus()):
+## its sale factor plus its canals' profit bonuses.
+func trade_bonus_factor(from_port: String, to_port: String, _model_id := "", _of: Company = null) -> float:
+	return GameData.sale_factor(from_port, to_port) + GameData.leg_canal_profit_bonus(from_port, to_port)
 
 
 ## Money cargo purchases leave alone so no ship is stranded for fuel: what
@@ -3776,7 +3357,7 @@ func cargo_toll(ship: Ship, canal: Dictionary) -> int:
 ## Charges a canal toll to a ship's ledger and the finances.
 func record_toll(ship: Ship, canal: Dictionary, toll: int) -> void:
 	_record(ship, "tolls", toll)
-	var stats: Dictionary = owner_of(ship).canal_stats.get_or_add(canal.id, {crossings = 0, tolls = 0.0, xp = 0.0})
+	var stats: Dictionary = owner_of(ship).canal_stats.get_or_add(canal.id, {crossings = 0, tolls = 0.0})
 	stats.crossings = int(stats.crossings) + 1
 	stats.tolls = float(stats.tolls) + toll
 
@@ -4022,7 +3603,6 @@ func _deliver(mammoth: Ship) -> void:
 	_arrive(mammoth, port, false)
 	_arrive(lost, port, to_destination)
 	ship_recovered.emit(lost, mammoth, port, to_destination)
-	_gain_recovery_xp(mammoth, lost)
 
 
 ## How far out (nm) a recovery boat leaves a ship for the tugs based at a port
@@ -4048,27 +3628,10 @@ func _hand_to_tugs(mammoth: Ship, lost: Ship) -> void:
 	mammoth.tow_port = ""
 	mammoth.align_time = 0.0
 	mammoth.segment_end = 0.0
-	_gain_recovery_xp(mammoth, lost)
 	tugs_handed.emit(lost, mammoth, port)
 	ship_changed.emit(mammoth)
 	ship_changed.emit(lost)
 	_send_recovery(lost, true)  # Its port's tugs, if they're free.
-
-
-## A finished recovery: the boat earns game_config recovery_xp.per_nm for every
-## mile of the job, and the company company_share of what the rescued ship's
-## full hold would earn over the miles it was carried.
-func _gain_recovery_xp(mammoth: Ship, lost: Ship) -> void:
-	var settings: Dictionary = GameData.config.get("recovery_xp", {})
-	var cargo: Array = lost.model().get("cargo", [])
-	var company := 0.0
-	if not cargo.is_empty():
-		company = Progression.xp_for_cargo(lost.capacity(), cargo[0], mammoth.carry_nm) * float(settings.get("company_share", 1.0))
-	var boat := mammoth.job_nm * float(settings.get("per_nm", 1.0))
-	if boat > 0.0:
-		_gain_xp(mammoth, boat, 1.0, company / boat)  # The company's XP as a multiple of the boat's.
-	mammoth.job_nm = 0.0
-	mammoth.carry_nm = 0.0
 
 
 ## Restores up to `amount` of maintenance, as far as money allows.
@@ -4076,7 +3639,7 @@ func _repair(ship: Ship, amount: float) -> void:
 	amount = minf(amount, 1.0 - ship.maintenance)
 	if amount <= 0.0:
 		return
-	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs", owner_of(ship))) * Research.perk(owner_of(ship), "repairs")
+	var cost := amount * ship.full_repair_cost() * port_sizes.cost_factor(ship.docked_at) * Research.perk(owner_of(ship), "repairs")
 	var paid := _spend(ship, cost, "repair")
 	ship.stop_repair_cost += paid
 	ship.maintenance = minf(ship.maintenance + amount * paid / cost, 1.0)
@@ -4093,7 +3656,7 @@ func _refuel(ship: Ship, amount: float) -> void:
 		amount -= free
 		if amount <= 0.001:
 			return
-	var cost := amount * market.fuel_price(ship.docked_at) * (1.0 - hub_bonus(ship.docked_at, "costs", owner_of(ship)))
+	var cost := amount * market.fuel_price(ship.docked_at)
 	var paid := _spend(ship, cost, "fuel")
 	ship.stop_fuel_cost += paid
 	ship.fuel = minf(ship.fuel + amount * paid / cost, ship.fuel_tank())
@@ -4130,7 +3693,7 @@ static func _overlap(a0: float, a1: float, b0: float, b1: float) -> float:
 # --- Finances ------------------------------------------------------------
 
 ## Tallies money of a kind (see MONEY_KINDS) for a ship (null for a company as
-## a whole: buying and selling ships, hub upgrades), in its company's finances
+## a whole: buying and selling ships, founding hubs), in its company's finances
 ## (who's, or else the ship's, or else this player's). Recovery boats pay for
 ## their own fuel and repairs.
 func _record(ship: Ship, kind: String, amount: float, who: Company = null) -> void:
@@ -4195,13 +3758,6 @@ func _current_bucket(of: Company = null) -> Dictionary:
 	while window[0].start < play_time - keep:
 		window.pop_front()
 	return window[-1]
-
-
-## Company XP per minute over the last WINDOW_SECONDS (or the time played, if
-## less), or 0 before any.
-func recent_xp_per_minute() -> float:
-	var minutes := minf(WINDOW_SECONDS, play_time) / 60.0
-	return float(recent_finances().fleet.get("xp", 0.0)) / minutes if minutes > 0.0 else 0.0
 
 
 ## A company's money (this player's by default) over the last `seconds` of
@@ -4273,7 +3829,6 @@ func found_company(new_name: String, new_color: String, new_home_port: String, n
 	if founded.ceo.is_empty():
 		founded.ceo = Company.random_ceo()
 	founded.hubs.assign([Hub.new(new_home_port, true)])
-	founded.regions.assign([str(GameData.port_region(new_home_port).get("id", ""))])  # (Or every port is locked to it.)
 	if companies.is_empty():
 		companies.assign([company])
 	companies.append(founded)
@@ -4423,8 +3978,7 @@ func _migrate_legacy_save() -> void:
 
 ## Starts a new company in save_slot, replacing any save there. options (all
 ## optional): tutorials (bool), max_time_speed (one of TIME_SPEEDS), storms
-## (one of Weather.LEVELS), seasons (bool: seasonal closures), rivals (how
-## many AI rivals) and rival_level (how well they play: RivalAI.LEVELS).
+## (one of Weather.LEVELS) and seasons (bool: seasonal closures).
 func new_game(new_company_name: String, new_home_port: String, new_color := "purple", options := {}) -> void:
 	company = Company.new(new_company_name.strip_edges(), new_color, new_home_port)
 	company.money = int(GameData.config.get("starting_money", 10000))
@@ -4433,9 +3987,9 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company.tutorials = bool(options.get("tutorials", false))
 	company.ceo = options.get("ceo", {}) if not (options.get("ceo", {}) as Dictionary).is_empty() else Company.random_ceo()
 	company.hubs.assign([Hub.new(new_home_port, true)])
-	company.regions.assign([str(GameData.port_region(new_home_port).get("id", ""))])
 	companies.assign([company])
 	_clear_ships()
+	_values_kept.clear()
 	next_ship_id = 1
 	play_time = 0.0
 	wage_period = 0
@@ -4453,8 +4007,6 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	energy.reset()
 	research.reset()
 	industry.reset()
-	rivals.reset()
-	rivals.add_rivals(int(options.get("rivals", 0)), str(options.get("rival_level", "normal")))
 	money_changed.emit(money)
 	SteamAchievements.note_game_created()
 	_begin_session()
@@ -4471,7 +4023,7 @@ func continue_game(slot: int) -> String:
 		push_error("GameState: save file %s is missing or corrupt" % path)
 		return "The saved game could not be read."
 	if int(data.get("version", 0)) != SAVE_VERSION:
-		return "This save is from before commodity trading and can't be loaded. Delete it to start a new game in this slot."
+		return "This save is from before the living world (no more levels or regions) and can't be loaded. Delete it to start a new game in this slot."
 	save_slot = slot
 	load_world(data)
 	_begin_session()
@@ -4483,9 +4035,9 @@ func continue_game(slot: int) -> String:
 ## before companies load as their one company.
 func load_world(data: Dictionary, local := -1) -> void:
 	data = _without_retired_ports(data)
-	rivals.reset()
 	ratings.reset()
 	companies.clear()
+	_values_kept.clear()
 	for company_data: Dictionary in data.get("companies", [data]):
 		companies.append(Company.from_dict(company_data))
 	company = companies[clampi(local if local >= 0 else int(data.get("local_company", 0)), 0, companies.size() - 1)]
@@ -4518,7 +4070,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 		ships.append(ship)
 	Ship.link_rescues(ships)
 	for ship in ships:
-		ship.invalidate_stats()  # Skills and mega upgrades are all loaded now.
+		ship.invalidate_stats()  # Everything it depends on is loaded now.
 	canal_traffic.rebuild(ships)
 	docks.rebuild(ships)
 	for ship in ships:
@@ -4526,7 +4078,6 @@ func load_world(data: Dictionary, local := -1) -> void:
 			ship.base_port = owner_of(ship).home_port
 	if not had_port_sizes:
 		_fit_ports_to_routes()
-	_fit_regions_to_fleet()
 	_rebalance_recovery_boats()
 	_rebalance_tugs()
 	money_changed.emit(money)
@@ -4550,8 +4101,8 @@ func _fit_ports_to_routes() -> void:
 
 
 func save_game() -> void:
-	if not in_session or Net.is_client() or ai_acting != null:
-		return  # A joined player's game is the host's to save (and an AI rival's moves wait for the next).
+	if not in_session or Net.is_client():
+		return  # A joined player's game is the host's to save.
 	_finish_autosave()  # (So an older autosave can't land after this.)
 	_write_save(save_path(save_slot), world_dict())
 
@@ -4560,7 +4111,7 @@ func save_game() -> void:
 ## written off the main thread (most of the time it takes with a big fleet),
 ## so play doesn't hitch.
 func _autosave() -> void:
-	if not in_session or Net.is_client() or ai_acting != null:
+	if not in_session or Net.is_client():
 		return
 	_finish_autosave()
 	var data := world_dict().duplicate(true)  # (Its own copy: the ships' routes and such are the live ones.)
@@ -4839,7 +4390,7 @@ func fishing_stage(ship: Ship) -> String:
 	var base := ship.base_port
 	if ship.fish_area.is_empty() or base.is_empty():
 		return base
-	var key := [base, ship.fish_area, ship.model_id, ship.fuel_per_s(), regions.size()]
+	var key := [base, ship.fish_area, ship.model_id, ship.fuel_per_s()]
 	if ship.get_meta(&"stage_key", []) == key:
 		return str(ship.get_meta(&"stage", base))
 	var stage := fishing_stage_from(ship, base, ship.fish_area)
@@ -4859,7 +4410,7 @@ func fishing_stage_from(ship: Ship, base: String, ground: String) -> String:
 	var best_nm := INF
 	for port: String in fish.grounds.get(ground, {}).get("ports", []):
 		var out := fish.miles_to(port, ground)
-		if out > reach or not ship.fits_port(port) or not port_open_to(owner_of(ship), port):
+		if out > reach or not ship.fits_port(port):
 			continue
 		var there := refuel_path_nm(ship, base, port)
 		if there + out < best_nm:
@@ -5104,8 +4655,7 @@ func _fishing_lost(ship: Ship) -> void:
 ## there (its species' grade in): sold there, or, at the company's HQ or a
 ## hub (the only ports with its freezers), into its cold store for its seafood
 ## carriers (by its landing choice; "auto" stores it where a carrier of the
-## company's calls, else sells). Earns XP like a
-## delivery of it over the miles out and back.
+## company's calls, else sells).
 func _land_catch(ship: Ship, port: String) -> void:
 	var crates := floori(ship.catch)
 	var species := ship.fish_species
@@ -5127,9 +4677,6 @@ func _land_catch(ship: Ship, port: String) -> void:
 		_tally_port_trade(who, port, family, crates, value, true)
 		market.trade(port, family, value, false)
 		port_sizes.add_traffic(port, value)
-	var miles := Fisheries.shared().miles_to(port, ship.fish_ground) * 2.0
-	if miles < INF:
-		_gain_xp(ship, Progression.xp_for_cargo(crates, family, miles))
 	catch_landed.emit(ship, port, species, crates, value, store)
 	ship_changed.emit(ship)
 
@@ -5269,13 +4816,13 @@ func fish_area_setting(ground: String, model_id: String) -> Dictionary:
 	return {port = port, freeze = bool(setting.get("freeze", false)) and hub_at(port) != null}
 
 
-## The port by a ground its lanes run from that's nearest it (unlocked first).
+## The port by a ground its lanes run from that's nearest it.
 func fish_area_default_port(ground: String) -> String:
 	var fish := Fisheries.shared()
 	var best := ""
 	var best_nm := INF
 	for port: String in fish.grounds.get(ground, {}).get("ports", []):
-		var nm := fish.miles_to(port, ground) + (0.0 if is_port_unlocked(port) else 100000.0)
+		var nm := fish.miles_to(port, ground)
 		if nm < best_nm:
 			best_nm = nm
 			best = port
@@ -5359,7 +4906,7 @@ func sell_plot(key: String) -> void:
 	if Net.command(&"sell_plot", [key]):
 		return
 	var price := farms.sell_to_land(company, key)
-	if price > 0 and ai_acting == null:
+	if price > 0:
 		ActivityLog.add("Sold your plot at %s back to the land for %s." % [GameData.port_name(Farms.port_of(key)), Fmt.money(price)], ActivityLog.Kind.INFO)
 
 
@@ -5412,7 +4959,7 @@ func sell_farm_item(port_id: String, item: String) -> void:
 	if Net.command(&"sell_farm_item", [port_id, item]):
 		return
 	var value := farms.sell_item(company, port_id, item)
-	if value > 0 and ai_acting == null:
+	if value > 0:
 		ActivityLog.add("Sold the %s in your farm store at %s for %s." % [Farms.item_name(item).to_lower(), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
 
 
@@ -5425,10 +4972,9 @@ func build_factory(maker_id: String, port_id: String) -> void:
 	if not makers.build_error(company, maker_id, port_id).is_empty():
 		return
 	makers.build(company, maker_id, port_id)
-	if ai_acting == null:
-		ActivityLog.add("Built a %s factory at %s for %s. It makes about %s %s a month." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id),
-			Fmt.money(Manufacturers.factory_cost(maker_id)), Fmt.thousands(roundi(Manufacturers.output_a_day(maker_id) * 365.25 / 12.0)),
-			GameData.commodity(maker_id).get("units", "vehicles")], ActivityLog.Kind.GOOD)
+	ActivityLog.add("Built a %s factory at %s for %s. It makes about %s %s a month." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id),
+		Fmt.money(Manufacturers.factory_cost(maker_id)), Fmt.thousands(roundi(Manufacturers.output_a_day(maker_id) * 365.25 / 12.0)),
+		GameData.commodity(maker_id).get("units", "vehicles")], ActivityLog.Kind.GOOD)
 
 
 ## Closes this player's factory for a maker at a port: the maker buys it back for a quarter of its price.
@@ -5436,7 +4982,7 @@ func close_factory(maker_id: String, port_id: String) -> void:
 	if Net.command(&"close_factory", [maker_id, port_id]):
 		return
 	var refund := makers.close(company, maker_id, port_id)
-	if refund > 0 and ai_acting == null:
+	if refund > 0:
 		ActivityLog.add("Closed your %s factory at %s: %s bought it back for %s." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id),
 			Manufacturers.maker(maker_id).name, Fmt.money(refund)], ActivityLog.Kind.INFO)
 
@@ -5446,15 +4992,15 @@ func sell_factory_stock(maker_id: String, port_id: String) -> void:
 	if Net.command(&"sell_factory_stock", [maker_id, port_id]):
 		return
 	var value := makers.sell_stock(company, maker_id, port_id)
-	if value > 0 and ai_acting == null:
+	if value > 0:
 		ActivityLog.add("Sold your %s factory's stock at %s for %s, after the maker's cut." % [Manufacturers.maker(maker_id).name, GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
 
 
 # --- Oil and gas (see Energy): rig runs, repairs, and this player's actions ----------------------
 
 ## A ship delivering to a port where its company's buildings take in its cargo:
-## what their tanks have room for goes into the store (no sale, the delivery's
-## XP all the same); the rest sells as usual.
+## what their tanks have room for goes into the store (no sale); the rest
+## sells as usual.
 func _deliver_to_plants(ship: Ship) -> void:
 	var who := owner_of(ship)
 	if not who.plants.has(ship.docked_at) or ship.cargo_qty <= 0:
@@ -5463,13 +5009,8 @@ func _deliver_to_plants(ship: Ship) -> void:
 	if taken <= 0:
 		return
 	var left := 1.0 - float(taken) / ship.cargo_qty
-	var xp := Progression.xp_for_cargo(taken, ship.cargo_id, ship.cargo_leg_nm)
-	_gain_xp(ship, xp)
-	var hub := hub_at(ship.docked_at, who)
-	if hub:
-		_gain_hub_xp(hub, xp, who)
 	who.delivered[ship.cargo_id] = int(who.delivered.get(ship.cargo_id, 0)) + taken
-	if who == company and ai_acting == null:
+	if who == company:
 		ActivityLog.add("%s unloaded %s tons of %s into your tanks at %s." % [ship.name, Fmt.thousands(taken), Energy.good_word(ship.cargo_id),
 			GameData.port_name(ship.docked_at)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
 	ship.cargo_qty -= taken
@@ -5631,7 +5172,7 @@ func _advance_rig(ship: Ship, delta: float) -> void:
 		return
 	_arrive(ship, port, true)
 	if not ship.cargo_id.is_empty():
-		ship.cargo_leg_nm = Energy.miles_to(port, field_id)  # (Its leg from the field, for its XP.)
+		ship.cargo_leg_nm = Energy.miles_to(port, field_id)  # (Its leg from the field.)
 	if ship.has_meta(&"rig_off"):
 		ship.remove_meta(&"rig_off")
 		ship.rig_field = ""
@@ -5715,7 +5256,7 @@ func _send_rig_tug(who: Company, key: String) -> void:
 	tug.rig_wait = 0.0
 	tug.job_segments = (legs[0] as Array).duplicate(true)
 	_start_segment(tug, tug.job_segments.pop_front())
-	if who == company and ai_acting == null:
+	if who == company:
 		ActivityLog.add("%s is heading out to repair your %s at %s (%s)." % [tug.name, str(Energy.rig_info(str(energy.slots[key].kind)).get("name", "rig")).to_lower(),
 			Energy.field_name(Energy.field_of(key)), Fmt.money(fee)], ActivityLog.Kind.INFO, ActivityLog.ship_color(tug))
 	energy._changed()
@@ -5733,7 +5274,7 @@ func sell_rig(key: String) -> void:
 	if Net.command(&"sell_rig", [key]):
 		return
 	var price := energy.sell_back(company, key)
-	if price > 0 and ai_acting == null:
+	if price > 0:
 		ActivityLog.add("Sold your rig at %s for %s." % [Energy.field_name(Energy.field_of(key)), Fmt.money(price)], ActivityLog.Kind.INFO)
 
 
@@ -5763,8 +5304,7 @@ func lay_pipeline(key: String) -> void:
 		return
 	var target: Array = energy.pipe_target(company, Energy.field_of(key))
 	energy.lay_pipe(company, key)
-	if ai_acting == null:
-		ActivityLog.add("Laid a pipeline from %s to %s." % [Energy.field_name(Energy.field_of(key)), GameData.port_name(str(target[0]))], ActivityLog.Kind.GOOD)
+	ActivityLog.add("Laid a pipeline from %s to %s." % [Energy.field_name(Energy.field_of(key)), GameData.port_name(str(target[0]))], ActivityLog.Kind.GOOD)
 
 
 ## "a" or "an" before a word.
@@ -5779,15 +5319,14 @@ func build_plant(building_id: String, port_id: String) -> void:
 	if not energy.build_error(company, building_id, port_id).is_empty():
 		return
 	energy.build(company, building_id, port_id)
-	if ai_acting == null:
-		ActivityLog.add("Built %s at %s." % [_a(str(Energy.building(building_id).name).to_lower()), GameData.port_name(port_id)], ActivityLog.Kind.GOOD)
+	ActivityLog.add("Built %s at %s." % [_a(str(Energy.building(building_id).name).to_lower()), GameData.port_name(port_id)], ActivityLog.Kind.GOOD)
 
 
 func demolish_plant(building_id: String, port_id: String) -> void:
 	if Net.command(&"demolish_plant", [building_id, port_id]):
 		return
 	var refund := energy.demolish(company, building_id, port_id)
-	if refund > 0 and ai_acting == null:
+	if refund > 0:
 		ActivityLog.add("Pulled down your %s at %s for %s." % [str(Energy.building(building_id).name).to_lower(), GameData.port_name(port_id), Fmt.money(refund)], ActivityLog.Kind.INFO)
 
 
@@ -5808,7 +5347,7 @@ func sell_energy_item(port_id: String, commodity: String) -> void:
 	if Net.command(&"sell_energy_item", [port_id, commodity]):
 		return
 	var value := energy.sell_item(company, port_id, commodity)
-	if value > 0 and ai_acting == null:
+	if value > 0:
 		ActivityLog.add("Sold the %s in your tanks at %s for %s." % [Energy.good_word(commodity), GameData.port_name(port_id), Fmt.money(value)], ActivityLog.Kind.GOOD)
 
 
@@ -5819,7 +5358,7 @@ func build_site(building_id: String, port_id: String) -> void:
 	if Net.command(&"build_site", [building_id, port_id]):
 		return
 	var key := industry.build(company, building_id, port_id)
-	if not key.is_empty() and ai_acting == null:
+	if not key.is_empty():
 		ActivityLog.add("Built a %s at %s for %s. It makes about %s %s of %s a month." % [str(Industry.building(building_id).name).to_lower(), GameData.port_name(port_id),
 			Fmt.money(Industry.cost(building_id)), Fmt.thousands(roundi(Industry.output_a_month(building_id))),
 			GameData.commodity(str(Industry.building(building_id).makes)).get("units", "units"), str(GameData.commodity(str(Industry.building(building_id).makes)).get("name", "")).to_lower()], ActivityLog.Kind.GOOD)
@@ -5830,7 +5369,7 @@ func close_site(key: String) -> void:
 	if Net.command(&"close_site", [key]):
 		return
 	var refund := industry.close(company, key)
-	if refund > 0 and ai_acting == null:
+	if refund > 0:
 		ActivityLog.add("Closed your %s at %s: %s back." % [str(Industry.building(Industry.building_of(key)).get("name", "")).to_lower(), GameData.port_name(Industry.port_of(key)), Fmt.money(refund)], ActivityLog.Kind.INFO)
 
 
@@ -5839,7 +5378,7 @@ func sell_site_stock(key: String) -> void:
 	if Net.command(&"sell_site_stock", [key]):
 		return
 	var value := industry.sell_stock(company, key)
-	if value > 0 and ai_acting == null:
+	if value > 0:
 		ActivityLog.add("Sold the stock of your %s at %s for %s." % [str(Industry.building(Industry.building_of(key)).get("name", "")).to_lower(), GameData.port_name(Industry.port_of(key)), Fmt.money(value)], ActivityLog.Kind.GOOD)
 
 

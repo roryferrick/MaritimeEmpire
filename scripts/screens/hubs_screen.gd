@@ -1,20 +1,18 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends Control
-## The HQ and every hub, one card each: level and XP bar, the upgrade tree,
-## the bonuses it gives ships docking there, and its traffic. Then a card for
-## a hub waiting to be founded and one for when the next hub unlocks.
+## The HQ and every hub, one card each: its upkeep, warehouses and traffic.
+## Then a card for founding the next hub (at its price).
 
 const CARD_WIDTH := 460.0
 const REFRESH_SECONDS := 1.0
 
-## Hub -> [XP bar, XP label, traffic label], updated every second.
+## Hub -> [traffic label], updated every second.
 var _live := {}
 var _clock := 0.0
 
 
 func _ready() -> void:
 	GameState.hubs_changed.connect(_rebuild)
-	GameState.company_leveled.connect(_rebuild.unbind(2))
 	visibility_changed.connect(_rebuild)
 	resized.connect(_fit_columns)
 	_rebuild()
@@ -41,21 +39,10 @@ func _rebuild() -> void:
 		%Cards.remove_child(child)
 		child.queue_free()
 	_live.clear()
-	var settings := Hub.settings()
-	%Intro.text = ("Your HQ and hubs level up from every delivery unloaded at their port, and from full loads shipped out by ships that arrived empty (one-way routes). Each level is an upgrade "
-		+ "point you can buy a bonus with (from $%s, rising $%s each time within a path) that helps every ship docking there; the HQ's bonuses are %d%% stronger. You get a new "
-		+ "hub every %d company levels.") % [Fmt.short(settings.get("upgrade_cost", 2000000)),
-		Fmt.short(settings.get("upgrade_cost_step", 500000)), roundi((float(settings.get("hq_multiplier", 1.5)) - 1.0) * 100.0),
-		int(settings.get("every_company_levels", 15))]
+	%Intro.text = "Your HQ and hubs launch new ships, take no port fee on your trade there and have plots for warehouses. Found a hub at any port: the next costs %s, each after twice the last, and each hub pays an upkeep by its port's size (the HQ pays none). Facilities to buy (berths, cranes, a fuel depot, a repair yard, offices) come soon." % Fmt.money(GameState.hub_price())
 	for hub in GameState.hubs:
 		%Cards.add_child(_hub_card(hub))
-	if GameState.hubs_available() > 0:
-		%Cards.add_child(_note_card("New hub available",
-			"%d hub%s to found. Click any port on the World map and choose \"Build a hub here\". Hubs are permanent, so pick a busy port." % [
-			GameState.hubs_available(), "" if GameState.hubs_available() == 1 else "s"], true))
-	var next := _next_hub_level()
-	if next > 0:
-		%Cards.add_child(_note_card("Next hub", "Unlocks at company level %d." % next, false))
+	%Cards.add_child(_note_card("Found a hub", "Your next hub costs %s. Click any port on the World map and choose \"Build a hub here\". Hubs are permanent, so pick a busy port." % Fmt.money(GameState.hub_price()), GameState.money >= GameState.hub_price()))
 	_update_live()
 	_fit_columns()
 
@@ -89,29 +76,9 @@ func _hub_card(hub: Hub) -> Control:
 	kind.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	header.add_child(kind)
 
-	var level := Label.new()
-	level.text = "Level %d of %d" % [hub.level, Hub.max_level()]
-	box.add_child(level)
-	var bar := ProgressBar.new()
-	bar.max_value = 1.0
-	bar.show_percentage = false
-	bar.custom_minimum_size.y = 10
-	box.add_child(bar)
-	var xp := Label.new()
-	xp.theme_type_variation = &"DimLabel"
-	box.add_child(xp)
-	var company := Label.new()
-	company.theme_type_variation = &"GainLabel"
-	company.text = hub.company_xp_text()
-	box.add_child(company)
-
-	box.add_child(HSeparator.new())
-	var points := hub.upgrade_points()
-	var upgrades := Label.new()
-	upgrades.text = "Upgrades" if points == 0 else "Upgrades: %d point%s to spend" % [points, "" if points == 1 else "s"]
-	upgrades.theme_type_variation = &"GainLabel" if points > 0 else &""
-	box.add_child(upgrades)
-	box.add_child(HubTree.new(hub))
+	var upkeep := Label.new()
+	upkeep.text = "No upkeep (headquarters)" if hub.is_hq else "Upkeep %s a month" % Fmt.money(hub.upkeep())
+	box.add_child(upkeep)
 
 	box.add_child(HSeparator.new())
 	box.add_child(IndustryPanel.new(hub))
@@ -125,7 +92,7 @@ func _hub_card(hub: Hub) -> Control:
 	show.text = "Show on map"
 	show.pressed.connect(func() -> void: GameRoot.find(self).show_port_on_map(hub.port_id))
 	box.add_child(show)
-	_live[hub] = [bar, xp, traffic]
+	_live[hub] = [traffic]
 	return box.get_parent()
 
 
@@ -161,13 +128,7 @@ func _card() -> VBoxContainer:
 
 func _update_live() -> void:
 	for hub: Hub in _live:
-		var bar: ProgressBar = _live[hub][0]
-		var xp: Label = _live[hub][1]
-		var traffic: Label = _live[hub][2]
-		var cost := GameState.hub_level_cost(hub)
-		bar.value = 1.0 if cost <= 0.0 else hub.xp / cost
-		xp.text = "Max level" if cost <= 0.0 else "%s / %s XP to level %d" % [
-			Fmt.thousands(floori(hub.xp)), Fmt.thousands(ceili(cost)), hub.level + 1]
+		var traffic: Label = _live[hub][0]
 		var docked := GameState.fleet().filter(func(ship: Ship) -> bool: return ship.docked_at == hub.port_id).size()
 		var boats := GameState.recovery_boats_at(hub.port_id).map(func(boat: Ship) -> String: return boat.name)
 		traffic.text = "%d ship%s docked now · %s deliveries unloaded here · %s pay received here\nRecovery boats based here: %s" % [
@@ -175,11 +136,3 @@ func _update_live() -> void:
 			", ".join(PackedStringArray(boats)) if not boats.is_empty() else "none"]
 
 
-## The company level that gives the next hub, or -1 if all are unlocked.
-func _next_hub_level() -> int:
-	var level := GameState.company_level()
-	var slots := Progression.hub_slots(level)
-	for next in range(level + 1, Progression.max_company_level() + 1):
-		if Progression.hub_slots(next) > slots:
-			return next
-	return -1

@@ -11,7 +11,7 @@ extends Node
 ## smoothly in between (see GameState._client_frame()). What a joined player
 ## does (buy, route, upgrade...) is sent to the host as a command and done
 ## there for their company; what happens to their ships (sales, breakdowns,
-## level-ups...) is sent back to them as GameState's own signals, so their
+## breakdowns...) is sent back to them as GameState's own signals, so their
 ## activity log reads as in single player.
 ##
 ## Games go over Steam when it's running (GodotSteam): the host opens a Steam
@@ -26,7 +26,7 @@ extends Node
 signal join_status(text: String)
 signal join_failed(reason: String)
 ## The host accepted: pick a company. info: {companies: [{index, name, color,
-## home_port, money, level, taken}], taken_ports: [port ids], storms, seasons,
+## home_port, money, value, taken}], taken_ports: [port ids], storms, seasons,
 ## max_time_speed}.
 signal join_choose(info: Dictionary)
 signal joined
@@ -60,7 +60,7 @@ const LOBBY_ENTER_SUCCESS := 1
 ## (Steam won't send a message over 512 KB).
 const START_PART_BYTES := 256 * 1024
 ## Bumped whenever games of different versions couldn't play together.
-const PROTOCOL := 3
+const PROTOCOL := 4
 const MAX_PLAYERS := 8
 ## How often the host sends what changed, and announces itself.
 const SYNC_S := 0.15
@@ -79,17 +79,17 @@ const CHAT_KEPT := 200
 ## Keys of a ship's dictionary that change every step while it moves: a change
 ## to only these doesn't need the screens to look at the ship again.
 const QUIET_SHIP_KEYS: Array[String] = ["traveled_nm", "fuel", "maintenance", "sea_time", "align_time", "dock_time", "berth_time",
-	"lock_time", "bill", "stop_fuel_cost", "stop_repair_cost", "canal_queue_since", "ledger", "xp", "job_nm", "carry_nm", "rig_wait", "research_work", "research_roll"]
+	"lock_time", "bill", "stop_fuel_cost", "stop_repair_cost", "canal_queue_since", "ledger", "job_nm", "carry_nm", "rig_wait", "research_work", "research_roll"]
 ## GameState signals whose first argument is a ship: sent to that ship's
 ## company's player. port_band_changed goes to everyone.
 const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_held", &"ship_departed", &"canal_entered",
-	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_leveled", &"ship_battered", &"wages_paid", &"research_discovered", &"research_mishap"]
+	&"ship_broke_down", &"ship_lost", &"ship_recovered", &"tugs_handed", &"recovery_sent", &"ship_at_risk", &"ship_sold", &"ship_battered", &"wages_paid", &"research_discovered", &"research_mishap"]
 ## Commands a joined player's game sends, done by the host for their company
 ## (each is the GameState function of that name).
 const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing_target", &"set_fishing_base", &"set_fish_landing", &"select_fish_area", &"assign_fish_boats", &"set_fish_area_model", &"set_uniform", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel", &"set_skin",
-	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve", &"level_skill", &"upgrade_all",
-	&"build_hub", &"upgrade_hub", &"buy_mega", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
-	&"rename_ship", &"set_prefs", &"unlock_region", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act",
+	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve",
+	&"build_hub", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
+	&"rename_ship", &"set_prefs", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"divine_act",
 	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item",
 	&"build_factory", &"close_factory", &"sell_factory_stock",
 	&"build_site", &"close_site", &"sell_site_stock", &"list_site", &"buy_listed_site",
@@ -183,9 +183,7 @@ func _ready() -> void:
 	for signal_name in SHIP_SIGNALS:
 		GameState.connect(signal_name, func(...args: Array) -> void: _on_ship_signal(signal_name, args))
 	GameState.port_band_changed.connect(func(...args: Array) -> void: _on_world_signal(&"port_band_changed", args))
-	GameState.hub_leveled.connect(func(...args: Array) -> void: _on_hub_signal(&"hub_leveled", args))
 	GameState.hub_built.connect(func(...args: Array) -> void: _on_hub_signal(&"hub_built", args))
-	GameState.mega_upgraded.connect(func(...args: Array) -> void: _on_acting_signal(&"mega_upgraded", args))
 	GameState.ship_changed.connect(func(ship: Ship) -> void:
 		if is_host():
 			_dirty[ship.id] = true)
@@ -449,7 +447,7 @@ func _choice_info() -> Dictionary:
 	for i in GameState.companies.size():
 		var each: Company = GameState.companies[i]
 		list.append({index = i, name = each.name, color = each.color, home_port = each.home_port,
-			money = each.money, level = each.level(), taken = taken.has(i) or each.is_ai(), ai = each.ai})
+			money = each.money, value = roundi(GameState.company_value(each)), taken = taken.has(i)})
 	return {companies = list, taken_colors = GameState.companies.map(func(each: Company) -> String: return each.color), taken_ports = GameState.companies.map(func(each: Company) -> String: return each.home_port),
 		storms = GameState.storms, seasons = GameState.seasons, max_time_speed = GameState.max_time_speed, name = game_name}
 
@@ -467,7 +465,7 @@ func _choose(choice: Dictionary) -> void:
 	var index := -1
 	if choice.has("company"):
 		index = int(choice.company)
-		var free := index >= 0 and index < GameState.companies.size() and index != GameState.companies.find(GameState.company) and not GameState.companies[index].is_ai()
+		var free := index >= 0 and index < GameState.companies.size() and index != GameState.companies.find(GameState.company)
 		for other: int in players:
 			if other != id and int(players[other].company) == index:
 				free = false
@@ -662,7 +660,7 @@ func _collect() -> Dictionary:
 	for ship in GameState.ships:
 		var data := ship.to_dict()
 		data["company"] = maxi(all.find(GameState.owner_of(ship)), 0)
-		ships[ship.id] = data.duplicate(true)  # A copy: the ship's own tables (skills, ledger) change in place.
+		ships[ship.id] = data.duplicate(true)  # A copy: the ship's own table (ledger) changes in place.
 	return {
 		t = GameState.play_time, speed = GameState.time_speed,
 		# (Copies: these hold the live tables, which change in place, and what
@@ -745,7 +743,7 @@ func _broadcast() -> void:
 		if not changed_ports.is_empty():
 			update.ports = changed_ports
 			_sent.ports = ports.duplicate(true)
-	# Companies: money and XP every time, the rest (finances, hubs...) each full round.
+	# Companies: money every time, the rest (finances, hubs...) each full round.
 	var all := GameState.all_companies()
 	var companies := {}
 	for i in all.size():
@@ -764,8 +762,6 @@ func _broadcast() -> void:
 			var changed := {}
 			if kept.money != all[i].money:
 				changed.money = all[i].money
-			if kept.company_xp != all[i].xp:
-				changed.company_xp = all[i].xp
 			if not changed.is_empty():
 				companies[i] = changed
 				kept.merge(changed, true)
@@ -869,7 +865,6 @@ func _sync(packed: Array) -> void:
 func _apply_companies(changes: Dictionary) -> void:
 	var mine := GameState.company
 	var money_before := mine.money
-	var level_before := mine.level()
 	var hubs_before := mine.hubs.size()
 	for index: int in changes:
 		while GameState.companies.size() <= index:
@@ -885,10 +880,6 @@ func _apply_companies(changes: Dictionary) -> void:
 			GameState.logo_changed.emit()
 	if mine.money != money_before:
 		GameState.money_changed.emit(mine.money)
-	if mine.level() != level_before or changes.has(GameState.companies.find(mine)):
-		GameState.company_xp_changed.emit(mine.xp)
-	for level in range(level_before + 1, mine.level() + 1):
-		GameState.company_leveled.emit(level, Progression.unlocks_at(level, mine))
 	if mine.hubs.size() != hubs_before:
 		GameState.hubs_changed.emit()
 
@@ -1026,7 +1017,6 @@ func _command(name: StringName, args: Array) -> void:
 	acting_for = null
 	GameState.company = mine
 	GameState.money_changed.emit(mine.money)
-	GameState.company_xp_changed.emit(mine.xp)
 	if name == &"buy_ship" and result is Ship:
 		_log_to(id, "Bought %s. It's docked at %s." % [result.name, GameData.port_name(result.docked_at)],
 			ActivityLog.Kind.INFO, ActivityLog.ship_color(result))
@@ -1062,19 +1052,13 @@ func _on_ship_signal(signal_name: StringName, args: Array) -> void:
 		_queue_for(GameState.owner_of(args[0]), signal_name, args)
 
 
-## Host: a hub leveled or was founded: sent to its company's player.
+## Host: a hub was founded: sent to its company's player.
 func _on_hub_signal(signal_name: StringName, args: Array) -> void:
 	if not is_host():
 		return
 	for each in GameState.companies:
 		if each.hubs.has(args[0]):
 			_queue_for(each, signal_name, args)
-
-
-## Host: something a joined player's own command did (a mega upgrade).
-func _on_acting_signal(signal_name: StringName, args: Array) -> void:
-	if is_host() and acting_peer != 0:
-		_queue_peer(acting_peer, signal_name, args)
 
 
 ## Host: something that happened to the world (a port grew): sent to everyone.

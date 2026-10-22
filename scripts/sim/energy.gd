@@ -174,26 +174,6 @@ static func can_drill(who: Company) -> bool:
 	return who != null and who.has_type("tankers")
 
 
-## The company level a Tankers tier unlocks at for a company (its tanker of that tier's).
-static func tier_level(tier: int, who: Company) -> int:
-	for model: Dictionary in GameData.ship_models:
-		if str(model.get("category", "")) == "tanker" and int(model.get("tier", 0)) == tier:
-			return Progression.unlock_level(model, who)
-	return Progression.LOCKED
-
-
-## The company level a thing unlocks at: a building's id, "rig", "platform" or "pipeline".
-static func unlock_level(what: String, who: Company) -> int:
-	var tier := int(building(what).get("tier", 0))
-	if tier <= 0:
-		tier = int(setting(what + "_tier", 3))
-	return tier_level(tier, who)
-
-
-static func unlocked(what: String, who: Company) -> bool:
-	return can_drill(who) and who.level() >= unlock_level(what, who)
-
-
 ## The ports a field's lanes run from (the lane tool's, nearest first).
 static func lane_ports(field_id: String) -> Array:
 	if _lane_ports.is_empty():
@@ -656,8 +636,6 @@ func buy_error(who: Company, key: String) -> String:
 	if field(field_id).is_empty() or index_of(key) >= int(field(field_id).get("slots", 0)):
 		return "No such slot"
 	var kind := kind_on(field_id)
-	if not unlocked(kind, who):
-		return "Unlocks at level %d" % unlock_level(kind, who)
 	if owner_of(key) != null:
 		return "Owned by %s" % owner_of(key).name
 	if owned_by(who, field_id).size() >= most_at(field_id):
@@ -805,8 +783,6 @@ func pipe_error(who: Company, key: String) -> String:
 		return "Not yours"
 	if not str(slot(key).get("pipe", "")).is_empty():
 		return "Piped to %s" % GameData.port_name(str(slot(key).pipe))
-	if not unlocked("pipeline", who):
-		return "Unlocks at level %d" % unlock_level("pipeline", who)
 	var target := pipe_target(who, field_of(key))
 	if str(target[0]).is_empty():
 		return "No HQ or hub of yours within %d nm" % int(setting("pipeline_nm", 300))
@@ -833,12 +809,8 @@ func build_error(who: Company, building_id: String, port_id: String) -> String:
 		return "No such building"
 	if not can_drill(who):
 		return "Only Tankers companies build these"
-	if not unlocked(building_id, who):
-		return "Unlocks at level %d" % unlock_level(building_id, who)
 	if GameData.get_port(port_id).is_empty() or is_field_end(port_id) or port_id.begins_with("@"):
 		return "Not a port"
-	if not _state.port_open_to(who, port_id):
-		return "Unlock %s first" % GameData.port_region(port_id).get("name", "its region")
 	if plants_at(who, port_id).has(building_id):
 		return "Built here"
 	return _money_error(who, int(info.cost))
@@ -984,8 +956,6 @@ func run_error(who: Company, ship: Ship, field_id: String, port_id: String) -> S
 		return "You have no rigs at %s" % field_name(field_id)
 	if not ship.fits_port(port_id):
 		return "%s is too small for it" % GameData.port_name(port_id)
-	if not _state.port_open_to(who, port_id):
-		return "Unlock %s first" % GameData.port_region(port_id).get("name", "its region")
 	var miles := miles_to(port_id, field_id)
 	if miles == INF:
 		return "No way from %s to the field" % GameData.port_name(port_id)
@@ -1133,7 +1103,7 @@ func rating_part(who: Company) -> Dictionary:
 	for key in keys:
 		if int(slot(key).get("damage", 0)) == 0:
 			working += 1
-	var expected := minf(1.0 + who.level() / 12.0, 8.0)
+	var expected := minf(1.0 + Ratings.maturity(who, "tankers") / 12.0, 8.0)
 	var sound := float(working) / keys.size() if not keys.is_empty() else 0.0
 	var processed := float(who.energy_tally.get("processed", 0.0))
 	var idle := float(who.energy_tally.get("idle", 0.0))
@@ -1160,85 +1130,3 @@ func slot_position(key: String) -> Vector2:
 	var angle := TAU * index_of(key) / count + 0.4
 	var radius := 0.08  # Degrees (about 5 nm).
 	return center + Vector2(cos(angle) * radius / maxf(cos(deg_to_rad(center.y)), 0.2), sin(angle) * radius)
-
-
-# --- AI rivals ---------------------------------------------------------------------------------------
-
-## A rival in oil and gas, simply (RivalAI, now and then): with money to
-## spare, a slot on the field nearest its HQ that its ships can collect from
-## (or a listed one), a refinery where its tankers call, a tug sent to a
-## damaged rig. Returns news ("put up an oil rig at Brent").
-func run_rival(rival: Company, spare: int) -> Array:
-	var news := []
-	if not can_drill(rival):
-		return news
-	var ships: Array[Ship] = _state.fleet(rival)
-	var carries := {}
-	for ship in ships:
-		for commodity: String in ship.model().get("cargo", []):
-			carries[commodity] = true
-	if carries.is_empty():
-		return news
-	# Damaged rigs: a tug if one can go.
-	for key in owned_by(rival):
-		if repair_error(rival, key).is_empty():
-			_state._send_rig_tug(rival, key)
-		elif int(slot(key).get("damage", 0)) > 0 and int(slot(key).get("tug", 0)) == 0 and randf() < 0.05 and rival.money > repair_fee(key):
-			# (No tug in reach: a contractor's, at twice the fee.)
-			_state._add_money(rival, -repair_fee(key) * 2)
-			_state._record(null, "energy", repair_fee(key) * 2, rival)
-			slots[key].damage = 0
-			_changed()
-	# Its ships on rig runs to the fields it has.
-	for field_id in fields_of(rival):
-		var running := ships.filter(func(ship: Ship) -> bool: return ship.rig_field == field_id)
-		if running.is_empty():
-			for ship in ships:
-				if not ship.rig_field.is_empty() or ship.is_service() or carries_from(ship.model(), field_id).is_empty() or not ship.is_docked():
-					continue
-				var port: String = way_to(ship.docked_at, field_id)[0]
-				var hq := rival.hubs[0].port_id if not rival.hubs.is_empty() else ""
-				for choice: String in [hq, ship.docked_at, port]:
-					if not choice.is_empty() and run_error(rival, ship, field_id, choice).is_empty():
-						_state._set_rig_run(ship, field_id, choice)
-						break
-				if not ship.rig_field.is_empty():
-					break
-	if rival.level() < 5:
-		return news
-	# A refinery at its HQ when it has crude coming in.
-	if not rival.hubs.is_empty() and spare > int(building("oil_refinery").get("cost", 0)) * 2:
-		var hq := rival.hubs[0].port_id
-		if build_error(rival, "oil_refinery", hq).is_empty() and not fields_of(rival).is_empty():
-			build(rival, "oil_refinery", hq)
-			news.append("built an oil refinery at %s" % GameData.port_name(hq))
-			return news
-	var most := mini(1 + rival.level() / 10, 6)
-	if owned_by(rival).size() >= most:
-		return news
-	for key: String in slots:
-		if int(slots[key].get("listing", 0)) > 0 and listing_error(rival, key).is_empty() and int(slots[key].listing) <= mini(spare, sale_price(key) * 3):
-			buy_listing(rival, key)
-			news.append("bought a %s at %s" % [str(rig_info(str(slots[key].kind)).get("name", "rig")).to_lower(), field_name(field_of(key))])
-			return news
-	var home := rival.hubs[0].port_id if not rival.hubs.is_empty() else ""
-	if home.is_empty():
-		return news
-	var best_key := ""
-	var best_nm := INF
-	for field_id in field_ids():
-		if not carries.has(products_of(field_id)[0]):
-			continue
-		var nm := miles_to(home, field_id)
-		if nm >= best_nm:
-			continue
-		for key in keys_at(field_id):
-			if buy_error(rival, key).is_empty() and int(rig_info(kind_on(field_id)).get("cost", 0)) <= spare:
-				best_key = key
-				best_nm = nm
-				break
-	if best_key.is_empty():
-		return news
-	buy(rival, best_key)
-	news.append("put up a %s at %s" % [str(rig_info(kind_on(field_of(best_key))).get("name", "rig")).to_lower(), field_name(field_of(best_key))])
-	return news

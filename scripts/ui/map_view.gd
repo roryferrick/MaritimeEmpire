@@ -39,9 +39,6 @@ signal field_clicked(field_id: String)
 signal site_clicked(site_id: String)
 ## Emitted whenever the view pans or zooms.
 signal view_changed
-## While choosing a region to unlock (choosing_region): a locked region's
-## area was clicked (its markets.json id).
-signal region_clicked(region_id: String)
 ## While choosing a divine power's target (choosing_divine): the target picked,
 ## a (lon, lat) Vector2 for a point, a port id, a Ship, or null for nothing there.
 signal divine_target(target: Variant)
@@ -344,11 +341,6 @@ const LOST_MARKER_OFFSET := 12.0
 ## The ring (in the company's color) around the HQ's and hubs' ports.
 const HQ_RING_WIDTH := 3.0
 const HUB_RING_WIDTH := 2.0
-## The red dot on an HQ or hub with an upgrade to buy: its size and where it
-## sits from the port's center (up and to the right, outside the first ring of
-## docked ships).
-const HUB_ALERT_RADIUS := 4.5
-const HUB_ALERT_OFFSET := Vector2(15, -15)
 ## The faint route lanes drawn with show_active_lanes.
 const ACTIVE_LANE_ALPHA := 0.45
 ## Multiplayer: other players' lanes, all in their company's color (lifted to
@@ -520,8 +512,6 @@ const FALLBACK_COLORS := {
 	&"equator": Color(1, 1, 1, 0.22),
 	&"equator_gray": Color(1, 1, 1, 0.12),
 	&"hub_ring_gray": Color(0.75, 0.75, 0.75),
-	&"hub_alert": Color(0.92, 0.22, 0.2),
-	&"hub_alert_outline": Color(1, 1, 1),
 	&"river_gray": Color(0.34, 0.35, 0.38),
 	&"route": Color(1.0, 0.6, 0.15),
 	&"lock_gate": Color(0.12, 0.1, 0.08),
@@ -652,36 +642,22 @@ var click_filter := Callable()
 var opens_at_port := ""
 var opens_whole_globe := false
 
-## Choosing a region to unlock: every region is outlined, the locked one under
-## the mouse (or hovered_region) lights up, and clicks pick regions
-## (region_clicked) instead of ports and ships.
-var choosing_region := false:
-	set(value):
-		choosing_region = value
-		hovered_region = ""
-		mouse_default_cursor_shape = CURSOR_ARROW
-## The locked region lit up while choosing (its id), or "" (shown on the next frame).
-var hovered_region := ""
 ## The divine power whose target is being chosen on the map (Divine.POWERS),
 ## or "": clicks then pick a point, a port or a ship (divine_target) instead.
 var choosing_divine := "":
 	set(value):
 		choosing_divine = value
 		mouse_default_cursor_shape = CURSOR_CROSS if not value.is_empty() else CURSOR_ARROW
-## The market regions' overlay (locked ones shaded: see RegionShade), and what
-## it was last set for ([image ready, unlocked regions, choosing, hovered]).
+## The market regions' overlay (see RegionShade), and what it was last set
+## for ([image ready]).
+
 var _globe_regions := ShaderMaterial.new()
 ## The sky over the map: clouds and storms (see SkyArt), and its material.
 var _sky := SkyArt.new()
 var _globe_sky := ShaderMaterial.new()
 var _regions_key := []
-## Each land drawing's region (index + 1; 0 until the region map is ready), so
-## those in locked regions are left out.
-var _decor_regions := PackedByteArray()
-## The land drawings picked and drawn natively (DecorSim), when the library's
-## there, and whether it has their regions yet.
+## The land drawings picked and drawn natively (DecorSim), when the library's there.
 static var _decor_native: Object = null
-static var _decor_regions_native := false
 
 ## The globe: the (lon, lat) at the middle of the view, that map point
 ## (projected), and the view's axes on the unit sphere (see _orient()): right
@@ -1015,8 +991,8 @@ class LandArt:
 		draw_mesh(art.south_cap_mesh, art.white, Transform2D.IDENTITY, view._color(&"land") if view.gray_mode else ANTARCTIC_ICE)
 
 ## The whole globe again, over the rest of the art, drawn by the regions'
-## overlay (MapView._globe_regions): locked regions shaded, and while choosing
-## one, the regions outlined and the hovered one lit up.
+## overlay (MapView._globe_regions). (Its shading of locked regions and the
+## region chooser are unused since every region is open.)
 class RegionShade:
 	extends Node2D
 
@@ -3205,9 +3181,6 @@ func _gui_input(event: InputEvent) -> void:
 				_drag_samples.pop_front()
 			_changed()
 		accept_event()
-	elif motion and choosing_region:
-		hovered_region = _locked_region_at(motion.position)
-		mouse_default_cursor_shape = CURSOR_ARROW if hovered_region.is_empty() else CURSOR_POINTING_HAND
 	elif motion:
 		var pod := _pod_at(motion.position) if show_ships else -1
 		_hover(pod, _storm_at(motion.position) if show_ships and pod < 0 else "")
@@ -3259,11 +3232,6 @@ func _notification(what: int) -> void:
 ## Picks whichever port or ship is closest to the click, within its hit radius,
 ## or else a canal lock under it, or else a storm (see _storm_at()).
 func _click(screen_pos: Vector2) -> void:
-	if choosing_region:
-		var region := _locked_region_at(screen_pos)
-		if not region.is_empty():
-			region_clicked.emit(region)
-		return
 	if not choosing_divine.is_empty() and str(Divine.POWERS[choosing_divine].target) == "point":
 		divine_target.emit(Geo.unproject(screen_to_world(screen_pos)))
 		return
@@ -3477,57 +3445,25 @@ func _update_sky() -> void:
 	_globe_sky.set_shader_parameter(&"storm_a", shapes)
 	_globe_sky.set_shader_parameter(&"storm_b", looks)
 
-## Keeps the regions' overlay in step with the unlocked regions (which a
-## joined player's game hears of from the host), and with choosing one; when
-## they change, the ports, docks and land drawings are redrawn too.
+## Gives the regions' overlay its maps once they're worked out (nothing is
+## shaded: every region is open).
 func _update_regions() -> void:
-	var key := [RegionMap.is_ready(), GameState.regions.duplicate(), choosing_region, hovered_region, selectable_ports.is_empty()]
+	var key := [RegionMap.is_ready()]
 	if key == _regions_key:
 		return
 	_regions_key = key
-	var locked := 0
-	var regions: Array = GameData.markets.get("regions", [])
-	for i in regions.size():
-		if selectable_ports.is_empty() and not GameState.is_region_unlocked(regions[i].id):
-			locked |= 1 << i
 	_globe_regions.set_shader_parameter(&"region_map", RegionMap.texture)
 	_globe_regions.set_shader_parameter(&"region_ports", RegionMap.ports_texture)
-	_globe_regions.set_shader_parameter(&"locked_mask", locked)
-	_globe_regions.set_shader_parameter(&"choosing", choosing_region)
-	_globe_regions.set_shader_parameter(&"hovered", RegionMap.index_of(hovered_region))
+	_globe_regions.set_shader_parameter(&"locked_mask", 0)
+	_globe_regions.set_shader_parameter(&"choosing", false)
+	_globe_regions.set_shader_parameter(&"hovered", -1)
 	_labels_key = []
 	_redraw_layers()
 
-## True if a port's region is locked (it can't be clicked, and its name is
-## dimmed; its marina shows like any other).
+## True if a port can't be picked while only some are selectable (its dot
+## faint and its name dimmed; its marina shows like any other).
 func _port_locked(port_id: String) -> bool:
-	if not selectable_ports.is_empty():
-		return not selectable_ports.has(port_id)
-	return not GameState.is_port_unlocked(port_id)
-
-## The locked region at a screen point (its id), or "" (unlocked, or off the globe).
-func _locked_region_at(screen_pos: Vector2) -> String:
-	if (screen_pos - size / 2.0).length() >= _radius():
-		return ""
-	var region := RegionMap.region_id(RegionMap.region_at(_screen_lon_lat(screen_pos)))
-	return region if not region.is_empty() and not GameState.is_region_unlocked(region) else ""
-
-## Where a region's unlock button goes on screen (HIDDEN round the far side,
-## or until the regions are worked out).
-func region_screen_position(region_id: String) -> Vector2:
-	var middle := RegionMap.center(RegionMap.index_of(region_id))
-	return world_to_screen(Geo.project(middle)) if middle != Vector2.INF else HIDDEN
-
-## True if a land drawing is in a locked region.
-func _decor_locked(index: int) -> bool:
-	if not RegionMap.is_ready() or not selectable_ports.is_empty():
-		return false
-	var data := GameData.world_map
-	if _decor_regions.is_empty():
-		_decor_regions.resize(data.decor_positions.size())
-		for i in data.decor_positions.size():
-			_decor_regions[i] = RegionMap.region_at(Geo.unproject(data.decor_positions[i])) + 1
-	return not GameState.is_region_unlocked(RegionMap.region_id(_decor_regions[index] - 1))
+	return not selectable_ports.is_empty() and not selectable_ports.has(port_id)
 
 ## True while the wheel's zoom is still easing to its goal.
 func _zooming() -> bool:
@@ -4102,9 +4038,10 @@ const ROPE_COLOR := Color(0.95, 0.9, 0.74)
 ## in sideways on its thrusters (and pulling out, slides off to).
 const BERTH_OFF_WIDTHS := 1.6
 ## HQ buildings (_draw_hq_building()): how many levels, one more every this
-## many company levels, and how far (dock units) they stand back from the quay's edges.
+## many times over its company grows in value, and how far (dock units) they stand back from the quay's edges.
 const HQ_LEVELS := 10
-const HQ_LEVEL_EVERY := 10
+const HQ_VALUE_START := 2500000.0
+const HQ_VALUE_STEP := 2.5
 const HQ_MARGIN := 0.6
 ## Canal ports (_is_canal_port()): the berthless side the canal comes in by
 ## (dock units), the cut through the quay (as wide), and how far along its canal
@@ -4851,10 +4788,10 @@ func _hq_look(port_id: String) -> Array:
 			look = [each.name, each.color, hq_level(each)]
 			break
 		if hub != null and look.is_empty():
-			look = ["hub", each.color, clampi(2 + hub.level / 3, 2, 4)]  # (A hub's warehouses: see _draw_hub_warehouses(). An HQ found after it wins.)
+			look = ["hub", each.color, Hub.warehouse_count(hub)]  # (A hub's warehouses: see _draw_hub_warehouses(). An HQ found after it wins.)
 	var industry := _industry_hub(port_id)
 	if industry != null:
-		look.append_array([industry.industries.duplicate(), industry.industry_slots(), industry == GameState.hub_at(port_id)])
+		look.append_array([industry.industries.duplicate(), Hub.INDUSTRY_SLOTS, industry == GameState.hub_at(port_id)])
 	return look
 
 # --- Industry -------------------------------------------------------------------
@@ -4906,7 +4843,7 @@ func _draw_industry(port_id: String, layout: Dictionary) -> void:
 		var plot: Rect2 = plots[slot]
 		var commodity: String = hub.industries[slot]
 		if commodity.is_empty():
-			if mine and slot < hub.industry_slots():
+			if mine:
 				var corners := _marina_polygon(port_id, _rect_points(plot.grow(-plot.size.x * 0.06)))
 				corners.append(corners[0])
 				for i in 4:
@@ -5076,10 +5013,11 @@ static func _quay_inland(layout: Dictionary) -> float:
 
 # --- HQ buildings ---------------------------------------------------------------
 
-## A company's HQ building's level (1 to HQ_LEVELS): one more every
-## HQ_LEVEL_EVERY company levels.
+## A company's HQ building's level (1 to HQ_LEVELS): one more each time its
+## value grows HQ_VALUE_STEP times over, from HQ_VALUE_START.
 static func hq_level(company: Company) -> int:
-	return clampi(1 + company.level() / HQ_LEVEL_EVERY, 1, HQ_LEVELS)
+	var value := maxf(GameState.company_value(company), 1.0)
+	return clampi(1 + floori(log(value / HQ_VALUE_START) / log(HQ_VALUE_STEP)), 1, HQ_LEVELS)
 
 ## Where a port's HQ building can stand (dock units): the -y half of the quay
 ## behind the basin, HQ_MARGIN in from its edges (the industry has the +y half).
@@ -5168,7 +5106,7 @@ func _draw_hq_building(port_id: String, layout: Dictionary) -> void:
 
 ## A hub that isn't an HQ: its company's warehouses on the HQ's half of the
 ## quay, roofed in its colour so whose hub it is shows from above (more of
-## them as the hub levels up: 2 to 4), the one nearest the basin its freezer
+## them as its traffic grows: 2 to 4, Hub.warehouse_count()), the one nearest the basin its freezer
 ## (a white roof with a band of the colour), each with its shadow, ridge,
 ## roof sheeting and loading doors on the basin side.
 func _draw_hub_warehouses(port_id: String, layout: Dictionary, hub: Hub, tint: Color) -> void:
@@ -5176,7 +5114,7 @@ func _draw_hub_warehouses(port_id: String, layout: Dictionary, hub: Hub, tint: C
 	if region.size() < 3:
 		return
 	var box := _bounds(region)
-	var count := clampi(2 + hub.level / 3, 2, 4)
+	var count := Hub.warehouse_count(hub)
 	var gap := box.size.y * 0.08
 	var depth := (box.size.y - gap * (count - 1)) / count
 	var length := box.size.x * 0.86
@@ -6669,7 +6607,6 @@ func _draw_overlay() -> void:
 		_prof("overlay.birds", t0)
 		t0 = Time.get_ticks_usec()
 		_draw_divine()
-		_draw_hub_alerts()
 		_prof("overlay.rest", t0)
 	if _night_shown:
 		_lights_layer.queue_redraw()  # (The ships' lights are drawn where the ships were drawn this frame: never a frame behind as the map drags.)
@@ -7414,7 +7351,7 @@ func _draw_logo_sign(company: Company, at: Vector2) -> void:
 ## anything that sets it has changed: a port picked, dimmed or shining, the regions open, the
 ## hubs, the ports' sizes, the colors. Dragging the map doesn't change them.
 func _update_port_styles(hub_ports: Dictionary, fill: Color, dimmed: Color, locked_fill: Color) -> void:
-	var key := [selectable_ports, dimmed_ports, shining_ports, GameState.regions.duplicate(), hub_ports.keys(), fill, dimmed, locked_fill, price_commodity,
+	var key := [selectable_ports, dimmed_ports, shining_ports, hub_ports.keys(), fill, dimmed, locked_fill, price_commodity,
 		-1 if price_commodity.is_empty() else floori(Time.get_ticks_msec() / (PRICE_REFRESH_S * 1000.0))]  # (Colored by price: looked at again as prices drift.)
 	var now := Time.get_ticks_msec()
 	# (Ports grow a little all the time: their dots' sizes are looked at again
@@ -8477,28 +8414,6 @@ func _canal_lane_offset(ship: Ship) -> Vector2:
 		var offset := (float(slots.find(sailing.lock_slot)) - (slots.size() - 1) / 2.0) * CHAMBER_LANE_WIDTH * _canal_zoom(chamber.canal)
 		return right * (offset if chamber.forward else -offset)
 	return right * CHAMBER_LANE_WIDTH * _canal_zoom(canal) / 2.0
-
-## A red dot (like the nav tabs') by each HQ or hub with an upgrade that can be
-## bought now. Drawn after the ships so docked ships don't hide it.
-func _draw_hub_alerts() -> void:
-	# Which hubs can be upgraded is asked a few times a second (it costs, every
-	# hub's every path), like the nav's own alert dots.
-	var now := Time.get_ticks_msec()
-	if now - _hub_alerts_time >= HUB_ALERTS_REFRESH_MS or _hub_alerts_time < 0:
-		_hub_alerts_time = now
-		_hub_alerts.clear()
-		for hub in GameState.hubs:
-			if GameState.hub_can_upgrade(hub):
-				_hub_alerts.append(hub.port_id)
-	for port_id: String in _hub_alerts:
-		var dot := port_screen_position(port_id) + HUB_ALERT_OFFSET
-		_canvas.draw_circle(dot, HUB_ALERT_RADIUS + 1.0, _color(&"hub_alert_outline"), true, -1.0, true)
-		_canvas.draw_circle(dot, HUB_ALERT_RADIUS, _color(&"hub_alert"), true, -1.0, true)
-
-## The ports of the hubs with an upgrade to buy, as last looked at, and when (ms).
-var _hub_alerts: Array[String] = []
-var _hub_alerts_time := -1
-const HUB_ALERTS_REFRESH_MS := 500
 
 ## Ships at sea are rectangles with a pointed bow; docked ships are small dots.
 ## Smaller ships are drawn over bigger ones.
@@ -10016,10 +9931,6 @@ func _draw_decor() -> void:
 	var kind_tiers := PackedInt32Array()
 	for side in kind_sides:
 		kind_tiers.append(0 if side < DECOR_MIN_PX else clampi(1 + floori((side - DECOR_MIN_PX) / (DECOR_FULL_PX - DECOR_MIN_PX) * 3.0), 1, 4))
-	var check_locks := RegionMap.is_ready() and selectable_ports.is_empty()
-	var locks := {}  # Region (as _decor_regions has it) -> locked.
-	if check_locks:
-		_decor_locked(0)  # (Sorts the drawings into their regions, the first time.)
 	# Natively (DecorSim: the same drawings, places and order) where the library's there.
 	if _decor_native == null and ClassDB.class_exists(&"DecorSim"):
 		var textures := []
@@ -10033,15 +9944,7 @@ func _draw_decor() -> void:
 		if not _season.is_empty() and _decor_native.has_method(&"set_seasons"):
 			_decor_native.set_seasons(_season[0], _season[1])
 	if _decor_native != null:
-		var locked := PackedByteArray()
-		if check_locks:
-			if not _decor_regions_native:
-				_decor_native.set_regions(_decor_regions)
-				_decor_regions_native = true
-			var regions: Array = GameData.markets.get("regions", [])
-			locked.resize(regions.size() + 1)
-			for r in regions.size():
-				locked[r + 1] = 0 if GameState.is_region_unlocked(RegionMap.region_id(r)) else 1
+		var locked := PackedByteArray()  # (No region is locked.)
 		_decor_native.draw(_canvas.get_canvas_item(), {right = _right, up = _up, toward = _toward, radius = _radius(), middle = size / 2.0,
 			screen = screen, zoom = _zoom, sides = kind_sides, tiers = kind_tiers, columns = Vector2i(first_column, last_column),
 			rows = Vector2i(floori(low.y / DECOR_BUCKET), floori(high.y / DECOR_BUCKET)), locked = locked, rescan = _decor_rescan()})
@@ -10055,12 +9958,6 @@ func _draw_decor() -> void:
 				var side := kind_sides[kind]
 				if _decor_room[i] * _zoom < side * 0.5:
 					continue  # Would reach into the water (or onto the land).
-				if check_locks:
-					var region: int = _decor_regions[i]
-					if not locks.has(region):
-						locks[region] = _decor_locked(i)
-					if locks[region]:
-						continue  # Its region is locked: shaded, bare.
 				var at := _unit_to_screen(_decor_units[i])
 				if not screen.has_point(at):
 					continue
@@ -10126,7 +10023,6 @@ func _draw_wildlife() -> void:
 	_wildlife_shown = true
 	var cal := float(GameState.calendar_time())
 	var reach := Rect2(Vector2.ZERO, size).grow(60.0)
-	var check_locks := RegionMap.is_ready() and selectable_ports.is_empty()
 	# The birds' homes, port by port.
 	var home_side := home_km * km
 	if home_side >= WILDLIFE_HOME_MIN_PX:
@@ -10150,21 +10046,14 @@ func _draw_wildlife() -> void:
 		_land_sim = ClassDB.instantiate(&"LandSim")
 		_land_sim.setup(wildlife.groups, wildlife.land, wildlife.migrate_days, _land_texture, _land_region)
 	if _land_sim != null:
-		var unlocked: Variant = null
-		if check_locks:
-			unlocked = {"": true}  # (GameState.is_region_unlocked().)
-			for region: String in GameState.regions:
-				unlocked[region] = true
 		_fauna_hits.append_array(_land_sim.draw(_canvas.get_canvas_item(), {box = _view_lon_lat_box(), reach = reach,
 			right = _right, up = _up, toward = _toward, radius = _radius(), middle = size / 2.0, km = km, home_side = home_side,
 			home_min_px = WILDLIFE_HOME_MIN_PX, min_px = WILDLIFE_MIN_PX, stride_s = WILDLIFE_STRIDE_S, cal = cal,
-			life_time = wildlife.life_time, unlocked = unlocked, font = get_theme_default_font()}))
+			life_time = wildlife.life_time, unlocked = null, font = get_theme_default_font()}))
 		return
 	var items := []  # [y, texture, middle, angle, side, tint]
 	for gi: int in wildlife.groups_in(_view_lon_lat_box()):
 		var group: Dictionary = wildlife.groups[gi]
-		if check_locks and not GameState.is_region_unlocked(RegionMap.region_id(RegionMap.region_at(group.home))):
-			continue
 		var in_den := false
 		if group.home_kind != "none" and home_side >= WILDLIFE_HOME_MIN_PX:
 			var home_at := world_to_screen(Geo.project(group.home))

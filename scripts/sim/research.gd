@@ -19,9 +19,10 @@ extends RefCounted
 ## lies idle again. Only a ship deep enough (depth_m) with the site's needs
 ## fitted (gear: bought into its slots) can go.
 ##
-## Personal research earns no money: XP (a same-tier cargo ship's rate for
-## the trip's time, by the site's difficulty, half again for the first company
-## to finish a site), the journal (Company.research done), the Research rating
+## Personal research earns no money: research points (Company.research_points,
+## banked for developing the company's own tech: DESIGN_LIVING_WORLD.md M5; the
+## ship's tier rate for the trip's time, by the site's difficulty, half again for
+## the first company to finish a site), the journal (Company.research done), the Research rating
 ## and perks: each category's at 25/50/100% of its sites done (perk()), and
 ## local ones (catch near surveyed wrecks and reefs: catch_factor(); sights
 ## for Expedition cruises: sights_near()). Contracts pay: a board shared by
@@ -34,8 +35,8 @@ extends RefCounted
 ## there (Company.research revealed).
 
 signal changed
-## A site finished by a company's ship: first if no company had before; xp earned.
-signal discovered(who: Company, site_id: String, first: bool, ship: Ship, xp: float)
+## A site finished by a company's ship: first if no company had before; research points earned.
+signal discovered(who: Company, site_id: String, first: bool, ship: Ship, points: float)
 ## A contract done (ok, paid) or failed (not ok, paid is the penalty).
 signal contract_finished(who: Company, offer: Dictionary, ok: bool, paid: int)
 ## Hidden sites a company now knows of: their ids.
@@ -65,7 +66,6 @@ static var _gear := {}
 static var _kinds := {}
 static var _lane_ends := {}
 static var _ways := {}
-static var _xp_rates := {}
 static var _perk_cache := {}  # Company instance id -> [done count, {stat: factor}]
 static var _near_cache := {}  # "company id|kind|place" -> [done count, value]
 
@@ -654,7 +654,7 @@ func _complete(ship: Ship, offer: Dictionary) -> void:
 	if not site_id.is_empty():
 		discover(who, site_id, ship)
 	elif offer.is_empty():
-		_state._gain_xp(ship, xp_rate(ship.model()) * (_state.play_time - ship.research_since) * 0.5)
+		earn_points(ship, points_rate(ship.model()) * (_state.play_time - ship.research_since) * 0.5)
 	if not offer.is_empty():
 		_finish_contract(who, offer, ship)
 	_head_home(ship, true)
@@ -711,7 +711,7 @@ func status_text(ship: Ship) -> String:
 	return "sailing to %s" % GameData.port_name(ship.to_port)
 
 
-# --- Discoveries, XP and the journal --------------------------------------------------------
+# --- Discoveries, research points and the journal ----------------------------------------
 
 ## A company's research record (Company.research), its parts made if missing.
 static func record_of(who: Company) -> Dictionary:
@@ -745,23 +745,20 @@ static func hint_lonlat(site_id: String) -> Vector2:
 	return Vector2(wrapf(lon, -180.0, 180.0), clampf(lat, -85.0, 85.0))
 
 
-## XP a second a model earns on research: the average of the cargo models of
-## its tier, full at sea (Progression), times xp_factor.
-static func xp_rate(model: Dictionary) -> float:
-	var tier := int(model.get("tier", 1))
-	if not _xp_rates.has(tier):
-		var total := 0.0
-		var count := 0
-		for other: Dictionary in GameData.ship_models:
-			if int(other.get("tier", 0)) == tier and not (other.get("cargo", []) as Array).is_empty() and not other.has("fishing"):
-				total += Progression._xp_per_minute(other)
-				count += 1
-		_xp_rates[tier] = total / maxf(count, 1.0) / 60.0
-	return float(_xp_rates[tier]) * float(setting("xp_factor", 1.0))
+## Research points a second a model earns on an expedition: points_per_minute
+## for a tier 1 ship, doubling with each tier.
+static func points_rate(model: Dictionary) -> float:
+	return float(setting("points_per_minute", 1.0)) * pow(2.0, int(model.get("tier", 1)) - 1) / 60.0
+
+
+## Banks research points for a ship's company.
+func earn_points(ship: Ship, points: float) -> void:
+	if points > 0.0:
+		_state.owner_of(ship).research_points += points
 
 
 ## A site finished by a company's ship: into its journal (the first company's
-## too), XP for the trip, the sites near it revealed.
+## too), research points for the trip, the sites near it revealed.
 func discover(who: Company, site_id: String, ship: Ship) -> void:
 	var rec := record_of(who)
 	var again := (rec.done as Dictionary).has(site_id)
@@ -772,26 +769,26 @@ func discover(who: Company, site_id: String, ship: Ship) -> void:
 		rec.done[site_id] = {day = today(), first = first, ship = ship.name if ship != null else ""}
 		(rec.revealed as Dictionary).erase(site_id)
 		_tally(who, "discoveries", 1.0 + float(site(site_id).get("difficulty", 1)) * 0.25)
-	var xp := 0.0
+	var points := 0.0
 	if ship != null:
 		var each := site(site_id)
-		xp = xp_rate(ship.model()) * maxf(_state.play_time - ship.research_since, 60.0) * (0.8 + 0.2 * float(each.get("difficulty", 1)))
+		points = points_rate(ship.model()) * maxf(_state.play_time - ship.research_since, 60.0) * (0.8 + 0.2 * float(each.get("difficulty", 1)))
 		if first:
-			xp *= 1.0 + float(setting("first_bonus", 0.5))
+			points *= 1.0 + float(setting("first_bonus", 0.5))
 		if ship.research_gear.has("sub"):
-			xp *= 1.5
+			points *= 1.5
 		if ship.research_gear.has("film"):
-			xp *= 1.1
+			points *= 1.1
 		if again:
-			xp *= 0.25
-		_state._gain_xp(ship, xp)
+			points *= 0.25
+		earn_points(ship, points)
 	reveal_near(who, target_lonlat(end_of(site_id)), float(setting("reveal_nm", 450)))
 	if not again:
 		for each_ship: Ship in _state.fleet(who):
 			each_ship.invalidate_stats()  # (Its perks may have stepped up: see perk().)
-	discovered.emit(who, site_id, first and not again, ship, xp)
+	discovered.emit(who, site_id, first and not again, ship, points)
 	if ship != null:
-		_state.research_discovered.emit(ship, site_id, first and not again, xp)
+		_state.research_discovered.emit(ship, site_id, first and not again, points)
 	_changed()
 
 
@@ -834,7 +831,7 @@ static func perk_step(who: Company, category_id: String) -> int:
 	return step
 
 
-## The multiplier a company's research perks put on a stat ("xp", "fuel",
+## The multiplier a company's research perks put on a stat ("wages", "fuel",
 ## "speed", "wear", "breakdowns", "repairs", "fees", "price", "catch"): 1 with none.
 static func perk(who: Company, stat: String) -> float:
 	if who == null or who.research.is_empty():
@@ -975,7 +972,7 @@ func _finish_contract(who: Company, offer: Dictionary, ship: Ship) -> void:
 		_mishap(ship, "recovered only part of what was down there")
 	_state._add_money(who, pay)
 	_state._record(ship, "research_pay", pay, who)
-	_state._gain_xp(ship, xp_rate(ship.model()) * maxf(_state.play_time - ship.research_since, 60.0) * 0.5)
+	earn_points(ship, points_rate(ship.model()) * maxf(_state.play_time - ship.research_since, 60.0) * 0.5)
 	_tally(who, "contracts", 1.0)
 	_tally(who, "on_time", 1.0 if ok else 0.5)
 	board.erase(offer)
@@ -1154,8 +1151,7 @@ func _changed() -> void:
 func rating_parts(who: Company, ships: Array) -> Dictionary:
 	var rec := record_of(who)
 	var tally: Dictionary = rec.tally
-	var level: int = who.level()
-	var since := maxi(level - maxi(who.type_level("research"), 1), 0)
+	var since := maxf(_state.play_time - who.type_taken("research"), 0.0) / 3600.0 * 3.0  # (About 3 a hour of play, as company levels came late on.)
 	var contracts := float(tally.get("contracts", 0.0))
 	var on_time := float(tally.get("on_time", 0.0))
 	var contract_part := 0.0
@@ -1184,76 +1180,6 @@ func rating_parts(who: Company, ships: Array) -> Dictionary:
 	return {parts = [contract_part, discovery_part, fleet_part, safety_part],
 		figures = {contracts = contracts, on_time = on_time, failed = float(tally.get("failed", 0.0)), score = score, expected = expected,
 			sites = (rec.done as Dictionary).size(), ships = research_ships.size(), dives = dives, trouble = trouble}}
-
-
-# --- AI rivals --------------------------------------------------------------------------------
-
-## A rival with the Research type, simply: it buys a research ship now and
-## then (the deepest it can afford twice over, at most one per 10 company
-## levels), fits the gear that opens the most sites, takes contracts its ships
-## can do and sends idle ships on them, else to the nearest site it hasn't done.
-func run_rival(rival: Company, budget: int) -> Array:
-	var news := []
-	if not can_research(rival) or rival.all_types():
-		return news
-	var level: int = rival.level()
-	var fleet: Array = _state.fleet(rival).filter(func(ship: Ship) -> bool: return ship.is_research())
-	if fleet.size() < 1 + level / 10:
-		var best := {}
-		for model: Dictionary in GameData.ship_models:
-			if not is_research_model(model) or Progression.unlock_level(model, rival) > level:
-				continue
-			var price: int = _state.ship_price(model.id)
-			if price * 2 > budget:
-				continue
-			if best.is_empty() or depth_of(model) > depth_of(best):
-				best = model
-		if not best.is_empty() and _state.buy_error(best.id).is_empty():
-			var ship: Ship = _state.buy_ship(best.id, _state.suggest_ship_name(), rival.home_port)
-			if ship != null:
-				_state.set_auto_recover(ship, true)
-				fleet.append(ship)
-				news.append("launched the research ship %s" % ship.name)
-	for ship: Ship in fleet:
-		if ship.is_lost() or not ship.is_docked() or ship.job_phase != Ship.JOB_NONE or not ship.research_target.is_empty():
-			continue
-		for gear_id: String in ["sonar", "rov", "divers", "lab", "sub", "film", "ice"]:
-			if ship.research_gear.size() >= slots_of(ship.model()):
-				break
-			if gear_id == "sub" and depth_of(ship.model()) < 9000:
-				continue  # (Only the hadal deeps need one.)
-			if fit_error(rival, ship, gear_id).is_empty() and rival.money - gear_cost(ship.model(), gear_id) > budget / 2:
-				fit(rival, ship, gear_id)
-		var sent := false
-		for offer: Dictionary in board:
-			if int(offer.taken_by) >= 0 and int(offer.taken_by) != _index_of(rival):
-				continue
-			if int(offer.taken_by) < 0 and not accept_error(rival, int(offer.id)).is_empty():
-				continue
-			var check := offer.duplicate()
-			check.taken_by = _index_of(rival)
-			if not trip_error(rival, ship, str(offer.target), check).is_empty():
-				continue
-			if int(offer.taken_by) < 0:
-				accept(rival, int(offer.id))
-			if send(rival, ship, str(offer.target), int(offer.id)):
-				sent = true
-				break
-		if sent:
-			continue
-		var best_site := ""
-		var best_nm := INF
-		for site_id: String in site_ids():
-			if is_done(rival, site_id) or not is_known(rival, site_id):
-				continue
-			var end := end_of(site_id)
-			var miles := miles_to(ship.docked_at, end)
-			if miles < best_nm and trip_error(rival, ship, end).is_empty():
-				best_nm = miles
-				best_site = site_id
-		if not best_site.is_empty():
-			send(rival, ship, end_of(best_site))
-	return news
 
 
 # --- State --------------------------------------------------------------------------------------

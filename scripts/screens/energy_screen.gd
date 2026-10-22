@@ -204,9 +204,7 @@ func _field_detail(field_id: String) -> void:
 	_detail.add_child(_text("%s field · richness %d%% · %s" % ["An oil" if str(info.kind) == "oil" else "A gas", roundi(float(info.richness) * 100.0), info.get("known", "")]))
 	_detail.add_child(_dim("Nearest ports: %s." % ", ".join(ports)))
 	if not Energy.can_drill(GameState.company):
-		_detail.add_child(_error("Only Tankers companies drill: choose Tankers as one of your company types."))
-	elif not Energy.unlocked(kind, GameState.company):
-		_detail.add_child(_error("%ss unlock at company level %d." % [rig.name, Energy.unlock_level(kind, GameState.company)]))
+		_detail.add_child(_error("Only Tankers companies drill: open a Tankers division."))
 	var gives := "crude oil, with a little LNG and LPG" if kind == "rig" else "LNG and LPG"
 	_detail.add_child(_text("Slots: you may own %d of the %d here. %s costs %s and gives %s; its crew costs %s every two weeks." % [Energy.most_at(field_id), int(info.get("slots", 0)),
 		_a(str(rig.name).to_lower()).capitalize().get_slice(" ", 0) + " " + str(rig.name).to_lower(), Fmt.money(int(rig.cost)), gives, Fmt.money(int(rig.wages))]))
@@ -319,7 +317,7 @@ func _delivery_ports(field_id: String) -> Array:
 	candidates.append_array(GameState.energy.plant_ports(GameState.company))
 	candidates.append_array(Energy.lane_ports(field_id).slice(0, 6))
 	for port_id: String in candidates:
-		if not out.has(port_id) and Energy.miles_to(port_id, field_id) < 4500.0 and GameState.port_open_to(GameState.company, port_id):
+		if not out.has(port_id) and Energy.miles_to(port_id, field_id) < 4500.0:
 			out.append(port_id)
 	out.sort_custom(func(a: String, b: String) -> bool: return Energy.miles_to(a, field_id) < Energy.miles_to(b, field_id))
 	return out

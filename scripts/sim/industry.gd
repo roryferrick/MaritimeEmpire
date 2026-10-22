@@ -253,8 +253,6 @@ func build_error(who: Company, building_id: String, port_id: String) -> String:
 	var each := building(building_id)
 	if each.is_empty() or GameData.get_port(port_id).is_empty():
 		return "No such building or port"
-	if not who.regions.is_empty() and not who.regions.has(str(GameData.port_region(port_id).get("id", ""))):
-		return "Unlock %s first" % GameData.port_region(port_id).get("name", "its region")
 	if on_claims(building_id):
 		var total := claims(building_id, port_id)
 		if total == 0:
@@ -320,8 +318,6 @@ func listing_error(who: Company, key: String) -> String:
 	if not can_build(who):
 		return "Only Cargo & Ore companies build industry"
 	var port_id := port_of(key)
-	if not who.regions.is_empty() and not who.regions.has(str(GameData.port_region(port_id).get("id", ""))):
-		return "Unlock %s first" % GameData.port_region(port_id).get("name", "its region")
 	if claims_held(who, building_of(key), port_id) >= (int(setting("most_claims", 2)) if on_claims(building_of(key)) else 1):
 		return "You hold as many of these here as you may"
 	if _state.in_debt(who) or who.money < int(entry.listing):
@@ -512,48 +508,3 @@ func load_ship(ship: Ship, to: String) -> Array:
 	_state.ship_changed.emit(ship)
 	_changed()
 	return [good_id, quantity]
-
-
-# --- AI rivals ---------------------------------------------------------------------
-
-## A rival building simply (RivalAI, now and then): with money to spare, a free
-## claim for a mine whose ore its ships carry at a resource port in its regions
-## (the richest ore for its price), else a plant or factory at its HQ or a hub
-## whose good its ships carry and whose inputs are on sale there. Returns news.
-func run_rival(rival: Company, spare: int) -> Array:
-	var news := []
-	if not can_build(rival) or rival.level() < 5:
-		return news
-	var most := mini(1 + rival.level() / 10, 8)
-	if owned_by(rival).size() >= most:
-		return news
-	var carries := {}
-	for ship: Ship in _state.fleet(rival):
-		for good_id: String in ship.model().get("cargo", []):
-			carries[good_id] = true
-	var best := []
-	var best_score := 0.0
-	for each: Dictionary in buildings():
-		var building_id := str(each.id)
-		if not carries.has(str(each.makes)) or cost(building_id) > spare:
-			continue
-		var ports: Array = (each.get("ports", {}) as Dictionary).keys() if on_claims(building_id) else rival.hubs.map(func(hub: Hub) -> String: return hub.port_id)
-		for port_id: String in ports:
-			if not build_error(rival, building_id, port_id).is_empty():
-				continue
-			var score := float(GameData.commodity(str(each.makes)).get("base", 0.0)) * output_a_month(building_id) / float(cost(building_id))
-			if score > best_score:
-				best_score = score
-				best = [building_id, port_id]
-	if best.is_empty():
-		return news
-	build(rival, best[0], best[1])
-	news.append("built a %s at %s" % [str(building(best[0]).name).to_lower(), GameData.port_name(best[1])])
-	return news
-
-
-## A rival's sites whose stockpiles have filled sell where they are.
-func sell_rival_stock(rival: Company) -> void:
-	for key in owned_by(rival):
-		if float(site(key).get("stock", 0.0)) >= stock_cap(building_of(key)) * 0.95:
-			sell_stock(rival, key)

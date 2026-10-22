@@ -1,44 +1,45 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 extends PanelContainer
-## Above the main screens: the level (with an XP bar) and money on the left;
+## Above the main screens: the company's value (with its trend) and money on the left;
 ## the company name (in the company's color) over the calendar date and time
 ## in the middle; the game speed buttons on the right (Pause, 1x, 2x, 4x, 8x; F
-## steps through them). Clicking the money opens the Finances screen; clicking
-## the level opens (or closes) the level popup with XP progress, upcoming
-## unlocks and time estimates.
+## steps through them). Clicking the value or the money opens the Finances screen.
 
 const SPEED_BUTTON_WIDTH := 64.0
 ## The company's logo before its name (px).
 const LOGO_SIZE := 22.0
+## How often the company value is worked out again (s), and how far back its
+## trend arrow looks (s of play).
+const VALUE_REFRESH_S := 2.0
+const TREND_BACK_S := 300.0
 
 ## Multiplayer: who's playing (see _update_players()).
 var _players := Label.new()
+## The company value lately: [[play time, value]...], oldest first.
+var _values: Array = []
+var _value_clock := 0.0
 
 
 func _ready() -> void:
-	# The company's name, the clock, the level and the money in the headings' font (Cinzel: see ui/theme.tres), a size up for its small capitals.
+	# The company's name, the clock, its value and the money in the headings' font (Cinzel: see ui/theme.tres), a size up for its small capitals.
 	var heading_font := get_theme_font(&"font", &"HeaderLabel")
 	%CompanyLabel.add_theme_font_override(&"font", heading_font)
 	%CompanyLabel.add_theme_font_size_override(&"font_size", 17)
 	%DateLabel.add_theme_font_override(&"font", heading_font)
 	%DateLabel.add_theme_font_size_override(&"font_size", 14)
-	for label: Label in [%LevelLabel, %MoneyLabel]:  # (The level and the money too.)
+	for label: Label in [%ValueLabel, %MoneyLabel]:  # (The value and the money too.)
 		label.add_theme_font_override(&"font", heading_font)
 	%CompanyLabel.text = GameState.company_name
 	GameState.apply_company_text_color(%CompanyLabel)
 	_add_logo()
 	GameState.money_changed.connect(_on_money_changed)
-	GameState.company_xp_changed.connect(_on_xp_changed)
-	for control: Control in [%LevelLabel, %LevelBar]:
-		control.mouse_filter = Control.MOUSE_FILTER_STOP
-		control.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		control.gui_input.connect(_on_level_input)
-	%MoneyLabel.mouse_filter = Control.MOUSE_FILTER_STOP
-	%MoneyLabel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	for label: Label in [%ValueLabel, %MoneyLabel]:
+		label.mouse_filter = Control.MOUSE_FILTER_STOP
+		label.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		label.gui_input.connect(_on_money_input)
 	%MoneyLabel.tooltip_text = "Open Finances"
-	%MoneyLabel.gui_input.connect(_on_money_input)
 	_on_money_changed(GameState.money)
-	_on_xp_changed(GameState.company_xp)
+	_update_value()
 	_add_speed_buttons()
 	GameState.time_speed_changed.connect(_on_time_speed_changed)
 	_on_time_speed_changed(GameState.time_speed)
@@ -72,8 +73,12 @@ func _on_money_changed(money: int) -> void:
 		%MoneyLabel.tooltip_text = "Open Finances"
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	%DateLabel.text = Fmt.calendar(GameState.calendar_time())
+	_value_clock += delta
+	if _value_clock >= VALUE_REFRESH_S:
+		_value_clock = 0.0
+		_update_value()
 
 
 ## One button per game speed this save allows (Pause, 1x, 2x, 4x, 8x, up to
@@ -117,25 +122,25 @@ func _on_time_speed_changed(speed: int) -> void:
 
 
 
-func _on_xp_changed(total_xp: float) -> void:
-	var info := Progression.company_level(total_xp)
-	%LevelLabel.text = "Level %d" % info.level
-	var at_max: bool = info.cost <= 0
-	%LevelBar.value = 1.0 if at_max else info.xp / float(info.cost)
-	%LevelBar.tooltip_text = "Click for details"
-
-
-func _on_level_input(event: InputEvent) -> void:
-	var click := event as InputEventMouseButton
-	if not click or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
-		return
-	var host := PopupHost.find(self)
-	if is_instance_valid(host.current) and host.current is LevelPopup:
-		host.close()
-		return
-	var popup := LevelPopup.new()
-	popup.follow = func() -> Vector2: return %LevelBar.get_global_rect().get_center() + Vector2(0, 14)
-	host.open(popup)
+## "Worth $12.4M ▲": the company's value (GameState.company_value()), with an
+## arrow when it's up or down more than 1% on TREND_BACK_S ago.
+func _update_value() -> void:
+	var value := GameState.company_value()
+	var now := GameState.play_time
+	if _values.is_empty() or now - float(_values[-1][0]) >= VALUE_REFRESH_S * 5.0 or now < float(_values[-1][0]):
+		if not _values.is_empty() and now < float(_values[-1][0]):
+			_values.clear()  # (Another game loaded.)
+		_values.append([now, value])
+	while _values.size() > 1 and now - float(_values[1][0]) >= TREND_BACK_S:
+		_values.pop_front()
+	var was := float(_values[0][1])
+	var arrow := ""
+	if now - float(_values[0][0]) >= TREND_BACK_S * 0.5 and absf(was) > 1.0:
+		var change := (value - was) / absf(was)
+		arrow = " ▲" if change > 0.01 else (" ▼" if change < -0.01 else "")
+	%ValueLabel.text = "Worth %s%s" % [Fmt.money_short(roundi(value)), arrow]
+	%ValueLabel.tooltip_text = "Company value: money less loans, plus what your ships would sell for and what your hubs cost.
+Open Finances"
 
 
 func _on_money_input(event: InputEvent) -> void:

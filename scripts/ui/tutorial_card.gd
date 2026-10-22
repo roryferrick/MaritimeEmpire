@@ -118,7 +118,6 @@ func _finish() -> void:
 func _tips_list() -> Array[Dictionary]:
 	var seen := func(id: String) -> bool: return GameState.tutorial_done.has(id)
 	var always := func() -> bool: return true
-	var breakdown_level := int(GameData.config.get("breakdowns", {}).get("min_company_level", 6))
 	return [
 		{id = "welcome", who = "dick", title = "Welcome to %s" % GameState.company_name, show = always,
 			text = func() -> String: return "Welcome aboard. I'm Captain Mo B. Dick, and this is your shipping company. %s\n\nYour headquarters is %s: the port with a ring in your color. Sonny, Marissa, Joe and I will chip in as you go; switch us off any time with the Tutorial switch in Settings (press Esc)." % [_type_welcome(), GameData.port_name(GameState.home_port)]},
@@ -148,18 +147,13 @@ func _tips_list() -> Array[Dictionary]:
 			text = func() -> String: return "The Prices picker in the top right of the map colors every port by a commodity's price: green where it's cheap to buy, red where it sells high.\n\nThe Markets button at the top left of the map lists the best trades, anywhere and close by, and a port's popup shows all its prices."},
 		{id = "grow", who = "sonny", title = "Grow your fleet", show = func() -> bool: return seen.call("prices"),
 			text = func() -> String: return "More ships, more profit. The Shop tab gets a red dot when you can afford another. Give each one its own route, or send several round a good loop.\n\nThe Finances tab shows where your money comes from and where it goes, and which ships earn the most."},
-		{id = "levels", who = "marissa", title = "Company levels",
-			show = func() -> bool: return seen.call("map") and GameState.company_level() >= 2,
-			text = func() -> String: return "Every delivery earns your company XP. New levels unlock bigger ships and let you own more of each. At level %d you branch out into another company type, and again every %d levels.\n\nClick your level at the top left to see what's coming next." % [Progression.type_pick_every(), Progression.type_pick_every()]},
-		{id = "ship_upgrades", who = "joe", title = "Ship upgrades",
-			show = func() -> bool: return seen.call("map") and _cargo_ships().any(func(ship: Ship) -> bool: return ship.skill_points() > 0),
-			text = func() -> String: return "Ships level up from their own deliveries, and each level gives an upgrade point. Spend them on speed, durability or gas efficiency with Upgrades in the ship's popup, or Upgrade all in the Ships tab. Each upgrade costs money too."},
 		{id = "hubs", who = "sonny", title = "Hubs",
-			show = func() -> bool: return seen.call("map") and GameState.hubs_available() > 0,
-			text = func() -> String: return "You can found a hub. Click a port and open its Hub tab to build one there.\n\nHubs level up from deliveries unloaded at them, their upgrades help every ship that docks, and new ships can launch from them. A hub is permanent, so pick a busy port on your routes."},
+			show = func() -> bool: return seen.call("grow") and GameState.hubs.size() < 2 and GameState.money >= GameState.hub_price() * 2,
+			done = func() -> bool: return GameState.hubs.size() >= 2,
+			text = func() -> String: return "We could afford a hub. Click a port and open its Hub tab to build one there (the next costs %s, and each pays a monthly upkeep).\n\nNew ships can launch from a hub, our trade there pays no port fee, and it has plots for warehouses. A hub is permanent, so pick a busy port on your routes." % Fmt.money(GameState.hub_price())},
 		{id = "breakdowns", who = "joe", title = "Breakdowns",
-			show = func() -> bool: return seen.call("map") and GameState.company_level() >= breakdown_level,
-			text = func() -> String: return "From now on ships can break down at sea, more often the more worn they are, so keep Repair on.\n\nA ship that breaks down completely or runs out of fuel is lost at sea until a recovery boat carries it to port. Recovery boats are in the Shop, from company level %d." % _first_recovery_level()},
+			show = func() -> bool: return seen.call("upkeep"),
+			text = func() -> String: return "Ships can break down at sea, more often the more worn they are, so keep Repair on.\n\nA ship that breaks down completely or runs out of fuel is lost at sea until a recovery boat carries it to port. Recovery boats are in the Shop's Service tab."},
 		{id = "storms", who = "joe", title = "Storms",
 			show = func() -> bool: return seen.call("map") and GameState.weather.active() and not GameState.weather.storms.is_empty(),
 			text = func() -> String: return "Storms now affect your ships. They form in their real seasons (hurricanes and typhoons in late summer, gales in winter), drift across the sea and fade.\n\nShips sail through them slower and wearing faster, and the strongest hurricane cores close ports while they pass; ships wait them out. The activity log warns you when one heads for your ports."},
@@ -167,11 +161,11 @@ func _tips_list() -> Array[Dictionary]:
 			show = func() -> bool: return seen.call("map") and GameState.seasonal.active(),
 			text = func() -> String: return "From now on the seasons close some places, on their real dates: the Great Lakes locks and ports in winter, Antarctica outside its summer, and icebound ports like Nain and Magadan. Ice in the Gulf of Finland slows ships instead.\n\nShips won't start a leg they can't finish before a closure; they wait in port until it reopens. The activity log warns you 10 days ahead, and a port's popup and the route screen show its dates."},
 		{id = "icebreakers", who = "joe", title = "Icebreakers",
-			show = func() -> bool: return seen.call("seasons") and GameState.company_level() >= _first_icebreaker_level(),
-			text = func() -> String: return "Icebreakers are in the Shop now. You only need one if your ships trade where winter ice closes ports: the Great Lakes, the Sea of Okhotsk, the White Sea, or the Gulf of Finland, where the ice just slows ships. A nuclear one can keep the Arctic routes open all winter.\n\nBuy one, then pick its Station in its popup. While the ice is in, it leads your ships through in small convoys (or keeps the Gulf of Finland's fairways open). The rest of the year it just waits."},
+			show = func() -> bool: return seen.call("seasons") and _cargo_ships().size() >= 3,
+			text = func() -> String: return "Icebreakers are in the Shop's Service tab. You only need one if your ships trade where winter ice closes ports: the Great Lakes, the Sea of Okhotsk, the White Sea, or the Gulf of Finland, where the ice just slows ships. A nuclear one can keep the Arctic routes open all winter.\n\nBuy one, then pick its Station in its popup. While the ice is in, it leads your ships through in small convoys (or keeps the Gulf of Finland's fairways open). The rest of the year it just waits."},
 		{id = "lost", who = "joe", title = "Lost at sea",
 			show = func() -> bool: return GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_lost()),
-			text = func() -> String: return "A ship is lost at sea. A recovery boat can carry it to the nearer end of its leg: press Send Recovery in the lost ship's popup. With its Rescue switch on (it is by default), one is sent automatically.\n\nNo recovery boat yet? Buy one in the Shop when it unlocks."},
+			text = func() -> String: return "A ship is lost at sea. A recovery boat can carry it to the nearer end of its leg: press Send Recovery in the lost ship's popup. With its Rescue switch on (it is by default), one is sent automatically.\n\nNo recovery boat yet? Buy one in the Shop's Service tab."},
 		{id = "birds_follow", who = "dick", title = "Birds on your wake",
 			show = func() -> bool: return seen.call("trading") and _followed_ship() != null,
 			text = func() -> String:
@@ -191,17 +185,17 @@ func _tips_list() -> Array[Dictionary]:
 			show = func() -> bool: return seen.call("upkeep") and GameState.wage_period >= 1,
 			text = func() -> String: return "Marissa here, from head office. Every two weeks the crews are paid: a captain and some hands on every ship that worked. It's in the Activity list each payday, and the Finances tab adds it up with the fuel, the repairs, the port fees and the tolls.\n\nWatch the profit per ship there, not just the sales: a ship that sails empty half the time is the one to re-route."},
 		{id = "company_type", who = "dick", title = "Time to branch out",
-			show = func() -> bool: return seen.call("map") and GameState.company_types_available() > 0,
-			done = func() -> bool: return GameState.company_types_available() <= 0,
-			text = func() -> String: return "We've grown enough to go into a second trade. Press Choose a company type at the top right of the map (or on a locked tab in the Shop) and pick one: its smallest ships open straight away and the bigger ones follow as we level up.\n\nIt's for good, so look at what each carries and which ports near our hubs trade it. Another choice comes every %d levels." % Progression.type_pick_every()},
+			show = func() -> bool: return seen.call("grow") and GameState.company.company_types.size() < 2 and GameState.money >= GameState.division_price() * 3,
+			done = func() -> bool: return GameState.company.company_types.size() >= 2,
+			text = func() -> String: return "We could afford to go into a second trade. Press Open a division at the top right of the map (or on a locked tab in the Shop) and pick one: it costs %s, and all its ships can be bought from then on.\n\nIt's for good, so look at what each carries and which ports near our hubs trade it." % Fmt.money(GameState.division_price())},
 		{id = "farms", who = "sonny", title = "Our own farms",
-			show = func() -> bool: return seen.call("trading") and Farms.can_farm(GameState.company) and GameState.company.level() >= 3,
+			show = func() -> bool: return seen.call("trading") and Farms.can_farm(GameState.company),
 			done = func() -> bool: return not GameState.farms.owned_by(GameState.company).is_empty(),
 			text = func() -> String: return "The Farms button at the top left of the map: the world's farm ports, each with a few plots of land for sale. Buy one, plant a crop that suits the climate (or graze a herd), and the harvest comes in by the season to our farm store at that port, where our own ships load it free.
 
 Grain carriers take the dry crops, Fresh produce carriers the fruit and vegetables (they lose a little value every day, so don't let them sit), livestock carriers the young stock. Watch the almanac: a drought or a frost can take most of a year's harvest."},
 		{id = "energy", who = "sonny", title = "Our own oil",
-			show = func() -> bool: return seen.call("trading") and Energy.can_drill(GameState.company) and GameState.company.level() >= Energy.unlock_level("oil_refinery", GameState.company),
+			show = func() -> bool: return seen.call("trading") and Energy.can_drill(GameState.company),
 			done = func() -> bool: return not GameState.energy.owned_by(GameState.company).is_empty() or not GameState.energy.plant_ports(GameState.company).is_empty(),
 			text = func() -> String: return "The Energy button at the top left of the map. An oil refinery at any port turns crude into diesel: route a tanker so its last stop is there and it brings the crude, and our ships load the diesel free (and fill their own tanks from it, free). Gas refineries and a jet fuel plant come later.
 
@@ -214,20 +208,20 @@ Once we're bigger, the offshore fields: put up a rig, send a tanker on rig runs 
 			show = func() -> bool: return seen.call("cruise_plan") and GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_cruise() and not ship.cruise.get("history", []).is_empty()),
 			text = func() -> String: return "Our first cruise is back. Guests book in the home port till the ship sails (the Departures tab sets when), and price decides how many come: at the recommended price about nine in ten berths fill, half again over it about a third.\n\nEvery voyage gets a review, and the reviews, the itineraries, the guest experience and how smoothly things go make our Cruises rating: more stars, and guests will pay more."},
 		{id = "research_ship", who = "sonny", title = "Into the deep",
-			show = func() -> bool: return seen.call("map") and Research.can_research(GameState.company) and not GameState.company.all_types() and not GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_research()),
+			show = func() -> bool: return seen.call("map") and Research.can_research(GameState.company) and not GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_research()),
 			done = func() -> bool: return GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_research()),
 			text = func() -> String: return "We're in Research now. In the Shop's Research tab: survey vessels for the shallower sites (reefs, wrecks, sunken cities) and deep-sea motherships for the deeps (the Titanic, the vents, one day the Challenger Deep).\n\nA research ship carries no cargo: it goes out to a site, holds on station for days surveying it, and comes home."},
 		{id = "research_gear", who = "dick", title = "Gear and expeditions",
 			show = func() -> bool: return seen.call("research_ship") and GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_research()),
 			done = func() -> bool: return GameState.fleet().any(func(ship: Ship) -> bool: return ship.is_research() and not ship.research_target.is_empty()) or not Research.record_of(GameState.company).done.is_empty(),
-			text = func() -> String: return "The Research button at the top left of the map. Gear first: every site needs some (sonar to find a wreck, an ROV to see it, divers for the shallows, a crewed sub for the deepest), fitted into the ship's slots in port.\n\nThen Expeditions: pick a site within its reach and send it. Our own expeditions earn no money, only XP, the Atlas and perks for the whole company; the Contracts board pays."},
+			text = func() -> String: return "The Research button at the top left of the map. Gear first: every site needs some (sonar to find a wreck, an ROV to see it, divers for the shallows, a crewed sub for the deepest), fitted into the ship's slots in port.\n\nThen Expeditions: pick a site within its reach and send it. Our own expeditions earn no money: research points (banked for developing our own technology), the Atlas and perks for the whole company; the Contracts board pays."},
 		{id = "research_contracts", who = "marissa", title = "Paid work",
 			show = func() -> bool: return seen.call("research_gear") and not Research.record_of(GameState.company).done.is_empty(),
 			done = func() -> bool: return not GameState.research.taken_by(GameState.company).is_empty(),
 			text = func() -> String: return "Our first site's in the Atlas. Expeditions cost fuel and wages, so take contracts too: universities, cable layers, salvors and film crews post them on the Contracts board, and every company sees the same board, first come first served.\n\nMind the deadline: a missed one loses the pay and costs a penalty. Finish a quarter of a category's sites for its first perk, half for the second, all of them for the third."},
 		{id = "achievements", who = "marissa", title = "A milestone",
 			show = func() -> bool: return seen.call("map") and Achievements.score(GameState.company).x > 0,
-			text = func() -> String: return "You've earned your first achievement star. The trophy button at the top right of the map keeps them all: stars for cargo delivered of each kind, for the fleet, the company level, the bank, the field guide, and badges for the rest.\n\nThey're the big milestones. Each one takes real work, so keep at it; the next is always listed with how far along we are."},
+			text = func() -> String: return "You've earned your first achievement star. The trophy button at the top right of the map keeps them all: stars for cargo delivered of each kind, for the fleet, the company's value, the bank, the field guide, and badges for the rest.\n\nThey're the big milestones. Each one takes real work, so keep at it; the next is always listed with how far along we are."},
 	]
 
 
@@ -307,19 +301,3 @@ func _route_screen_open() -> bool:
 	return root != null and root.is_route_screen_open()
 
 
-## The lowest company level a recovery boat unlocks at.
-static func _first_recovery_level() -> int:
-	var level := 999
-	for model: Dictionary in GameData.ship_models:
-		if model.get("recovery", false):
-			level = mini(level, int(model.get("unlock_level", 1)))
-	return level
-
-
-## The lowest company level an icebreaker unlocks at.
-static func _first_icebreaker_level() -> int:
-	var level := 999
-	for model: Dictionary in GameData.ship_models:
-		if not str(model.get("icebreaker", "")).is_empty():
-			level = mini(level, int(model.get("unlock_level", 1)))
-	return level

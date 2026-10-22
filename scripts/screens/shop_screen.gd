@@ -4,17 +4,17 @@ extends Control
 ## company type, TYPE_ROWS, then Service) of sections by category, laid out in
 ## rows with the sections of a row side by side, each as wide as its models (up
 ## to 5 cards a row). A type the company lacks has a lock on its tab, its cards
-## faded, and a note over them saying when it can be chosen (with a Choose
-## button while a type can be: CompanyTypeDialog); the Shop opens on the
+## faded, and a note over them with its division's price and an Open a
+## division button (CompanyTypeDialog); the Shop opens on the
 ## company's first type. A row too wide for the screen stacks its
 ## sections. Each section title runs through its models' map colors, smallest
 ## ship first, and each card's name is in its model's map color, above a
 ## picture of the ship as it looks on the map (see ShipPicture). Each card
-## shows how many of the model the company's level allows, and the level that
-## unlocks the model or its next slot. Each section sits on a faint tint of its
+## shows how many of the model the company owns (tugs: of the slots its route
+## ports give). Each section sits on a faint tint of its
 ## ship line's color. A red dot marks every Buy button that can be used right
 ## now; hovering one the company can't afford shows a small note saying so.
-## The Tugs section has Buy All Tugs (filling every free slot money allows).
+## The Tugs section has Buy All Tugs (filling every free tug slot money allows).
 
 ## [title, ship_models.json category]
 const SECTIONS := [["Container ships", "container"], ["Ore carriers", "ore"], ["Breakbulk carriers", "breakbulk"], ["Grain carriers", "grain"],
@@ -74,7 +74,7 @@ var _buy_all_tugs := Button.new()
 var _hint := PanelContainer.new()
 var _hint_label := Label.new()
 var _hovered := ""
-## Money, the fleet or the level changed since the cards were last updated.
+## Money or the fleet changed since the cards were last updated.
 var _dirty := false
 var _tabs: TabContainer = null
 ## Per company type: its tab's index, its rows of sections, and the note over
@@ -149,7 +149,7 @@ func _ready() -> void:
 	# once a frame, and only while the Shop is open.
 	GameState.money_changed.connect(func(_money: int) -> void: _dirty = true)
 	GameState.ships_changed.connect(func() -> void: _dirty = true)
-	GameState.company_leveled.connect(func(_level: int, _unlocks: Array[String]) -> void: _dirty = true)
+	GameState.company_types_changed.connect(func() -> void: _dirty = true)
 	GameState.company_types_changed.connect(func() -> void: _dirty = true)
 	if _type_tabs.has(GameState.company.start_type()):
 		tabs.current_tab = _type_tabs[GameState.company.start_type()]
@@ -392,13 +392,9 @@ func _make_card(model: Dictionary, coming := false) -> Control:
 
 
 func _update_cards() -> void:
-	var level := GameState.company_level()
 	for model_id: String in _buy_buttons:
 		var model := GameData.get_ship_model(model_id)
-		var slots := _slots(model)
-		var max_owned := int(model.get("max_owned", 0))
 		var owned := GameState.owned_count(model_id)
-		var next := Progression.next_slot_level(model, level)
 		var price := GameState.ship_price(model_id)
 		_price_labels[model_id].text = _price_text(price)
 		if model.get("tug", false):
@@ -408,20 +404,17 @@ func _update_cards() -> void:
 			_price_labels[model_id].mouse_filter = Control.MOUSE_FILTER_PASS
 		elif price < int(model.get("price", 0)):
 			_price_labels[model_id].text += " for your first, then %s" % _price_text(int(model.price))
-		_owned_labels[model_id].text = "%d / %d" % [owned, slots]
 		if model.get("tug", false):
-			_owned_labels[model_id].text += " (2 per route port)"
-		elif slots < max_owned and level >= Progression.unlock_level(model):
-			_owned_labels[model_id].text += " (max %d)" % max_owned
-		var button: Button = _buy_buttons[model_id]
-		if next == Progression.LOCKED:
-			button.text = "Comes with %s" % Progression.type_name(Progression.type_of_model(model))
-		elif level < Progression.unlock_level(model):
-			button.text = "Unlocks at level %d" % next
-		elif owned < slots:
-			button.text = "Buy"
+			_owned_labels[model_id].text = "%d / %d (%d per route port)" % [owned, GameState.tug_slots(), GameState.tugs_per_port()]
 		else:
-			button.text = "Route to more ports for more" if model.get("tug", false) else ("Limit reached" if next < 0 else "Next slot at level %d" % next)
+			_owned_labels[model_id].text = "%d owned" % owned
+		var button: Button = _buy_buttons[model_id]
+		if not Progression.can_buy_model(model):
+			button.text = "Comes with %s" % Progression.type_name(Progression.type_of_model(model))
+		elif model.get("tug", false) and owned >= GameState.tug_slots():
+			button.text = "Route to more ports for more"
+		else:
+			button.text = "Buy"
 		var error := GameState.buy_error(model_id)
 		button.disabled = not error.is_empty()
 		_buy_alerts[model_id].visible = error.is_empty()
@@ -436,7 +429,7 @@ func _update_cards() -> void:
 
 
 ## The note over a company type's sections while the company lacks it: its
-## icon, when it can be chosen, and a Choose button while it can.
+## icon, its price, and a button to open the division.
 func _type_banner(type_id: String) -> Control:
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
@@ -456,7 +449,7 @@ func _type_banner(type_id: String) -> Control:
 	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(label)
 	var choose := Button.new()
-	choose.text = "Choose a company type"
+	choose.text = "Open a division"
 	choose.pressed.connect(func() -> void: CompanyTypeDialog.open(self))
 	row.add_child(choose)
 	_type_banners[type_id] = [panel, label, choose]
@@ -466,20 +459,12 @@ func _type_banner(type_id: String) -> Control:
 ## Each type's tab: a lock and faded cards under its note while the company
 ## lacks the type; plain once it has it.
 func _update_types() -> void:
-	var available := GameState.company_types_available()
-	var next := Progression.next_type_level(GameState.company_level())
 	for type_id: String in _type_tabs:
 		var has := GameState.company.has_type(type_id)
 		var banner: Array = _type_banners[type_id]
 		(banner[0] as Control).visible = not has
 		var name := Progression.type_name(type_id)
-		if available > 0:
-			(banner[1] as Label).text = "Your company isn't in %s. You can choose a new company type now: choose %s to open its ships." % [name, name]
-		elif next > 0:
-			(banner[1] as Label).text = "Your company isn't in %s. You can choose a new company type at company level %d." % [name, next]
-		else:
-			(banner[1] as Label).text = "Your company isn't in %s." % name
-		(banner[2] as Button).visible = available > 0
+		(banner[1] as Label).text = "Your company isn't in %s. Open a %s division (%s) to buy its ships." % [name, name, Fmt.money(GameState.division_price())]
 		for row: Control in _type_rows[type_id]:
 			row.modulate.a = 1.0 if has else 0.5
 		_tabs.set_tab_icon(_type_tabs[type_id], null if has else _lock())
@@ -530,11 +515,10 @@ func _on_buy_pressed(model_id: String) -> void:
 
 
 ## How much more money buying this model needs, or 0 if money isn't what's
-## stopping it (it's affordable, locked or out of slots).
+## stopping it (it's affordable, or locked).
 func _short_of_money(model_id: String) -> int:
 	var model := GameData.get_ship_model(model_id)
-	var slots := _slots(model)
-	if GameState.owned_count(model_id) >= slots:
+	if not Progression.can_buy_model(model) or model.get("tug", false) and GameState.owned_count(model_id) >= GameState.tug_slots():
 		return 0
 	return maxi(GameState.ship_price(model_id) - GameState.money, 0)
 
@@ -568,14 +552,6 @@ func _process_timed(_delta: float) -> void:
 		_update_cards()
 	elif _hint.visible:
 		_update_hint()  # Follows the button if the list scrolls.
-
-
-## How many of a model the company can own now: its level's slots, or for
-## tugs two for each port on its routes.
-func _slots(model: Dictionary) -> int:
-	if model.get("tug", false):
-		return GameState.tug_slots() if GameState.company_level() >= Progression.unlock_level(model) else 0
-	return Progression.model_slots(model, GameState.company_level())
 
 
 ## A price short enough for a card: "$250,000", "$15M", "$1.5M".

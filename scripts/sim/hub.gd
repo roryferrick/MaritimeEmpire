@@ -1,33 +1,18 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name Hub
 extends RefCounted
-## The company's headquarters (at its home port, from the start) or a hub (one
-## more every hubs.every_company_levels company levels, placed at any port for
-## good). Levels 0 to hubs.max_level from the XP of deliveries unloaded at its
-## port; each level is an upgrade point for its tree, which boosts every ship
-## docking there, and costs money (see upgrade_cost()). The HQ's bonuses are
-## hubs.hq_multiplier times a hub's.
-
-## Upgrade paths: [key, name, what each point does ("%d" is the total percent)].
-const PATHS := [
-	["xp", "Ship XP", "+%d%% XP"],
-	["costs", "Fuel & repairs", "-%d%% price"],
-	["speed", "Port stops", "-%d%% time"],
-	["pay", "Sale prices", "+%d%% sale price"],
-]
+## The company's headquarters (at its home port, from the start) or a hub
+## (bought at any port, for good: GameState.hub_price()). Each pays a monthly
+## upkeep by its port's size (GameState._pay_hub_upkeep()) and has plots for
+## its warehouses. Facilities to buy come later (DESIGN_LIVING_WORLD.md).
 
 var port_id := ""
 var is_hq := false
-## Level and XP into it (levels are bought as XP comes in, see GameState).
-var level := 0
-var xp := 0.0
-var upgrades := {"xp": 0, "costs": 0, "speed": 0, "pay": 0}
 ## Traffic: deliveries unloaded here and the pay they brought in.
 var deliveries := 0
 var income := 0.0
-## Its industry: a building on each plot beside the marina (a commodity id,
-## or "" for an empty plot), INDUSTRY_SLOTS of them, each opening at one of
-## hubs.industry.slot_levels (see industry_slots()).
+## Its warehouses: one on each plot beside the marina (a commodity id, or ""
+## for an empty plot), INDUSTRY_SLOTS of them, all open.
 var industries := ["", "", ""]
 
 const INDUSTRY_SLOTS := 3
@@ -42,59 +27,9 @@ func title() -> String:
 	return "%s %s" % [GameData.port_name(port_id), "HQ" if is_hq else "hub"]
 
 
-func upgrade_points() -> int:
-	var spent := 0
-	for path: String in upgrades:
-		spent += int(upgrades[path])
-	return level - spent
-
-
-func can_upgrade(path: String) -> bool:
-	return upgrade_points() > 0 and int(upgrades.get(path, 0)) < Hub.max_path_level()
-
-
-## Extra company XP for deliveries unloaded here (e.g. 0.3 for +30%): hubs.
-## company_xp_base, plus company_xp_per_10_levels for every 10 levels, times
-## the HQ multiplier. Free: it comes with the hub's level, not an upgrade.
-func company_xp_bonus() -> float:
-	var settings := Hub.settings()
-	var bonus := float(settings.get("company_xp_base", 0.1)) + float(settings.get("company_xp_per_10_levels", 0.1)) * floori(level / 10.0)
-	return bonus * (float(settings.get("hq_multiplier", 1.5)) if is_hq else 1.0)
-
-
-## Money for the next point in a path: upgrade_cost, plus upgrade_cost_step for
-## each point it already has.
-func upgrade_cost(path: String) -> int:
-	var settings := Hub.settings()
-	return int(settings.get("upgrade_cost", 2000000)) + int(settings.get("upgrade_cost_step", 500000)) * int(upgrades.get(path, 0))
-
-
-## The bonus from a path (e.g. 0.15 for +15%), counting the HQ multiplier.
-func bonus(path: String) -> float:
-	var settings := Hub.settings()
-	var step := float(settings.get("per_point", {}).get(path, 0.0))
-	var multiplier := float(settings.get("hq_multiplier", 1.5)) if is_hq else 1.0
-	return int(upgrades.get(path, 0)) * step * multiplier
-
-
 ## The industry settings (game_config hubs.industry).
 static func industry_settings() -> Dictionary:
 	return settings().get("industry", {})
-
-
-## The hub level each industry plot opens at.
-static func industry_slot_level(slot: int) -> int:
-	var levels: Array = industry_settings().get("slot_levels", [10, 20, 30])
-	return int(levels[slot]) if slot < levels.size() else 999
-
-
-## How many of its industry plots are open (by its level).
-func industry_slots() -> int:
-	var open := 0
-	for slot in INDUSTRY_SLOTS:
-		if level >= Hub.industry_slot_level(slot):
-			open += 1
-	return open
 
 
 ## True if it has a building for a commodity.
@@ -103,31 +38,32 @@ func has_industry(commodity_id: String) -> bool:
 
 
 ## What its building for a commodity gives (0 without one): "buy" (its buy
-## price here that much cheaper, e.g. 0.2), "sell" (its sell price here that
-## much more expensive) or "xp" (that much more XP for deliveries of it to or from
-## here), the HQ's hq_multiplier times a hub's.
+## price here that much cheaper, e.g. 0.2) or "sell" (its sell price here that
+## much more expensive), the HQ's hq_multiplier times a hub's.
 func industry_bonus(commodity_id: String, kind: String) -> float:
 	if not has_industry(commodity_id):
 		return 0.0
-	var key: String = {buy = "buy_discount", sell = "sell_bonus", xp = "xp_bonus"}.get(kind, "")
+	var key: String = {buy = "buy_discount", sell = "sell_bonus"}.get(kind, "")
 	var value := float(Hub.industry_settings().get(key, 0.0))
 	return value * (float(Hub.settings().get("hq_multiplier", 1.5)) if is_hq else 1.0)
 
 
+## Its monthly upkeep: game_config hubs.upkeep_month for its port's size band
+## (none for the HQ).
+func upkeep() -> int:
+	if is_hq:
+		return 0
+	return int(Hub.settings().get("upkeep_month", {}).get(GameState.port_sizes.band(port_id), 0))
+
+
 func to_dict() -> Dictionary:
-	return {"port_id": port_id, "is_hq": is_hq, "level": level, "xp": xp, "upgrades": upgrades,
-		"deliveries": deliveries, "income": income, "industries": industries}
+	return {"port_id": port_id, "is_hq": is_hq, "deliveries": deliveries, "income": income, "industries": industries}
 
 
 static func from_dict(data: Dictionary) -> Hub:
 	var hub := Hub.new(data.get("port_id", ""), bool(data.get("is_hq", false)))
-	hub.level = int(data.get("level", 0))
-	hub.xp = float(data.get("xp", 0.0))
 	hub.deliveries = int(data.get("deliveries", 0))
 	hub.income = float(data.get("income", 0.0))
-	var saved: Dictionary = data.get("upgrades", {})
-	for path: String in hub.upgrades:
-		hub.upgrades[path] = int(saved.get(path, 0))
 	var built: Array = data.get("industries", [])
 	for slot in INDUSTRY_SLOTS:
 		hub.industries[slot] = str(built[slot]) if slot < built.size() else ""
@@ -138,19 +74,8 @@ static func settings() -> Dictionary:
 	return GameData.config.get("hubs", {})
 
 
-static func max_level() -> int:
-	return int(settings().get("max_level", 40))
-
-
-static func max_path_level() -> int:
-	return int(settings().get("max_path_level", 10))
-
-
-## "Company XP +30% on deliveries here (+40% at level 30)"
-func company_xp_text() -> String:
-	var text := "Company XP +%d%% on deliveries here" % roundi(company_xp_bonus() * 100.0)
-	var next_level := (floori(level / 10.0) + 1) * 10
-	if next_level <= Hub.max_level():
-		var step := float(Hub.settings().get("company_xp_per_10_levels", 0.1)) * (float(Hub.settings().get("hq_multiplier", 1.5)) if is_hq else 1.0)
-		text += " (+%d%% at level %d)" % [roundi((company_xp_bonus() + step) * 100.0), next_level]
-	return text
+## How many warehouses its marina shows (MapView): 2, one more for every
+## WAREHOUSE_DELIVERIES deliveries unloaded here, up to 4.
+static func warehouse_count(hub: Hub) -> int:
+	return clampi(2 + hub.deliveries / WAREHOUSE_DELIVERIES, 2, 4)
+const WAREHOUSE_DELIVERIES := 300

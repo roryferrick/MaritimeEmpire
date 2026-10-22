@@ -1,0 +1,164 @@
+# Maritime Empire — Living World design
+
+The plan for turning the game into a CK3 / Victoria 3-style living world: a causal economy, hundreds of companies, contracts as the main income, reputation and memory, real ship components and new technology. Started 2026-10-21. This file holds the decisions and open questions; SPEC.md stays the record of what is built and is updated as each milestone lands.
+
+## Goal
+
+The player should feel that millions of variables are moving at once. In practice that means three things:
+1. **Every number has a reason the player can see.** Hovering a price, a fee, an opinion or a contract rate shows its breakdown, and the lines of a breakdown can be hovered too.
+2. **The world remembers.** Producers, shipping firms and countries remember what you did, and those memories fade over time.
+3. **The systems feed each other.** A failed harvest raises a price, which changes contracts, which moves rivals, which reaches you.
+
+Today's prices have no causes: `Market.sell_price()` is a regional base × a sine-wave drift × the fading effect of recent trades. That is the first thing to replace.
+
+## Decisions so far
+
+### Time and era
+- Start year **2016** only for now; tech arrives from 2016 onward. An East India Company start and a 1950s–60s start come later, once the 2016 world is done.
+- **Faster calendar:** a game year is about 1.5–2 hours of play (today the calendar runs 20 game minutes per second at 1x, a year about 7.3 hours, matched to real ship speeds). Ships keep today's on-screen speed, so in game time they sail at about a quarter of their real speed (Shanghai to Rotterdam takes about 4 months); contract deadlines and quotas are set to match.
+- **Events pause the game** (single player; the game already has Pause, 1x, 2x, 4x and 8x). Multiplayer handling is still open.
+
+### Removed
+- **Company levels**, and **all other XP**: ship levels, hub levels, recovery boat levels.
+- **Market region unlocking.** Every port is open from day one; reputation decides what you are offered.
+- **Today's AI rivals** (real ships, the New Company "AI rivals" option). The paper companies replace them.
+- **Old saves:** saves from before the overhaul can't be loaded.
+
+What levels used to gate, and what replaces it:
+
+| Was gated by levels | Now |
+|---|---|
+| Ship model unlocks | Money + shipyard orders; reputation lowers the deposit and the total price, never blocks |
+| Slots per model | No slots; a crew pool per seafaring nation limits fleet size |
+| Ship skill points (Speed, Durability, Fuel) | Removed in M1 (ships are just their model); ship components, bought refits fitted in drydock, arrive in M4 |
+| Company type picks at 15/30/45/60 | Buy into a division at any time (about $5M set-up), or buy out an AI company in that trade. Ship models belong to their type: only your divisions' models can be bought |
+| Number of hubs | Unlimited, each dearer than the last ($5M, $10M, $20M...) plus a monthly upkeep by port size ($5k Small to $40k Giant for now; the HQ pays none) |
+| Production buildings (rigs, refineries, pipelines; farm, mine and plant counts) and hub industry plots | All open from day one; price is the gate; each hub industry plot is bought |
+| Hub upgrade points | Hubs buy real facilities with money: extra berths and faster cranes; a fuel depot (cheaper fuel, and fuel sold to passing AI firms); a repair yard (a small drydock for big repairs and refits); warehouses (hold goods for better prices) and a regional office (seats that region's heads, lifts reputation in the country); the Ship XP upgrade goes; a hub raises reputation in its country |
+| Storms, closures, port shrinking (world level) | On from the start (severity from the New Company options); ports grow and shrink with their trade |
+| Achievements, level-up cards, Steam achievements | Milestone achievements (first contract, first tender won, Renowned in 5 countries, a $1B company, a 50-ship fleet...); the level card becomes a milestone card |
+| Tutorial and story characters' pacing | Paced by the player's actions; rewritten as each milestone lands |
+| Research expeditions' XP | Research points, banked now (more for deep, difficult and first finds) and spent in M5 developing the company's own cutting-edge tech; can also be sold or licensed then |
+| XP bonuses (canals, cherry blossom omen, Trenches research perk, star ratings' XP effect) | Money of a similar size: canal crossings add profit, cherry blossom adds sale price in Japan in April, the Trenches perk lowers costs, ratings improve sale prices |
+
+### Starting a company
+- Starting money is no longer one figure: the player picks from **50–100 backstory starts per company type**, each a short story explaining where the money came from and tied to where the company comes from, so starts differ in money, location and therefore strategy even within one type.
+- A backstory is **3–4 sentences** and can also set: **starting ships** (e.g. an inherited old ship with worn components instead of cash), **debt or investors** (more money, strings attached), **starting relations** (friendly or hostile companies and countries from the story) and **CEO traits** (CK3-style: Shrewd, Ex-Navy, Engineer, Gambler... with bonuses, maluses and event flavour).
+- Stories name only made-up companies, never real ones.
+- **Picker:** after choosing a company type, the globe shows every start as a pin; a card shows title, story, money, home port, assets, relations and a difficulty rating, with filters by difficulty and region.
+- **Custom start:** pick a home port and money from a few presets and write your own story, with no special relations or traits.
+
+### Countries
+- Real nations. `ports.json` already has a `country` on all 323 ports.
+- This stage: population, wealth, currency strength, tariffs, and a country page.
+- **Currency strength as a modifier:** all money stays in US dollars; each country's currency strength moves its local prices and wages in dollars and swings with the economy and news (a weak currency makes exports cheap). No exchanging to manage.
+- **Tariffs:** each country's real 2016 average applied tariff (World Bank / WTO data, CC BY 4.0) on imports, with real exceptions such as tariff-free trade inside the EU. Politics can change them later. Governments, elections, laws and sanctions wait for the politics stage.
+
+### Population (Victoria 3-style pops)
+- **3 strata** (lower, middle, upper), each with its own shopping list and standard of living, plus about **8 professions** tied to the buildings where they live (dockers, factory workers, miners, farmers, clerks, officials, owners...). Professions give unions and strikes later.
+- **~600 inland cities** (down to about 300,000 people) hold part of each country's population, alongside the port cities.
+- Until transport exists, an inland city's demand is **shared by its nearby ports** (own country preferred, weighted by distance), shown with faint catchment lines. Roads, rail, airports and more are planned for later and will replace this link.
+- **Pops change over time:** they grow with a good standard of living and shrink with a bad one, migrate toward wealthier cities in their country, and move between professions as buildings open and close. Ports grow and shrink with them (replacing the old level-based port shrinking).
+- **Data:** city locations and populations from Natural Earth "populated places" (public domain); 2016 country population and GDP from the World Bank (CC BY 4.0, credited). A tool script builds `data/cities.json` and `data/countries.json`.
+- On the map, inland cities are a **dot and name** fading in with zoom like port labels. Clicking one opens a popup (pops, needs, plants, catchment ports), and a procedural town is drawn when zoomed in.
+
+### Economy
+- Each port (and inland city) has **stockpiles and demand** per good; the price comes from how short or overstocked it is.
+- Production comes from plants, farms, mines and fields, which consume inputs along the existing chains (ore + coal → steel...).
+- **Within-country pooling:** each country's production and consumption are modelled in full, but goods move freely between its own ports and cities (abstract trucks and rail); only its surplus or shortfall becomes stockpile pressure at its ports, which is what ships carry. Big countries (US, China, Russia, Brazil...) are split into a few internal zones so their coasts still trade with each other.
+- **Real 2016 production** per country and good, from public statistics (FAO for crops and fish, USGS for minerals and metals, EIA for oil and gas; free with credit), turned into producer companies' plants by a tool script.
+- **Pop needs with substitutes** (Victoria 3-style): needs are categories (staple food, protein, clothing, household goods, fuel, electronics, luxuries...), any good in a category satisfies it, and the cheapest is bought first, so a rice spike shifts demand to wheat. Richer strata want more categories.
+- **Daily ticks:** stockpiles update each game day; a delivery lands at once and the price reacts visibly. A price's tooltip shows today's supply, demand, stockpile, incoming ships and the trend.
+- **Moderate volatility:** normal swings of 20–40%; big events (a failed harvest, a closed canal, a war) can double or halve a price in a region for a while.
+- **Spot trade** (buying and selling cargo yourself at ports) stays, but it's secondary: thin margins, because the AI shipping firms keep prices evened out. It's useful for empty return legs and sudden shortages.
+
+### Seeing the world
+- **Intelligence**, a new screen with tabs beside Ships and Finances: Countries, Companies (the AI firms, searchable), Markets (today's Markets page plus price history) and News. City, country and firm popups also open from the map.
+- **Nested CK3-style tooltips:** hovering a number shows its breakdown; holding still locks the tooltip so a line can be hovered for its own breakdown, and so on.
+- **News:** a slim ticker under the top bar scrolls headlines as they happen, and a Newspaper page holds the day's and past editions, filterable by country and good. Big stories pause the game as events.
+
+### Companies
+- **Hundreds of producer companies** own plants, farms, mines and industry buildings, and they are the ones who send contracts.
+- **Hundreds of shipping companies** of all sizes, which together are the world's background trade.
+- **All AI companies are simulated on paper** (fleets, money, reputations, cargo moved as numbers along lanes), with drawn ambient traffic near the camera. Reason: the game spends about 1 ms per simulation step on 213 real ships, so thousands of real ships aren't possible.
+- **Names are made up**, styled by country and trade ("Pilbara Iron Holdings", "Hanseatic Reederei"), to avoid trademark trouble.
+- The player **keeps owning production** (farms, mines, plants, oil). The output sells to the world or goes into supply deals with AI producers, and the player can ship it or put the shipping out to tender with AI firms.
+
+- **About 300 producers and 200 shipping firms** at the start (1–3 producers per port and big inland city, more in industrial countries; a handful of shipping giants, dozens of mid-size firms and a long tail of one-to-five-ship operators).
+- **Full lifecycle:** firms are founded where trade booms, badly run ones go bankrupt (ships to the second-hand market, plants to auction), successful ones expand, merge and buy each other, and the player can buy them out. **Disgruntled long-serving captains** who have saved some money sometimes quit and found their own firms (yours included). All of it goes in the news.
+- **AI firms trade by their CEO:** good CEOs chase price gaps quickly, poor ones lag and overpay, a Gambler chases spikes and sometimes goes bust, leaving gaps for a sharp player.
+- **Ambient traffic:** near the camera, AI ships are drawn as the right model for what the firm carries, in its hull colour with its logo, sailing real lanes and docking at real piers; clicking one shows a read-only card (firm, cargo, destination).
+
+### Divine Actions
+- The mode stays. Storms and Wrath now ripple through the real economy (a smashed port stops exporting, prices spike, contracts are missed), AI firms use powers too, and passive blessings become reputation and event bonuses instead of XP and profit boosts.
+
+### Characters and traits
+- **One trait system for every character:** the player's CEO (from the backstory), every AI firm's CEO, captains and officers, executives (Cautious, Reckless, Ex-Navy, Drinker, Shrewd, Gambler...). In M1 traits drive AI firms' behaviour and give the player's people bonuses; opinions and memories hook into them in M2.
+
+- **Five skills, from 0 with no upper cap** (like CK3): Seamanship, Finance, Negotiation, Engineering, Leadership. Each role uses one or two (CFO: Finance; CTO: Engineering; Head of Ore: Negotiation + Finance; Captain: Seamanship + Leadership). Traits add to or take from skills.
+- **Hiring** from all four sources: a rolling **job market** of candidates worldwide (age, nationality, skills, traits, salary ask; the best want more, and some only join a company with a good reputation in their country); **poaching** from AI firms (the firm remembers); **promotion from within** (passed-over people may get disgruntled); a **headhunter fee** to find a strong candidate for one role quickly.
+- **Ageing and succession:** everyone ages with the calendar, and people retire or die, sometimes suddenly. When the player's CEO goes, the player picks a successor from the executives or family, and the game continues as the company. Captains retire and leave gaps.
+
+### Headquarters staff
+- A real executive team at HQ: **CFO, CTO, COO** and the like.
+- **Heads of trade groups, per region** (regions are the **17 market regions**, kept as administrative areas, no longer locks): every trade group in every region where the company works that group can have its own head (Head of Ore, Head of Seafood transport, Head of Fishing & crabbing... in each such region), so a big company can end up with many heads. Trades are grouped logically: Fishing & crabbing as one group, Seafood transport as one, Ore as one, and so on.
+- Roles **don't have to be filled**. Anyone in the role, even someone bad at it, gives a small bonus over an empty seat; better people give more. Everyone is **paid a salary**.
+
+- **Trade groups (17):** Containers · Ore & dry bulk · Grain & agri bulk · Metals & breakbulk · Crude & oil products · Gas · Vehicles · Livestock · Fresh produce (reefer) · Seafood transport · Fishing & crabbing · Cruises · Research · Towage & salvage (tugs, recovery, icebreaking) · Farming · Mining & industry · Oil & gas production.
+- **Executive seats:** CFO (loan rates, cash, hedging), COO (port turnaround, fuel use, scheduling), CTO (refits, components, R&D relations), Chief Commercial Officer (tender bids, contract rates, producer relations), Chief People Officer (crew pools, wages, morale, captains quitting), Legal & Compliance (fines, disputes, penalties; politics and regulation later).
+- **What they do:** passive bonuses from their skills, plus **delegation** (e.g. "Head of Ore, East Asia: bid on small tenders and assign ships to them, up to $20M"), done as well as their skills and traits allow. They also **come to the CEO** (as events) when they need things, have new business ideas, or bring information.
+
+### Ownership, the board and succession
+- The CEO has a **family** (spouse, children who grow up, can be educated and given jobs in the company).
+- The company has **owners with shareholdings**; **board members vote by the percentage they own**.
+- Succession is a **company vote**. The player can **resign at any time** to trigger a succession election, and still votes as an owner.
+- After a resignation, a series of events and questions: first the election, then the player chooses who to play next:
+  - **the same character** (found a new company they own privately, look for a better job at a better company, etc.),
+  - **the election's winner**, regardless of family,
+  - **their son or daughter** (who may or may not have won; the result is known by then).
+- **A new job** for the same character comes at both levels: some AI firms offer their **CEO seat** (you then run that company, keeping your shares in the old one), others offer **executive posts** (CFO, a regional head) with powers limited to that remit, from which you climb through board votes.
+- **Full share market:** companies are private or listed on a stock exchange. Selling shares raises money and dilutes your vote; you can buy shares in AI firms and take one over by passing 50%, or be taken over yourself. Share prices follow results and news. The backstory sets the starting stake.
+- **Going public is a real process:** choose an investment bank (made-up names; fees vs reputation and investor reach; prestigious banks only take companies with good results); the bank values the company and the player picks the price range and how much to sell (cash vs control); a **roadshow** of investor-meeting events whose answers and CEO traits shift demand; **listing day** plays out live (pop or flop); afterwards **quarterly reports** against analysts' expectations move the share price.
+- **Real stock exchanges** (New York, London, Oslo, Hong Kong, Singapore, Tokyo, Frankfurt...), each with its own listing rules, fees and appetite for shipping; no exchange logos.
+- **Other shareholders:** big holders are characters (co-founders, family, pension fund managers, activist investors) with traits and opinions of the CEO that drive their votes; small holders are the "public float", voting with share-price performance.
+- **No-confidence votes:** if results are bad or the board dislikes the CEO, shareholders can call a vote to remove them. A majority stake keeps you safe, and selling too much makes you vulnerable. Losing leads into the same succession choices as resigning.
+- **Sudden death:** shares pass to the heirs under a will the player can set, the board holds the election, and the player continues as the winner or one of the children.
+
+### Contracts
+- **Contracts are the main way to earn.**
+- Kinds: **recurring volume** (the backbone of the long-term economy), **one-off voyages**, **time charters**, **special jobs** (project cargo, disaster relief, towing...).
+- **One-off voyages** come straight to the player, with no bidding. **Big recurring contracts go to tender:** the player and AI firms bid on price, transit time and reputation.
+- To run a recurring contract the player **assigns ships**. The game builds their loop and shows quota coverage ("3 Capesize: 104% of quota"); return legs take spot cargo or a contract that fits.
+- **Failure** (late, short, a lost ship): a late fee, a reputation hit and a fading memory with that producer. Repeated failures stop their offers.
+- **Per company type:** Cruises and Fishing are less contract-based, and the player picks their routes more. Research and the vehicle makers stay very contract-based.
+- **Multiplayer:** one shared world. Players bid against each other and the AI, and can subcontract to each other. The host runs the economy.
+
+### Reputation
+- A reputation **in every country** (grows as you deliver there; home country starts friendly, others unknown), plus **each company's personal opinion** of you with its memories.
+- **Reputation tiers hold back an early company:** unknown companies get small one-off voyages; "Trusted" opens 1-year volume contracts; "Renowned" opens the biggest tenders. Far-off countries take longer to win over.
+
+### Ships: components, wear, shipyards
+- **Components scale with size:** about 5 on a Scooter (engine, propeller, hull, rudder, electrics), about 15 on a Feeder, up to about 50 on the giants (twin engines, shaft bearings, scrubbers, ballast water system, cranes, reefer plugs, bow thrusters, mooring winches...). They're based on real parts, and each can be upgraded (newer drivetrain, a new propeller, a better bow...).
+- **Maintenance per part:** each part wears at its own pace and weakens its own stat (a fouled hull burns more fuel, a worn propeller costs speed, a tired engine breaks down). Small parts are fixed during port stops. Major work and refits need **drydock at a shipyard port**, taking the ship out of service for days or weeks.
+- **Shipyards** are world companies. Big ships are ordered with a deposit and take months to build; a second-hand market sells ready ships.
+
+### R&D companies and technology
+- **Research companies** based around the map develop new tech over the years: engine designs, hull designs, propeller designs and more.
+- They give **early access** to companies they like, and they also back the Research ship line.
+
+## Milestones
+
+Each milestone is playable on its own.
+
+- **M1 — The world and its companies** (M1 and M2 merged so the economy is never tested without its traders): 2016 start (done in step 1); the faster calendar lands with the economy core (step 3) so each calendar-based rate is tuned once; countries; inland cities; pops; stockpile prices with hover breakdowns; news feed. Remove levels, XP, region unlocks and today's AI rivals; hubs buy facilities; world features on from the start. Plus hundreds of producer and shipping companies on paper, with ambient traffic. Also backstory starts and the trait system (for AI CEOs and the player's CEO).
+- **M2 — Contracts:** contracts, tenders, reputation and memory; assigning ships; spot trade made secondary; per-type contracts.
+- **M3 — People and ownership:** HQ executives, regional heads and delegation, heads coming to the CEO, family, ageing and death, the board, shares and the stock market, going public, no-confidence votes, succession and the resignation flow, new jobs at other firms.
+- **M4 — Ships:** components, per-part wear, shipyards, drydock, second-hand market, crew pools.
+- **M5 — Technology:** R&D companies and the tech timeline.
+- **Later stages:** rival personalities and agreements, politics and events (pausing), land transport, the earlier start eras.
+
+## Open questions
+
+- Events pausing in multiplayer.
+- The exact rules for how firms are founded, grow, merge and go bankrupt.
+- Contract board UI, tender UI, hover-breakdown UI, news feed UI.

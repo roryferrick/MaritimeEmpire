@@ -598,11 +598,11 @@ func leg_toll_share(from_port: String, to_port: String) -> float:
 	return total
 
 
-## The XP bonus a leg earns from its canals, added up (e.g. 0.5 for Panama).
-func leg_canal_xp_bonus(from_port: String, to_port: String) -> float:
+## The profit bonus a leg earns from its canals, added up (e.g. 0.5 for Panama).
+func leg_canal_profit_bonus(from_port: String, to_port: String) -> float:
 	var total := 0.0
 	for crossing: Dictionary in canal_crossings(from_port, to_port):
-		total += float(crossing.canal.get("xp_bonus", 0.0))
+		total += float(crossing.canal.get("profit_bonus", 0.0))
 	return total
 
 

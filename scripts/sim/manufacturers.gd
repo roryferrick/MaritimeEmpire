@@ -158,7 +158,7 @@ func change(who: Company, id: String, amount: float) -> void:
 	var before := likeness(who, id)
 	var after := clampf(before + amount, 0.0, 100.0)
 	who.maker_likes[id] = after
-	if who != _state.company or _state.ai_acting != null:
+	if who != _state.company:
 		return
 	for mark: Array in perk_marks():
 		if before < float(mark[0]) and after >= float(mark[0]):
@@ -189,7 +189,7 @@ func on_mishap(ship: Ship, lost: bool) -> void:
 		return
 	var who: Company = _state.owner_of(ship)
 	change(who, ship.cargo_id, -float(setting("lost_penalty" if lost else "breakdown_penalty", 2)))
-	if who == _state.company and _state.ai_acting == null:
+	if who == _state.company:
 		ActivityLog.add("%s isn't pleased: %s %s with its %s aboard." % [maker(ship.cargo_id).name, ship.name, "was lost" if lost else "broke down",
 			GameData.commodity(ship.cargo_id).get("units", "vehicles")], ActivityLog.Kind.BAD)
 
@@ -303,8 +303,6 @@ func build_error(who: Company, id: String, port_id: String) -> String:
 	for pair: Array in factories_at(port_id):
 		if pair[1].maker == id:
 			return "%s has a %s factory here already" % [(pair[0] as Company).name, each.name]
-	if not who.regions.is_empty() and not who.regions.has(str(GameData.port_region(port_id).get("id", ""))):
-		return "Unlock %s first" % GameData.port_region(port_id).get("name", "its region")
 	if _state.in_debt(who) or who.money < factory_cost(id):
 		return "Not enough money"
 	return ""
@@ -459,37 +457,3 @@ static func convert_old_cargo(ship: Ship) -> void:
 		return
 	ship.cargo_id = best
 	ship.cargo_qty = maxi(floori(ship.cargo_qty / GameData.hold_of(best)), 1)
-
-
-# --- AI rivals ---------------------------------------------------------------------
-
-## A rival building simply (RivalAI, now and then): a factory for the maker
-## it's best liked by that allows one more, at the first of its HQ and hubs
-## where it can, if it has the money to spare. Returns news.
-func run_rival(rival: Company, spare: int) -> Array:
-	var news := []
-	if not can_deal(rival):
-		return news
-	var ids := makers().map(func(each: Dictionary) -> String: return str(each.id))
-	ids.sort_custom(func(a: String, b: String) -> bool: return likeness(rival, a) > likeness(rival, b))
-	for id: String in ids:
-		if factories_allowed(rival, id) <= factories_of(rival, id).size():
-			if factories_allowed(rival, id) == 0:
-				break  # (Sorted: none after likes it enough.)
-			continue
-		if factory_cost(id) * 2 > spare:
-			continue
-		for hub: Hub in rival.hubs:
-			if build_error(rival, id, hub.port_id).is_empty():
-				build(rival, id, hub.port_id)
-				news.append("built a %s factory at %s" % [maker(id).name, GameData.port_name(hub.port_id)])
-				return news
-	return news
-
-
-## A rival's factories' stockpiles that have filled are sold where they are
-## (its ships pass by now and then and load the rest).
-func sell_rival_stock(rival: Company) -> void:
-	for each: Dictionary in rival.factories.duplicate():
-		if float(each.get("stock", 0.0)) >= stock_cap(str(each.maker)) * 0.95:
-			sell_stock(rival, str(each.maker), str(each.port))

@@ -4,7 +4,7 @@ extends Control
 ## The achievements (the trophy button at the map's top right, see
 ## Achievements): this player's company's stars, all told, then each line with
 ## its three stars and how far along it is (cargo delivered of each commodity;
-## the fleet, company level, money and field guide), then the badges. Over the
+## the fleet, company value, money and field guide), then the badges. Over the
 ## map, dimming it; Esc, X or a click outside closes it.
 
 const PANEL_SIZE := Vector2(820, 640)
@@ -161,7 +161,7 @@ func _row(stars: Control, name: String, line: String, share: float) -> Control:
 
 ## An amount on a line, as its unit reads.
 static func _amount(line_id: String, amount: int) -> String:
-	if line_id == "money":
+	if line_id == "money" or line_id == "value":
 		return Fmt.money_short(amount)
 	return Fmt.short(amount) if amount >= 100000 else Fmt.thousands(amount)
 

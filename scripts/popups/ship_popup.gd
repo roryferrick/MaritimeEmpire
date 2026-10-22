@@ -4,32 +4,20 @@ extends AnchoredPopup
 ## A ship's stats, live status, bars and route, with the repair, refuel, rescue
 ## and full-load toggles, Assign Route, Pause/Go, Sell and Follow on Map (the map keeps it in the middle as it goes; again to stop). Click the
 ## name to rename the ship. Lost ships get a Send Recovery button; recovery boats
-## have no route controls. Cargo ships show their level, and the Upgrades button
-## (red dot while points are unspent) swaps the bars for spending upgrade points
-## on the skill paths. Under the stats, the captain's picture and name; the
+## have no route controls. Under the stats, the captain's picture and name; the
 ## Crew button swaps the bars for all its officers (captain and mates) and crew.
 
 ## Selling takes a second click within this many seconds.
 const SELL_CONFIRM_SECONDS := 3.0
 const BIRDS_SECONDS := 1.0
-## Skill paths: [key, name, what each level does ("%d" is the total percent)].
-const SKILLS := [
-	["speed", "Speed", "+%d%%"],
-	["efficiency", "Efficiency", "-%d%% fuel"],
-	["durability", "Durability", "-%d%% wear"],
-	["range", "Range", "+%d%% reach"],
-]
 
 ## Set before adding to the tree.
 var ship: Ship
 
 var _sell_confirm_until := 0.0
-var _upgrades_alert := AlertDot.new(4.0, Vector2(6, 6))
 ## "Carrying 10 containers of Toys, bought for $1,200 at Shanghai, worth about
 ## $3,500 at Rotterdam".
 var _cargo_label := Label.new()
-## The skills panel's "+" buttons, by skill (their price and state follow the money).
-var _skill_buttons := {}
 ## The Crew button, and the page it swaps the bars for: every officer (the
 ## captain and mates) with their picture, and the crew.
 var _crew_button := Button.new()
@@ -88,9 +76,7 @@ func _ready() -> void:
 		%Buttons.add_sibling(FishingPanel.new(ship))
 		%Buttons.get_parent().move_child(%Buttons, -1)
 	%BarsSlot.add_child(ShipBars.new(ship))
-	%SkillsButton.toggled.connect(_show_skills)
 	_add_captain()
-	%SkillsButton.add_child(_upgrades_alert)
 	%CloseButton.pressed.connect(queue_free)
 	%NameLabel.gui_input.connect(_on_name_input)
 	%RenameEdit.text_submitted.connect(_finish_rename.unbind(1))
@@ -151,7 +137,7 @@ func _update_birds() -> void:
 		if not boosts.is_empty():
 			parts.append(boosts)
 	_birds_label.text = " · ".join(parts)
-	_set_shown(_birds_label, not parts.is_empty() and not %SkillsButton.button_pressed and not _crew_button.button_pressed)
+	_set_shown(_birds_label, not parts.is_empty() and not _crew_button.button_pressed)
 
 
 func _on_ship_changed(changed: Ship) -> void:
@@ -161,7 +147,6 @@ func _on_ship_changed(changed: Ship) -> void:
 
 func _update_live() -> void:
 	%StatusLabel.text = ship.status_text() if GameState.is_mine(ship) else "%s — %s's ship" % [ship.status_text(), GameState.owner_of(ship).name]
-	_update_skill_buttons()
 	%SpeedValue.text = "%s nm/s (top %s)" % [Fmt.decimal(ship.speed(), 2), Fmt.decimal(ship.top_speed(), 2)]
 	if ship.is_tug():
 		%RangeValue.text = "%d nm from %s" % [roundi(ship.reach_nm()), GameData.port_name(ship.base_port)]
@@ -170,7 +155,7 @@ func _update_live() -> void:
 	var toll := ship.stop_toll
 	var has_costs := ship.is_docked() and (ship.stop_sale > 0 or fuel + repair + toll > 0)
 	_update_cargo()
-	_set_shown(%CostLabel, has_costs and not %SkillsButton.button_pressed and not _crew_button.button_pressed and GameState.is_mine(ship))
+	_set_shown(%CostLabel, has_costs and not _crew_button.button_pressed and GameState.is_mine(ship))
 	var costs := "Fuel %s · Repair %s" % [Fmt.money(-fuel), Fmt.money(-repair)]
 	if toll > 0:
 		costs += " · Toll %s" % Fmt.money(-toll)
@@ -181,7 +166,6 @@ func _update_live() -> void:
 			Fmt.money(ship.stop_cost), costs, Fmt.money(ship.stop_sale - ship.stop_cost - fuel - repair - toll)]
 	_update_recovery()
 	_update_sell()
-	_update_level_text()
 
 
 ## What's aboard: its cost and what it should sell for where it's going, at
@@ -190,7 +174,7 @@ func _update_cargo() -> void:
 	var stops := _next_stops()
 	var at: String = stops[0]
 	var after: String = stops[1]
-	_set_shown(_cargo_label, not ship.is_service() and not %SkillsButton.button_pressed and not _crew_button.button_pressed
+	_set_shown(_cargo_label, not ship.is_service() and not _crew_button.button_pressed
 		and (not ship.cargo_id.is_empty() or not at.is_empty()))
 	var lines: Array[String] = []
 	var sale_worth := 0.0
@@ -326,75 +310,6 @@ func _update_recovery() -> void:
 		Fmt.duration(plan.seconds)]
 
 
-## Swaps the bars, toggles and stop summary for the upgrades (skills) panel.
-func _show_skills(on: bool) -> void:
-	%BarsSlot.visible = not on
-	%Toggles.visible = not on
-	%SkillsBox.visible = on
-	_update_live()
-	reset_size.call_deferred()
-
-
-func _update_level_text() -> void:
-	var info := ship.level_info()
-	if info.cost > 0:
-		%LevelValue.text = "%d · %s / %s XP" % [info.level, Fmt.thousands(floori(info.xp)), Fmt.thousands(ceili(info.cost))]
-	else:
-		%LevelValue.text = "%d (max)" % info.level
-
-
-## The Upgrades button's point count and dot, and the skills panel's rows.
-func _refresh_level() -> void:
-	var points := ship.skill_points()
-	%SkillsButton.text = "Upgrades (%d)" % points if points > 0 else "Upgrades"
-	_upgrades_alert.visible = points > 0
-	for child in %SkillsBox.get_children():
-		%SkillsBox.remove_child(child)
-		child.queue_free()
-	for skill: Array in SKILLS.filter(func(entry: Array) -> bool: return ship.skill_names().has(entry[0])):
-		var level := int(ship.skills[skill[0]])
-		var name_label := Label.new()
-		name_label.text = skill[1]
-		%SkillsBox.add_child(name_label)
-		var pips := HBoxContainer.new()
-		pips.add_theme_constant_override(&"separation", 3)
-		pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		for i in Progression.skill_max_level():
-			var pip := ColorRect.new()
-			pip.custom_minimum_size = Vector2(8, 12)
-			pip.color = _pip_color(i < level)
-			pips.add_child(pip)
-		%SkillsBox.add_child(pips)
-		var effect := Label.new()
-		effect.theme_type_variation = &"DimLabel"
-		effect.text = skill[2] % roundi(level * Progression.skill_step(skill[0]) * 100.0)
-		%SkillsBox.add_child(effect)
-		var add := Button.new()
-		add.pressed.connect(GameState.level_skill.bind(ship, skill[0]))
-		%SkillsBox.add_child(add)
-		_skill_buttons[skill[0]] = add
-	_update_skill_buttons()
-
-
-## Each "+" shows the next level's price ("+ $1.3M"), greyed out with the reason
-## as its tooltip when it can't be bought, or "Max" once the skill is maxed out.
-func _update_skill_buttons() -> void:
-	for skill: String in _skill_buttons:
-		var add: Button = _skill_buttons[skill]
-		var maxed := int(ship.skills[skill]) >= Progression.skill_max_level()
-		var error := GameState.skill_error(ship, skill)
-		add.text = "Max" if maxed else "+ $%s" % Fmt.short(GameState.skill_cost(ship, skill))
-		add.disabled = not error.is_empty()
-		add.tooltip_text = error
-
-
-func _pip_color(filled: bool) -> Color:
-	var color_name := &"filled" if filled else &"empty"
-	if has_theme_color(color_name, &"SkillPip"):
-		return get_theme_color(color_name, &"SkillPip")
-	return Color(0.45, 0.9, 0.5) if filled else Color(1, 1, 1, 0.15)
-
-
 func _set_shown(control: Control, shown: bool) -> void:
 	if control.visible != shown:
 		control.visible = shown
@@ -451,7 +366,6 @@ func _refresh() -> void:
 	var root := GameRoot.find(self)
 	%MapButton.text = "Stop Following" if root != null and root.followed_ship() == ship else "Follow on Map"
 	_update_live()
-	_refresh_level()
 	%RepairToggle.set_pressed_no_signal(ship.auto_repair)
 	%RefuelToggle.set_pressed_no_signal(ship.auto_refuel)
 	%RescueToggle.set_pressed_no_signal(ship.auto_recover)
@@ -481,7 +395,7 @@ func _refresh() -> void:
 	%PauseButton.text = "Go" if ship.paused else "Pause"
 	# Another player's ship (multiplayer): to look at, not to run.
 	if not GameState.is_mine(ship):
-		for control: Control in [%Toggles, %AssignButton, %PauseButton, %SellButton, %SkillsButton, _skin_button]:
+		for control: Control in [%Toggles, %AssignButton, %PauseButton, %SellButton, _skin_button]:
 			control.visible = false
 	reset_size.call_deferred()
 
@@ -555,15 +469,11 @@ func _add_captain() -> void:
 	_crew_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_crew_button.tooltip_text = "The ship's captain, mates and crew."
 	_crew_button.toggled.connect(_show_crew)
-	%SkillsButton.add_sibling(_crew_button)
-	%SkillsButton.get_parent().move_child(_crew_button, %SkillsButton.get_index())
-	%SkillsButton.toggled.connect(func(on: bool) -> void:
-		if on:
-			_crew_button.set_pressed_no_signal(false)
-			_crew_box.visible = false)
+	%CloseButton.add_sibling(_crew_button)
+	%CloseButton.get_parent().move_child(_crew_button, %CloseButton.get_index())
 	_crew_box.visible = false
 	_crew_box.add_theme_constant_override(&"separation", 6)
-	%SkillsBox.add_sibling(_crew_box)
+	%BarsSlot.add_sibling(_crew_box)
 	for i in ship.captains.size():
 		var officer: Dictionary = ship.captains[i]
 		var line := HBoxContainer.new()
@@ -598,8 +508,6 @@ func _add_captain() -> void:
 
 
 func _show_crew(on: bool) -> void:
-	if on and %SkillsButton.button_pressed:
-		%SkillsButton.button_pressed = false  # (Shows the bars again: hidden below.)
 	_crew_box.visible = on
 	%BarsSlot.visible = not on
 	%Toggles.visible = not on

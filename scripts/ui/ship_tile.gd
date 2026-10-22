@@ -2,8 +2,7 @@
 class_name ShipTile
 extends Button
 ## One compact tile on the Ships screen: status dot, ship name, what it's
-## carrying and its level (highlighted while it has skill points to spend), and
-## mini maintenance, fuel and cargo bars, with its captain's picture and name,
+## carrying, and mini maintenance, fuel and cargo bars, with its captain's picture and name,
 ## and what it earned in the last 30 days of game time under its name.
 ## Hovering shows the full name.
 
@@ -110,12 +109,11 @@ func _get_tooltip(_at_position: Vector2) -> String:
 	return "%s\n%s" % [ship.name, ship.status_text()]
 
 
-## What needs the player (in red: "Held in port"), or else "Coffee · Lv 3"
-## (green, with "+2", while it has skill points to spend); recovery boats say
-## "Recovery" in place of the cargo.
+## What needs the player (in red: "Held in port"), or else what it carries
+## ("Coffee"); recovery boats say "Recovery" in place of the cargo.
 func _update_info() -> void:
 	var reason := ship.attention_reason()
-	if not reason.is_empty() and reason != Ship.UPGRADES_REASON:
+	if not reason.is_empty():
 		_info.text = reason[0].to_upper() + reason.substr(1)
 		_info.theme_type_variation = &"ErrorLabel"
 		return
@@ -126,9 +124,8 @@ func _update_info() -> void:
 		cargo = "Icebreaker"
 	elif ship.is_tug():
 		cargo = "Tug at %s" % GameData.port_name(ship.base_port)
-	var points := ship.skill_points()
-	_info.text = "%s · Lv %d%s" % [cargo, ship.level(), " +%d" % points if points > 0 else ""]
-	_info.theme_type_variation = &"GainLabel" if points > 0 else &"DimLabel"
+	_info.text = cargo
+	_info.theme_type_variation = &"DimLabel"
 
 
 ## Green while running, amber while waiting in port for a full load, red when

@@ -9,10 +9,10 @@ extends RefCounted
 ## window with its first sample instead, so nothing drops).
 ##
 ## Agriculture's has a fourth, a quarter of its stars: its Farms (Farms.rating_part():
-## plots farmed against its level, its crops' and herds' climate fit, and the
+## plots farmed against its maturity (maturity()), its crops' and herds' climate fit, and the
 ## share of its harvests collected rather than spoiled). Tankers' has a fourth
 ## too, a quarter of its stars: its Production (Energy.rating_part(): rigs and
-## refineries against its level, its rigs working, its refineries running, and
+## refineries against its maturity, its rigs working, its refineries running, and
 ## what its rigs made kept rather than lost for want of room).
 ##
 ## A cruise line's sample has four parts, a quarter each (Cruises.rating_parts():
@@ -20,23 +20,20 @@ extends RefCounted
 ## has four too (Research.rating_parts(): contracts, discoveries, fleet & gear,
 ## safety & reliability). A cargo
 ## type's has three, a third of the stars each:
-## - Condition: its ships' maintenance (from 40% up to 95%), the share of
-##   their upgrade points spent, and the mega upgrades of its models;
+## - Condition: its ships' maintenance (from 40% up to 95%);
 ## - Reliability: ships standing idle (paused, held, no route or lost),
 ##   departures with an empty hold, and breakdowns and losses (a loss counts 3);
-## - Scale & reach: its ships against what its slots allow at the company's
-##   level, the ports it has traded at lately against what that level
-##   expects, and the company's hubs against its hub slots.
-## The stars change what its ships' cargo sells for, the port fees on it and
-## the XP it earns (EFFECTS: nothing at 2.5 stars, the most at 0 and 5). Each
+## - Scale & reach: its ships, the ports it has traded at lately and the
+##   company's hubs, against what the type's maturity expects.
+## The stars change what its ships' cargo sells for and the port fees on it (EFFECTS: nothing at 2.5 stars, the most at 0 and 5). Each
 ## whole star gained or lost is announced (GameState.rating_changed).
 
 const SAMPLE_S := 60.0
 const WINDOW := 120
 ## How long a port counts as served after the type last traded there (s of play).
 const PORT_MEMORY_S := 1800.0
-## At 5 stars (and the opposite at 0): sale prices, port fees, XP.
-const EFFECTS := {price = 0.05, fees = -0.2, xp = 0.1}
+## At 5 stars (and the opposite at 0): sale prices, port fees.
+const EFFECTS := {price = 0.1, fees = -0.2}
 const PART_NAMES := ["Condition", "Reliability", "Scale & reach"]
 const CRUISE_PART_NAMES := ["Guest experience", "Itinerary", "Reliability & safety", "Value & reviews"]
 const FARM_PART_NAMES := ["Condition", "Reliability", "Scale & reach", "Farms"]
@@ -155,7 +152,7 @@ func minutes_on_record(company: Company, type_id: String) -> int:
 	return (company.ratings.get(type_id, {}).get("samples", []) as Array).size()
 
 
-## A rating effect's factor for a company's type ("price", "fees" or "xp"):
+## A rating effect's factor for a company's type ("price" or "fees"):
 ## 1 at 2.5 stars, 1 + EFFECTS at 5, 1 - EFFECTS at 0. 1 for no type.
 func factor(company: Company, type_id: String, effect: String) -> float:
 	if company == null or type_id.is_empty() or not company.has_type(type_id):
@@ -163,9 +160,17 @@ func factor(company: Company, type_id: String, effect: String) -> float:
 	return 1.0 + float(EFFECTS[effect]) * (stars(company, type_id) - 2.5) / 2.5
 
 
+## How far along a company is in a type, for what its ratings expect: about 3
+## a hour of play since it took the type (1 at the start, up to 140), as
+## company levels came.
+static func maturity(company: Company, type_id: String) -> float:
+	if company == null or not company.has_type(type_id):
+		return 1.0
+	return clampf(1.0 + maxf(GameState.play_time - company.type_taken(type_id), 0.0) / 3600.0 * 3.0, 1.0, 140.0)
+
+
 ## Takes a sample of each of a company's types, announcing whole stars gained or lost.
 func sample(company: Company) -> void:
-	var level := company.level()
 	var fleet: Array[Ship] = _state.fleet(company)
 	var events: Dictionary = _events.get(company, {})
 	for type_id: String in rated_types(company):
@@ -182,7 +187,7 @@ func sample(company: Company) -> void:
 			figures = found.figures
 			sample = (found.parts as Array).map(func(part: float) -> float: return snappedf(part, 0.01))
 		else:
-			figures = _figures(company, type_id, ships, events.get(type_id, {}), entry, level)
+			figures = _figures(company, type_id, ships, events.get(type_id, {}), entry, maturity(company, type_id))
 			sample = [snappedf(figures.condition, 0.01), snappedf(figures.reliability, 0.01), snappedf(figures.scale, 0.01)]
 			if type_id == "agriculture":  # (Its fourth part, its farms: see Farms.rating_part().)
 				var farm := (_state.farms as Farms).rating_part(company)
@@ -214,44 +219,33 @@ func sample(company: Company) -> void:
 
 
 ## The figures behind a type's sample, each part 0 to 5.
-func _figures(company: Company, type_id: String, ships: Array, events: Dictionary, entry: Dictionary, level: int) -> Dictionary:
+func _figures(company: Company, type_id: String, ships: Array, events: Dictionary, entry: Dictionary, maturity_now: float) -> Dictionary:
 	var n := ships.size()
 	var maintenance := 0.0
-	var spent := 0
-	var unspent := 0
 	var idle := 0
 	var models := {}
 	for ship: Ship in ships:
 		maintenance += ship.maintenance
-		unspent += ship.skill_points()
-		spent += int(ship.skills.speed) + int(ship.skills.durability) + int(ship.skills.efficiency) + int(ship.skills.get("range", 0))
 		idle += 0 if ship.is_active() else 1
 		models[ship.model_id] = true
 	maintenance /= maxf(n, 1.0)
-	var upgrades := float(spent) / maxf(spent + unspent, 1.0) if spent + unspent > 0 else 1.0
-	var megas := models.keys().filter(func(id: String) -> bool: return company.has_mega(id)).size()
-	var mega := float(megas) / maxf(models.size(), 1.0)
-	var condition := 0.0 if n == 0 else 5.0 * (0.6 * clampf((maintenance - 0.4) / 0.55, 0.0, 1.0) + 0.3 * upgrades + 0.1 * mega)
+	var condition := 0.0 if n == 0 else 5.0 * clampf((maintenance - 0.4) / 0.55, 0.0, 1.0)
 	var departures := int(events.get("departures", 0))
 	var empty_share := float(events.get("empty", 0)) / departures if departures > 0 else 0.0
 	var incidents := int(events.get("breakdowns", 0)) + 3 * int(events.get("losses", 0))
 	var incident_share := minf(incidents * 10.0 / maxf(n, 1.0), 1.0)
 	var idle_share := float(idle) / maxf(n, 1.0)
 	var reliability := 0.0 if n == 0 else 5.0 * (1.0 - (0.4 * idle_share + 0.3 * empty_share + 0.3 * incident_share))
-	var slots := 0
-	for model: Dictionary in GameData.ship_models:
-		if Progression.type_of_model(model) == type_id:
-			slots += Progression.model_slots(model, level, company)
-	var expected_ships := maxf(1.0, 0.4 * slots)
+	var expected_ships := minf(1.0 + maturity_now * 0.3, 40.0)
 	var ports: Dictionary = entry.get("ports", {})
 	for port_id: String in ports.keys():
 		if _state.play_time - float(ports[port_id]) > PORT_MEMORY_S:
 			ports.erase(port_id)
-	var expected_ports := minf(3.0 + level * 0.4, 40.0)
-	var hub_slots := Progression.hub_slots(level)
+	var expected_ports := minf(3.0 + maturity_now * 0.4, 40.0)
+	var hub_slots := minf(1.0 + maturity_now / 15.0, 7.0)
 	var scale := 5.0 * (0.5 * minf(n / expected_ships, 1.0) + 0.35 * minf(ports.size() / expected_ports, 1.0) + 0.15 * minf(float(company.hubs.size()) / hub_slots, 1.0))
 	return {condition = clampf(condition, 0.0, 5.0), reliability = clampf(reliability, 0.0, 5.0), scale = clampf(scale, 0.0, 5.0),
-		ships = n, maintenance = maintenance, upgrades = upgrades, mega = mega, megas = megas, models = models.size(),
+		ships = n, maintenance = maintenance, models = models.size(),
 		idle = idle, departures = departures, empty = int(events.get("empty", 0)), breakdowns = int(events.get("breakdowns", 0)),
 		losses = int(events.get("losses", 0)), expected_ships = expected_ships, ports = ports.size(), expected_ports = expected_ports,
 		hubs = company.hubs.size(), hub_slots = hub_slots}

@@ -4,7 +4,7 @@ extends RefCounted
 ## The achievements (the trophy button at the map's top right): lines of up to
 ## three stars, and single badges. A line for each commodity (units delivered,
 ## STAR_UNITS by its unit), one for the fleet (ships owned, tugs not counted),
-## one for the company level, one for money in the bank, and one for the field
+## one for company value, one for money in the bank, and one for the field
 ## guide (the animals seen: a flock, pod or group clicked on the map, see
 ## discover()), one for the wonders of the world seen (clicked on the map, see
 ## discover()), one for the hidden gems found (GameState.HIDDEN_GEMS). Badges
@@ -31,7 +31,7 @@ const STAR_UNITS := {
 	"pallet": [1000, 150000, 3000000],
 }
 const FLEET_STARS := [10, 50, 200]
-const LEVEL_STARS := [10, 30, 60]
+const VALUE_STARS := [50000000, 1000000000, 20000000000]
 const MONEY_STARS := [10000000, 500000000, 5000000000]
 ## Shares of all the animals in the field guide seen, for each star: a
 ## third, two thirds and all of them (counted, not shown as percentages).
@@ -47,8 +47,8 @@ const BADGES := [
 	["first_delivery", "Maiden voyage", "Deliver a cargo"],
 	["first_hub", "Branching out", "Build a hub"],
 	["five_hubs", "Network", "Have 5 hubs"],
-	["second_region", "New horizons", "Unlock a second market region"],
-	["all_regions", "Seven seas", "Unlock every market region"],
+	["second_division", "New horizons", "Open a second division"],
+	["all_divisions", "Seven seas", "Have every division"],
 	["every_cargo", "Jack of all trades", "Deliver every commodity"],
 	["full_house", "Full house", "Own a ship of every cargo line"],
 	["panama", "Between the oceans", "Cross the Panama Canal"],
@@ -56,7 +56,6 @@ const BADGES := [
 	["all_canals", "Lock keeper", "Cross every canal"],
 	["loan", "Borrowed time", "Take out a loan"],
 	["debt_free", "Debt free", "Pay a loan back in full"],
-	["mega", "Mega", "Give a ship model its mega upgrade"],
 	["atlas_trench", "Hadal zone", "Survey every trench and deep"],
 	["atlas_wreck", "Wreck hunter", "Survey every shipwreck"],
 	["atlas_vent", "Black smokers", "Survey every vent and seep"],
@@ -84,7 +83,7 @@ static func lines() -> Array:
 		if not stars.is_empty():
 			out.append({id = "deliver_" + str(commodity.id), name = str(commodity.name), unit = str(commodity.get("units", "units")) + " delivered", stars = stars})
 	out.append({id = "fleet", name = "Fleet", unit = "ships owned (not tugs)", stars = FLEET_STARS})
-	out.append({id = "level", name = "Company level", unit = "levels reached", stars = LEVEL_STARS})
+	out.append({id = "value", name = "Company value", unit = "company value", stars = VALUE_STARS})
 	out.append({id = "money", name = "Money in the bank", unit = "in the bank", stars = MONEY_STARS})
 	out.append({id = "animals", name = "Field guide", unit = "animals seen", stars = ANIMAL_STARS.map(func(share: float) -> int: return roundi(share * animal_count()))})
 	out.append({id = "wonders", name = "Wonders of the world", unit = "wonders seen", stars = WONDER_STARS.map(func(need: int) -> int: return need if need > 0 else GameData.wonders.size())})
@@ -105,8 +104,8 @@ static func progress(company: Company, line_id: String) -> int:
 				if str(ship.model().get("category", "")) != "tug":
 					count += 1
 			return count
-		"level":
-			return company.level()
+		"value":
+			return roundi(GameState.company_value(company))
 		"money":
 			return company.money
 		"wonders":
@@ -132,10 +131,10 @@ static func badge_done(company: Company, badge_id: String) -> bool:
 			return company.hubs.size() >= 2
 		"five_hubs":
 			return company.hubs.size() >= 6
-		"second_region":
-			return company.regions.size() >= 2
-		"all_regions":
-			return company.regions.size() >= (GameData.markets.get("regions", []) as Array).size()
+		"second_division":
+			return company.company_types.size() >= 2
+		"all_divisions":
+			return company.company_types.size() >= Progression.company_types().size()
 		"every_cargo":
 			for commodity: Dictionary in GameData.commodities:
 				if not commodity.get("maker", false) and delivered_of(company, commodity.id) <= 0:
@@ -157,8 +156,6 @@ static func badge_done(company: Company, badge_id: String) -> bool:
 			return company.loan > 0
 		"debt_free":  # Had one (the badge for taking it), and none now.
 			return company.achievements.has("loan") and company.loan <= 0
-		"mega":
-			return not company.mega_upgrades.is_empty()
 		"challenger":
 			return Research.is_done(company, "challenger_deep")
 	if badge_id.begins_with("atlas_"):  # A whole category of research sites (see Research).

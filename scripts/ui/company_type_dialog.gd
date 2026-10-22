@@ -1,18 +1,18 @@
 # Copyright (c) 2026 Rory Ferrick. All rights reserved. Maritime Empire.
 class_name CompanyTypeDialog
 extends Control
-## Choosing another company type (from the World map's button, the Shop's
-## locked tabs or the level-up card): the types as CompanyTypeCards, those the
-## company has greyed; Choose, then Confirm, takes one
+## Buying into another company type, a division (from the World map's button
+## or the Shop's locked tabs): the types as CompanyTypeCards, those the
+## company has greyed; Choose, then Confirm, buys one
 ## (GameState.choose_company_type()). Over whatever opened it, dimming it;
 ## Esc, X or a click outside closes it.
 
 var _note := Label.new()
 
 
-## Opens it over the game (a no-op if no type can be chosen now).
+## Opens it over the game (a no-op once the company has every type).
 static func open(from: Node) -> void:
-	if GameState.company_types_available() <= 0:
+	if GameState.company.company_types.size() >= Progression.company_types().size():
 		return
 	GameRoot.find(from).add_child(CompanyTypeDialog.new())
 
@@ -40,7 +40,7 @@ func _ready() -> void:
 	var header := HBoxContainer.new()
 	var title := Label.new()
 	title.theme_type_variation = &"HeaderLabel"
-	title.text = "Choose a new company type"
+	title.text = "Open a division"
 	title.size_flags_horizontal = SIZE_EXPAND_FILL
 	header.add_child(title)
 	var close := Button.new()
@@ -55,7 +55,7 @@ func _ready() -> void:
 	_note.theme_type_variation = &"DimLabel"
 	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_note.custom_minimum_size.x = 900
-	_note.text = "Your company is in %s. Branch out into one more type: its smallest ships open now and the bigger ones follow as you level up (the next tiers 3, 8, 15 and 24 levels on). It's for good, so choose with care." % " and ".join(has)
+	_note.text = "Your company is in %s. Branch out into another type for %s: all its ships can be bought from then on. It's for good." % [" and ".join(has), Fmt.money(GameState.division_price())]
 	content.add_child(_note)
 	var cards := CompanyTypeCards.new(true, GameState.company.company_types.keys())
 	cards.chosen.connect(_choose)

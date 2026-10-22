@@ -21,8 +21,6 @@ var entries: Array[Dictionary] = []
 func add(text: String, kind := Kind.INFO, color := Color.TRANSPARENT) -> void:
 	if Net.redirect_log(text, kind, color):
 		return  # From a joined player's command: theirs, not this player's (see Net).
-	if GameState.ai_acting != null:
-		return  # An AI rival's own doings (see RivalAI: it reports its big moves itself).
 	var entry := {text = text, kind = kind, color = color, time = GameState.play_time}
 	entries.append(entry)
 	if entries.size() > MAX_ENTRIES:

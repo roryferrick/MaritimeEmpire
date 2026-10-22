@@ -332,12 +332,12 @@ DELIVER_TIMBER_3,Timber ★★★,"100,000,000 tons delivered",0
 FLEET_1,Fleet ★,10 ships owned (not tugs),0
 FLEET_2,Fleet ★★,50 ships owned (not tugs),0
 FLEET_3,Fleet ★★★,200 ships owned (not tugs),0
-LEVEL_1,Company level ★,10 levels reached,0
-LEVEL_2,Company level ★★,30 levels reached,0
-LEVEL_3,Company level ★★★,60 levels reached,0
-MONEY_1,Money in the bank ★,"10,000,000 in the bank",0
-MONEY_2,Money in the bank ★★,"500,000,000 in the bank",0
-MONEY_3,Money in the bank ★★★,"5,000,000,000 in the bank",0
+VALUE_1,Company value ★,"$50,000,000 company value",0
+VALUE_2,Company value ★★,"$1,000,000,000 company value",0
+VALUE_3,Company value ★★★,"$20,000,000,000 company value",0
+MONEY_1,Money in the bank ★,"$10,000,000 in the bank",0
+MONEY_2,Money in the bank ★★,"$500,000,000 in the bank",0
+MONEY_3,Money in the bank ★★★,"$5,000,000,000 in the bank",0
 ANIMALS_1,Field guide ★,62 animals seen,0
 ANIMALS_2,Field guide ★★,125 animals seen,0
 ANIMALS_3,Field guide ★★★,187 animals seen,0
@@ -356,8 +356,8 @@ FIRST_DISCOVERIES_3,First to discover ★★★,100 sites surveyed before any ot
 FIRST_DELIVERY,Maiden voyage,Deliver a cargo,0
 FIRST_HUB,Branching out,Build a hub,0
 FIVE_HUBS,Network,Have 5 hubs,0
-SECOND_REGION,New horizons,Unlock a second market region,0
-ALL_REGIONS,Seven seas,Unlock every market region,0
+SECOND_DIVISION,New horizons,Open a second division,0
+ALL_DIVISIONS,Seven seas,Have every division,0
 EVERY_CARGO,Jack of all trades,Deliver every commodity,0
 FULL_HOUSE,Full house,Own a ship of every cargo line,0
 PANAMA,Between the oceans,Cross the Panama Canal,0
@@ -365,7 +365,6 @@ SUEZ,Short cut,Cross the Suez Canal,0
 ALL_CANALS,Lock keeper,Cross every canal,0
 LOAN,Borrowed time,Take out a loan,0
 DEBT_FREE,Debt free,Pay a loan back in full,0
-MEGA,Mega,Give a ship model its mega upgrade,0
 ATLAS_TRENCH,Hadal zone,Survey every trench and deep,0
 ATLAS_WRECK,Wreck hunter,Survey every shipwreck,0
 ATLAS_VENT,Black smokers,Survey every vent and seep,0

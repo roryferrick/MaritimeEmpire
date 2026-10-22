@@ -3,7 +3,7 @@ class_name RatingsPage
 extends Control
 ## The company's star ratings (the stars button in the World map's side
 ## column: see Ratings): a card per company type it has, with its stars, what
-## they do to its sale prices, port fees and XP, how much of the window is on
+## they do to its sale prices and port fees, how much of the window is on
 ## record, and each part (Condition, Reliability, Scale & reach) with its own
 ## stars, the figures behind it and how to raise it. Refreshed every few
 ## seconds. Over the map, dimming it; Esc, X or a click outside closes it.
@@ -12,9 +12,9 @@ const PANEL_SIZE := Vector2(820, 720)
 const REFRESH_S := 3.0
 ## How to raise each part.
 const TIPS := [
-	"Keep Repair on so ships sail well maintained, spend their upgrade points, and buy mega upgrades for the models you run.",
+	"Keep Repair on so ships sail well maintained.",
 	"Give every ship a route and keep it running, plan loops with cargo both ways, and repair before breakdowns strike.",
-	"Grow the fleet as your slots allow, trade at more ports, and found every hub your level gives.",
+	"Grow the fleet, trade at more ports, and found hubs as the type matures.",
 ]
 
 ## How to raise Tankers' fourth part, its rigs and refineries.
@@ -82,7 +82,7 @@ func _ready() -> void:
 	var note := Label.new()
 	note.theme_type_variation = &"DimLabel"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Each company type you run earns 0 to 5 stars from the last 2 hours of play, worked out every minute: a third each for its ships' condition, their reliability, and its scale and reach. At 2.5 stars nothing changes; above, its cargo sells for more, pays lower port fees and earns more XP, and below, the opposite. Agriculture has a fourth part, a quarter of its stars, for its farms, and Tankers one for its rigs and refineries. Cruises has four parts, a quarter each: guest experience, itinerary, reliability & safety, and value & reviews; its stars move what guests will pay."
+	note.text = "Each company type you run earns 0 to 5 stars from the last 2 hours of play, worked out every minute: a third each for its ships' condition, their reliability, and its scale and reach. At 2.5 stars nothing changes; above, its cargo sells for more and pays lower port fees, and below, the opposite. What scale it expects grows the longer you've been in the type. Agriculture has a fourth part, a quarter of its stars, for its farms, and Tankers one for its rigs and refineries. Cruises has four parts, a quarter each: guest experience, itinerary, reliability & safety, and value & reviews; its stars move what guests will pay."
 	content.add_child(note)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL
@@ -145,7 +145,7 @@ func _type_card(company: Company, type_id: String) -> Control:
 		box.add_child(_dim("Building up: %d of %d minutes on record (the minutes not yet on record count as no stars)." % [minutes, Ratings.WINDOW]))
 	var parts := ratings.part_stars(company, type_id)
 	var figures: Dictionary = (ratings.details.get(company, {}) as Dictionary).get(type_id, {})
-	var lines := _cruise_texts(figures) if type_id == "cruises" else (_research_texts(figures) if type_id == "research" else _part_texts(figures, company.level()))
+	var lines := _cruise_texts(figures) if type_id == "cruises" else (_research_texts(figures) if type_id == "research" else _part_texts(figures))
 	var tips: Array = CRUISE_TIPS if type_id == "cruises" else (RESEARCH_TIPS if type_id == "research" else TIPS)
 	if type_id == "agriculture":
 		tips = TIPS + [FARM_TIP]
@@ -171,13 +171,12 @@ func _type_card(company: Company, type_id: String) -> Control:
 	return panel
 
 
-## "Sale prices +2%, port fees -8%, XP +4%" at these stars.
+## "Sale prices +2%, port fees -8%" at these stars.
 func _effects_text(company: Company, type_id: String) -> String:
 	if type_id == "cruises":  # (Its stars move what guests will pay: Cruises.rating_factor().)
-		var xp := roundi((GameState.ratings.factor(company, type_id, "xp") - 1.0) * 100.0)
-		return "At these stars: recommended cruise prices x%.2f, XP %s%d%%." % [GameState.cruises.rating_factor(company), "+" if xp >= 0 else "−", absi(xp)]
+		return "At these stars: recommended cruise prices x%.2f." % GameState.cruises.rating_factor(company)
 	var parts := PackedStringArray()
-	for effect: Array in [["price", "sale prices"], ["fees", "port fees"], ["xp", "XP"]]:
+	for effect: Array in [["price", "sale prices"], ["fees", "port fees"]]:
 		var change := roundi((GameState.ratings.factor(company, type_id, effect[0]) - 1.0) * 100.0)
 		parts.append("%s %s%d%%" % [effect[1], "+" if change >= 0 else "−", absi(change)])
 	return "At these stars: " + ", ".join(parts) + "."
@@ -203,7 +202,7 @@ func _research_texts(figures: Dictionary) -> Array:
 		return ["Worked out every minute of play.", "", "", ""]
 	return [
 		"%.1f contracts finished lately, %.1f on time and %.1f failed" % [float(figures.contracts), float(figures.on_time), float(figures.failed)] if float(figures.contracts) > 0.05 else "No contracts finished lately.",
-		"%d sites done, worth %.0f of the %.0f expected at your level (deeper and first count more)" % [int(figures.sites), float(figures.score), float(figures.expected)],
+		"%d sites done, worth %.0f of the %.0f expected by now (deeper and first count more)" % [int(figures.sites), float(figures.score), float(figures.expected)],
 		"%d research ships, their condition and gear slots filled" % int(figures.ships) if int(figures.ships) > 0 else "No research ships yet: buy one in the Shop.",
 		"%.0f dives lately, %.1f troubles (failed dives, lost gear, breakdowns, losses)" % [float(figures.dives), float(figures.trouble)] if float(figures.dives) > 0.05 else "No dives yet.",
 	]
@@ -231,18 +230,17 @@ func _farm_text(figures: Dictionary) -> String:
 
 
 ## Each part's figures from the latest minute (or a note before the first).
-func _part_texts(figures: Dictionary, level: int) -> Array:
+func _part_texts(figures: Dictionary) -> Array:
 	if figures.is_empty():
 		return ["Worked out every minute of play.", "Worked out every minute of play.", "Worked out every minute of play."]
 	if int(figures.ships) == 0:
 		return ["No ships of this type yet.", "No ships of this type yet.", "No ships yet: buy some in the Shop."]
 	return [
-		"Maintenance %d%% on average · %d%% of upgrade points spent · mega upgrades on %d of %d models" % [
-			roundi(float(figures.maintenance) * 100.0), roundi(float(figures.upgrades) * 100.0), int(figures.megas), int(figures.models)],
+		"Maintenance %d%% on average" % roundi(float(figures.maintenance) * 100.0),
 		"%d of %d ships idle (paused, held, no route or lost) · %d of %d departures empty · %d breakdowns, %d losses in the last minute" % [
 			int(figures.idle), int(figures.ships), int(figures.empty), int(figures.departures), int(figures.breakdowns), int(figures.losses)],
-		"%d ships of about %d expected at level %d · %d ports traded at in the last 30 minutes of about %d · %d of %d hubs" % [
-			int(figures.ships), roundi(float(figures.expected_ships)), level, int(figures.ports), roundi(float(figures.expected_ports)), int(figures.hubs), int(figures.hub_slots)],
+		"%d ships of about %d expected · %d ports traded at in the last 30 minutes of about %d · %d of about %d hubs" % [
+			int(figures.ships), roundi(float(figures.expected_ships)), int(figures.ports), roundi(float(figures.expected_ports)), int(figures.hubs), roundi(float(figures.hub_slots))],
 	]
 
 

@@ -165,11 +165,6 @@ func _start_game() -> void:
 	Settings.night = "off"
 	GameState.show_active_routes = true
 	Settings.own_routes_only = false
-	if unlock_all:
-		for region: Dictionary in GameData.markets.get("regions", []):
-			if not GameState.regions.has(str(region.id)):
-				GameState.regions.append(str(region.id))
-		GameState.regions_changed.emit()
 	Cosmetics.equipped = ""  # The base ships, not the player's skin pack.
 	for ship in GameState.ships:
 		ship.skin = "base"
@@ -711,11 +706,6 @@ func stage_ship(model_id: String, port_id: String, route: Array[String] = []) ->
 	return ship
 
 
-func set_level(level: int) -> void:
-	while GameState.company.level() < level:
-		GameState.company.xp = GameState.company.xp * 1.15 + 1000.0
-
-
 func log_crop(seconds: float) -> Callable:
 	return push(Rect2(0, 40, 300, 280), Rect2(0, 44, 272, 200), seconds)
 
@@ -1044,35 +1034,13 @@ func shot_regions_locked(seconds: float) -> void:
 		look(lerpf(140.0, 118.0, t / seconds), 22.0, low * lerpf(1.6, 2.1, t / seconds)))
 
 
-func shot_region_unlock(seconds: float) -> void:
-	unlock_all = false
-	await use_new_company("SHA")
-	unlock_all = true
-	set_level(5)
-	portrait()
-	for child in world.get_children():
-		if child == world._choose_layer:
-			child.visible = true
-	world._start_choosing()
-	look(112.0, 12.0, map._min_zoom() * 2.4)
-	await settle(20)
-	var step := 0
-	await rec("region_unlock", seconds, func(t: float) -> void:
-		if t >= seconds * 0.3 and step == 0:
-			world._pick_region("southeast_asia")
-			step = 1
-		elif t >= seconds * 0.7 and step == 1:
-			world._pick_region("southeast_asia")
-			step = 2)
-
-
 func shot_ship_through_locked(seconds: float) -> void:
 	unlock_all = false
 	await use_save("save_2", true)
 	unlock_all = true
 	portrait()
 	var ship := pick_ship([], func(s: Ship) -> bool:
-		return at_sea(s) and not GameState.is_port_unlocked(s.from_port) or at_sea(s) and GameData.distance_nm(s.from_port, s.to_port) > 1500.0)
+		return at_sea(s) and GameData.distance_nm(s.from_port, s.to_port) > 1500.0)
 	if ship == null:
 		ship = pick_ship([], func(s: Ship) -> bool: return at_sea(s))
 	follow(ship, 45.0)
@@ -1392,7 +1360,7 @@ func shot_ships_tiles(seconds: float) -> void:
 func _skills_popup() -> Control:
 	await use_save("save_2")
 	landscape()
-	var ship := pick_ship(["model_2", "model_3", "model_1"], func(s: Ship) -> bool: return at_sea(s) and s.level() >= 2)
+	var ship := pick_ship(["model_2", "model_3", "model_1"], func(s: Ship) -> bool: return at_sea(s))
 	if ship == null:
 		ship = pick_ship(["model_2", "model_3", "model_1"], func(s: Ship) -> bool: return at_sea(s))
 	var box := await open_ship_popup(ship, 600.0)
@@ -1430,36 +1398,6 @@ func landscape_bare() -> void:
 	vp.size = Vector2i(UI_BASE) * LAND_SCALE
 	vp.size_2d_override = Vector2i(UI_BASE)
 	vp.size_2d_override_stretch = true
-
-
-func shot_new_company_rivals(seconds: float) -> void:
-	GameState.in_session = false
-	var scene := await _other_scene("res://scenes/new_company.tscn")
-	var map_view: MapView = scene.find_child("MapView", true, false)
-	var waited := 0
-	while map_view != null and not map_view.is_warm() and waited < 3000:
-		await get_tree().process_frame
-		waited += 1
-	await settle(20)
-	var row := find_text("AI rivals", scene)
-	var rect := Rect2(0, 0, 1280, 720)
-	if row != null:
-		rect = row.get_parent().get_global_rect()
-	await rec("new_company_rivals", seconds, Callable(), push(grow(rect, 160.0), grow(rect, 14.0), seconds))
-	scene.queue_free()
-
-
-func shot_rival_ships(seconds: float) -> void:
-	await use_save("save_2")
-	portrait()
-	var rival: Ship = null
-	for ship in GameState.ships:
-		if ship.company != GameState.company and at_sea(ship) and not ship.is_service():
-			rival = ship
-			break
-	follow(rival, 900.0)
-	await settle(10)
-	await rec("rival_ships", seconds)
 
 
 ## The title screen's Host Game dialog (its settings; nothing hosted).
