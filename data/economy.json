@@ -1,0 +1,66 @@
+{
+	"_comment": "The living world's economy (scripts/sim/world_economy.gd WorldEconomy; DESIGN_LIVING_WORLD.md M1). Built from data/countries.json, data/cities.json and data/production.json. Markets are trade zones (a country, or a big country's coastline zone, with its ports); each has a stockpile and a price per good. Every calendar day each zone makes what its plants make, its pops and industry use what they need, and ships' arrivals and departures move stock. A good's price follows its days of cover (stockpile / daily use) against cover_days: base x (cover_days / cover) ^ price_power, capped to price_range, x the country's currency strength x the port's local factor.",
+
+	"_units_comment": "Turning the real 2016 units of production.json into the game's units (markets.json unit): crate_t (a seafood crate in tonnes), pallet_t (a produce pallet), timber_t_per_m3; grades: the metal share of each ore as shipped (concentrate), so ore tonnes = metal tonnes / grade; container_totals: the world's yearly output, in containers, of the goods production.json gives as shares (manufactured goods).",
+	"units": {
+		"crate_t": 0.025, "pallet_t": 1.0, "timber_t_per_m3": 0.7,
+		"grades": {"gold": 0.00005, "copper_ore": 0.28, "nickel_ore": 0.15, "zinc_ore": 0.5, "tin_ore": 0.6, "lithium_ore": 0.028, "silver_ore": 0.002, "manganese_ore": 0.45, "rare_earth_ore": 0.6, "rare_earths": 1.0},
+		"container_totals": {"electronics": 60000000, "machine_parts": 45000000, "clothing": 36000000, "furniture": 24000000, "appliances": 24000000, "tools": 15000000, "footwear": 15000000, "toys": 12000000, "medicine": 12000000, "sporting_goods": 9000000, "cosmetics": 9000000, "batteries": 6000000, "solar_panels": 6000000}
+	},
+
+	"_prices_comment": "cover_days: the days of use a zone's stockpile normally holds (at that cover, the base price); price_power: how hard price answers cover; price_range: [cheapest, dearest] x base; start_cover: [least, most] days a zone starts with (more for one that makes the good, less for one that only uses it); port_spread: a port's local factor runs from 1 - port_spread (the zone's biggest port) to 1 + port_spread (its smallest); demand_power: how much a good's use falls as its price rises (price ^ -demand_power); substitution: how strongly pops switch within a need to the cheaper goods; supply_power: how much plants' output answers price (from supply_floor of capacity at the cheapest).",
+	"prices": {"cover_days": 30, "price_power": 0.6, "price_range": [0.3, 3.0], "start_cover": [20, 45], "port_spread": 0.06, "demand_power": 0.3, "substitution": 2.0, "supply_power": 0.25, "supply_floor": 0.6},
+
+	"_strata_comment": "A place's people split into lower, middle and upper strata by its country's GDP a head (US$): middle = middle_min + (middle_max - middle_min) x the wealth (0 at poor_gdp, 1 at rich_gdp, on a log scale), upper likewise; the rest lower. Cities lean richer: in a port metro or inland city the middle and upper shares are x city_lean, in the countryside x rural_lean (renormalized). wealth_power: how much a country's wealth (its GDP a head against world_gdp_per_head) lifts every stratum's spending.",
+	"strata": {"poor_gdp": 800, "rich_gdp": 50000, "middle_min": 0.1, "middle_max": 0.7, "upper_min": 0.01, "upper_max": 0.2, "city_lean": 1.3, "rural_lean": 0.7, "world_gdp_per_head": 10200, "wealth_power": 0.25},
+
+	"_needs_comment": "What pops buy: each need's goods (any of them satisfies it; the cheapest mix is bought first) and how much a person of each stratum wants of it ([lower, middle, upper]; relative weights, the world's output of each good is shared out by them). Goods no need lists are used by industry (users).",
+	"needs": [
+		{"id": "staples", "name": "Staple food", "goods": ["wheat", "rice", "corn", "barley", "potatoes"], "strata": [1.0, 1.2, 1.3]},
+		{"id": "protein", "name": "Meat and fish", "goods": ["cows", "pigs", "sheep", "whitefish", "small_pelagic", "mackerel", "flatfish", "tuna", "game_fish", "swimming_crab", "crayfish", "blue_crab"], "strata": [0.5, 1.0, 1.5]},
+		{"id": "clothing", "name": "Clothing and shoes", "goods": ["clothing", "footwear"], "strata": [0.5, 1.0, 2.0]},
+		{"id": "fuel", "name": "Fuel", "goods": ["gasoline", "diesel", "lpg"], "strata": [0.3, 1.0, 2.0]},
+		{"id": "health", "name": "Medicine", "goods": ["medicine"], "strata": [0.5, 1.0, 2.0]},
+		{"id": "produce", "name": "Fruit and vegetables", "goods": ["apples", "pears", "cherries", "peaches", "strawberries", "blueberries", "raspberries", "blackberries", "cranberries", "oranges", "lemons", "bananas", "mangoes", "pineapples", "avocados", "grapes", "tomatoes", "onions", "lettuce", "peppers"], "strata": [0.2, 1.0, 1.8]},
+		{"id": "treats", "name": "Drinks and treats", "goods": ["coffee", "tea", "cocoa", "sugarcane", "pepper", "vanilla", "cinnamon", "almonds", "dates", "olives"], "strata": [0.1, 1.0, 2.0]},
+		{"id": "household", "name": "Household goods", "goods": ["furniture", "appliances", "tools"], "strata": [0.05, 1.0, 2.5]},
+		{"id": "electronics", "name": "Electronics", "goods": ["electronics"], "strata": [0.05, 1.0, 3.0]},
+		{"id": "cars", "name": "Cars", "goods": ["@cars"], "strata": [0.01, 1.0, 3.0]},
+		{"id": "beauty", "name": "Cosmetics", "goods": ["cosmetics"], "strata": [0.05, 1.0, 3.0]},
+		{"id": "leisure", "name": "Leisure", "goods": ["toys", "sporting_goods", "@boats"], "strata": [0.02, 0.4, 4.0]},
+		{"id": "travel", "name": "Air travel", "goods": ["jet_fuel"], "strata": [0.0, 0.3, 3.0]},
+		{"id": "delicacies", "name": "Delicacies", "goods": ["salmon", "king_crab", "snow_crab", "dungeness_crab", "stone_crab", "rock_crab", "deepwater_crab", "billfish"], "strata": [0.0, 0.3, 4.0]},
+		{"id": "valuables", "name": "Gold and silver", "goods": ["gold_bars", "silver_bars"], "strata": [0.0, 0.2, 5.0]}
+	],
+
+	"_users_comment": "Who else uses each good, and how much of its world output: [[driver, share]...]. Drivers: make:<good> (a zone uses it in proportion to what it makes of that good), gdp (by the zone's GDP), people (by its population), farming (by its crops). A good in a need and here splits its world output between them by these shares (the need's part shared by people, the rest by these drivers). @cars, @trucks, @boats: every maker of that kind.",
+	"users": {
+		"iron": [["make:steel", 1.0]], "coal": [["make:steel", 0.4], ["gdp", 0.6]], "gold": [["make:gold_bars", 1.0]],
+		"copper_ore": [["make:copper", 1.0]], "bauxite": [["make:aluminium", 1.0]], "nickel_ore": [["make:nickel", 1.0]],
+		"zinc_ore": [["make:zinc", 1.0]], "tin_ore": [["make:tin", 1.0]], "lithium_ore": [["make:lithium", 1.0]],
+		"silver_ore": [["make:silver_bars", 1.0]], "phosphate": [["make:fertilizer", 1.0]], "manganese_ore": [["make:ferromanganese", 1.0]],
+		"rare_earth_ore": [["make:rare_earths", 1.0]], "timber": [["make:furniture", 0.4], ["gdp", 0.6]],
+		"steel": [["make:machine_parts", 0.2], ["make:@cars", 0.15], ["make:@trucks", 0.05], ["make:appliances", 0.05], ["make:tools", 0.05], ["gdp", 0.5]],
+		"aluminium": [["make:@cars", 0.3], ["make:solar_panels", 0.1], ["make:sporting_goods", 0.05], ["gdp", 0.55]],
+		"copper": [["make:electronics", 0.3], ["make:appliances", 0.1], ["gdp", 0.6]],
+		"nickel": [["make:steel", 0.6], ["make:batteries", 0.2], ["gdp", 0.2]], "zinc": [["make:steel", 0.5], ["make:tools", 0.1], ["gdp", 0.4]],
+		"tin": [["make:electronics", 0.7], ["gdp", 0.3]], "lithium": [["make:batteries", 1.0]],
+		"gold_bars": [["gdp", 0.3]], "silver_bars": [["make:electronics", 0.3], ["make:solar_panels", 0.2]],
+		"ferromanganese": [["make:steel", 1.0]], "rare_earths": [["make:electronics", 0.5], ["make:@cars", 0.3], ["make:batteries", 0.2]],
+		"fertilizer": [["farming", 1.0]],
+		"plastics": [["make:toys", 0.15], ["make:electronics", 0.15], ["make:appliances", 0.1], ["make:sporting_goods", 0.05], ["make:cosmetics", 0.05], ["make:footwear", 0.05], ["gdp", 0.45]],
+		"cotton": [["make:clothing", 1.0]], "rubber": [["make:@cars", 0.5], ["make:@trucks", 0.2], ["make:footwear", 0.1], ["gdp", 0.2]],
+		"oil": [["make:diesel", 1.0]], "gas": [["people", 0.5], ["gdp", 0.3], ["make:ammonia", 0.2]],
+		"ammonia": [["make:fertilizer", 0.7], ["gdp", 0.3]], "hydrogen": [["gdp", 1.0]],
+		"diesel": [["gdp", 0.6]], "gasoline": [["gdp", 0.2]], "lpg": [["gdp", 0.3]], "jet_fuel": [["gdp", 0.3]],
+		"machine_parts": [["make:@cars", 0.3], ["gdp", 0.7]], "batteries": [["make:@cars", 0.3], ["gdp", 0.3]],
+		"solar_panels": [["gdp", 1.0]], "tools": [["gdp", 0.6]], "@trucks": [["gdp", 1.0]],
+		"horses": [["gdp", 1.0]], "sugarcane": [["gdp", 0.5]], "soybeans": [["farming", 0.75], ["people", 0.25]]
+	},
+
+	"_people_comment": "How people move: growth is each country's real 2016 yearly growth, x (1 + living_growth x (its standard of living - 1)) so a better-off zone grows a little faster; migration moves migration_share a year of a country's rural people into its cities.",
+	"people": {"living_growth": 0.5, "migration_share": 0.004},
+
+	"_currency_comment": "A country's currency strength drifts with its trade balance: by rate a year x (exports - imports) / (exports + imports) by value over about the last balance_days, held within range.",
+	"currency": {"rate": 0.15, "balance_days": 90, "range": [0.6, 1.6]}
+}

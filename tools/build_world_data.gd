@@ -4,7 +4,7 @@ extends Node
 ## (DESIGN_LIVING_WORLD.md) from public datasets downloaded to a folder:
 ##   <raw>/naturalearth/ne_10m_populated_places_simple.dbf  (Natural Earth, public domain)
 ##   <raw>/worldbank/SP.POP.TOTL.json, NY.GDP.MKTP.CD.json, NY.GDP.PCAP.CD.json,
-##     SP.URB.TOTL.IN.ZS.json (2016), tariff_2012_2019.json (TM.TAX.MRCH.WM.AR.ZS),
+##     SP.URB.TOTL.IN.ZS.json, SP.POP.GROW.json (2016), tariff_2012_2019.json (TM.TAX.MRCH.WM.AR.ZS),
 ##     countries_meta.json  (World Bank API, CC BY 4.0)
 ##
 ##   Godot --headless --path . tools/build_world_data.tscn -- --raw <folder>
@@ -52,8 +52,8 @@ const SHORT_NAMES := {
 }
 ## Places the World Bank doesn't cover: ISO3 -> {name, population, gdp_usd} (2016).
 const EXTRA_COUNTRIES := {
-	"TWN": {name = "Taiwan", population = 23540000, gdp_usd = 543000000000.0, urban = 78.0, tariff = 1.9},
-	"ATA": {name = "Antarctica", population = 4000, gdp_usd = 0.0, urban = 0.0, tariff = 0.0},
+	"TWN": {name = "Taiwan", population = 23540000, gdp_usd = 543000000000.0, urban = 78.0, tariff = 1.9, growth = 0.2},
+	"ATA": {name = "Antarctica", population = 4000, gdp_usd = 0.0, urban = 0.0, tariff = 0.0, growth = 0.0},
 }
 ## Natural Earth's country codes that differ from the World Bank's (ISO3).
 const NE_CODES := {"SDS": "SSD", "KOS": "XKX", "SAH": "ESH", "PSX": "PSE", "CYN": "CYP", "SOL": "SOM", "KAS": "IND"}
@@ -139,6 +139,7 @@ func _ready() -> void:
 	var gdp := _wb_values("NY.GDP.MKTP.CD.json")
 	var per_head := _wb_values("NY.GDP.PCAP.CD.json")
 	var urban := _wb_values("SP.URB.TOTL.IN.ZS.json")
+	var growth := _wb_values("SP.POP.GROW.json")
 	var tariff := _wb_nearest_2016("tariff_2012_2019.json")
 	var wb_ids := {}  # World Bank name -> ISO3.
 	for id: String in meta:
@@ -176,6 +177,7 @@ func _ready() -> void:
 			gdp_usd = roundf(float(extra.get("gdp_usd", gdp.get(id, 0.0))) / 1e6) * 1e6,
 			gdp_per_head = roundi(float(per_head.get(id, 0.0))) if extra.is_empty() else roundi(float(extra.gdp_usd) / maxf(float(extra.population), 1.0)),
 			urban_share = snappedf(float(extra.get("urban", urban.get(id, 50.0))) / 100.0, 0.001),
+			growth = snappedf(float(extra.get("growth", growth.get(id, 1.0))) / 100.0, 0.0001),
 			tariff = snappedf(float(extra.get("tariff", tariff.get(id, 5.0))) / 100.0, 0.0001),
 			bloc = "EU" if EU.has(id) else "",
 			region = str(meta.get(id, {}).get("region", "")),
@@ -214,7 +216,7 @@ func _ready() -> void:
 			people = int(TOWN_BY_BAND.get(GameState.port_sizes.band(port.id), 20000))
 		port_people[port.id] = {country = port.country, population = people, places = places_of}
 	_write(OUT_COUNTRIES, {
-		_comment = "Countries for the living world (tools/build_world_data.gd; DESIGN_LIVING_WORLD.md). Every country with a port or an inland city: 2016 population, GDP (US$), GDP a head, urban share and average applied tariff (the year nearest 2016, 2012-2019) from the World Bank (CC BY 4.0), Taiwan's and Antarctica's by hand; bloc (EU: tariff-free inside); currency_strength (1 to start, moves with the economy); zones: its internal trade zones (goods move freely inside a zone; big countries split by coastline), each with its ports. port_countries: the ports' country ids (a port can be its own customs territory, like Hong Kong).",
+		_comment = "Countries for the living world (tools/build_world_data.gd; DESIGN_LIVING_WORLD.md). Every country with a port or an inland city: 2016 population, GDP (US$), GDP a head, urban share, yearly population growth and average applied tariff (the year nearest 2016, 2012-2019) from the World Bank (CC BY 4.0), Taiwan's and Antarctica's by hand; bloc (EU: tariff-free inside); currency_strength (1 to start, moves with the economy); zones: its internal trade zones (goods move freely inside a zone; big countries split by coastline), each with its ports. port_countries: the ports' country ids (a port can be its own customs territory, like Hong Kong).",
 		countries = countries,
 		port_countries = _port_countries(ports),
 	})

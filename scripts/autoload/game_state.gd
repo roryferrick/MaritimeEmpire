@@ -292,6 +292,10 @@ var _player_use_time := 0.0
 var canal_traffic := CanalTraffic.new(self)
 ## Commodity prices: drift and the impact of the player's own trades.
 var market := Market.new(self)
+## The living world: zones, people, producers, stockpiles and prices (see WorldEconomy).
+var world := WorldEconomy.new(self)
+## The world's AI shipping firms, on paper, carrying the zones' surpluses (see ShippingFirms).
+var firms := ShippingFirms.new(self)
 var weather := Weather.new(self)
 ## Divine Actions (the game mode chosen at founding: see Divine); off in most games.
 var divine := Divine.new(self)
@@ -404,6 +408,12 @@ func _step(delta: float) -> void:
 	_roll_breakdowns(delta)
 	MapView._prof("sim.breakdowns", t_s)
 	ratings.step(delta)
+	t_s = Time.get_ticks_usec()
+	world.step(delta)
+	MapView._prof("sim.world", t_s)
+	t_s = Time.get_ticks_usec()
+	firms.step(delta)
+	MapView._prof("sim.firms", t_s)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -2414,6 +2424,8 @@ func _sell_cargo(ship: Ship) -> void:
 		ship.cargo_cut = 0.0
 	makers.on_trade(who, ship.cargo_id, ship.cargo_payment, false)
 	_tally_port_trade(who, ship.docked_at, ship.cargo_id, ship.cargo_qty, ship.cargo_payment, true)
+	if world.zone_of_port(ship.docked_at) >= 0 and world.good_index(ship.cargo_id) >= 0:
+		world.add_inbound(world.zone_of_port(ship.docked_at), world.good_index(ship.cargo_id), -ship.cargo_qty)
 	var t_s := Time.get_ticks_usec()
 	market.trade(ship.docked_at, ship.cargo_id, ship.cargo_payment - site_value, false)
 	MapView._prof("sell.trade", t_s)
@@ -2485,6 +2497,10 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	var quantity := mini(room, floori((float(who.money) - ship.bill - reserve - who.bank_reserve) / price))
 	if in_debt(who):
 		quantity = room  # On credit (see in_debt()).
+	var zone := world.zone_of_port(ship.docked_at)
+	var good := world.good_index(best[0])
+	if zone >= 0 and good >= 0:
+		quantity = mini(quantity, floori(world.zone_stock(zone, good)))  # (No more than the zone has.)
 	if quantity <= 0 or (ship.full_loads and quantity < room):
 		# What a full hold would need in the bank, for ships waiting for one.
 		ship.load_need = roundi(room * price + ship.bill + reserve + who.bank_reserve)
@@ -2507,6 +2523,8 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	ship.cargo_cost = cost
 	var t_e := Time.get_ticks_usec()
 	cargo_loaded.emit(ship, ship.docked_at, best[0], quantity, cost, to)
+	if good >= 0 and world.zone_of_port(to) >= 0:
+		world.add_inbound(world.zone_of_port(to), good, quantity)  # (On its way: the price there looks ahead to it.)
 	MapView._prof("load.loaded", t_e)
 	ship_changed.emit(ship)
 	return best[0]
@@ -4007,6 +4025,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	energy.reset()
 	research.reset()
 	industry.reset()
+	world.make_world(int(options.get("seed", randi())))
+	firms.generate(world, world.seed)
 	money_changed.emit(money)
 	SteamAchievements.note_game_created()
 	_begin_session()
@@ -4047,6 +4067,8 @@ func load_world(data: Dictionary, local := -1) -> void:
 	_stock_day = -1
 	wage_period = int(data.get("wage_period", -1))  # Saves from before wages: none owed for the time before.
 	market.from_dict(data.get("market", {}))
+	world.from_dict(data.get("world", {}))
+	firms.from_dict(data.get("firms", {}), world)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
 	max_time_speed = int(data.get("max_time_speed", TIME_SPEEDS[-1]))
 	# Saves from before weather have no storms or seasonal closures.
@@ -4114,7 +4136,15 @@ func _autosave() -> void:
 	if not in_session or Net.is_client():
 		return
 	_finish_autosave()
-	var data := world_dict().duplicate(true)  # (Its own copy: the ships' routes and such are the live ones.)
+	var data := world_dict()
+	# Its own copy: the ships' routes and such are the live ones. The world's and
+	# the firms' parts are made fresh by their to_dict() (and are the biggest), so
+	# they're kept as they are rather than copied again.
+	var fresh := {world = data.world, firms = data.firms}
+	data.erase("world")
+	data.erase("firms")
+	data = data.duplicate(true)
+	data.merge(fresh)
 	_autosave_task = WorkerThreadPool.add_task(_write_save.bind(save_path(save_slot), data), false, "Autosave")
 
 
@@ -4156,6 +4186,8 @@ func world_dict() -> Dictionary:
 		"research": research.to_dict(),
 		"industry": industry.to_dict(),
 		"market": market.to_dict(),
+		"world": world.to_dict(),
+		"firms": firms.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
 			var ship_data := ship.to_dict()

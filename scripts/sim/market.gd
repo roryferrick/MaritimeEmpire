@@ -24,8 +24,12 @@ func clear() -> void:
 	_impacts.clear()
 
 
-## What a port pays for a unit of a commodity now.
+## What a port pays for a unit of a commodity now: the living world's price
+## (WorldEconomy: its zone's stockpile), or for a good the world doesn't
+## trade, the old steady price with its drift and the player's trades' impact.
 func sell_price(port_id: String, commodity_id: String) -> float:
+	if _state.world.zone_of_port(port_id) >= 0 and _state.world.has_good(commodity_id):
+		return _state.world.sell_price(port_id, commodity_id)
 	return GameData.base_price(port_id, commodity_id) * _drift(port_id, commodity_id) * (1.0 + _impact(port_id, commodity_id))
 
 
@@ -44,6 +48,16 @@ func fuel_price(port_id: String) -> float:
 ## to impact_max for a load worth impact_ref_value, less for smaller loads,
 ## times the port size's impact factor (more at small ports, less at big ones).
 func trade(port_id: String, commodity_id: String, value: float, buying: bool) -> void:
+	var world: WorldEconomy = _state.world
+	var zone := world.zone_of_port(port_id)
+	var good := world.good_index(commodity_id)
+	if zone >= 0 and good >= 0:  # The living world: the goods come out of (or go into) the zone's stockpile.
+		var quantity := value / maxf(world.sell_price(port_id, commodity_id), 0.01)
+		if buying:
+			world.take(zone, good, quantity, value)
+		else:
+			world.deliver(zone, good, quantity, value)
+		return
 	var size := minf(value / float(GameData.markets.get("impact_ref_value", 1.0)), 1.0)
 	var change: float = float(GameData.markets.get("impact_max", 0.0)) * size * (1.0 if buying else -1.0) * _state.port_sizes.impact_factor(port_id)
 	_impacts["%s/%s" % [port_id, commodity_id]] = [_impact(port_id, commodity_id) + change, _state.play_time]

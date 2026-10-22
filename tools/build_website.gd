@@ -34,7 +34,7 @@ const TOPICS := [
 		["Ship models", "Cruise lines", "Fuel, maintenance and port stops", "Refuel stops", "Lost ships and recovery boats", "Tugs", "Tugs working a ship in",
 			"Icebreakers", "Long-term moorings", "People on deck", "Wakes", "Fishing and crabbing", "Choosing a fishing base"]],
 	["world", "The world", "The globe, its ports and lanes, the great canals, the Arctic and the Great Lakes.", "globe",
-		["World", "World data", "Panama Canal", "Suez Canal", "Great Lakes", "The Arctic",
+		["World", "World data", "Living world economy", "Panama Canal", "Suez Canal", "Great Lakes", "The Arctic",
 			"Wonders of the world"]],
 	["sea-and-sky", "Sea and sky", "Weather and storms, currents, seasons, and the animals and birds that share the sea.", "shanghai",
 		["Weather", "Rough seas", "Seasonal closures", "Ocean currents", "Sea animals", "Wildlife", "Birds", "Sound"]],
