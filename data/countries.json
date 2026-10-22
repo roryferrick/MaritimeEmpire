@@ -1,0 +1,4644 @@
+{
+	"_comment": "Countries for the living world (tools/build_world_data.gd; DESIGN_LIVING_WORLD.md). Every country with a port or an inland city: 2016 population, GDP (US$), GDP a head, urban share and average applied tariff (the year nearest 2016, 2012-2019) from the World Bank (CC BY 4.0), Taiwan's and Antarctica's by hand; bloc (EU: tariff-free inside); currency_strength (1 to start, moves with the economy); zones: its internal trade zones (goods move freely inside a zone; big countries split by coastline), each with its ports. port_countries: the ports' country ids (a port can be its own customs territory, like Hong Kong).",
+	"countries": [
+		{
+			"id": "AFG",
+			"name": "Afghanistan",
+			"population": 34700612,
+			"gdp_usd": 18117000000.0,
+			"gdp_per_head": 522,
+			"urban_share": 0.247,
+			"tariff": 0.0563,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Afghanistan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "ALB",
+			"name": "Albania",
+			"population": 2689469,
+			"gdp_usd": 11989000000.0,
+			"gdp_per_head": 4458,
+			"urban_share": 0.556,
+			"tariff": 0.0106,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Albania",
+					"ports": [
+						"DRZ"
+					]
+				}
+			]
+		},
+		{
+			"id": "DZA",
+			"name": "Algeria",
+			"population": 40850721,
+			"gdp_usd": 180764000000.0,
+			"gdp_per_head": 4425,
+			"urban_share": 0.707,
+			"tariff": 0.0885,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Algeria",
+					"ports": [
+						"ALR"
+					]
+				}
+			]
+		},
+		{
+			"id": "ASM",
+			"name": "American Samoa",
+			"population": 52245,
+			"gdp_usd": 671000000.0,
+			"gdp_per_head": 12843,
+			"urban_share": 0.843,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "American Samoa",
+					"ports": [
+						"PPG"
+					]
+				}
+			]
+		},
+		{
+			"id": "AND",
+			"name": "Andorra",
+			"population": 72181,
+			"gdp_usd": 2897000000.0,
+			"gdp_per_head": 40130,
+			"urban_share": 0.885,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Andorra",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "AGO",
+			"name": "Angola",
+			"population": 29183070,
+			"gdp_usd": 60770000000.0,
+			"gdp_per_head": 2082,
+			"urban_share": 0.643,
+			"tariff": 0.0938,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Angola",
+					"ports": [
+						"LAD",
+						"LOB"
+					]
+				}
+			]
+		},
+		{
+			"id": "ATA",
+			"name": "Antarctica",
+			"population": 4000,
+			"gdp_usd": 0.0,
+			"gdp_per_head": 0,
+			"urban_share": 0.0,
+			"tariff": 0.0,
+			"bloc": "",
+			"region": "",
+			"income": "",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Antarctica",
+					"ports": [
+						"KGI",
+						"MCM",
+						"PAL",
+						"ROT",
+						"DAV",
+						"MAW"
+					]
+				}
+			]
+		},
+		{
+			"id": "ARG",
+			"name": "Argentina",
+			"population": 43900313,
+			"gdp_usd": 557532000000.0,
+			"gdp_per_head": 12700,
+			"urban_share": 0.916,
+			"tariff": 0.0753,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Argentina",
+					"ports": [
+						"BUE",
+						"BHI"
+					]
+				}
+			]
+		},
+		{
+			"id": "ARM",
+			"name": "Armenia",
+			"population": 2992300,
+			"gdp_usd": 10546000000.0,
+			"gdp_per_head": 3524,
+			"urban_share": 0.646,
+			"tariff": 0.0213,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Armenia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "AUS",
+			"name": "Australia",
+			"population": 24190907,
+			"gdp_usd": 1211588000000.0,
+			"gdp_per_head": 50084,
+			"urban_share": 0.87,
+			"tariff": 0.0118,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "east",
+					"name": "East and South",
+					"ports": [
+						"MEL",
+						"SYD",
+						"BNE",
+						"ADL",
+						"XCH"
+					]
+				},
+				{
+					"id": "west",
+					"name": "West and North",
+					"ports": [
+						"FRE",
+						"DRW"
+					]
+				}
+			]
+		},
+		{
+			"id": "AUT",
+			"name": "Austria",
+			"population": 8736668,
+			"gdp_usd": 393687000000.0,
+			"gdp_per_head": 45061,
+			"urban_share": 0.677,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Austria",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "AZE",
+			"name": "Azerbaijan",
+			"population": 9757812,
+			"gdp_usd": 37867000000.0,
+			"gdp_per_head": 3881,
+			"urban_share": 0.558,
+			"tariff": 0.0519,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Azerbaijan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "BHS",
+			"name": "Bahamas",
+			"population": 388055,
+			"gdp_usd": 11881000000.0,
+			"gdp_per_head": 30617,
+			"urban_share": 0.822,
+			"tariff": 0.1856,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bahamas",
+					"ports": [
+						"FPO"
+					]
+				}
+			]
+		},
+		{
+			"id": "BHR",
+			"name": "Bahrain",
+			"population": 1423726,
+			"gdp_usd": 33885000000.0,
+			"gdp_per_head": 23800,
+			"urban_share": 1.0,
+			"tariff": 0.0313,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bahrain",
+					"ports": [
+						"BAH"
+					]
+				}
+			]
+		},
+		{
+			"id": "BGD",
+			"name": "Bangladesh",
+			"population": 160811932,
+			"gdp_usd": 265225000000.0,
+			"gdp_per_head": 1649,
+			"urban_share": 0.299,
+			"tariff": 0.1072,
+			"bloc": "",
+			"region": "South Asia",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bangladesh",
+					"ports": [
+						"CGP",
+						"MGL"
+					]
+				}
+			]
+		},
+		{
+			"id": "BRB",
+			"name": "Barbados",
+			"population": 279598,
+			"gdp_usd": 5679000000.0,
+			"gdp_per_head": 20311,
+			"urban_share": 0.593,
+			"tariff": 0.1421,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Barbados",
+					"ports": [
+						"BGI"
+					]
+				}
+			]
+		},
+		{
+			"id": "BLR",
+			"name": "Belarus",
+			"population": 9469379,
+			"gdp_usd": 47724000000.0,
+			"gdp_per_head": 5040,
+			"urban_share": 0.768,
+			"tariff": 0.0182,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Belarus",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "BEL",
+			"name": "Belgium",
+			"population": 11331422,
+			"gdp_usd": 474272000000.0,
+			"gdp_per_head": 41855,
+			"urban_share": 0.865,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Belgium",
+					"ports": [
+						"ANR"
+					]
+				}
+			]
+		},
+		{
+			"id": "BEN",
+			"name": "Benin",
+			"population": 11697842,
+			"gdp_usd": 11821000000.0,
+			"gdp_per_head": 1011,
+			"urban_share": 0.466,
+			"tariff": 0.112,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Benin",
+					"ports": [
+						"COO"
+					]
+				}
+			]
+		},
+		{
+			"id": "BMU",
+			"name": "Bermuda",
+			"population": 63449,
+			"gdp_usd": 6900000000.0,
+			"gdp_per_head": 108747,
+			"urban_share": 1.0,
+			"tariff": 0.1873,
+			"bloc": "",
+			"region": "North America",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bermuda",
+					"ports": [
+						"BDA"
+					]
+				}
+			]
+		},
+		{
+			"id": "BTN",
+			"name": "Bhutan",
+			"population": 747866,
+			"gdp_usd": 2358000000.0,
+			"gdp_per_head": 3152,
+			"urban_share": 0.373,
+			"tariff": 0.0282,
+			"bloc": "",
+			"region": "South Asia",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bhutan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "BOL",
+			"name": "Bolivia",
+			"population": 11180020,
+			"gdp_usd": 33941000000.0,
+			"gdp_per_head": 3036,
+			"urban_share": 0.687,
+			"tariff": 0.0475,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bolivia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "BIH",
+			"name": "Bosnia and Herzegovina",
+			"population": 3473003,
+			"gdp_usd": 17117000000.0,
+			"gdp_per_head": 4929,
+			"urban_share": 0.48,
+			"tariff": 0.0123,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bosnia and Herzegovina",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "BWA",
+			"name": "Botswana",
+			"population": 2234776,
+			"gdp_usd": 15083000000.0,
+			"gdp_per_head": 6749,
+			"urban_share": 0.657,
+			"tariff": 0.0059,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Botswana",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "BRA",
+			"name": "Brazil",
+			"population": 203218114,
+			"gdp_usd": 1795693000000.0,
+			"gdp_per_head": 8836,
+			"urban_share": 0.859,
+			"tariff": 0.0801,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "south",
+					"name": "South and Southeast",
+					"ports": [
+						"SSZ",
+						"PNG",
+						"RIO",
+						"ITJ",
+						"RIG",
+						"VIX"
+					]
+				},
+				{
+					"id": "north",
+					"name": "North and Northeast",
+					"ports": [
+						"SSA",
+						"FOR",
+						"SUA",
+						"VDC"
+					]
+				}
+			]
+		},
+		{
+			"id": "BRN",
+			"name": "Brunei",
+			"population": 427564,
+			"gdp_usd": 11400000000.0,
+			"gdp_per_head": 26663,
+			"urban_share": 0.749,
+			"tariff": 0.005,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Brunei",
+					"ports": [
+						"BWN"
+					]
+				}
+			]
+		},
+		{
+			"id": "BGR",
+			"name": "Bulgaria",
+			"population": 6894139,
+			"gdp_usd": 53932000000.0,
+			"gdp_per_head": 7823,
+			"urban_share": 0.732,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Bulgaria",
+					"ports": [
+						"VAR"
+					]
+				}
+			]
+		},
+		{
+			"id": "BFA",
+			"name": "Burkina Faso",
+			"population": 19334856,
+			"gdp_usd": 12833000000.0,
+			"gdp_per_head": 664,
+			"urban_share": 0.258,
+			"tariff": 0.0693,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Burkina Faso",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "BDI",
+			"name": "Burundi",
+			"population": 11239451,
+			"gdp_usd": 2618000000.0,
+			"gdp_per_head": 233,
+			"urban_share": 0.156,
+			"tariff": 0.0591,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Burundi",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "CPV",
+			"name": "Cabo Verde",
+			"population": 512554,
+			"gdp_usd": 1850000000.0,
+			"gdp_per_head": 3609,
+			"urban_share": 0.68,
+			"tariff": 0.1089,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Cabo Verde",
+					"ports": [
+						"RAI"
+					]
+				}
+			]
+		},
+		{
+			"id": "KHM",
+			"name": "Cambodia",
+			"population": 15852803,
+			"gdp_usd": 26557000000.0,
+			"gdp_per_head": 1675,
+			"urban_share": 0.325,
+			"tariff": 0.0977,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Cambodia",
+					"ports": [
+						"KOS"
+					]
+				}
+			]
+		},
+		{
+			"id": "CMR",
+			"name": "Cameroon",
+			"population": 23454161,
+			"gdp_usd": 33814000000.0,
+			"gdp_per_head": 1442,
+			"urban_share": 0.53,
+			"tariff": 0.127,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Cameroon",
+					"ports": [
+						"DLA"
+					]
+				}
+			]
+		},
+		{
+			"id": "CAN",
+			"name": "Canada",
+			"population": 36110803,
+			"gdp_usd": 1527996000000.0,
+			"gdp_per_head": 42314,
+			"urban_share": 0.813,
+			"tariff": 0.0156,
+			"bloc": "",
+			"region": "North America",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "west",
+					"name": "Pacific",
+					"ports": [
+						"YVR"
+					]
+				},
+				{
+					"id": "central",
+					"name": "Great Lakes and Hudson Bay",
+					"ports": [
+						"TOR",
+						"YHM",
+						"YQT",
+						"YYQ"
+					]
+				},
+				{
+					"id": "east",
+					"name": "Atlantic and Arctic",
+					"ports": [
+						"YHZ",
+						"YDP",
+						"YFB",
+						"YRB"
+					]
+				}
+			]
+		},
+		{
+			"id": "CAF",
+			"name": "Central African Republic",
+			"population": 4713663,
+			"gdp_usd": 1825000000.0,
+			"gdp_per_head": 387,
+			"urban_share": 0.404,
+			"tariff": 0.1644,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Central African Republic",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "TCD",
+			"name": "Chad",
+			"population": 15114655,
+			"gdp_usd": 13026000000.0,
+			"gdp_per_head": 862,
+			"urban_share": 0.231,
+			"tariff": 0.1636,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Chad",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "CHL",
+			"name": "Chile",
+			"population": 18267221,
+			"gdp_usd": 249345000000.0,
+			"gdp_per_head": 13650,
+			"urban_share": 0.876,
+			"tariff": 0.0589,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Chile",
+					"ports": [
+						"SAI",
+						"ANF",
+						"PUQ",
+						"VAP"
+					]
+				}
+			]
+		},
+		{
+			"id": "CHN",
+			"name": "China",
+			"population": 1387790000,
+			"gdp_usd": 11456024000000.0,
+			"gdp_per_head": 8255,
+			"urban_share": 0.588,
+			"tariff": 0.0354,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "north",
+					"name": "North China",
+					"ports": [
+						"TSN",
+						"DLC",
+						"YIK",
+						"YNT",
+						"TAO",
+						"RZH",
+						"LYG"
+					]
+				},
+				{
+					"id": "east",
+					"name": "East China",
+					"ports": [
+						"SHA",
+						"NGB",
+						"TAC",
+						"FOC",
+						"XMN",
+						"QZJ"
+					]
+				},
+				{
+					"id": "south",
+					"name": "South China",
+					"ports": [
+						"SZX",
+						"CAN",
+						"QZH"
+					]
+				}
+			]
+		},
+		{
+			"id": "COL",
+			"name": "Colombia",
+			"population": 47437512,
+			"gdp_usd": 282720000000.0,
+			"gdp_per_head": 5960,
+			"urban_share": 0.772,
+			"tariff": 0.0698,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Colombia",
+					"ports": [
+						"CTG",
+						"BUN"
+					]
+				}
+			]
+		},
+		{
+			"id": "COM",
+			"name": "Comoros",
+			"population": 741741,
+			"gdp_usd": 1013000000.0,
+			"gdp_per_head": 1365,
+			"urban_share": 0.307,
+			"tariff": 0.1043,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Comoros",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "CRI",
+			"name": "Costa Rica",
+			"population": 4866998,
+			"gdp_usd": 58847000000.0,
+			"gdp_per_head": 12091,
+			"urban_share": 0.755,
+			"tariff": 0.0178,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Costa Rica",
+					"ports": [
+						"PAS"
+					]
+				}
+			]
+		},
+		{
+			"id": "HRV",
+			"name": "Croatia",
+			"population": 4106867,
+			"gdp_usd": 52651000000.0,
+			"gdp_per_head": 12820,
+			"urban_share": 0.557,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Croatia",
+					"ports": [
+						"RJK"
+					]
+				}
+			]
+		},
+		{
+			"id": "CUB",
+			"name": "Cuba",
+			"population": 11265612,
+			"gdp_usd": 91370000000.0,
+			"gdp_per_head": 8111,
+			"urban_share": 0.769,
+			"tariff": 0.0802,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Cuba",
+					"ports": [
+						"HAV"
+					]
+				}
+			]
+		},
+		{
+			"id": "CYP",
+			"name": "Cyprus",
+			"population": 1237112,
+			"gdp_usd": 21046000000.0,
+			"gdp_per_head": 24280,
+			"urban_share": 0.67,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Cyprus",
+					"ports": [
+						"LMS"
+					]
+				}
+			]
+		},
+		{
+			"id": "CZE",
+			"name": "Czechia",
+			"population": 10566332,
+			"gdp_usd": 198161000000.0,
+			"gdp_per_head": 18754,
+			"urban_share": 0.73,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Czechia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "COD",
+			"name": "DR Congo",
+			"population": 83956415,
+			"gdp_usd": 38600000000.0,
+			"gdp_per_head": 460,
+			"urban_share": 0.417,
+			"tariff": 0.1019,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "DR Congo",
+					"ports": [
+						"BNW"
+					]
+				}
+			]
+		},
+		{
+			"id": "DNK",
+			"name": "Denmark",
+			"population": 5728010,
+			"gdp_usd": 312182000000.0,
+			"gdp_per_head": 54501,
+			"urban_share": 0.877,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Denmark",
+					"ports": [
+						"CPH",
+						"AAR"
+					]
+				}
+			]
+		},
+		{
+			"id": "DJI",
+			"name": "Djibouti",
+			"population": 1037653,
+			"gdp_usd": 2605000000.0,
+			"gdp_per_head": 2510,
+			"urban_share": 0.711,
+			"tariff": 0.1756,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Djibouti",
+					"ports": [
+						"JIB"
+					]
+				}
+			]
+		},
+		{
+			"id": "DOM",
+			"name": "Dominican Republic",
+			"population": 10551430,
+			"gdp_usd": 75553000000.0,
+			"gdp_per_head": 7160,
+			"urban_share": 0.741,
+			"tariff": 0.046,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Dominican Republic",
+					"ports": [
+						"CAU"
+					]
+				}
+			]
+		},
+		{
+			"id": "ECU",
+			"name": "Ecuador",
+			"population": 16505139,
+			"gdp_usd": 97671000000.0,
+			"gdp_per_head": 5918,
+			"urban_share": 0.63,
+			"tariff": 0.0681,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Ecuador",
+					"ports": [
+						"GYE",
+						"GPS"
+					]
+				}
+			]
+		},
+		{
+			"id": "EGY",
+			"name": "Egypt",
+			"population": 101644589,
+			"gdp_usd": 332442000000.0,
+			"gdp_per_head": 3271,
+			"urban_share": 0.425,
+			"tariff": 0.0663,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Egypt",
+					"ports": [
+						"PSD",
+						"ALY",
+						"SOK",
+						"TEW"
+					]
+				}
+			]
+		},
+		{
+			"id": "SLV",
+			"name": "El Salvador",
+			"population": 6200800,
+			"gdp_usd": 24191000000.0,
+			"gdp_per_head": 3901,
+			"urban_share": 0.704,
+			"tariff": 0.0207,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "El Salvador",
+					"ports": [
+						"ACJ"
+					]
+				}
+			]
+		},
+		{
+			"id": "GNQ",
+			"name": "Equatorial Guinea",
+			"population": 1508186,
+			"gdp_usd": 11241000000.0,
+			"gdp_per_head": 7453,
+			"urban_share": 0.693,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Equatorial Guinea",
+					"ports": [
+						"SSG"
+					]
+				}
+			]
+		},
+		{
+			"id": "ERI",
+			"name": "Eritrea",
+			"population": 3124698,
+			"gdp_usd": 0.0,
+			"gdp_per_head": 0,
+			"urban_share": 0.355,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Eritrea",
+					"ports": [
+						"MSW"
+					]
+				}
+			]
+		},
+		{
+			"id": "EST",
+			"name": "Estonia",
+			"population": 1315790,
+			"gdp_usd": 24561000000.0,
+			"gdp_per_head": 18666,
+			"urban_share": 0.687,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Estonia",
+					"ports": [
+						"TLL"
+					]
+				}
+			]
+		},
+		{
+			"id": "SWZ",
+			"name": "Eswatini",
+			"population": 1149507,
+			"gdp_usd": 3722000000.0,
+			"gdp_per_head": 3238,
+			"urban_share": 0.235,
+			"tariff": 0.0118,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Eswatini",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "ETH",
+			"name": "Ethiopia",
+			"population": 106718162,
+			"gdp_usd": 68476000000.0,
+			"gdp_per_head": 642,
+			"urban_share": 0.199,
+			"tariff": 0.1214,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Ethiopia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "FRO",
+			"name": "Faroe Islands",
+			"population": 49463,
+			"gdp_usd": 2813000000.0,
+			"gdp_per_head": 56876,
+			"urban_share": 0.383,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Faroe Islands",
+					"ports": [
+						"THN"
+					]
+				}
+			]
+		},
+		{
+			"id": "FJI",
+			"name": "Fiji",
+			"population": 919166,
+			"gdp_usd": 4930000000.0,
+			"gdp_per_head": 5364,
+			"urban_share": 0.552,
+			"tariff": 0.1605,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Fiji",
+					"ports": [
+						"SUV"
+					]
+				}
+			]
+		},
+		{
+			"id": "FIN",
+			"name": "Finland",
+			"population": 5495303,
+			"gdp_usd": 238778000000.0,
+			"gdp_per_head": 43451,
+			"urban_share": 0.716,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Finland",
+					"ports": [
+						"HEL"
+					]
+				}
+			]
+		},
+		{
+			"id": "FRA",
+			"name": "France",
+			"population": 66724104,
+			"gdp_usd": 2470408000000.0,
+			"gdp_per_head": 37024,
+			"urban_share": 0.786,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "France",
+					"ports": [
+						"LEH",
+						"MRS",
+						"BIA",
+						"SNR",
+						"FSP"
+					]
+				}
+			]
+		},
+		{
+			"id": "PYF",
+			"name": "French Polynesia",
+			"population": 279178,
+			"gdp_usd": 5497000000.0,
+			"gdp_per_head": 19690,
+			"urban_share": 0.618,
+			"tariff": 0.0536,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "French Polynesia",
+					"ports": [
+						"PPT"
+					]
+				}
+			]
+		},
+		{
+			"id": "GAB",
+			"name": "Gabon",
+			"population": 2100306,
+			"gdp_usd": 14024000000.0,
+			"gdp_per_head": 6677,
+			"urban_share": 0.885,
+			"tariff": 0.1693,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Gabon",
+					"ports": [
+						"LBV"
+					]
+				}
+			]
+		},
+		{
+			"id": "GMB",
+			"name": "Gambia",
+			"population": 2283769,
+			"gdp_usd": 1485000000.0,
+			"gdp_per_head": 650,
+			"urban_share": 0.599,
+			"tariff": 0.1808,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Gambia",
+					"ports": [
+						"BJL"
+					]
+				}
+			]
+		},
+		{
+			"id": "GEO",
+			"name": "Georgia",
+			"population": 3727505,
+			"gdp_usd": 15445000000.0,
+			"gdp_per_head": 4143,
+			"urban_share": 0.577,
+			"tariff": 0.0067,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Georgia",
+					"ports": [
+						"PTI"
+					]
+				}
+			]
+		},
+		{
+			"id": "DEU",
+			"name": "Germany",
+			"population": 82348669,
+			"gdp_usd": 3536788000000.0,
+			"gdp_per_head": 42949,
+			"urban_share": 0.808,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Germany",
+					"ports": [
+						"HAM",
+						"BRV"
+					]
+				}
+			]
+		},
+		{
+			"id": "GHA",
+			"name": "Ghana",
+			"population": 29356742,
+			"gdp_usd": 56144000000.0,
+			"gdp_per_head": 1912,
+			"urban_share": 0.542,
+			"tariff": 0.1079,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Ghana",
+					"ports": [
+						"TEM"
+					]
+				}
+			]
+		},
+		{
+			"id": "GIB",
+			"name": "Gibraltar",
+			"population": 33658,
+			"gdp_usd": 0.0,
+			"gdp_per_head": 0,
+			"urban_share": 1.0,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Gibraltar",
+					"ports": [
+						"GIB"
+					]
+				}
+			]
+		},
+		{
+			"id": "GRC",
+			"name": "Greece",
+			"population": 10775971,
+			"gdp_usd": 193097000000.0,
+			"gdp_per_head": 17919,
+			"urban_share": 0.777,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Greece",
+					"ports": [
+						"PIR"
+					]
+				}
+			]
+		},
+		{
+			"id": "GRL",
+			"name": "Greenland",
+			"population": 56186,
+			"gdp_usd": 2707000000.0,
+			"gdp_per_head": 48182,
+			"urban_share": 0.862,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Greenland",
+					"ports": [
+						"GOH",
+						"JHS",
+						"JAV"
+					]
+				}
+			]
+		},
+		{
+			"id": "GUM",
+			"name": "Guam",
+			"population": 164233,
+			"gdp_usd": 5901000000.0,
+			"gdp_per_head": 35931,
+			"urban_share": 0.941,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Guam",
+					"ports": [
+						"GUM"
+					]
+				}
+			]
+		},
+		{
+			"id": "GTM",
+			"name": "Guatemala",
+			"population": 16268760,
+			"gdp_usd": 66053000000.0,
+			"gdp_per_head": 4060,
+			"urban_share": 0.537,
+			"tariff": 0.0139,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Guatemala",
+					"ports": [
+						"PQZ"
+					]
+				}
+			]
+		},
+		{
+			"id": "GIN",
+			"name": "Guinea",
+			"population": 12073030,
+			"gdp_usd": 8596000000.0,
+			"gdp_per_head": 712,
+			"urban_share": 0.353,
+			"tariff": 0.1225,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Guinea",
+					"ports": [
+						"CKY"
+					]
+				}
+			]
+		},
+		{
+			"id": "GNB",
+			"name": "Guinea-Bissau",
+			"population": 1831893,
+			"gdp_usd": 1245000000.0,
+			"gdp_per_head": 680,
+			"urban_share": 0.426,
+			"tariff": 0.155,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Guinea-Bissau",
+					"ports": [
+						"OXB"
+					]
+				}
+			]
+		},
+		{
+			"id": "GUY",
+			"name": "Guyana",
+			"population": 763548,
+			"gdp_usd": 4483000000.0,
+			"gdp_per_head": 5871,
+			"urban_share": 0.264,
+			"tariff": 0.0658,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Guyana",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "HTI",
+			"name": "Haiti",
+			"population": 10671457,
+			"gdp_usd": 14069000000.0,
+			"gdp_per_head": 1318,
+			"urban_share": 0.501,
+			"tariff": 0.0652,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Haiti",
+					"ports": [
+						"PAP"
+					]
+				}
+			]
+		},
+		{
+			"id": "HND",
+			"name": "Honduras",
+			"population": 9412380,
+			"gdp_usd": 21718000000.0,
+			"gdp_per_head": 2307,
+			"urban_share": 0.549,
+			"tariff": 0.0279,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Honduras",
+					"ports": [
+						"PCR"
+					]
+				}
+			]
+		},
+		{
+			"id": "HKG",
+			"name": "Hong Kong",
+			"population": 7336600,
+			"gdp_usd": 320860000000.0,
+			"gdp_per_head": 43734,
+			"urban_share": 1.0,
+			"tariff": 0.0,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Hong Kong",
+					"ports": [
+						"HKG"
+					]
+				}
+			]
+		},
+		{
+			"id": "HUN",
+			"name": "Hungary",
+			"population": 9759755,
+			"gdp_usd": 128984000000.0,
+			"gdp_per_head": 13216,
+			"urban_share": 0.705,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Hungary",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "ISL",
+			"name": "Iceland",
+			"population": 335439,
+			"gdp_usd": 21084000000.0,
+			"gdp_per_head": 62854,
+			"urban_share": 0.938,
+			"tariff": 0.0147,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Iceland",
+					"ports": [
+						"REK"
+					]
+				}
+			]
+		},
+		{
+			"id": "IND",
+			"name": "India",
+			"population": 1343944296,
+			"gdp_usd": 2294797000000.0,
+			"gdp_per_head": 1708,
+			"urban_share": 0.329,
+			"tariff": 0.0635,
+			"bloc": "",
+			"region": "South Asia",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "west",
+					"name": "West Coast",
+					"ports": [
+						"MUN",
+						"JNP",
+						"HZR",
+						"COK"
+					]
+				},
+				{
+					"id": "east",
+					"name": "East Coast",
+					"ports": [
+						"MAA",
+						"CCU",
+						"VTZ",
+						"PRT"
+					]
+				}
+			]
+		},
+		{
+			"id": "IDN",
+			"name": "Indonesia",
+			"population": 264627418,
+			"gdp_usd": 931877000000.0,
+			"gdp_per_head": 3521,
+			"urban_share": 0.538,
+			"tariff": 0.0264,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Indonesia",
+					"ports": [
+						"JKT",
+						"SUB",
+						"BLW",
+						"UPG",
+						"BPN"
+					]
+				}
+			]
+		},
+		{
+			"id": "IRN",
+			"name": "Iran",
+			"population": 83812228,
+			"gdp_usd": 478618000000.0,
+			"gdp_per_head": 5711,
+			"urban_share": 0.739,
+			"tariff": 0.1543,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Iran",
+					"ports": [
+						"BND"
+					]
+				}
+			]
+		},
+		{
+			"id": "IRQ",
+			"name": "Iraq",
+			"population": 38469627,
+			"gdp_usd": 166744000000.0,
+			"gdp_per_head": 4334,
+			"urban_share": 0.699,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Iraq",
+					"ports": [
+						"UQR"
+					]
+				}
+			]
+		},
+		{
+			"id": "IRL",
+			"name": "Ireland",
+			"population": 4762722,
+			"gdp_usd": 305431000000.0,
+			"gdp_per_head": 64130,
+			"urban_share": 0.627,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Ireland",
+					"ports": [
+						"DUB",
+						"ORK"
+					]
+				}
+			]
+		},
+		{
+			"id": "IMN",
+			"name": "Isle of Man",
+			"population": 83466,
+			"gdp_usd": 6846000000.0,
+			"gdp_per_head": 82026,
+			"urban_share": 0.521,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Isle of Man",
+					"ports": [
+						"IOM"
+					]
+				}
+			]
+		},
+		{
+			"id": "ISR",
+			"name": "Israel",
+			"population": 8546000,
+			"gdp_usd": 321084000000.0,
+			"gdp_per_head": 37571,
+			"urban_share": 0.917,
+			"tariff": 0.0281,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Israel",
+					"ports": [
+						"HFA",
+						"ASH",
+						"AQJ"
+					]
+				}
+			]
+		},
+		{
+			"id": "ITA",
+			"name": "Italy",
+			"population": 60115223,
+			"gdp_usd": 1887111000000.0,
+			"gdp_per_head": 31392,
+			"urban_share": 0.696,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Italy",
+					"ports": [
+						"GIT",
+						"GOA",
+						"SPE",
+						"ROM",
+						"PMO",
+						"CAG"
+					]
+				}
+			]
+		},
+		{
+			"id": "CIV",
+			"name": "Ivory Coast",
+			"population": 25989405,
+			"gdp_usd": 48408000000.0,
+			"gdp_per_head": 1863,
+			"urban_share": 0.499,
+			"tariff": 0.0816,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Ivory Coast",
+					"ports": [
+						"ABJ"
+					]
+				}
+			]
+		},
+		{
+			"id": "JAM",
+			"name": "Jamaica",
+			"population": 2809915,
+			"gdp_usd": 14899000000.0,
+			"gdp_per_head": 5302,
+			"urban_share": 0.555,
+			"tariff": 0.1084,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Jamaica",
+					"ports": [
+						"KIN"
+					]
+				}
+			]
+		},
+		{
+			"id": "JPN",
+			"name": "Japan",
+			"population": 127076000,
+			"gdp_usd": 5110357000000.0,
+			"gdp_per_head": 40215,
+			"urban_share": 0.915,
+			"tariff": 0.0255,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Japan",
+					"ports": [
+						"TYO",
+						"YOK",
+						"UKB",
+						"OSA",
+						"NGO"
+					]
+				}
+			]
+		},
+		{
+			"id": "JOR",
+			"name": "Jordan",
+			"population": 10006367,
+			"gdp_usd": 43688000000.0,
+			"gdp_per_head": 4366,
+			"urban_share": 0.906,
+			"tariff": 0.0432,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Jordan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "KAZ",
+			"name": "Kazakhstan",
+			"population": 18363600,
+			"gdp_usd": 137278000000.0,
+			"gdp_per_head": 7476,
+			"urban_share": 0.567,
+			"tariff": 0.0255,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Kazakhstan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "KEN",
+			"name": "Kenya",
+			"population": 48139687,
+			"gdp_usd": 74815000000.0,
+			"gdp_per_head": 1554,
+			"urban_share": 0.317,
+			"tariff": 0.1225,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Kenya",
+					"ports": [
+						"MBA"
+					]
+				}
+			]
+		},
+		{
+			"id": "XKX",
+			"name": "Kosovo",
+			"population": 1777568,
+			"gdp_usd": 6683000000.0,
+			"gdp_per_head": 3759,
+			"urban_share": 0.408,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Kosovo",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "KWT",
+			"name": "Kuwait",
+			"population": 4004096,
+			"gdp_usd": 109407000000.0,
+			"gdp_per_head": 27324,
+			"urban_share": 1.0,
+			"tariff": 0.0296,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Kuwait",
+					"ports": [
+						"KWI"
+					]
+				}
+			]
+		},
+		{
+			"id": "KGZ",
+			"name": "Kyrgyzstan",
+			"population": 6175338,
+			"gdp_usd": 6813000000.0,
+			"gdp_per_head": 1103,
+			"urban_share": 0.351,
+			"tariff": 0.0316,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Kyrgyzstan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "LAO",
+			"name": "Laos",
+			"population": 6908802,
+			"gdp_usd": 15913000000.0,
+			"gdp_per_head": 2303,
+			"urban_share": 0.338,
+			"tariff": 0.0165,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Laos",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "LVA",
+			"name": "Latvia",
+			"population": 1959537,
+			"gdp_usd": 27117000000.0,
+			"gdp_per_head": 13839,
+			"urban_share": 0.679,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Latvia",
+					"ports": [
+						"RIX"
+					]
+				}
+			]
+		},
+		{
+			"id": "LBN",
+			"name": "Lebanon",
+			"population": 6323060,
+			"gdp_usd": 51147000000.0,
+			"gdp_per_head": 8089,
+			"urban_share": 0.888,
+			"tariff": 0.0298,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Lebanon",
+					"ports": [
+						"BEY"
+					]
+				}
+			]
+		},
+		{
+			"id": "LSO",
+			"name": "Lesotho",
+			"population": 2130422,
+			"gdp_usd": 2114000000.0,
+			"gdp_per_head": 992,
+			"urban_share": 0.355,
+			"tariff": 0.0201,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Lesotho",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "LBR",
+			"name": "Liberia",
+			"population": 4755608,
+			"gdp_usd": 3398000000.0,
+			"gdp_per_head": 715,
+			"urban_share": 0.513,
+			"tariff": 0.0954,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Liberia",
+					"ports": [
+						"MLW"
+					]
+				}
+			]
+		},
+		{
+			"id": "LBY",
+			"name": "Libya",
+			"population": 6632126,
+			"gdp_usd": 49912000000.0,
+			"gdp_per_head": 7526,
+			"urban_share": 0.878,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Libya",
+					"ports": [
+						"MRA"
+					]
+				}
+			]
+		},
+		{
+			"id": "LTU",
+			"name": "Lithuania",
+			"population": 2877325,
+			"gdp_usd": 42971000000.0,
+			"gdp_per_head": 14934,
+			"urban_share": 0.672,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Lithuania",
+					"ports": [
+						"KLJ"
+					]
+				}
+			]
+		},
+		{
+			"id": "LUX",
+			"name": "Luxembourg",
+			"population": 582014,
+			"gdp_usd": 62217000000.0,
+			"gdp_per_head": 106899,
+			"urban_share": 0.915,
+			"tariff": 0.05,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Luxembourg",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "MDG",
+			"name": "Madagascar",
+			"population": 26099952,
+			"gdp_usd": 11849000000.0,
+			"gdp_per_head": 454,
+			"urban_share": 0.294,
+			"tariff": 0.0786,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Madagascar",
+					"ports": [
+						"TMM"
+					]
+				}
+			]
+		},
+		{
+			"id": "MWI",
+			"name": "Malawi",
+			"population": 17557739,
+			"gdp_usd": 7910000000.0,
+			"gdp_per_head": 451,
+			"urban_share": 0.159,
+			"tariff": 0.0477,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Malawi",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "MYS",
+			"name": "Malaysia",
+			"population": 31789685,
+			"gdp_usd": 301256000000.0,
+			"gdp_per_head": 9477,
+			"urban_share": 0.739,
+			"tariff": 0.0402,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Malaysia",
+					"ports": [
+						"PKG",
+						"TPP",
+						"PEN"
+					]
+				}
+			]
+		},
+		{
+			"id": "MDV",
+			"name": "Maldives",
+			"population": 443308,
+			"gdp_usd": 4410000000.0,
+			"gdp_per_head": 9948,
+			"urban_share": 0.39,
+			"tariff": 0.1116,
+			"bloc": "",
+			"region": "South Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Maldives",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "MLI",
+			"name": "Mali",
+			"population": 19191289,
+			"gdp_usd": 16744000000.0,
+			"gdp_per_head": 872,
+			"urban_share": 0.264,
+			"tariff": 0.0622,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Mali",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "MLT",
+			"name": "Malta",
+			"population": 454505,
+			"gdp_usd": 12026000000.0,
+			"gdp_per_head": 26459,
+			"urban_share": 0.945,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Malta",
+					"ports": [
+						"MLA"
+					]
+				}
+			]
+		},
+		{
+			"id": "MRT",
+			"name": "Mauritania",
+			"population": 4086657,
+			"gdp_usd": 6408000000.0,
+			"gdp_per_head": 1568,
+			"urban_share": 0.529,
+			"tariff": 0.0867,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Mauritania",
+					"ports": [
+						"NKC"
+					]
+				}
+			]
+		},
+		{
+			"id": "MUS",
+			"name": "Mauritius",
+			"population": 1263747,
+			"gdp_usd": 12758000000.0,
+			"gdp_per_head": 10095,
+			"urban_share": 0.396,
+			"tariff": 0.0079,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Mauritius",
+					"ports": [
+						"MRU"
+					]
+				}
+			]
+		},
+		{
+			"id": "MEX",
+			"name": "Mexico",
+			"population": 122251351,
+			"gdp_usd": 1112233000000.0,
+			"gdp_per_head": 9098,
+			"urban_share": 0.774,
+			"tariff": 0.0435,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Mexico",
+					"ports": [
+						"ZLO",
+						"VER",
+						"LZC",
+						"CSL",
+						"CUN"
+					]
+				}
+			]
+		},
+		{
+			"id": "MDA",
+			"name": "Moldova",
+			"population": 2803186,
+			"gdp_usd": 7981000000.0,
+			"gdp_per_head": 2847,
+			"urban_share": 0.397,
+			"tariff": 0.0354,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Moldova",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "MNG",
+			"name": "Mongolia",
+			"population": 3088856,
+			"gdp_usd": 11181000000.0,
+			"gdp_per_head": 3620,
+			"urban_share": 0.68,
+			"tariff": 0.0552,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Mongolia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "MNE",
+			"name": "Montenegro",
+			"population": 625353,
+			"gdp_usd": 4357000000.0,
+			"gdp_per_head": 6968,
+			"urban_share": 0.649,
+			"tariff": 0.0301,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Montenegro",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "MAR",
+			"name": "Morocco",
+			"population": 35023457,
+			"gdp_usd": 111573000000.0,
+			"gdp_per_head": 3141,
+			"urban_share": 0.61,
+			"tariff": 0.0378,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Morocco",
+					"ports": [
+						"TNG"
+					]
+				}
+			]
+		},
+		{
+			"id": "MOZ",
+			"name": "Mozambique",
+			"population": 27337105,
+			"gdp_usd": 12069000000.0,
+			"gdp_per_head": 441,
+			"urban_share": 0.324,
+			"tariff": 0.0355,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Mozambique",
+					"ports": [
+						"MPM",
+						"BEW",
+						"MNC"
+					]
+				}
+			]
+		},
+		{
+			"id": "MMR",
+			"name": "Myanmar",
+			"population": 51495696,
+			"gdp_usd": 63298000000.0,
+			"gdp_per_head": 1229,
+			"urban_share": 0.298,
+			"tariff": 0.0172,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Myanmar",
+					"ports": [
+						"RGN"
+					]
+				}
+			]
+		},
+		{
+			"id": "NAM",
+			"name": "Namibia",
+			"population": 2439213,
+			"gdp_usd": 10722000000.0,
+			"gdp_per_head": 4396,
+			"urban_share": 0.462,
+			"tariff": 0.0103,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Namibia",
+					"ports": [
+						"WVB"
+					]
+				}
+			]
+		},
+		{
+			"id": "NPL",
+			"name": "Nepal",
+			"population": 27955462,
+			"gdp_usd": 24524000000.0,
+			"gdp_per_head": 877,
+			"urban_share": 0.653,
+			"tariff": 0.1235,
+			"bloc": "",
+			"region": "South Asia",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Nepal",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "NLD",
+			"name": "Netherlands",
+			"population": 17030314,
+			"gdp_usd": 797164000000.0,
+			"gdp_per_head": 46809,
+			"urban_share": 0.906,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Netherlands",
+					"ports": [
+						"RTM"
+					]
+				}
+			]
+		},
+		{
+			"id": "NCL",
+			"name": "New Caledonia",
+			"population": 283423,
+			"gdp_usd": 8725000000.0,
+			"gdp_per_head": 30783,
+			"urban_share": 0.669,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "New Caledonia",
+					"ports": [
+						"NOU"
+					]
+				}
+			]
+		},
+		{
+			"id": "NZL",
+			"name": "New Zealand",
+			"population": 4714100,
+			"gdp_usd": 188980000000.0,
+			"gdp_per_head": 40088,
+			"urban_share": 0.847,
+			"tariff": 0.0127,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "New Zealand",
+					"ports": [
+						"AKL",
+						"WLG"
+					]
+				}
+			]
+		},
+		{
+			"id": "NIC",
+			"name": "Nicaragua",
+			"population": 6232666,
+			"gdp_usd": 13286000000.0,
+			"gdp_per_head": 2132,
+			"urban_share": 0.58,
+			"tariff": 0.0217,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Nicaragua",
+					"ports": [
+						"CIO"
+					]
+				}
+			]
+		},
+		{
+			"id": "NER",
+			"name": "Niger",
+			"population": 20685753,
+			"gdp_usd": 10341000000.0,
+			"gdp_per_head": 500,
+			"urban_share": 0.164,
+			"tariff": 0.0821,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Niger",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "NGA",
+			"name": "Nigeria",
+			"population": 195443700,
+			"gdp_usd": 404649000000.0,
+			"gdp_per_head": 2070,
+			"urban_share": 0.565,
+			"tariff": 0.0852,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Nigeria",
+					"ports": [
+						"LOS",
+						"ONN"
+					]
+				}
+			]
+		},
+		{
+			"id": "PRK",
+			"name": "North Korea",
+			"population": 25698326,
+			"gdp_usd": 0.0,
+			"gdp_per_head": 0,
+			"urban_share": 0.616,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "North Korea",
+					"ports": [
+						"NAM"
+					]
+				}
+			]
+		},
+		{
+			"id": "MKD",
+			"name": "North Macedonia",
+			"population": 1906313,
+			"gdp_usd": 10672000000.0,
+			"gdp_per_head": 5598,
+			"urban_share": 0.594,
+			"tariff": 0.0396,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "North Macedonia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "NOR",
+			"name": "Norway",
+			"population": 5234519,
+			"gdp_usd": 383284000000.0,
+			"gdp_per_head": 73222,
+			"urban_share": 0.817,
+			"tariff": 0.0341,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Norway",
+					"ports": [
+						"OSL",
+						"BGO",
+						"TOS",
+						"HFT",
+						"KKN",
+						"LYR"
+					]
+				}
+			]
+		},
+		{
+			"id": "OMN",
+			"name": "Oman",
+			"population": 4390877,
+			"gdp_usd": 75129000000.0,
+			"gdp_per_head": 17110,
+			"urban_share": 0.778,
+			"tariff": 0.0146,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Oman",
+					"ports": [
+						"SLL",
+						"SOH"
+					]
+				}
+			]
+		},
+		{
+			"id": "PAK",
+			"name": "Pakistan",
+			"population": 220138869,
+			"gdp_usd": 313630000000.0,
+			"gdp_per_head": 1425,
+			"urban_share": 0.362,
+			"tariff": 0.1009,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Pakistan",
+					"ports": [
+						"KHI"
+					]
+				}
+			]
+		},
+		{
+			"id": "PLW",
+			"name": "Palau",
+			"population": 17797,
+			"gdp_usd": 303000000.0,
+			"gdp_per_head": 17044,
+			"urban_share": 0.801,
+			"tariff": 0.078,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Palau",
+					"ports": [
+						"ROR"
+					]
+				}
+			]
+		},
+		{
+			"id": "PAN",
+			"name": "Panama",
+			"population": 4029086,
+			"gdp_usd": 59761000000.0,
+			"gdp_per_head": 14832,
+			"urban_share": 0.656,
+			"tariff": 0.0541,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Panama",
+					"ports": [
+						"CLN",
+						"BLB"
+					]
+				}
+			]
+		},
+		{
+			"id": "PNG",
+			"name": "Papua New Guinea",
+			"population": 8961718,
+			"gdp_usd": 20759000000.0,
+			"gdp_per_head": 2316,
+			"urban_share": 0.134,
+			"tariff": 0.0458,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Papua New Guinea",
+					"ports": [
+						"POM"
+					]
+				}
+			]
+		},
+		{
+			"id": "PRY",
+			"name": "Paraguay",
+			"population": 6249126,
+			"gdp_usd": 36090000000.0,
+			"gdp_per_head": 5775,
+			"urban_share": 0.621,
+			"tariff": 0.0421,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Paraguay",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "PER",
+			"name": "Peru",
+			"population": 30866494,
+			"gdp_usd": 191898000000.0,
+			"gdp_per_head": 6217,
+			"urban_share": 0.814,
+			"tariff": 0.008,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Peru",
+					"ports": [
+						"LIM"
+					]
+				}
+			]
+		},
+		{
+			"id": "PHL",
+			"name": "Philippines",
+			"population": 106735719,
+			"gdp_usd": 318627000000.0,
+			"gdp_per_head": 2985,
+			"urban_share": 0.519,
+			"tariff": 0.0417,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Philippines",
+					"ports": [
+						"MNL",
+						"CEB",
+						"DVO"
+					]
+				}
+			]
+		},
+		{
+			"id": "POL",
+			"name": "Poland",
+			"population": 37970087,
+			"gdp_usd": 473260000000.0,
+			"gdp_per_head": 12464,
+			"urban_share": 0.602,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Poland",
+					"ports": [
+						"GDN"
+					]
+				}
+			]
+		},
+		{
+			"id": "PRT",
+			"name": "Portugal",
+			"population": 10325452,
+			"gdp_usd": 206305000000.0,
+			"gdp_per_head": 19980,
+			"urban_share": 0.611,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Portugal",
+					"ports": [
+						"SIE",
+						"OPO",
+						"PDL",
+						"FNC",
+						"FLW"
+					]
+				}
+			]
+		},
+		{
+			"id": "PRI",
+			"name": "Puerto Rico",
+			"population": 3480432,
+			"gdp_usd": 104337000000.0,
+			"gdp_per_head": 29978,
+			"urban_share": 0.938,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Puerto Rico",
+					"ports": [
+						"SJU"
+					]
+				}
+			]
+		},
+		{
+			"id": "QAT",
+			"name": "Qatar",
+			"population": 2477113,
+			"gdp_usd": 151732000000.0,
+			"gdp_per_head": 61254,
+			"urban_share": 0.99,
+			"tariff": 0.0337,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Qatar",
+					"ports": [
+						"HMD"
+					]
+				}
+			]
+		},
+		{
+			"id": "COG",
+			"name": "Republic of the Congo",
+			"population": 5222536,
+			"gdp_usd": 10931000000.0,
+			"gdp_per_head": 2093,
+			"urban_share": 0.633,
+			"tariff": 0.1155,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Republic of the Congo",
+					"ports": [
+						"PNR"
+					]
+				}
+			]
+		},
+		{
+			"id": "ROU",
+			"name": "Romania",
+			"population": 19702267,
+			"gdp_usd": 185291000000.0,
+			"gdp_per_head": 9405,
+			"urban_share": 0.536,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Romania",
+					"ports": [
+						"CND"
+					]
+				}
+			]
+		},
+		{
+			"id": "RUS",
+			"name": "Russia",
+			"population": 145015460,
+			"gdp_usd": 1276786000000.0,
+			"gdp_per_head": 8663,
+			"urban_share": 0.744,
+			"tariff": 0.0362,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "west",
+					"name": "Baltic and Arctic",
+					"ports": [
+						"LED",
+						"ULU",
+						"MMK",
+						"ARH",
+						"SBT",
+						"DUD"
+					]
+				},
+				{
+					"id": "south",
+					"name": "Black Sea",
+					"ports": [
+						"NVS"
+					]
+				},
+				{
+					"id": "east",
+					"name": "Far East",
+					"ports": [
+						"VVO",
+						"KRS",
+						"PKC",
+						"GDX",
+						"VYP",
+						"VNN",
+						"TIK",
+						"PWE"
+					]
+				}
+			]
+		},
+		{
+			"id": "RWA",
+			"name": "Rwanda",
+			"population": 11919183,
+			"gdp_usd": 8597000000.0,
+			"gdp_per_head": 721,
+			"urban_share": 0.191,
+			"tariff": 0.0733,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Rwanda",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "WSM",
+			"name": "Samoa",
+			"population": 203499,
+			"gdp_usd": 844000000.0,
+			"gdp_per_head": 4147,
+			"urban_share": 0.191,
+			"tariff": 0.1058,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Samoa",
+					"ports": [
+						"APW"
+					]
+				}
+			]
+		},
+		{
+			"id": "STP",
+			"name": "Sao Tome and Principe",
+			"population": 203689,
+			"gdp_usd": 292000000.0,
+			"gdp_per_head": 1435,
+			"urban_share": 0.675,
+			"tariff": 0.1044,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Sao Tome and Principe",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "SAU",
+			"name": "Saudi Arabia",
+			"population": 30954198,
+			"gdp_usd": 689279000000.0,
+			"gdp_per_head": 22268,
+			"urban_share": 0.831,
+			"tariff": 0.0485,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Saudi Arabia",
+					"ports": [
+						"JED",
+						"DMM",
+						"KAP"
+					]
+				}
+			]
+		},
+		{
+			"id": "SEN",
+			"name": "Senegal",
+			"population": 15034521,
+			"gdp_usd": 19040000000.0,
+			"gdp_per_head": 1266,
+			"urban_share": 0.471,
+			"tariff": 0.0875,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Senegal",
+					"ports": [
+						"DKR"
+					]
+				}
+			]
+		},
+		{
+			"id": "SRB",
+			"name": "Serbia",
+			"population": 7058322,
+			"gdp_usd": 42225000000.0,
+			"gdp_per_head": 5982,
+			"urban_share": 0.604,
+			"tariff": 0.0137,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Serbia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "SLE",
+			"name": "Sierra Leone",
+			"population": 7205328,
+			"gdp_usd": 6084000000.0,
+			"gdp_per_head": 844,
+			"urban_share": 0.412,
+			"tariff": 0.1031,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Sierra Leone",
+					"ports": [
+						"FNA"
+					]
+				}
+			]
+		},
+		{
+			"id": "SGP",
+			"name": "Singapore",
+			"population": 5607283,
+			"gdp_usd": 320759000000.0,
+			"gdp_per_head": 57204,
+			"urban_share": 1.0,
+			"tariff": 0.0007,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Singapore",
+					"ports": [
+						"SIN"
+					]
+				}
+			]
+		},
+		{
+			"id": "SVK",
+			"name": "Slovakia",
+			"population": 5430798,
+			"gdp_usd": 90347000000.0,
+			"gdp_per_head": 16636,
+			"urban_share": 0.537,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Slovakia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "SVN",
+			"name": "Slovenia",
+			"population": 2065042,
+			"gdp_usd": 44291000000.0,
+			"gdp_per_head": 21448,
+			"urban_share": 0.536,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Slovenia",
+					"ports": [
+						"KOP"
+					]
+				}
+			]
+		},
+		{
+			"id": "SLB",
+			"name": "Solomon Islands",
+			"population": 662379,
+			"gdp_usd": 1379000000.0,
+			"gdp_per_head": 2083,
+			"urban_share": 0.245,
+			"tariff": 0.1408,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Solomon Islands",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "SOM",
+			"name": "Somalia",
+			"population": 14348740,
+			"gdp_usd": 6614000000.0,
+			"gdp_per_head": 461,
+			"urban_share": 0.459,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Somalia",
+					"ports": [
+						"MGQ"
+					]
+				}
+			]
+		},
+		{
+			"id": "ZAF",
+			"name": "South Africa",
+			"population": 57259551,
+			"gdp_usd": 323586000000.0,
+			"gdp_per_head": 5651,
+			"urban_share": 0.633,
+			"tariff": 0.0451,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "South Africa",
+					"ports": [
+						"DUR",
+						"NGQ",
+						"CPT"
+					]
+				}
+			]
+		},
+		{
+			"id": "KOR",
+			"name": "South Korea",
+			"population": 51217803,
+			"gdp_usd": 1579151000000.0,
+			"gdp_per_head": 30832,
+			"urban_share": 0.816,
+			"tariff": 0.0867,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "South Korea",
+					"ports": [
+						"PUS",
+						"KWN",
+						"ICN"
+					]
+				}
+			]
+		},
+		{
+			"id": "ESP",
+			"name": "Spain",
+			"population": 46458139,
+			"gdp_usd": 1243016000000.0,
+			"gdp_per_head": 26756,
+			"urban_share": 0.794,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Spain",
+					"ports": [
+						"VLC",
+						"BCN",
+						"PMI",
+						"LPA",
+						"BIO"
+					]
+				}
+			]
+		},
+		{
+			"id": "LKA",
+			"name": "Sri Lanka",
+			"population": 21209000,
+			"gdp_usd": 88000000000.0,
+			"gdp_per_head": 4149,
+			"urban_share": 0.19,
+			"tariff": 0.0872,
+			"bloc": "",
+			"region": "South Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Sri Lanka",
+					"ports": [
+						"CMB"
+					]
+				}
+			]
+		},
+		{
+			"id": "SDN",
+			"name": "Sudan",
+			"population": 41259892,
+			"gdp_usd": 42630000000.0,
+			"gdp_per_head": 1033,
+			"urban_share": 0.342,
+			"tariff": 0.1401,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Sudan",
+					"ports": [
+						"PZU"
+					]
+				}
+			]
+		},
+		{
+			"id": "SUR",
+			"name": "Suriname",
+			"population": 587757,
+			"gdp_usd": 3317000000.0,
+			"gdp_per_head": 5644,
+			"urban_share": 0.661,
+			"tariff": 0.1054,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Suriname",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "SWE",
+			"name": "Sweden",
+			"population": 9923085,
+			"gdp_usd": 513058000000.0,
+			"gdp_per_head": 51704,
+			"urban_share": 0.87,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Sweden",
+					"ports": [
+						"GOT"
+					]
+				}
+			]
+		},
+		{
+			"id": "CHE",
+			"name": "Switzerland",
+			"population": 8373338,
+			"gdp_usd": 698608000000.0,
+			"gdp_per_head": 83432,
+			"urban_share": 0.767,
+			"tariff": 0.0131,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Switzerland",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "SYR",
+			"name": "Syria",
+			"population": 19193834,
+			"gdp_usd": 12598000000.0,
+			"gdp_per_head": 656,
+			"urban_share": 0.752,
+			"tariff": 0.1418,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Syria",
+					"ports": [
+						"LTK"
+					]
+				}
+			]
+		},
+		{
+			"id": "TWN",
+			"name": "Taiwan",
+			"population": 23540000,
+			"gdp_usd": 543000000000.0,
+			"gdp_per_head": 23067,
+			"urban_share": 0.78,
+			"tariff": 0.019,
+			"bloc": "",
+			"region": "",
+			"income": "",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Taiwan",
+					"ports": [
+						"KHH",
+						"TPE"
+					]
+				}
+			]
+		},
+		{
+			"id": "TJK",
+			"name": "Tajikistan",
+			"population": 8865631,
+			"gdp_usd": 6992000000.0,
+			"gdp_per_head": 789,
+			"urban_share": 0.264,
+			"tariff": 0.057,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Tajikistan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "TZA",
+			"name": "Tanzania",
+			"population": 53824013,
+			"gdp_usd": 49774000000.0,
+			"gdp_per_head": 953,
+			"urban_share": 0.318,
+			"tariff": 0.0862,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Tanzania",
+					"ports": [
+						"DAR"
+					]
+				}
+			]
+		},
+		{
+			"id": "THA",
+			"name": "Thailand",
+			"population": 70859841,
+			"gdp_usd": 413366000000.0,
+			"gdp_per_head": 5834,
+			"urban_share": 0.479,
+			"tariff": 0.0352,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Thailand",
+					"ports": [
+						"LCH"
+					]
+				}
+			]
+		},
+		{
+			"id": "TLS",
+			"name": "Timor-Leste",
+			"population": 1228312,
+			"gdp_usd": 1640000000.0,
+			"gdp_per_head": 1336,
+			"urban_share": 0.294,
+			"tariff": 0.025,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Timor-Leste",
+					"ports": [
+						"DIL"
+					]
+				}
+			]
+		},
+		{
+			"id": "TGO",
+			"name": "Togo",
+			"population": 7200884,
+			"gdp_usd": 6071000000.0,
+			"gdp_per_head": 843,
+			"urban_share": 0.401,
+			"tariff": 0.0948,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Togo",
+					"ports": [
+						"LFW"
+					]
+				}
+			]
+		},
+		{
+			"id": "TON",
+			"name": "Tonga",
+			"population": 105524,
+			"gdp_usd": 421000000.0,
+			"gdp_per_head": 3988,
+			"urban_share": 0.231,
+			"tariff": 0.0574,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Tonga",
+					"ports": [
+						"TBU"
+					]
+				}
+			]
+		},
+		{
+			"id": "TTO",
+			"name": "Trinidad and Tobago",
+			"population": 1353895,
+			"gdp_usd": 23624000000.0,
+			"gdp_per_head": 17449,
+			"urban_share": 0.539,
+			"tariff": 0.0863,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Trinidad and Tobago",
+					"ports": [
+						"POS"
+					]
+				}
+			]
+		},
+		{
+			"id": "TUN",
+			"name": "Tunisia",
+			"population": 11528674,
+			"gdp_usd": 44360000000.0,
+			"gdp_per_head": 3848,
+			"urban_share": 0.681,
+			"tariff": 0.0935,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Tunisia",
+					"ports": [
+						"TUN"
+					]
+				}
+			]
+		},
+		{
+			"id": "TUR",
+			"name": "Turkey",
+			"population": 79277962,
+			"gdp_usd": 870818000000.0,
+			"gdp_per_head": 10984,
+			"urban_share": 0.881,
+			"tariff": 0.0274,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Turkey",
+					"ports": [
+						"IST",
+						"MER",
+						"IZM"
+					]
+				}
+			]
+		},
+		{
+			"id": "TKM",
+			"name": "Turkmenistan",
+			"population": 6360041,
+			"gdp_usd": 33314000000.0,
+			"gdp_per_head": 5238,
+			"urban_share": 0.47,
+			"tariff": 0.05,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Turkmenistan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "UGA",
+			"name": "Uganda",
+			"population": 38799152,
+			"gdp_usd": 29204000000.0,
+			"gdp_per_head": 753,
+			"urban_share": 0.257,
+			"tariff": 0.0733,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Uganda",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "UKR",
+			"name": "Ukraine",
+			"population": 45616832,
+			"gdp_usd": 93356000000.0,
+			"gdp_per_head": 2158,
+			"urban_share": 0.692,
+			"tariff": 0.0246,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Ukraine",
+					"ports": [
+						"ODS"
+					]
+				}
+			]
+		},
+		{
+			"id": "ARE",
+			"name": "United Arab Emirates",
+			"population": 8935095,
+			"gdp_usd": 381717000000.0,
+			"gdp_per_head": 42721,
+			"urban_share": 0.845,
+			"tariff": 0.0282,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "United Arab Emirates",
+					"ports": [
+						"DXB",
+						"AUH",
+						"KLF"
+					]
+				}
+			]
+		},
+		{
+			"id": "GBR",
+			"name": "United Kingdom",
+			"population": 65606000,
+			"gdp_usd": 2706808000000.0,
+			"gdp_per_head": 41259,
+			"urban_share": 0.82,
+			"tariff": 0.0209,
+			"bloc": "EU",
+			"region": "Europe & Central Asia",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "United Kingdom",
+					"ports": [
+						"FXT",
+						"SOU",
+						"LGW",
+						"BFS",
+						"LIV",
+						"IMM",
+						"TEE",
+						"MLH",
+						"GRG",
+						"GRK"
+					]
+				}
+			]
+		},
+		{
+			"id": "USA",
+			"name": "United States",
+			"population": 324353340,
+			"gdp_usd": 18804913000000.0,
+			"gdp_per_head": 57977,
+			"urban_share": 0.805,
+			"tariff": 0.0165,
+			"bloc": "",
+			"region": "North America",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "east",
+					"name": "East Coast",
+					"ports": [
+						"NYC",
+						"SAV",
+						"CHS",
+						"ORF",
+						"BOS",
+						"MIA",
+						"PWM",
+						"BAL",
+						"PHL",
+						"JAX"
+					]
+				},
+				{
+					"id": "gulf",
+					"name": "Gulf Coast",
+					"ports": [
+						"HOU",
+						"MSY",
+						"MOB"
+					]
+				},
+				{
+					"id": "west",
+					"name": "West Coast, Alaska and Hawaii",
+					"ports": [
+						"LGB",
+						"SEA",
+						"OAK",
+						"MRY",
+						"ANC",
+						"JNU",
+						"DUT",
+						"SCC",
+						"HNL",
+						"LIH",
+						"ITO",
+						"KWH",
+						"MDY"
+					]
+				},
+				{
+					"id": "lakes",
+					"name": "Great Lakes",
+					"ports": [
+						"CHI",
+						"DLH",
+						"DET",
+						"CLE",
+						"MKE",
+						"TOL",
+						"GRY",
+						"TWH",
+						"MQT",
+						"CAL",
+						"BUF"
+					]
+				}
+			]
+		},
+		{
+			"id": "URY",
+			"name": "Uruguay",
+			"population": 3379283,
+			"gdp_usd": 57481000000.0,
+			"gdp_per_head": 17010,
+			"urban_share": 0.952,
+			"tariff": 0.057,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "High income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Uruguay",
+					"ports": [
+						"MVD"
+					]
+				}
+			]
+		},
+		{
+			"id": "UZB",
+			"name": "Uzbekistan",
+			"population": 31284568,
+			"gdp_usd": 97871000000.0,
+			"gdp_per_head": 3128,
+			"urban_share": 0.507,
+			"tariff": 0.0873,
+			"bloc": "",
+			"region": "Europe & Central Asia",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Uzbekistan",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "VEN",
+			"name": "Venezuela",
+			"population": 30765720,
+			"gdp_usd": 112948000000.0,
+			"gdp_per_head": 3671,
+			"urban_share": 0.89,
+			"tariff": 0.1004,
+			"bloc": "",
+			"region": "Latin America & Caribbean ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Venezuela",
+					"ports": [
+						"PBL"
+					]
+				}
+			]
+		},
+		{
+			"id": "VNM",
+			"name": "Vietnam",
+			"population": 94000117,
+			"gdp_usd": 257096000000.0,
+			"gdp_per_head": 2735,
+			"urban_share": 0.328,
+			"tariff": 0.0286,
+			"bloc": "",
+			"region": "East Asia & Pacific",
+			"income": "Upper middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Vietnam",
+					"ports": [
+						"SGN",
+						"HPH",
+						"DAD"
+					]
+				}
+			]
+		},
+		{
+			"id": "YEM",
+			"name": "Yemen",
+			"population": 32109010,
+			"gdp_usd": 31318000000.0,
+			"gdp_per_head": 975,
+			"urban_share": 0.33,
+			"tariff": 0.0435,
+			"bloc": "",
+			"region": "Middle East, North Africa, Afghanistan & Pakistan",
+			"income": "Low income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Yemen",
+					"ports": [
+						"ADE"
+					]
+				}
+			]
+		},
+		{
+			"id": "ZMB",
+			"name": "Zambia",
+			"population": 16914423,
+			"gdp_usd": 20958000000.0,
+			"gdp_per_head": 1239,
+			"urban_share": 0.423,
+			"tariff": 0.0622,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Zambia",
+					"ports": []
+				}
+			]
+		},
+		{
+			"id": "ZWE",
+			"name": "Zimbabwe",
+			"population": 14600294,
+			"gdp_usd": 20559000000.0,
+			"gdp_per_head": 1408,
+			"urban_share": 0.341,
+			"tariff": 0.0499,
+			"bloc": "",
+			"region": "Sub-Saharan Africa ",
+			"income": "Lower middle income",
+			"currency_strength": 1.0,
+			"zones": [
+				{
+					"id": "all",
+					"name": "Zimbabwe",
+					"ports": []
+				}
+			]
+		}
+	],
+	"port_countries": {
+		"SHA": "CHN",
+		"SIN": "SGP",
+		"NGB": "CHN",
+		"SZX": "CHN",
+		"TAO": "CHN",
+		"CAN": "CHN",
+		"PUS": "KOR",
+		"TSN": "CHN",
+		"DXB": "ARE",
+		"HKG": "HKG",
+		"PKG": "MYS",
+		"RTM": "NLD",
+		"XMN": "CHN",
+		"ANR": "BEL",
+		"TPP": "MYS",
+		"LCH": "THA",
+		"KHH": "TWN",
+		"TNG": "MAR",
+		"GIB": "GIB",
+		"TAC": "CHN",
+		"LGB": "USA",
+		"NYC": "USA",
+		"HAM": "DEU",
+		"MUN": "IND",
+		"SGN": "VNM",
+		"CMB": "LKA",
+		"RZH": "CHN",
+		"YIK": "CHN",
+		"JNP": "IND",
+		"PIR": "GRC",
+		"VLC": "ESP",
+		"BRV": "DEU",
+		"MNL": "PHL",
+		"LYG": "CHN",
+		"JKT": "IDN",
+		"SLL": "OMN",
+		"SAV": "USA",
+		"HPH": "VNM",
+		"TYO": "JPN",
+		"JED": "SAU",
+		"QZH": "CHN",
+		"FOC": "CHN",
+		"SSZ": "BRA",
+		"HOU": "USA",
+		"CLN": "PAN",
+		"BLB": "PAN",
+		"SUB": "IDN",
+		"SEA": "USA",
+		"YVR": "CAN",
+		"YOK": "JPN",
+		"PSD": "EGY",
+		"DUR": "ZAF",
+		"AUH": "ARE",
+		"DMM": "SAU",
+		"BCN": "ESP",
+		"KHI": "PAK",
+		"FXT": "GBR",
+		"GIT": "ITA",
+		"MLA": "MLT",
+		"LEH": "FRA",
+		"CGP": "BGD",
+		"UKB": "JPN",
+		"OSA": "JPN",
+		"NGO": "JPN",
+		"KLF": "ARE",
+		"OAK": "USA",
+		"ZLO": "MEX",
+		"KWN": "KOR",
+		"ICN": "KOR",
+		"CHS": "USA",
+		"ORF": "USA",
+		"IST": "TUR",
+		"CTG": "COL",
+		"LIM": "PER",
+		"TPE": "TWN",
+		"MER": "TUR",
+		"GDN": "POL",
+		"GOA": "ITA",
+		"LED": "RUS",
+		"MEL": "AUS",
+		"SYD": "AUS",
+		"HZR": "IND",
+		"MAA": "IND",
+		"SOH": "OMN",
+		"HMD": "QAT",
+		"BND": "IRN",
+		"KAP": "SAU",
+		"ALY": "EGY",
+		"LFW": "TGO",
+		"TEM": "GHA",
+		"LOS": "NGA",
+		"MBA": "KEN",
+		"VER": "MEX",
+		"LZC": "MEX",
+		"KIN": "JAM",
+		"FPO": "BHS",
+		"BUE": "ARG",
+		"PNG": "BRA",
+		"GYE": "ECU",
+		"SAI": "CHL",
+		"DLC": "CHN",
+		"YNT": "CHN",
+		"QZJ": "CHN",
+		"PEN": "MYS",
+		"SOU": "GBR",
+		"LGW": "GBR",
+		"SIE": "PRT",
+		"JIB": "DJI",
+		"MRU": "MUS",
+		"NGQ": "ZAF",
+		"ABJ": "CIV",
+		"BNE": "AUS",
+		"MRS": "FRA",
+		"HFA": "ISR",
+		"ASH": "ISR",
+		"IZM": "TUR",
+		"SPE": "ITA",
+		"KOP": "SVN",
+		"ROM": "ITA",
+		"TUN": "TUN",
+		"BOS": "USA",
+		"MIA": "USA",
+		"LMS": "CYP",
+		"PMO": "ITA",
+		"CAG": "ITA",
+		"BIA": "FRA",
+		"PMI": "ESP",
+		"MRY": "USA",
+		"ANC": "USA",
+		"CSL": "MEX",
+		"MSY": "USA",
+		"HNL": "USA",
+		"AKL": "NZL",
+		"CND": "ROU",
+		"GOT": "SWE",
+		"DUB": "IRL",
+		"BFS": "GBR",
+		"ORK": "IRL",
+		"CPH": "DNK",
+		"ODS": "UKR",
+		"NVS": "RUS",
+		"HAV": "CUB",
+		"SJU": "PRI",
+		"OSL": "NOR",
+		"AAR": "DNK",
+		"RIX": "LVA",
+		"KLJ": "LTU",
+		"TLL": "EST",
+		"WLG": "NZL",
+		"CEB": "PHL",
+		"PQZ": "GTM",
+		"BGO": "NOR",
+		"DRZ": "ALB",
+		"POM": "PNG",
+		"TMM": "MDG",
+		"BWN": "BRN",
+		"PAP": "HTI",
+		"GUM": "GUM",
+		"PAS": "CRI",
+		"CUN": "MEX",
+		"SUV": "FJI",
+		"BGI": "BRB",
+		"PPT": "PYF",
+		"REK": "ISL",
+		"RAI": "CPV",
+		"JNU": "USA",
+		"DUT": "USA",
+		"APW": "WSM",
+		"PPG": "ASM",
+		"TBU": "TON",
+		"LIH": "USA",
+		"GOH": "GRL",
+		"IOM": "IMN",
+		"GPS": "ECU",
+		"VVO": "RUS",
+		"RIO": "BRA",
+		"LAD": "AGO",
+		"MPM": "MOZ",
+		"SNR": "FRA",
+		"OPO": "PRT",
+		"SSA": "BRA",
+		"BUN": "COL",
+		"ANF": "CHL",
+		"FOR": "BRA",
+		"PWM": "USA",
+		"KRS": "RUS",
+		"PKC": "RUS",
+		"FNA": "SLE",
+		"BJL": "GMB",
+		"PDL": "PRT",
+		"FNC": "PRT",
+		"BDA": "BMU",
+		"PUQ": "CHL",
+		"GDX": "RUS",
+		"ITO": "USA",
+		"KWH": "USA",
+		"ROR": "PLW",
+		"FSP": "FRA",
+		"YDP": "CAN",
+		"FLW": "PRT",
+		"SOK": "EGY",
+		"TEW": "EGY",
+		"NOU": "NCL",
+		"CHI": "USA",
+		"DLH": "USA",
+		"DET": "USA",
+		"TOR": "CAN",
+		"CLE": "USA",
+		"YHM": "CAN",
+		"MKE": "USA",
+		"TOL": "USA",
+		"YQT": "CAN",
+		"GRY": "USA",
+		"TWH": "USA",
+		"MQT": "USA",
+		"CAL": "USA",
+		"XCH": "AUS",
+		"MDY": "USA",
+		"KGI": "ATA",
+		"MCM": "ATA",
+		"PAL": "ATA",
+		"ROT": "ATA",
+		"DAV": "ATA",
+		"MAW": "ATA",
+		"VYP": "RUS",
+		"CCU": "IND",
+		"BAL": "USA",
+		"VTZ": "IND",
+		"PHL": "USA",
+		"DAR": "TZA",
+		"CPT": "ZAF",
+		"FRE": "AUS",
+		"DKR": "SEN",
+		"MVD": "URY",
+		"ULU": "RUS",
+		"ITJ": "BRA",
+		"VAP": "CHL",
+		"CAU": "DOM",
+		"JAX": "USA",
+		"HEL": "FIN",
+		"DLA": "CMR",
+		"COO": "BEN",
+		"PNR": "COG",
+		"BLW": "IDN",
+		"UQR": "IRQ",
+		"BEY": "LBN",
+		"YHZ": "CAN",
+		"MOB": "USA",
+		"RGN": "MMR",
+		"COK": "IND",
+		"SUA": "BRA",
+		"RIG": "BRA",
+		"ONN": "NGA",
+		"AQJ": "ISR",
+		"ALR": "DZA",
+		"KOS": "KHM",
+		"PRT": "IND",
+		"UPG": "IDN",
+		"DVO": "PHL",
+		"VIX": "BRA",
+		"PCR": "HND",
+		"POS": "TTO",
+		"ADL": "AUS",
+		"KWI": "KWT",
+		"BAH": "BHR",
+		"PZU": "SDN",
+		"CKY": "GIN",
+		"PBL": "VEN",
+		"DAD": "VNM",
+		"BEW": "MOZ",
+		"VNN": "RUS",
+		"VDC": "BRA",
+		"RJK": "HRV",
+		"VAR": "BGR",
+		"LBV": "GAB",
+		"WVB": "NAM",
+		"ADE": "YEM",
+		"BPN": "IDN",
+		"LOB": "AGO",
+		"BHI": "ARG",
+		"PTI": "GEO",
+		"LTK": "SYR",
+		"MRA": "LBY",
+		"NKC": "MRT",
+		"MLW": "LBR",
+		"ACJ": "SLV",
+		"MGL": "BGD",
+		"MNC": "MOZ",
+		"DRW": "AUS",
+		"CIO": "NIC",
+		"MGQ": "SOM",
+		"NAM": "PRK",
+		"SSG": "GNQ",
+		"MSW": "ERI",
+		"BNW": "COD",
+		"OXB": "GNB",
+		"DIL": "TLS",
+		"BUF": "USA",
+		"MMK": "RUS",
+		"ARH": "RUS",
+		"TOS": "NOR",
+		"HFT": "NOR",
+		"KKN": "NOR",
+		"SBT": "RUS",
+		"DUD": "RUS",
+		"TIK": "RUS",
+		"PWE": "RUS",
+		"YYQ": "CAN",
+		"YFB": "CAN",
+		"YRB": "CAN",
+		"SCC": "USA",
+		"LYR": "NOR",
+		"JHS": "GRL",
+		"JAV": "GRL",
+		"LIV": "GBR",
+		"IMM": "GBR",
+		"LPA": "ESP",
+		"BIO": "ESP",
+		"TEE": "GBR",
+		"MLH": "GBR",
+		"GRG": "GBR",
+		"GRK": "GBR",
+		"THN": "FRO"
+	}
+}

@@ -194,6 +194,12 @@
 - Multiplayer: the board and first discoveries are the host's (sent with each update); sending, recalling, moving, fitting, taking and giving up are host commands; discoveries and mishaps go to their ship's player.
 - Industry surveys at oil and gas fields don't yet unlock or cheapen rig slots (planned).
 
+## World data (2026-10-21, for the living world)
+- tools/build_world_data.tscn (`Godot --headless --path . tools/build_world_data.tscn -- --raw <folder>`, about 25 s) builds three files from public data downloaded to a folder (Natural Earth populated places; World Bank 2016 indicators and country metadata; FAOSTAT crops and livestock), plus the hand-compiled table in tools/world_data_sources.gd. Not used by the game yet: the economy core (DESIGN_LIVING_WORLD.md M1 step 3) reads them.
+- data/countries.json: the 189 countries with a port or an inland city: 2016 population, GDP, GDP a head, urban share, average applied tariff (nearest year to 2016), bloc (EU), region, income group, currency strength (1), and internal trade zones (2-4 by coastline for the US, China, Russia, Canada, Brazil, India and Australia; one for the rest), each with its ports; port_countries gives each port's country (Hong Kong is its own).
+- data/cities.json: 568 inland cities (Natural Earth places over 750,000 people, every capital over 50,000; places within 25 km merged), each with its country, zone, population and serving ports (its own country's nearest 3 within 2,500 km, weighted by 1 / distance squared); and each port's metro population (places whose name is in its name within 150 km, else within 50 km; a port with none, a town by its size band).
+- data/production.json: 110 goods' 2016 output by country in real units (t, t_metal, t_oxide, head, m3, units, or share of world output for manufactured goods).
+
 ## Market regions
 - The 17 market regions (markets.json regions) set prices (see Trading) and are planned as administrative areas (regional heads); since 2026-10-21 none is locked: every port can be routed to and built on from the start.
 - A region's area on the globe: every point belongs to the region of its nearest port (scripts/ui/region_map.gd, worked out once on the GPU as the game starts).

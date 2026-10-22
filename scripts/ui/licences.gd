@@ -87,6 +87,7 @@ static func notices() -> String:
 	var out := PackedStringArray()
 	out.append("[b]Maritime Empire[/b]\n© 2026 Rory Ferrick. All rights reserved.")
 	out.append("[b]Map data[/b]\nMade with Natural Earth: free vector and raster map data @ naturalearthdata.com (public domain).")
+	out.append("[b]World data[/b]\nCountry figures from the World Bank's World Development Indicators (CC BY 4.0, data.worldbank.org). Crop and livestock production from FAO, FAOSTAT (CC BY 4.0, fao.org/faostat).")
 	out.append("[b]GodotSteam[/b]\n" + _plain(GODOTSTEAM_LICENSE))
 	out.append("[b]Fonts[/b]\n" + _font_notices())
 	out.append("[b]Sounds[/b]\n" + _sound_notices())
