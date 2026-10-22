@@ -48,6 +48,10 @@ var bank_reserve := 0
 ## Money borrowed on the Finances screen and not yet paid back (see
 ## GameState.take_loan()).
 var loan := 0
+## The backers' stake from the backstory start ({stake, name}), {} for none (the share market comes in M3).
+var investors := {}
+## Standing from the backstory: {countries: {id: value}, firms: {firm index: value}} (used when reputation arrives in M2).
+var relations := {}
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
 ## What its people wear, line by line, where it's changed the defaults
@@ -165,6 +169,8 @@ func to_dict() -> Dictionary:
 		"hidden_gems": hidden_gems,
 		"bank_reserve": bank_reserve,
 		"loan": loan,
+		"investors": investors,
+		"relations": relations,
 		"ceo": ceo,
 		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
@@ -218,6 +224,8 @@ static func from_dict(data: Dictionary) -> Company:
 	company.hidden_gems.assign(data.get("hidden_gems", []))
 	company.bank_reserve = int(data.get("bank_reserve", 0))
 	company.loan = int(data.get("loan", 0))
+	company.investors = data.get("investors", {}) if data.get("investors") is Dictionary else {}
+	company.relations = data.get("relations", {}) if data.get("relations") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.

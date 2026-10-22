@@ -833,7 +833,7 @@ func _check_payday() -> void:
 		if not ship.worked:
 			continue
 		ship.worked = false
-		var wages := crew_wages(ship.model())
+		var wages := roundi(crew_wages(ship.model()) * Traits.factor(owner_of(ship), "wages", false))  # (A thrifty or ex-navy CEO pays less: see Traits.)
 		if ship.is_cruise():
 			wages = roundi(wages * cruises.crew_factor(ship))  # (Its Crew service level.)
 		var who := owner_of(ship)
@@ -850,7 +850,7 @@ func _check_payday() -> void:
 	_pay_hub_upkeep()
 	# Interest on loans, paid at the same time.
 	for who in all_companies():
-		var interest := loan_interest(who.loan)
+		var interest := roundi(loan_interest(who.loan) * Traits.factor(who, "interest", false))  # (A bookkeeper CEO borrows cheaper: see Traits.)
 		if interest > 0:
 			_add_money(who, -interest)
 			_record(null, "interest", interest, who)
@@ -1286,7 +1286,7 @@ func company_buy_price(port_id: String, commodity_id: String, of: Company = null
 func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
 	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(GameData.family_of(commodity_id), "sell") if hub else 0.0)) * divine.price_factor(port_id, true) \
-		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price") * Research.perk(of if of != null else company, "price")  # (The type's stars: see Ratings; the research perks: see Research.)
+		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price") * Research.perk(of if of != null else company, "price") * Traits.factor(of if of != null else company, "price")  # (The type's stars: see Ratings; the research perks: see Research.)
 
 
 ## Spreads recovery boats evenly across the HQ and hubs, model by model: each
@@ -4090,6 +4090,8 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	company.logo = options.get("logo", {}) if not (options.get("logo", {}) as Dictionary).is_empty() else CompanyLogo.default_logo(company.color)
 	company.tutorials = bool(options.get("tutorials", false))
 	company.ceo = options.get("ceo", {}) if not (options.get("ceo", {}) as Dictionary).is_empty() else Company.random_ceo()
+	if not (company.ceo as Dictionary).has("skills"):
+		company.ceo.skills = Traits.random_skills(RandomNumberGenerator.new())
 	company.hubs.assign([Hub.new(new_home_port, true)])
 	companies.assign([company])
 	_clear_ships()
@@ -4117,8 +4119,29 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
 	SteamAchievements.note_game_created()
+	if options.get("start") is Dictionary and not (options.start as Dictionary).is_empty():
+		Backstories.apply(self, options.start)  # (Its money, debt, backers, ships, standing and the CEO's traits.)
+		money_changed.emit(money)
 	_begin_session()
 	_start_warm_up(WARM_UP_DAYS)  # (Saved once it's run: see _warm_up_frame().)
+
+
+## A ship given, not bought (a backstory start's): docked at a port, in the company's fleet.
+func grant_ship(model_id: String, ship_name: String, port_id: String) -> Ship:
+	var model := GameData.get_ship_model(model_id)
+	if model.is_empty():
+		return null
+	var ship := Ship.new(Net.clean_text(ship_name.strip_edges()), model_id, port_id)
+	ship.id = next_ship_id
+	next_ship_id += 1
+	ship.company = company
+	ship.purchase_price = int(model.get("price", 0))
+	ship.captains = Characters.officers_for(model)
+	ships.append(ship)
+	if ship.is_cruise():
+		cruises.ensure(ship)
+	ships_changed.emit()
+	return ship
 
 
 ## Loads a slot's save and starts a session saving to it. Returns why it

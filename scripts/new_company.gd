@@ -38,11 +38,20 @@ var _type_label := Label.new()
 ## The logo (the page after the company's: see _show_logo_page()).
 var _logo := {}
 var _logo_page := Control.new()
+## The backstory start picked (Backstories): the one at the chosen port, or a custom one.
+var _chosen_start := {}
+var _custom := false
+var _custom_money: int = Backstories.CUSTOM_MONEY[1]
+var _start_title := Label.new()
+var _start_lines := Label.new()
+var _custom_toggle := CheckButton.new()
+var _money_picker := OptionButton.new()
 
 
 func _ready() -> void:
 	%NameEdit.max_length = GameState.MAX_COMPANY_NAME_LENGTH
 	_add_ports()
+	_add_start_box()
 	_add_color_swatches()
 	_add_speed_choices()
 	_add_storm_choices()
@@ -74,12 +83,69 @@ func _pick_port(port_id: String) -> void:
 	%MapView.selected_port = port_id
 	var port := GameData.get_port(port_id)
 	%PortName.text = "Headquarters: %s, %s" % [port.name, port.get("country", "")]
-	_show_start_note()
-	%StartNote.tooltip_text = %StartNote.text
+	_refresh_start()
 
 
 func _selected_port() -> String:
 	return _home_port
+
+
+## The start at the chosen port (Backstories: its story in the note, what it
+## gives below), or the custom start: a money preset and the port's kind of start.
+func _add_start_box() -> void:
+	%StartNote.max_lines_visible = 9
+	%StartNote.custom_minimum_size.y = 120.0
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 2)
+	_start_title.add_theme_font_size_override(&"font_size", 16)
+	box.add_child(_start_title)
+	_start_lines.theme_type_variation = &"DimLabel"
+	_start_lines.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_start_lines.add_theme_font_size_override(&"font_size", 13)
+	box.add_child(_start_lines)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 10)
+	_custom_toggle.text = "Custom start"
+	_custom_toggle.tooltip_text = "Your own start instead of the port's story: pick the money, no ships, debt, backers or CEO traits."
+	_custom_toggle.toggled.connect(func(on: bool) -> void:
+		_custom = on
+		_money_picker.visible = on
+		_refresh_start())
+	row.add_child(_custom_toggle)
+	for amount: int in Backstories.CUSTOM_MONEY:
+		_money_picker.add_item(Fmt.money(amount))
+		_money_picker.set_item_metadata(_money_picker.item_count - 1, amount)
+	_money_picker.select(1)
+	_money_picker.visible = false
+	_money_picker.item_selected.connect(func(index: int) -> void:
+		_custom_money = int(_money_picker.get_item_metadata(index))
+		_refresh_start())
+	row.add_child(_money_picker)
+	box.add_child(row)
+	%StartNote.add_sibling(box)
+	_refresh_start()
+
+
+## The start for the port and type picked now, shown.
+func _refresh_start() -> void:
+	if not is_node_ready():
+		return
+	var port_id := _selected_port()
+	if _custom:
+		_chosen_start = Backstories.custom(_company_type, port_id, _custom_money)
+	else:
+		_chosen_start = Backstories.for_type(_company_type).get(port_id, Backstories.custom(_company_type, port_id, _custom_money))
+	var kind := start_note(port_id, _company_type)
+	_start_title.text = str(_chosen_start.get("name", "Your start"))
+	_start_title.add_theme_color_override(&"font_color", start_note_color(port_id, _company_type))
+	var story := Backstories.story(_chosen_start, "")
+	%StartNote.text = story if not str(_chosen_start.get("archetype", "")).is_empty() else kind
+	%StartNote.remove_theme_color_override(&"font_color")
+	%StartNote.tooltip_text = "%s
+
+%s" % [story, kind] if not kind.is_empty() else story
+	_start_lines.text = " · ".join(Backstories.summary(_chosen_start))
+	_start_lines.tooltip_text = kind
 
 
 ## What kind of start the chosen port is, and why.
@@ -230,6 +296,7 @@ func _found() -> void:
 		company_type = _company_type,
 		logo = _logo.duplicate(),
 		ceo = _ceo_page.ceo.duplicate(true),
+		start = _chosen_start.duplicate(true),
 	})
 	if GameState.multiplayer_save:
 		Net.host_error = Net.host(MainMenu.host_settings)  # Friends can join it; the game says if it couldn't.
@@ -308,6 +375,7 @@ func _pick_type(type_id: String) -> void:
 			_pick_port(str(best[0].port))
 			map.focus_port(_home_port)
 	_show_start_note()
+	_refresh_start()
 	_type_label.text = "Company type: %s" % Progression.type_name(type_id)
 	_type_label.add_theme_color_override(&"font_color", CompanyTypeIcon.type_color(type_id))
 

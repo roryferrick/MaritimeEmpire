@@ -578,8 +578,8 @@ func _refresh_stats() -> void:
 	var data := model()
 	var who := GameState.owner_of(self)  # (Its company's research perks too: see Research.perk().)
 	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed")
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel")
-	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear")
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel") * Traits.factor(who, "fuel", false)  # (The CEO's traits too: see Traits.)
+	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear") * Traits.factor(who, "wear", false)
 	_stats_dirty = false
 
 
@@ -597,7 +597,7 @@ func breakdown_chance() -> float:
 	var chance := lerpf(float(settings.get("chance_at_full", 0.0005)), float(settings.get("chance_at_empty", 0.005)), worn)
 	var age := minf(1.0 + float(settings.get("age_per_hour_at_sea", 0.1)) * sea_time / 3600.0,
 		float(settings.get("max_age_factor", 2.0)))
-	return chance * float(model().get("breakdown_factor", 1.0)) * age * Research.perk(GameState.owner_of(self), "breakdowns")
+	return chance * float(model().get("breakdown_factor", 1.0)) * age * Research.perk(GameState.owner_of(self), "breakdowns") * Traits.factor(GameState.owner_of(self), "breakdowns", false)
 
 
 ## Cost of restoring 100% maintenance (from 0%).

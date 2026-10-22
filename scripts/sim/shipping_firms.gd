@@ -116,7 +116,7 @@ func generate(world: WorldEconomy, new_seed: int) -> void:
 			var ports: Array = ports_by_country[country]
 			var home: String = ports[rng.randi() % mini(ports.size(), 3)]  # (One of its biggest ports.)
 			firms.append({id = firms.size(), name = CompanyNames.shipping(country, GameData.port_name(home), rng, taken), country = country, home = home,
-				size = float(HOMES[country]) * (1.0 - TAIL_SHARE) * float(weights[i]) / total, fleet = {}, money = 0.0, carried = 0.0})
+				size = float(HOMES[country]) * (1.0 - TAIL_SHARE) * float(weights[i]) / total, fleet = {}, money = 0.0, carried = 0.0, ceo = _ceo(rng)})
 			named += 1
 	var others := ports_by_country.keys().filter(func(country: String) -> bool: return not HOMES.has(country))
 	var tail := maxi(FIRMS - named, 0)
@@ -125,8 +125,16 @@ func generate(world: WorldEconomy, new_seed: int) -> void:
 		var ports: Array = ports_by_country[country]
 		var home: String = ports[rng.randi() % ports.size()]
 		firms.append({id = firms.size(), name = CompanyNames.shipping(country, GameData.port_name(home), rng, taken), country = country, home = home,
-			size = TAIL_SHARE / tail, fleet = {}, money = 0.0, carried = 0.0})
+			size = TAIL_SHARE / tail, fleet = {}, money = 0.0, carried = 0.0, ceo = _ceo(rng)})
 	_give_fleets(rng)
+
+
+## A firm's CEO: a character with traits and skills (Traits), the same each game from the seed.
+static func _ceo(rng: RandomNumberGenerator) -> Dictionary:
+	var ceo := Characters.random_character(rng)
+	ceo.traits = Traits.random_traits(rng)
+	ceo.skills = Traits.random_skills(rng)
+	return ceo
 
 
 func _named_total() -> float:

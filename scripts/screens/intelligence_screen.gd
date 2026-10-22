@@ -352,6 +352,9 @@ func _firm_card(firm: Dictionary, at_sea: int) -> Control:
 		if parts.size() < 6:
 			parts.append("%d %s" % [int(firm.fleet[model_id]), str(GameData.get_ship_model(model_id).get("name", model_id))])
 	box.add_child(_text("%s ships (%s at sea now): %s%s" % [Fmt.thousands(ships), Fmt.thousands(at_sea), ", ".join(parts), "..." if fleet.size() > 6 else ""]))
+	var ceo: Dictionary = firm.get("ceo", {})
+	if not ceo.is_empty():
+		box.add_child(_text("Run by %s: %s" % [str(ceo.get("name", "")), Traits.names_of(ceo) if not Traits.names_of(ceo).is_empty() else "no traits of note"]))
 	box.add_child(_dim("Earned %s on %s units carried so far. Its ships sail where the world's stockpiles call for cargo; you'll see them on the map in its colour." % [Fmt.money(roundi(float(firm.money))), Fmt.short(float(firm.carried))]))
 	return box.get_parent()
 
