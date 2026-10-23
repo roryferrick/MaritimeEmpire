@@ -91,6 +91,8 @@ func show_offer(offer: Dictionary) -> void:
 Worth %s in all%s. %s" % [contracts.producer_name(int(offer.producer)), GameState.contract_summary(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)),
 		Fmt.thousands(roundi(float(offer.nm))), Fmt.money(int(offer.value)), " over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "",
 		"The offer stands till %s." % Fmt.calendar_short(int(offer.expires))]
+	if str(offer.kind) != "tender":
+		body += " Accepted, it needs a ship of yours assigned on the Contracts page (a department head with a budget does that for you); a quarter left unserved costs a fee."
 	if str(offer.kind) == "tender":
 		var names := PackedStringArray()
 		for index: int in offer.get("bidders", []):

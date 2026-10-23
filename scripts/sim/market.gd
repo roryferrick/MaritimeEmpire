@@ -128,6 +128,8 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 	var best_profit := 0.0
 	var model_id := str(model.get("id", ""))
 	var toll_share := GameData.leg_toll_share(from_port, to_port)
+	var zone: int = _state.world.zone_of_port(from_port) if _state.world != null else -1  # (The living world's stockpile here: a good the port has none of is no cargo, a short one scores less. See WorldEconomy.)
+	var capacity := float(model.get("capacity", 0))
 	var factor := NAN  # (The leg's bonuses, from the memo: looked up once.)
 	var days := -1.0  # (The leg's calendar days at sea, for fresh cargo: worked out once if needed.)
 	for commodity_id: String in model.get("cargo", []):
@@ -167,6 +169,13 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 			bonus -= sell * (1.0 - kept)
 		var margin := sell - buy
 		var profit := (margin + bonus - sell * toll_share) / GameData.hold_of(commodity_id)  # (A unit of hold: a horse takes three.)
+		if zone >= 0:
+			var g: int = _state.world.good_index(commodity_id)
+			if g >= 0:
+				var fill := clampf(_state.world.zone_stock(zone, g) / maxf(capacity / GameData.hold_of(commodity_id), 1.0), 0.0, 1.0)
+				if fill <= 0.0:
+					continue
+				profit *= 0.5 + 0.5 * fill
 		if profit > best_profit:
 			best = commodity_id
 			best_profit = profit

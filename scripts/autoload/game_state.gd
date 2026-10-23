@@ -2244,7 +2244,7 @@ func _advance_timed(ship: Ship, delta: float) -> void:
 		_advance_drydock(ship)
 		return
 	# A ship waiting in port for a full load, not due another look: nothing to do.
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _short_of_load(ship) and ship.is_docked() \
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _load_wait_holds(ship) and ship.is_docked() \
 			and ship.berth_phase == Ship.BERTH_NONE:
 		return
 	# A recovery boat or tug standing by at its base (most of them, most of the
@@ -3027,7 +3027,7 @@ func _sell_cargo(ship: Ship) -> void:
 ## (see fuel_reserve()) and bank_reserve, unless full loads are on, when it
 ## buys nothing short of a full hold. Nothing if no cargo makes a profit.
 ## Returns the cargo it chose (bought or not, for lack of money), or "" if none pays.
-func _load_cargo(ship: Ship, to: String) -> String:
+func _load_cargo(ship: Ship, to: String, partial_ok := false) -> String:
 	if ship.is_service() or not ship.cargo_id.is_empty() or not ship.is_docked() or to.is_empty() or to == ship.docked_at:
 		return ""
 	ship.cargo_breed = ""
@@ -3077,9 +3077,11 @@ func _load_cargo(ship: Ship, to: String) -> String:
 	var good := world.good_index(best[0])
 	if zone >= 0 and good >= 0:
 		quantity = mini(quantity, floori(world.zone_stock(zone, good)))  # (No more than the zone has.)
-	if quantity <= 0 or (ship.full_loads and quantity < room):
-		# What a full hold would need in the bank, for ships waiting for one.
-		ship.load_need = roundi(room * price + ship.bill + reserve + who.bank_reserve)
+	if quantity <= 0 or (ship.full_loads and quantity < room and not partial_ok):
+		# What a full hold would need in the bank, for ships waiting for one; 0 when
+		# it's the port that's short, not the money (the wait then has a limit: see _waiting_for_load()).
+		var affordable := room if in_debt(who) else floori((float(who.money) - ship.bill - reserve - who.bank_reserve) / price)
+		ship.load_need = roundi(room * price + ship.bill + reserve + who.bank_reserve) if affordable < room else 0
 		return best[0]
 	var cost := roundi(quantity * price)
 	var t_m := Time.get_ticks_usec()
@@ -3278,19 +3280,36 @@ func _waiting_for_load(ship: Ship, to: String) -> bool:
 		_set_load_wait(ship, "")
 		return false
 	# Already waiting: look again as soon as the money reaches what a full hold
-	# needed, and otherwise only every LOAD_RECHECK_S (prices drift slowly).
-	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _short_of_load(ship):
+	# needed, and otherwise only every LOAD_RECHECK_S (prices and stocks drift slowly).
+	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _load_wait_holds(ship):
 		return true
 	ship.load_check_time = play_time + LOAD_RECHECK_S
-	if _load_cargo(ship, to).is_empty() or not ship.cargo_id.is_empty():
+	# A port short of the good (the living world's stockpiles) is waited on for
+	# STOCK_WAIT_DAYS at most; then the ship takes what there is.
+	var stock_wait := ship.load_need == 0 and not ship.load_wait.is_empty()
+	var waited_out := stock_wait and calendar_time() - ship.load_wait_since > STOCK_WAIT_DAYS * 86400
+	var got := _load_cargo(ship, to, waited_out)
+	if got.is_empty() or not ship.cargo_id.is_empty():
 		_set_load_wait(ship, "")
 		return false
 	_set_hold(ship, "")
-	var reason := "waiting for money for a full load to %s" % GameData.port_name(to)
-	if owner_of(ship).bank_reserve > 0:
-		reason += " (keeping %s in the bank)" % Fmt.money(owner_of(ship).bank_reserve)
+	var reason := ""
+	if ship.load_need == 0:
+		reason = "waiting for a full load of %s to %s (%s is short of it; sails part-loaded after %d days)" % [str(GameData.commodity(got).get("name", got)).to_lower(), GameData.port_name(to), GameData.port_name(ship.docked_at), STOCK_WAIT_DAYS]
+	else:
+		reason = "waiting for money for a full load to %s" % GameData.port_name(to)
+		if owner_of(ship).bank_reserve > 0:
+			reason += " (keeping %s in the bank)" % Fmt.money(owner_of(ship).bank_reserve)
+	if ship.load_wait.is_empty():
+		ship.load_wait_since = calendar_time()
 	_set_load_wait(ship, reason)
 	return true
+
+
+## Whether a ship waiting for a full load need not look again yet: the port is the short one, or the money still is.
+func _load_wait_holds(ship: Ship) -> bool:
+	return ship.load_need == 0 or _short_of_load(ship)
+const STOCK_WAIT_DAYS := 4
 
 
 func _set_load_wait(ship: Ship, reason: String) -> void:

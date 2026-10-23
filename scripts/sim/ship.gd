@@ -250,6 +250,8 @@ var weather_wait := ""
 var load_check_time := 0.0
 ## The money a full hold needed at its last look (see GameState._load_cargo()).
 var load_need := 0
+## When the wait for a full load began (calendar time): a port short of the good is waited on for days only (GameState._waiting_for_load()).
+var load_wait_since := 0
 ## Cached top_speed(), fuel_per_s() and wear_per_s() (see _refresh_stats()).
 var _top_speed := 0.0
 var _fuel_per_s := 0.0
