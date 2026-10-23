@@ -67,6 +67,11 @@ var family := {}
 var orders := []
 ## How the firms this company controls are run (Ownership.ensure_plan(): firm index -> {focus, groups, dividend, extra_fleet, orders}).
 var firm_plans := {}
+## Technology (Technology): the techs held (id -> {since, how, exclusive_until}), the company's own R&D ({tech, budget, progress}), what each R&D company thinks of it (id -> 0 to 100) and the early offers already made (tech id -> true).
+var techs := {}
+var rnd := {}
+var rnd_likes := {}
+var rnd_offers := {}
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
 ## What its people wear, line by line, where it's changed the defaults
@@ -200,6 +205,10 @@ func to_dict() -> Dictionary:
 		"family": family,
 		"orders": orders,
 		"firm_plans": firm_plans,
+		"techs": techs,
+		"rnd": rnd,
+		"rnd_likes": rnd_likes,
+		"rnd_offers": rnd_offers,
 		"ceo": ceo,
 		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
@@ -270,6 +279,10 @@ static func from_dict(data: Dictionary) -> Company:
 	company.family = data.get("family", {}) if data.get("family") is Dictionary else {}
 	company.orders = data.get("orders", []) if data.get("orders") is Array else []
 	company.firm_plans = data.get("firm_plans", {}) if data.get("firm_plans") is Dictionary else {}
+	company.techs = data.get("techs", {}) if data.get("techs") is Dictionary else {}
+	company.rnd = data.get("rnd", {}) if data.get("rnd") is Dictionary else {}
+	company.rnd_likes = data.get("rnd_likes", {}) if data.get("rnd_likes") is Dictionary else {}
+	company.rnd_offers = data.get("rnd_offers", {}) if data.get("rnd_offers") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.

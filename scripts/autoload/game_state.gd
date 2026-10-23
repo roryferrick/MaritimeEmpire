@@ -309,6 +309,8 @@ var people := People.new(self)
 var ownership := Ownership.new(self)
 ## The shipyards, ship orders and the second-hand market (see Shipyards).
 var shipyards := Shipyards.new(self)
+## Technology: the tree, the R&D companies, licences, own R&D (see Technology).
+var technology := Technology.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -441,6 +443,7 @@ func _step(delta: float) -> void:
 	people.step(delta)
 	ownership.step(delta)
 	shipyards.step(delta)
+	technology.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -1388,6 +1391,30 @@ func choose_successor(kind: String, key: String) -> void:
 	people.succeed(company, kind, key)
 	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
 
+# --- Technology (see Technology) -----------------------------------------------------------------
+
+func license_tech(tech_id: String) -> void:
+	if Net.command(&"license_tech", [tech_id]):
+		return
+	var error := technology.license(company, tech_id)
+	if not error.is_empty():
+		ActivityLog.add("Can't license %s: %s." % [str(Technology.tech(tech_id).get("name", tech_id)), error], ActivityLog.Kind.INFO)
+
+
+func set_rnd(tech_id: String, budget: int) -> void:
+	if Net.command(&"set_rnd", [tech_id, budget]):
+		return
+	technology.set_rnd(company, tech_id, budget)
+
+
+func sell_research_data(rnd_id: String) -> void:
+	if Net.command(&"sell_research_data", [rnd_id]):
+		return
+	var error := technology.sell_data(company, rnd_id)
+	if not error.is_empty():
+		ActivityLog.add("Can't sell data: %s." % error, ActivityLog.Kind.INFO)
+
+
 # --- Running controlled firms (see Ownership) ----------------------------------------------------
 
 func set_firm_plan(firm_index: int, key: String, value: Variant) -> void:
@@ -1544,10 +1571,11 @@ func _begin_drydock(ship: Ship) -> void:
 func _advance_drydock(ship: Ship) -> void:
 	if calendar_time() < int(ship.drydock.until):
 		return
-	for part_id: String in ship.drydock.get("upgrades", []):
-		var upgrade: Dictionary = ShipParts.part(part_id).get("upgrade", {})
-		if not upgrade.is_empty():
-			ship.upgrades[part_id] = str(upgrade.id)
+	for upgrade_id: String in ship.drydock.get("upgrades", []):
+		var info := ShipParts.upgrade_info(upgrade_id)
+		if not info.is_empty():
+			ship.upgrades[str(info.part)] = upgrade_id
+			technology.note_fitted(owner_of(ship), upgrade_id)
 	ship.maintenance = 1.0
 	ShipParts.flush(ship)  # (In drydock still: the major parts too.)
 	var route: Array = ship.drydock.get("route", [])
@@ -4282,6 +4310,7 @@ func _tally_port_trade(who: Company, port: String, commodity: String, units: int
 	if port.is_empty() or commodity.is_empty() or units <= 0:
 		return
 	var here: Dictionary = who.port_trade.get_or_add(port, {since = play_time, goods = {}})
+	here.last = play_time  # (Trading at an R&D company's port pleases it: see Technology.)
 	var tally: Array = (here.goods as Dictionary).get_or_add(commodity, [0, 0.0, 0, 0.0])
 	var at := 2 if sold else 0
 	tally[at] = int(tally[at]) + units
@@ -4592,6 +4621,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	people.reset()
 	ownership.reset()
 	shipyards.reset()
+	technology.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
@@ -4675,6 +4705,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	contracts.from_dict(data.get("contracts", {}))
 	people.from_dict(data.get("people", {}))
 	shipyards.from_dict(data.get("shipyards", {}))
+	technology.from_dict(data.get("technology", {}))
 	ownership.apply_plans()  # (The ships the controlled firms' orders added: see Ownership.)
 	history.load(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, world)  # (Joining a game: none; the host's history isn't sent.)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
@@ -4807,6 +4838,7 @@ func world_dict() -> Dictionary:
 		"contracts": contracts.to_dict(),
 		"people": people.to_dict(),
 		"shipyards": shipyards.to_dict(),
+		"technology": technology.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
 			var ship_data := ship.to_dict()

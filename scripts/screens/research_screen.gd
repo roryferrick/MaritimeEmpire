@@ -16,7 +16,7 @@ extends Control
 
 const LIST_WIDTH := 330.0
 const FONT_SIZE := 14
-const VIEWS := ["Contracts board", "Expeditions", "Atlas", "Gear"]
+const VIEWS := ["Contracts board", "Expeditions", "Atlas", "Gear", "Technology"]
 const REFRESH_S := 2.0
 ## A contract given up takes a second click within this many seconds.
 const CONFIRM_S := 3.0
@@ -86,6 +86,7 @@ func _ready() -> void:
 	_detail.add_theme_constant_override(&"separation", 10)
 	margin.add_child(_detail)
 	GameState.research.changed.connect(func() -> void: _dirty = true)
+	GameState.technology.changed.connect(func() -> void: _dirty = true)
 	GameState.ships_changed.connect(func() -> void: _dirty = true)
 	visibility_changed.connect(func() -> void: _dirty = true)
 
@@ -140,6 +141,8 @@ func _rebuild() -> void:
 			_atlas_list()
 		3:
 			_ships_list("gear:")
+		4:
+			_tech_list()
 	if place.begins_with("offer:"):
 		_offer_detail(int(place.substr(6)))
 	elif place.begins_with("ship:"):
@@ -150,6 +153,12 @@ func _rebuild() -> void:
 		_category_detail(place.substr(4))
 	elif place.begins_with("site:"):
 		_site_detail(place.substr(5))
+	elif place.begins_with("tech:"):
+		_tech_detail(place.substr(5))
+	elif place.begins_with("rnd:"):
+		_rnd_detail(place.substr(4))
+	elif place == "own":
+		_own_rnd_detail()
 	else:
 		_detail.add_child(_dim("Pick one on the left."))
 
@@ -609,6 +618,153 @@ func _site_detail(site_id: String) -> void:
 
 
 # --- Bits --------------------------------------------------------------------------------------
+
+# --- Technology (Technology, DESIGN M5) -----------------------------------------------------------
+
+func _tech_list() -> void:
+	var who := GameState.company
+	var tech: Technology = GameState.technology
+	var plan: Dictionary = who.rnd
+	_list.add_child(_list_button("own", "Your own R&D\n%s" % ("working on %s (%d%%)" % [str(Technology.tech(str(plan.tech)).get("name", "")), roundi(100.0 * float(plan.get("progress", 0.0)) / tech.rnd_cost(str(plan.tech)))] if not str(plan.get("tech", "")).is_empty() else "nothing chosen · %d points banked" % roundi(who.research_points))))
+	for branch: String in Technology.branches():
+		var head := Label.new()
+		head.theme_type_variation = &"DimLabel"
+		head.text = str(Technology.branches()[branch])
+		_list.add_child(head)
+		for each: Dictionary in Technology.techs():
+			if str(each.branch) != branch:
+				continue
+			var state := tech.standing(who, str(each.id))
+			var mark: String = {held = "✓ ", licence = "", early = "★ ", future = "· "}[str(state.how)]
+			var note: String = {held = "held" + (" (yours alone)" if tech.exclusive(who, str(each.id)) else ""), licence = "licence %s" % Fmt.money_short(int(state.price)), early = "early offer %s" % Fmt.money_short(int(state.price)), future = "expected %d" % int(each.year)}[str(state.how)]
+			_list.add_child(_list_button("tech:" + str(each.id), "%s%s (tier %d)\n%s" % [mark, each.name, int(each.tier), note]))
+	var head := Label.new()
+	head.theme_type_variation = &"DimLabel"
+	head.text = "R&D companies"
+	_list.add_child(head)
+	for info: Dictionary in Technology.companies():
+		_list.add_child(_list_button("rnd:" + str(info.id), "%s\n%s · %s · likes you %d" % [info.name, GameData.port_name(str(info.port)), str(Technology.branches()[str(info.branch)]), roundi(tech.liking(who, str(info.id)))]))
+	if place.is_empty():
+		place = "own"
+
+
+func _tech_detail(tech_id: String) -> void:
+	var each := Technology.tech(tech_id)
+	if each.is_empty():
+		return
+	var who := GameState.company
+	var tech: Technology = GameState.technology
+	var state := tech.standing(who, tech_id)
+	_detail.add_child(_heading("%s (%s, tier %d)" % [str(each.name), str(Technology.branches()[str(each.branch)]), int(each.tier)]))
+	_detail.add_child(_text(str(each.get("text", ""))))
+	if each.has("perk"):
+		_detail.add_child(_text("Perk, fleet-wide the moment you hold it: %s." % EventCard._perk_text(each.perk)))
+	else:
+		var upgrade: Dictionary = each.upgrade
+		_detail.add_child(_text("Upgrade for the %s, fitted in drydock ship by ship (%d%% of a ship's list price): %s. New ships you order come with it." % [str(ShipParts.part(str(upgrade.part)).get("name", upgrade.part)).to_lower(), roundi(float(upgrade.cost) * 100.0), DrydockPopup._effects_text(upgrade.get("effects", {}))]))
+	var by: Dictionary = Technology.rnd(str(each.by))
+	_detail.add_child(_dim("Developed by %s (%s), expected about %d.%s" % [str(by.get("name", "")), GameData.port_name(str(by.get("port", ""))), int(each.year), " Published %s." % Fmt.calendar_short(int(tech.published[tech_id])) if tech.published.has(tech_id) else ""]))
+	match str(state.how):
+		"held":
+			var entry: Dictionary = who.techs[tech_id]
+			_detail.add_child(_text("Held since %s (%s)%s." % [Fmt.calendar_short(int(entry.since)), str(entry.how), "; yours alone till %s, with royalties" % Fmt.calendar_short(int(entry.exclusive_until)) if tech.exclusive(who, tech_id) else ""]))
+		"licence", "early":
+			var button := Button.new()
+			button.text = "License for %s%s" % [Fmt.money(int(state.price)), " (early, a friend's price)" if str(state.how) == "early" else ""]
+			var error := tech.license_error(who, tech_id)
+			button.disabled = not error.is_empty()
+			button.tooltip_text = error
+			button.pressed.connect(func() -> void: GameState.license_tech(tech_id))
+			_detail.add_child(button)
+			_detail.add_child(_dim("The fee is a share of your fleet at list price (tier %d: %s%%), at least %s; 30%% off from an R&D company that likes you (60 or more)." % [int(each.tier), Fmt.decimal(float((Technology.setting("licence", [0.004, 0.008, 0.015]) as Array)[int(each.tier) - 1]) * 100.0, 1), Fmt.money(int((Technology.setting("floor", [250000, 500000, 1000000]) as Array)[int(each.tier) - 1]))]))
+		"future":
+			_detail.add_child(_dim("Not published yet. An R&D company that likes you (60 or more) offers its techs a year early at 30%% off; or develop it yourself first and hold it alone."))
+	if str(state.how) != "held":
+		var own := Button.new()
+		var plan: Dictionary = who.rnd
+		var chosen := str(plan.get("tech", "")) == tech_id
+		own.text = "Being developed by your R&D" if chosen else "Develop it yourself (%d research points)" % roundi(tech.rnd_cost(tech_id))
+		own.disabled = chosen
+		own.pressed.connect(func() -> void:
+			GameState.set_rnd(tech_id, int(plan.get("budget", 0)))
+			place = "own"
+			_dirty = true)
+		_detail.add_child(own)
+
+
+func _rnd_detail(rnd_id: String) -> void:
+	var info := Technology.rnd(rnd_id)
+	if info.is_empty():
+		return
+	var who := GameState.company
+	var tech: Technology = GameState.technology
+	_detail.add_child(_heading(str(info.name)))
+	_detail.add_child(_text("%s, based at %s. Thinks of you: %d of 100 (%s)." % [str(Technology.branches()[str(info.branch)]), GameData.port_name(str(info.port)), roundi(tech.liking(who, rnd_id)), "a friend: early offers and 30% off" if tech.liking(who, rnd_id) >= float(Technology.setting("early_at", 60)) else "liking grows by licensing their techs, fitting their upgrades, trading at their port and selling them your survey data"]))
+	var sell := Button.new()
+	sell.text = "Sell survey data: %d research points for %s" % [int(Technology.setting("data_points", 100)), Fmt.money(int(Technology.setting("data_price", 600000)))]
+	var error := tech.sell_data_error(who, rnd_id)
+	sell.disabled = not error.is_empty()
+	sell.tooltip_text = error if not error.is_empty() else "Liking +%d." % int(Technology.setting("like_data", 10))
+	sell.pressed.connect(func() -> void: GameState.sell_research_data(rnd_id))
+	_detail.add_child(sell)
+	_detail.add_child(_heading("Their technologies"))
+	for each: Dictionary in Technology.techs():
+		if str(each.by) != rnd_id:
+			continue
+		var state := tech.standing(who, str(each.id))
+		var button := Button.new()
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.add_theme_font_size_override(&"font_size", FONT_SIZE - 1)
+		button.text = "%s (tier %d) · %s" % [str(each.name), int(each.tier), str(state.how) if str(state.how) != "future" else "expected %d" % int(each.year)]
+		button.pressed.connect(func() -> void:
+			place = "tech:" + str(each.id)
+			_dirty = true)
+		_detail.add_child(button)
+
+
+func _own_rnd_detail() -> void:
+	var who := GameState.company
+	var tech: Technology = GameState.technology
+	var plan: Dictionary = who.rnd
+	_detail.add_child(_heading("Your own R&D"))
+	_detail.add_child(_text("One technology at a time: your banked research points (%d; a quarter drawn each month) and a monthly budget (%s a point, more per dollar with a CTO strong in Engineering and a Technology centre at a hub: x%s now) progress it. Finish before the world publishes it and it is yours alone for two years, rivals paying royalties." % [roundi(who.research_points), Fmt.money(int(Technology.setting("point_cost", 20000))), Fmt.decimal(tech.monthly_points(who) / maxf(float(plan.get("budget", 0)) / float(Technology.setting("point_cost", 20000)), 0.001) if int(plan.get("budget", 0)) > 0 else 1.0 + People.bonus(who, "research"), 2)]))
+	var chosen := str(plan.get("tech", ""))
+	if chosen.is_empty():
+		_detail.add_child(_dim("Nothing chosen: pick a technology on the left and press Develop it yourself."))
+	else:
+		var each := Technology.tech(chosen)
+		var progress := float(plan.get("progress", 0.0))
+		var cost := tech.rnd_cost(chosen)
+		_detail.add_child(_text("Working on %s: %d of %d points (%d%%).%s" % [str(each.name), roundi(progress), roundi(cost), roundi(100.0 * progress / cost), " The world has it already: finishing saves the licence." if tech.published.has(chosen) else " Not published yet: finish first and hold it alone."]))
+		var bar := ProgressBar.new()
+		bar.min_value = 0.0
+		bar.max_value = cost
+		bar.value = progress
+		bar.custom_minimum_size = Vector2(320.0, 14.0)
+		_detail.add_child(bar)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 8)
+	row.add_child(_text("Monthly budget"))
+	var spin := SpinBox.new()
+	spin.min_value = 0
+	spin.max_value = 50000000
+	spin.step = 100000
+	spin.prefix = "$"
+	spin.value = int(plan.get("budget", 0))
+	spin.value_changed.connect(func(v: float) -> void: GameState.set_rnd(chosen, int(v)))
+	row.add_child(spin)
+	row.add_child(_dim("about %d points a month" % roundi(tech.monthly_points(who))))
+	_detail.add_child(row)
+	if not chosen.is_empty():
+		var stop := Button.new()
+		stop.text = "Stop (the work so far is lost)"
+		stop.pressed.connect(func() -> void: GameState.set_rnd("", int(plan.get("budget", 0))))
+		_detail.add_child(stop)
+	var held := who.techs.keys()
+	if not held.is_empty():
+		_detail.add_child(_heading("Held"))
+		_detail.add_child(_dim(", ".join(PackedStringArray(held.map(func(id: String) -> String: return str(Technology.tech(id).get("name", id)))))))
+
 
 func _gear_names(ids: Array) -> String:
 	return ", ".join(PackedStringArray(ids.map(func(gear_id: String) -> String: return Research.gear_name(gear_id))))

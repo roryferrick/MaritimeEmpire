@@ -174,6 +174,7 @@
 			{"id": "fish_market", "name": "Fish market", "price": 4000000, "upkeep_month": 2000, "effect": "price", "value": 0.08, "family": "seafood", "categories": [], "text": "An auction hall by the quay: your catch and seafood cargo sell for more here."},
 			{"id": "cruise_terminal", "name": "Cruise terminal", "price": 15000000, "upkeep_month": 7500, "effect": "passengers", "value": 0.3, "categories": [], "text": "A proper terminal with check-in halls: a third more guests book cruises from here."},
 			{"id": "bunkering", "name": "Bunkering station", "price": 8000000, "upkeep_month": 4000, "effect": "fuel", "value": 0.1, "categories": [], "text": "Your own bunker barges and tanks: fuel costs a tenth less here."},
-			{"id": "drydock", "name": "Drydock", "price": 25000000, "upkeep_month": 10000, "effect": "repairs", "value": 0.25, "categories": [], "text": "A graving dock and workshops: repairs cost a quarter less here (and the refits of the future are done here)."}
+			{"id": "drydock", "name": "Drydock", "price": 25000000, "upkeep_month": 10000, "effect": "repairs", "value": 0.25, "categories": [], "text": "A graving dock and workshops: repairs cost a quarter less here (and the refits of the future are done here)."},
+			{"id": "tech_centre", "name": "Technology centre", "price": 30000000, "upkeep_month": 15000, "effect": "research", "value": 0.5, "categories": [], "text": "Laboratories and a test tank: your own technology develops half again as fast (see the Research page)."}
 		]}
 }

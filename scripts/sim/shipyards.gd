@@ -207,6 +207,11 @@ func _deliver(company: Company, order: Dictionary) -> void:
 		return
 	ship.parts = ShipParts.new_conditions(ship.model(), lerpf(0.9, 1.0, clampf(quality, 0.0, 1.0)))
 	ship.sync_maintenance(ShipParts.mean(ship))
+	for each: Dictionary in ShipParts.for_model(ship.model()):  # (Built with the technology the company holds: see Technology.)
+		var options: Array = _state.technology.upgrades_for_part(company, str(each.id))
+		if not options.is_empty():
+			ship.upgrades[str(each.id)] = str(options[-1].id)
+	ship.invalidate_stats()
 	if company == _state.company:
 		ActivityLog.add("%s delivered at %s by %s." % [ship.name, GameData.port_name(str(order.port)), str(info.name)], ActivityLog.Kind.GOOD, ActivityLog.ship_color(ship))
 	if _state.news != null and int(ship.model().get("tier", 1)) >= 4:

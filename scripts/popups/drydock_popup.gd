@@ -53,14 +53,12 @@ func _ready() -> void:
 	var open := ShipParts.upgrades_open(ship)
 	if not open.is_empty():
 		box.add_child(_text("Upgrades to fit"))
-		for part_id: String in open:
-			var info := ShipParts.part(part_id)
-			var upgrade: Dictionary = info.upgrade
+		for info: Dictionary in open:
 			var tick := CheckBox.new()
-			tick.text = "%s on the %s — %s (%s)" % [str(upgrade.name), str(info.name).to_lower(), _effects_text(upgrade.get("effects", {})), Fmt.money(ShipParts.upgrade_cost(ship, part_id))]
+			tick.text = "%s on the %s — %s (%s)%s" % [str(info.name), str(info.part_name).to_lower(), _effects_text(info.get("effects", {})), Fmt.money(ShipParts.upgrade_cost(ship, str(info.id))), "" if str(info.get("tech", "")).is_empty() else " · from %s" % str(Technology.tech(str(info.tech)).get("name", ""))]
 			tick.add_theme_font_size_override(&"font_size", 14)
 			tick.toggled.connect(func(_on: bool) -> void: _update())
-			_ticks[part_id] = tick
+			_ticks[str(info.id)] = tick
 			box.add_child(tick)
 	_cost.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_cost)

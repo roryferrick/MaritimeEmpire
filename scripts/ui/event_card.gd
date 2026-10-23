@@ -224,6 +224,32 @@ func show_firm_order(proposal: Dictionary) -> void:
 		actions = [["Approve", func() -> void: GameState.answer_firm_order(index, true)], ["Not now", func() -> void: GameState.answer_firm_order(index, false)]]})
 
 
+## A technology the company can license, or have early (Technology.offered).
+func show_tech_offer(tech_id: String, how: String) -> void:
+	var each := Technology.tech(tech_id)
+	var by: Dictionary = Technology.rnd(str(each.by))
+	var price: int = GameState.technology.licence_cost(GameState.company, tech_id)
+	var what := "a fleet-wide perk: %s" % _perk_text(each.get("perk", {})) if each.has("perk") else "an upgrade to fit in drydock: %s (%s)" % [str((each.upgrade as Dictionary).name), DrydockPopup._effects_text((each.upgrade as Dictionary).get("effects", {}))]
+	_enqueue({kicker = "EARLY ACCESS" if how == "early" else "NEW TECHNOLOGY", title = str(each.name), color = GOLD,
+		body = "%s %s %s. %s. A licence costs %s%s." % [str(by.get("name", "")), "offers you, before the world," if how == "early" else "publishes", str(each.name).to_lower(), str(each.get("text", "")) + " It gives " + what, Fmt.money(price), " (their price for a friend)" if how == "early" else ""],
+		actions = [["License it", func() -> void: GameState.license_tech(tech_id)], ["Research page", func() -> void: GameRoot.find(self).open_page("research")], ["Later", Callable()]]})
+
+
+## The company's own R&D finished a tech (Technology.developed).
+func show_tech_developed(tech_id: String, exclusive: bool) -> void:
+	var each := Technology.tech(tech_id)
+	_enqueue({kicker = "YOUR OWN TECHNOLOGY", title = "%s developed" % str(each.name), color = GOLD,
+		body = "Your R&D has finished %s. %s%s" % [str(each.name).to_lower(), "You hold it alone for two years: rivals pay you royalties, and the world's version waits. " if exclusive else "The world had it already, but you pay no licence. ", "Its perk applies to the fleet now." if each.has("perk") else "Fit its upgrade in drydock; new ships come with it."],
+		actions = [["Research page", func() -> void: GameRoot.find(self).open_page("research")], ["Carry on", Callable()]]})
+
+
+static func _perk_text(perk: Dictionary) -> String:
+	var words := {fuel = "fuel", speed = "speed", wear = "wear", breakdowns = "breakdowns", dock = "port time"}
+	var value := float(perk.get("value", 1.0))
+	var categories: Array = perk.get("categories", [])
+	return "%s%d%% %s%s" % ["+" if value > 1.0 else "-", roundi(absf(value - 1.0) * 100.0), words.get(str(perk.get("stat", "")), str(perk.get("stat", ""))), "" if categories.is_empty() else " for " + ", ".join(PackedStringArray(categories.map(func(c: String) -> String: return People.group_name(c).to_lower())))]
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

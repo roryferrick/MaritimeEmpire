@@ -610,11 +610,11 @@ func in_drydock() -> bool:
 func _refresh_stats() -> void:
 	var data := model()
 	var who := GameState.owner_of(self)  # (Its company's research perks too: see Research.perk().)
-	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed") * People.captain_factor(self, "speed", true) * ShipParts.factor(self, "speed")  # (Worn propulsion: see ShipParts.)  # (The captain's seamanship: see People.)
-	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel") * Traits.factor(who, "fuel", false) * People.captain_factor(self, "fuel") * ShipParts.factor(self, "fuel")  # (A fouled hull.)  # (The CEO's traits too: see Traits.)
-	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear") * Traits.factor(who, "wear", false) * People.captain_factor(self, "wear") * People.factor(who, "wear")  # (The captain's engineering and the CTO's.)
-	_parts_breakdowns = ShipParts.factor(self, "breakdowns")  # (A tired engine or electrics; kept with the rest.)
-	_parts_dock = ShipParts.factor(self, "dock")
+	_top_speed = float(data.get("speed_nm_per_s", 0)) * Research.perk(who, "speed") * People.captain_factor(self, "speed", true) * ShipParts.factor(self, "speed")  # (Worn propulsion: see ShipParts.) * GameState.technology.factor(who, "speed", str(data.get("category", "")))  # (And the company's technology: see Technology.)  # (The captain's seamanship: see People.)
+	_fuel_per_s = float(data.get("fuel_per_s", 0)) * (1.0 - bird_fuel_saving) * Research.perk(who, "fuel") * Traits.factor(who, "fuel", false) * People.captain_factor(self, "fuel") * ShipParts.factor(self, "fuel")  # (A fouled hull.) * GameState.technology.factor(who, "fuel", str(data.get("category", "")))  # (The CEO's traits too: see Traits.)
+	_wear_per_s = float(data.get("wear_pct_per_min", 0)) / 100.0 / 60.0 * Research.perk(who, "wear") * Traits.factor(who, "wear", false) * People.captain_factor(self, "wear") * People.factor(who, "wear") * GameState.technology.factor(who, "wear", str(data.get("category", "")))  # (The captain's engineering and the CTO's.)
+	_parts_breakdowns = ShipParts.factor(self, "breakdowns") * GameState.technology.factor(who, "breakdowns", str(data.get("category", "")))  # (A tired engine or electrics, and the company's technology; kept with the rest.)
+	_parts_dock = ShipParts.factor(self, "dock") * GameState.technology.factor(who, "dock", str(data.get("category", "")))
 	_stats_dirty = false
 
 

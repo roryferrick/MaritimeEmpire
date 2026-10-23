@@ -167,11 +167,11 @@ static func group_deficit(ship: Ship, group: String) -> float:
 ## The parts' factor on a stat ("fuel", "speed", "breakdowns", "dock"): the
 ## group's deficit times the effect's size (data effects), and the upgrades' effects.
 static func factor(ship: Ship, key: String) -> float:
-	if ship.parts.is_empty():
-		return 1.0
 	flush(ship)
 	var size := float((data().get("effects", {}) as Dictionary).get(key, 0.0))
 	var out := 1.0
+	if ship.parts.is_empty():  # (Never worn: nothing to deduct, but its upgrades count.)
+		size = 0.0
 	match key:
 		"fuel":
 			out = 1.0 + size * group_deficit(ship, "hull")
@@ -182,9 +182,8 @@ static func factor(ship: Ship, key: String) -> float:
 		"dock":
 			out = 1.0 + size * group_deficit(ship, "deck")
 	for part_id: String in ship.upgrades:
-		var info := part(part_id)
-		var upgrade: Dictionary = info.get("upgrade", {})
-		if str(upgrade.get("id", "")) == str(ship.upgrades[part_id]):
+		var upgrade := upgrade_info(str(ship.upgrades[part_id]))
+		if str(upgrade.get("part", "")) == part_id:
 			out *= float((upgrade.get("effects", {}) as Dictionary).get(key, 1.0))
 	return out
 
@@ -229,17 +228,34 @@ static func drydock_cost(ship: Ship, port_id: String, upgrade_ids: Array) -> int
 	return roundi(repairs + fee + upgrades)
 
 
-static func upgrade_cost(ship: Ship, part_id: String) -> int:
-	var upgrade: Dictionary = part(part_id).get("upgrade", {})
-	return roundi(float(upgrade.get("cost", 0.0)) * float(ship.model().get("price", 0)))
+## An upgrade by its id: the catalogue's stock one for a part, or a technology's (Technology): {id, part, name, cost, effects, tech}.
+static func upgrade_info(upgrade_id: String) -> Dictionary:
+	for each: Dictionary in data().get("parts", []):
+		var upgrade: Dictionary = each.get("upgrade", {})
+		if not upgrade.is_empty() and str(upgrade.get("id", "")) == upgrade_id:
+			return {id = upgrade_id, part = str(each.id), name = str(upgrade.name), cost = float(upgrade.get("cost", 0.0)), effects = upgrade.get("effects", {}), tech = ""}
+	return Technology.upgrade_by_id(upgrade_id)
 
 
-## The upgrades a ship could still take: [part id, ...].
+static func upgrade_cost(ship: Ship, upgrade_id: String) -> int:
+	return roundi(float(upgrade_info(upgrade_id).get("cost", 0.0)) * float(ship.model().get("price", 0)))
+
+
+## The upgrades a ship could still take: the stock one of each part without one, and the technology
+## upgrades its company holds for its parts not fitted yet: [{id, part, part_name, name, cost, effects, tech}].
 static func upgrades_open(ship: Ship) -> Array:
 	var out := []
+	var company: Company = GameState.owner_of(ship)
 	for each: Dictionary in for_model(ship.model()):
-		if each.has("upgrade") and not ship.upgrades.has(each.id):
-			out.append(each.id)
+		var fitted := str(ship.upgrades.get(each.id, ""))
+		var stock: Dictionary = each.get("upgrade", {})
+		if not stock.is_empty() and fitted.is_empty():
+			out.append({id = str(stock.id), part = str(each.id), part_name = str(each.name), name = str(stock.name), cost = float(stock.get("cost", 0.0)), effects = stock.get("effects", {}), tech = ""})
+		for tech_upgrade: Dictionary in GameState.technology.upgrades_for_part(company, str(each.id)):
+			if str(tech_upgrade.id) != fitted:
+				var info := tech_upgrade.duplicate()
+				info.part_name = str(each.name)
+				out.append(info)
 	return out
 
 
