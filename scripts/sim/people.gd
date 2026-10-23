@@ -556,6 +556,12 @@ func _monthly_morale(company: Company, rng: RandomNumberGenerator) -> void:
 		if ship.maintenance < 0.4:
 			morale -= 3.0
 		captain.morale = clampf(morale, 0.0, 100.0)
+		var major := ShipParts.major_deficit(ship)  # (A nudge when the parts only a yard puts right are well worn: see ShipParts.)
+		if major >= 0.3 and not ship.has_meta(&"drydock_nudged") and company == _state.company:
+			ship.set_meta(&"drydock_nudged", true)
+			ActivityLog.add("%s wants a drydock: its major parts are %d%% worn (fuel x%s, speed x%s, breakdowns x%s). Parts on its card." % [ship.name, roundi(major * 100.0), Fmt.decimal(ShipParts.factor(ship, "fuel"), 2), Fmt.decimal(ShipParts.factor(ship, "speed"), 2), Fmt.decimal(ShipParts.factor(ship, "breakdowns"), 2)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
+		elif major < 0.15 and ship.has_meta(&"drydock_nudged"):
+			ship.remove_meta(&"drydock_nudged")
 		if float(captain.morale) < MORALE_RESIGN:
 			var name := str(captain.get("name", ""))
 			ship.captains[0] = Characters.random_person(rng, "officer", "")
