@@ -744,16 +744,25 @@ func _own_rnd_detail() -> void:
 		_detail.add_child(bar)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 8)
-	row.add_child(_text("Monthly budget"))
+	var budget_label := Label.new()
+	budget_label.text = "Monthly budget"
+	budget_label.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	row.add_child(budget_label)
 	var spin := SpinBox.new()
 	spin.min_value = 0
 	spin.max_value = 50000000
 	spin.step = 100000
 	spin.prefix = "$"
+	spin.custom_minimum_size.x = 180.0
+	spin.size_flags_vertical = SIZE_SHRINK_CENTER
 	spin.value = int(plan.get("budget", 0))
 	spin.value_changed.connect(func(v: float) -> void: GameState.set_rnd(chosen, int(v)))
 	row.add_child(spin)
-	row.add_child(_dim("about %d points a month" % roundi(tech.monthly_points(who))))
+	var rate := Label.new()
+	rate.theme_type_variation = &"DimLabel"
+	rate.add_theme_font_size_override(&"font_size", FONT_SIZE - 1)
+	rate.text = "about %d points a month" % roundi(tech.monthly_points(who))
+	row.add_child(rate)
 	_detail.add_child(row)
 	if not chosen.is_empty():
 		var stop := Button.new()
