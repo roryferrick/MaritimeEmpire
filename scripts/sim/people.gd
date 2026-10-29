@@ -1064,6 +1064,8 @@ func _idle_ship_for(company: Company, offer: Dictionary) -> Ship:
 			continue
 		if ship.docked_at != str(offer.from) and not ship.can_sail(ship.docked_at, str(offer.from)):
 			continue
+		if not _state.route_error([str(offer.from), str(offer.to)] as Array[String], ship).is_empty():
+			continue  # (The same check as the player's picker: a ship put on a contract is always routed.)
 		return ship
 	return null
 

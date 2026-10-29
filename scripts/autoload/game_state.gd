@@ -1803,7 +1803,8 @@ func contract_ship_error(contract: Dictionary, ship: Ship) -> String:
 		return "It doesn't carry %s" % str(GameData.commodity(str(contract.good)).get("name", contract.good)).to_lower()
 	if not ship.can_sail(str(contract.from), str(contract.to)):
 		return "It can't make %s to %s on a tank" % [GameData.port_name(str(contract.from)), GameData.port_name(str(contract.to))]
-	return ""
+	var route: Array[String] = [str(contract.from), str(contract.to)]
+	return route_error(route, ship)  # (Its way to the load port from where it is, and the ports' sizes: assigned, it is routed; never left sitting without a route.)
 
 
 func assign_contract_ship(contract_id: int, ship: Ship) -> void:

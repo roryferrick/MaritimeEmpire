@@ -93,6 +93,8 @@ const BID_SPREAD := [0.9, 1.15]
 const STANDING_WEIGHT := 400.0
 const TENDER_HOLDS := 2.5
 const RENOWNED_VALUE := 50000000.0
+## An offer's lane is at most this share of the longest leg its ship can sail on a tank (see _longest_leg()).
+const LEG_MARGIN := 0.9
 
 var _state: Node  # GameState
 ## Open offers to the player's company: {id, kind, producer, good, from, to, nm, units, quarters, rate, premium, value, offered, expires, min_tier, country}.
@@ -101,6 +103,7 @@ var offers: Array = []
 var contracts: Array = []
 var _next_id := 1
 var _offer_day := -1
+var _reach_checked := false
 var _month := -1
 
 
@@ -111,6 +114,7 @@ func _init(state: Node) -> void:
 func clear() -> void:
 	offers.clear()
 	contracts.clear()
+	_reach_checked = false
 	_next_id = 1
 	_offer_day = -1
 	_month = -1
@@ -203,6 +207,9 @@ func step(_delta: float) -> void:
 	if world.zones.is_empty():
 		return
 	var day := world.day
+	if not _reach_checked:  # (Once a game: offers from before the one-leg rule, or beyond a sold ship.)
+		_reach_checked = true
+		_drop_unreachable()
 	if _offer_day < 0 or day - _offer_day >= OFFER_DAYS:
 		_offer_day = day
 		_refresh_offers()
@@ -240,6 +247,7 @@ func _refresh_offers() -> void:
 	var company: Company = _state.company
 	if company == null:
 		return
+	_drop_unreachable()
 	var world: WorldEconomy = _state.world
 	var tier := best_tier(company)
 	var quota := int(OFFERS_BY_TIER.get(tier, 5))
@@ -403,8 +411,8 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 	var hold := _biggest_hold(company, str(lane.line), good)
 	if hold <= 0.0:
 		return {}
-	if float(lane.nm) > _longest_leg(company, good) * 0.9:
-		return {}  # (Beyond what any ship of the company, or the line's smallest, can sail on a tank.)
+	if float(lane.nm) > _longest_leg(company, good) * LEG_MARGIN:
+		return {}  # (Beyond one leg for the company's ships, or the line's tier-one ship: see _longest_leg().)
 	var base := float(GameData.commodity(good).get("base", 1.0))
 	var premium := lerpf(PREMIUM_LOW, PREMIUM_HIGH, float(lane.urgency))
 	var rate := base * (HANDLING + float(lane.nm) / FREIGHT_NM) * premium
@@ -534,20 +542,47 @@ func _close_tender(offer: Dictionary) -> void:
 
 
 ## The longest leg (nm) a ship of the company carrying the good can sail on a tank, else the line's smallest model's.
+## The longest leg (nm) a ship of the company carrying the good can sail on a
+## tank; with no ship of the good's line yet, the line's tier-one ship's (0 if
+## it doesn't carry the good, or if the company has ships of the line that
+## don't): an offer's lane must fit it (with a tenth in hand), so every offer
+## can be carried by a ship the company has or starts with (see _make_offer(),
+## _drop_unreachable()).
 func _longest_leg(company: Company, good: String) -> float:
 	var best := 0.0
+	var line := WorldEconomy.line_of(good)
+	var has_line := false
 	for ship: Ship in _state.fleet(company):
 		if good in ship.model().get("cargo", []):
 			best = maxf(best, ship.range_nm())
+		has_line = has_line or str(ship.model().get("category", "")) == line
 	if best > 0.0:
 		return best
-	var smallest := {}
-	for model: Dictionary in GameData.ship_models:
-		if good in model.get("cargo", []) and not model.get("coming_soon", false) and (smallest.is_empty() or int(model.get("capacity", 0)) < int(smallest.get("capacity", 0))):
-			smallest = model
-	if smallest.is_empty():
-		return 0.0
-	return float(smallest.get("range_nm", 0))
+	if has_line:
+		return 0.0  # (Ships of the line, but none carries the good: no offer till one does.)
+	for model: Dictionary in GameData.ship_models:  # (The line's tier-one ship, if it carries the good.)
+		if int(model.get("tier", 1)) == 1 and good in model.get("cargo", []) and not model.get("coming_soon", false):
+			return float(model.get("range_nm", 0))
+	return 0.0
+
+
+## Whether an offer's lane is one leg for the company (see _longest_leg()); supply deals and charters have no lane.
+func _reachable(company: Company, offer: Dictionary) -> bool:
+	if str(offer.kind) in ["supply", "charter"]:
+		return true
+	return float(offer.nm) <= _longest_leg(company, str(offer.good)) * LEG_MARGIN
+
+
+## Drops the open offers the company can no longer carry in one leg (a ship
+## sold; offers made before this rule): at load and each refresh.
+func _drop_unreachable() -> void:
+	var company: Company = _state.company
+	if company == null:
+		return
+	var kept := offers.filter(func(offer: Dictionary) -> bool: return _reachable(company, offer))
+	if kept.size() != offers.size():
+		offers = kept
+		offers_changed.emit()
 
 ## The hold (units of the good) of the company's biggest ship that carries the good, else the line's smallest model's.
 func _biggest_hold(company: Company, line: String, good: String) -> float:
