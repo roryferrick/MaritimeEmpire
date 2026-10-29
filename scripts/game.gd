@@ -325,8 +325,11 @@ func show_people() -> void:
 
 
 ## Opens the Contracts page (the offers, the signed contracts, the standing).
-func show_contracts() -> void:
+## The Contracts page; `signed`: scrolled to Your contracts (a contract just signed from its card).
+func show_contracts(signed := false) -> void:
 	open_page("contracts")
+	if signed:
+		_contracts_screen.show_signed()
 
 
 ## Opens the newspaper over the map (Gazette), at the latest issue or a week's.

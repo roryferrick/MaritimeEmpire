@@ -14,20 +14,22 @@ const FONT_SIZE := 14
 const ROW_WIDTH := 760.0
 
 var _body := VBoxContainer.new()
+var _scroll := ScrollContainer.new()
+## The Your contracts card (see show_signed()).
+var _mine_card: Control = null
 var _clock := 0.0
 var _picking := -1  # The contract a ship is being picked for, or -1.
 
 
 func _ready() -> void:
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	add_child(scroll)
+	_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(_scroll)
 	var margin := MarginContainer.new()
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for side: String in ["left", "top", "right", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 24)
-	scroll.add_child(margin)
+	_scroll.add_child(margin)
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override(&"separation", 12)
 	margin.add_child(content)
@@ -104,13 +106,13 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override(&"separation", 4)
 		if str(offer.kind) in ["supply", "charter"]:
-			line.add_child(_text(GameState.contract_summary(offer)))
+			line.add_child(_nowrap(_text(GameState.contract_summary(offer))))
 		else:
-			line.add_child(_text(GameState.contract_summary(offer) + ","))
+			line.add_child(_nowrap(_text(GameState.contract_summary(offer) + ",")))
 			line.add_child(_port_button(str(offer.from)))
-			line.add_child(_text("to"))
+			line.add_child(_nowrap(_text("to")))
 			line.add_child(_port_button(str(offer.to)))
-			line.add_child(_dim("(%s nm)" % Fmt.thousands(roundi(float(offer.nm)))))
+			line.add_child(_nowrap(_dim("(%s nm)" % Fmt.thousands(roundi(float(offer.nm))))))
 		row.add_child(line)
 		var standing := Contracts.tier_of(contracts.opinion(company, int(offer.producer), str(offer.country)))
 		row.add_child(_dim("Worth %s%s · premium x%s over plain freight · stands till %s · needs %s standing (you're %s with them, %d)" % [Fmt.money(int(offer.value)),
@@ -165,7 +167,17 @@ func _add_contracts(contracts: Contracts, company: Company) -> void:
 	if not past.is_empty():
 		box.add_child(HSeparator.new())
 		box.add_child(_dim("Earlier: " + ", ".join(PackedStringArray(past.slice(-8).map(func(c: Dictionary) -> String: return "%s for %s (%s)" % [GameState.contract_summary(c), contracts.party_name(c), str(c.status)])))))
-	_body.add_child(box.get_parent())
+	_mine_card = box.get_parent()
+	_body.add_child(_mine_card)
+
+
+## Scrolls to Your contracts: a contract just signed from its offer card
+## (GameRoot.show_contracts(true)), so the player sees it there and assigns a ship.
+func show_signed() -> void:
+	_refresh()
+	await get_tree().process_frame
+	if _mine_card != null and is_instance_valid(_mine_card):
+		_scroll.scroll_vertical = roundi(_mine_card.global_position.y - _scroll.global_position.y + _scroll.scroll_vertical) - 12
 
 
 func _contract_row(contracts: Contracts, contract: Dictionary) -> Control:
@@ -174,12 +186,12 @@ func _contract_row(contracts: Contracts, contract: Dictionary) -> Control:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override(&"separation", 4)
 	var shipped := not str(contract.kind) in ["supply", "charter"]
-	var title := _text("%s for %s%s" % [GameState.contract_summary(contract), contracts.party_name(contract), "," if shipped else ""])
+	var title := _nowrap(_text("%s for %s%s" % [GameState.contract_summary(contract), contracts.party_name(contract), "," if shipped else ""]))
 	title.add_theme_color_override(&"font_color", Color(0.75, 0.9, 1.0))
 	head.add_child(title)
 	if shipped:
 		head.add_child(_port_button(str(contract.from)))
-		head.add_child(_text("to"))
+		head.add_child(_nowrap(_text("to")))
 		head.add_child(_port_button(str(contract.to)))
 	row.add_child(head)
 	var progress := ProgressBar.new()
@@ -196,7 +208,7 @@ func _contract_row(contracts: Contracts, contract: Dictionary) -> Control:
 		return row
 	var ships := HFlowContainer.new()
 	ships.add_theme_constant_override(&"h_separation", 6)
-	ships.add_child(_text("Ships:"))
+	ships.add_child(_nowrap(_text("Ships:")))
 	var any := false
 	for id: int in contract.ships:
 		var ship: Ship = GameState.ship_by_id(id)
@@ -211,10 +223,10 @@ func _contract_row(contracts: Contracts, contract: Dictionary) -> Control:
 		chip.pressed.connect(func() -> void: GameState.unassign_contract_ship(ship))
 		ships.add_child(chip)
 	if not any:
-		ships.add_child(_dim("none yet"))
+		ships.add_child(_nowrap(_dim("none yet")))
 	var capacity := contracts.capacity_a_quarter(contract)
 	if str(contract.kind) == "recurring":
-		ships.add_child(_dim("(they can carry about %s a quarter of the %s needed)" % [Fmt.short(capacity), Fmt.thousands(int(contract.units))]))
+		ships.add_child(_nowrap(_dim("(they can carry about %s a quarter of the %s needed)" % [Fmt.short(capacity), Fmt.thousands(int(contract.units))])))
 	var assign := Button.new()
 	assign.text = "Assign a ship"
 	assign.add_theme_font_size_override(&"font_size", FONT_SIZE)
@@ -252,7 +264,7 @@ func _ship_picker(contract: Dictionary) -> Control:
 			_refresh())
 		flow.add_child(button)
 	if not any:
-		flow.add_child(_dim("No ship of yours carries %s. The Shop has them." % str(GameData.commodity(good).get("name", good)).to_lower()))
+		flow.add_child(_nowrap(_dim("No ship of yours carries %s. The Shop has them." % str(GameData.commodity(good).get("name", good)).to_lower())))
 	return flow
 
 
@@ -301,6 +313,13 @@ func _text(text: String) -> Label:
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	return label
+
+
+## A label in a row of labels and buttons: no wrapping (an autowrap label in a
+## box with no width of its own wrapped one character a line).
+func _nowrap(label: Label) -> Label:
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	return label
 
 

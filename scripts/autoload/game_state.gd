@@ -1325,7 +1325,12 @@ func build_facility(hub: Hub, id: String) -> void:
 
 func sign_contract(offer_id: int) -> void:
 	var offer := contracts.offer_by_id(offer_id)
-	if offer.is_empty() or not contracts.can_sign(company, offer).is_empty():
+	if offer.is_empty():
+		ActivityLog.add("That offer is no longer open.", ActivityLog.Kind.BAD)
+		return
+	var error := contracts.can_sign(company, offer)
+	if not error.is_empty():
+		ActivityLog.add("Couldn't sign: %s." % error, ActivityLog.Kind.BAD)
 		return
 	if Net.command(&"sign_contract", [offer_id]):
 		return

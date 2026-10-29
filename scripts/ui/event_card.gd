@@ -91,8 +91,13 @@ func show_offer(offer: Dictionary) -> void:
 Worth %s in all%s. %s" % [contracts.producer_name(int(offer.producer)), GameState.contract_summary(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)),
 		Fmt.thousands(roundi(float(offer.nm))), Fmt.money(int(offer.value)), " over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "",
 		"The offer stands till %s." % Fmt.calendar_short(int(offer.expires))]
+	var error := contracts.can_sign(GameState.company, offer)
 	if str(offer.kind) != "tender":
-		body += " Accepted, it needs a ship of yours assigned on the Contracts page (a department head with a budget does that for you); a quarter left unserved costs a fee."
+		body += " Accepted, it goes under Your contracts on the Contracts page, where a ship of yours is assigned to it (a department head with a budget does that for you); a quarter left unserved costs a fee."
+		if not error.is_empty():
+			body += "
+
+You can't take this one yet: %s." % error
 	if str(offer.kind) == "tender":
 		var names := PackedStringArray()
 		for index: int in offer.get("bidders", []):
@@ -103,8 +108,14 @@ Worth %s in all%s. %s" % [contracts.producer_name(int(offer.producer)), GameStat
 			actions = [["Bid", func() -> void: GameRoot.find(self).show_contracts()], ["Ignore", Callable()]]})
 		return
 	var id := int(offer.id)
-	_enqueue({kicker = "CONTRACT OFFER", title = "%s from %s" % [Contracts.KINDS.get(str(offer.kind), "Offer"), GameData.port_name(str(offer.from))], body = body, color = GOLD,
-		actions = [["Accept", func() -> void: GameState.sign_contract(id)], ["Decline", func() -> void: GameState.decline_offer(id)], ["Leave it", Callable()]]})
+	var actions := [["Decline", func() -> void: GameState.decline_offer(id)], ["Leave it", Callable()]]
+	if error.is_empty():  # Accept signs it and opens the Contracts page at it, to assign a ship.
+		actions.push_front(["Accept", func() -> void:
+			GameState.sign_contract(id)
+			GameRoot.find(self).show_contracts(true)])
+	else:
+		actions.push_front(["Contracts page", func() -> void: GameRoot.find(self).show_contracts()])
+	_enqueue({kicker = "CONTRACT OFFER", title = "%s from %s" % [Contracts.KINDS.get(str(offer.kind), "Offer"), GameData.port_name(str(offer.from))], body = body, color = GOLD, actions = actions})
 
 
 

@@ -269,8 +269,8 @@ func _refresh_offers() -> void:
 			continue
 		offers.append(offer)
 		made += 1
-		if _is_important(company, offer) or str(offer.kind) == "tender":
-			offer_arrived.emit(offer)
+		if (_is_important(company, offer) and can_sign(company, offer).is_empty()) or str(offer.kind) == "tender":
+			offer_arrived.emit(offer)  # (The card only for offers the company can take: Accept on it always signs.)
 	if offers.size() < quota and company.has_type("seafood"):
 		made += _supply_offers(company, rng, quota - offers.size())
 	if offers.size() < quota and company.has_type("cruises"):
@@ -824,7 +824,7 @@ func _offer_renewal(contract: Dictionary, company: Company) -> void:
 	offers_changed.emit()
 	if company == _state.company:
 		ActivityLog.add("%s offers to renew the %s contract%s." % [party_name(contract), _good_word(good), " with a loyalty premium" if int(contract.short_quarters) == 0 else ""], ActivityLog.Kind.INFO)
-		if _is_important(company, offer):
+		if _is_important(company, offer) and can_sign(company, offer).is_empty():
 			offer_arrived.emit(offer)
 
 
