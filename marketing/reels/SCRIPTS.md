@@ -17,12 +17,12 @@ Rewritten 29 Oct 2026 for the living world (the first script showed levels, the 
 
 | Time | VO | TEXT | SHOT |
 |---|---|---|---|
-| 0–3 | This is the whole planet. Every port is real. | 300+ REAL PORTS | Globe spinning slowly, zoom starts |
-| 3–7 | Hundreds of shipping firms already work it, and the markets move every day. | A LIVING WORLD | The globe diving into Shanghai's harbour → a Scooter leaving Shanghai (the other firms' ships through the Singapore Strait once they draw in the director) |
+| 0–3 | This is the whole planet. Every port is real. | 300+ REAL PORTS | One slow dive from the whole globe into Shanghai's harbour, carried on through the next beat |
+| 3–7 | Hundreds of shipping firms already work it, and the markets move every day. | A LIVING WORLD | The same dive, arriving among the piers (the other firms' ships through the Singapore Strait once they draw in the director) |
 | 7–11 | Producers put work out to contract. Win it, and your ships carry the cargo. | CONTRACTS PAY THE BILLS | A contract offer card (Accept / Decline / Leave it) → a loaded Feedermax under way |
 | 11–15 | Order ships from real yards. Hire the people who run them. | ORDER SHIPS. HIRE PEOPLE. | The Shop's "Order a Trans Atlantic" popup with a yard's quote → the People page's executives |
 | 15–20 | Ships wear out, break down and get lost at sea, and you pay to fetch them. | THINGS GO WRONG | A lost Scooter → the Mammoth ballasting down and lifting it |
-| 20–23 | Storms follow the seasons. Canals charge tolls. | THE SEA DOESN'T CARE | A tempest off Taiwan, the Gatún locks |
+| 20–23 | Storms follow the seasons. Canals charge tolls. | THE SEA DOESN'T CARE | A tempest off Taiwan (the Gatún locks come back once the canal is as the user wants it) |
 | 23–27 | Grow it into a maritime empire, with rivals or friends in the same world. | GROW INTO A MARITIME EMPIRE | Thirty ships on routes, the map pulling back from Shanghai |
 | 27–30 | Maritime Empire. Coming soon to Steam. | END CARD | End card |
 

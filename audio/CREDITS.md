@@ -1,5 +1,20 @@
 # Sound credits
 
+## Music
+
+The soundtrack (audio/music) plays in this order from the moment the game opens, round and round. Each track is used under a Creative Commons Attribution licence; "Exploring the Ocean" was converted from the WAV the author published to Ogg Vorbis, the others are the files as published.
+
+| Game file | Track | Author | Licence | Source |
+|---|---|---|---|---|
+| voyage_of_discovery.mp3 | Voyage Of Discovery (the game's theme) | Shane Ivers, https://www.silvermansound.com | CC BY 4.0 | https://www.silvermansound.com/free-music/voyage-of-discovery |
+| the_great_sea.mp3 | The Great Sea | Scott Buckley, www.scottbuckley.com.au | CC BY 4.0 | https://www.scottbuckley.com.au/library/the-great-sea/ |
+| the_krakens_pursuit.mp3 | The Kraken's Pursuit | Shane Ivers, https://www.silvermansound.com | CC BY 4.0 | https://www.silvermansound.com/free-music/the-krakens-pursuit |
+| exploring_the_ocean.ogg | Exploring the Ocean (Ocean Music Pack) | Leonardo Paz (leohpaz) | CC BY 4.0 | https://opengameart.org/content/ocean-music-pack |
+
+Credit lines as the authors ask: "Music: Voyage Of Discovery by Shane Ivers - https://www.silvermansound.com", "Music: The Kraken's Pursuit by Shane Ivers - https://www.silvermansound.com", "'The Great Sea' by Scott Buckley - released under CC-BY 4.0. www.scottbuckley.com.au", "Exploring the Ocean by Leonardo Paz".
+
+## Sounds
+
 Every sound in this folder comes from Wikimedia Commons under a free licence; the file, its author and its licence are listed here as the licences require. Files were renamed to the sound they stand for in the game; none were edited beyond that.
 
 | Game file | Original | Author | Licence | Source |

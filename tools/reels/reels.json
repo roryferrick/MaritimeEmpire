@@ -10,7 +10,7 @@
 				"caption": "300+ REAL PORTS",
 				"shots": [
 					{
-						"shot": "globe_spin2",
+						"shot": "globe_dive2",
 						"len": 3
 					}
 				]
@@ -24,11 +24,8 @@
 				"shots": [
 					{
 						"shot": "globe_dive2",
-						"len": 2.2
-					},
-					{
-						"shot": "scooter_leaves2",
-						"len": 1.8
+						"len": 4,
+						"from": 3
 					}
 				]
 			},
@@ -93,11 +90,7 @@
 				"shots": [
 					{
 						"shot": "storm2",
-						"len": 1.5
-					},
-					{
-						"shot": "panama_locks2",
-						"len": 1.5
+						"len": 3
 					}
 				]
 			},
@@ -127,7 +120,11 @@
 					}
 				]
 			}
-		]
+		],
+		"music": {
+			"file": "../../audio/music/voyage_of_discovery.mp3",
+			"gain_db": -4
+		}
 	},
 	"B": {
 		"file": "intro_15s",

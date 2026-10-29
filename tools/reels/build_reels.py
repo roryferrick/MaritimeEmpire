@@ -58,7 +58,8 @@ def build(reel_id: str, reel: dict) -> None:
                 n += 1
     length = n / FPS
     cards = os.path.join(BUILD, reel_id, "cards")
-    args = [ffmpeg(), "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(frames_dir, "%05d.jpg")]
+    # (-nostdin: run after Godot in one shell, ffmpeg otherwise hung waiting on the console.)
+    args = [ffmpeg(), "-y", "-nostdin", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(frames_dir, "%05d.jpg")]
     filters = []
     last = "0:v"
     inputs = 1
@@ -85,27 +86,28 @@ def build(reel_id: str, reel: dict) -> None:
     # over the last two seconds and held under the voiceover), else silence.
     voice = reel.get("audio")
     music = reel.get("music")
-    sounds = []
-    if voice:
-        args += ["-i", os.path.join(OUT, voice)]
-        sounds.append(f"[{inputs}:a]aformat=sample_rates=48000:channel_layouts=stereo[vo]")
-        inputs += 1
-    if music:
+    sound_map = None
+    if music:  # (Mixed in the filter graph; without music the one track maps straight through.)
+        sounds = []
+        if voice:
+            args += ["-i", os.path.join(OUT, voice)]
+            sounds.append(f"[{inputs}:a]aformat=sample_rates=48000:channel_layouts=stereo[vo]")
+            inputs += 1
         args += ["-i", os.path.join(OUT, music["file"])]
         gain = float(music.get("gain_db", -14.0 if voice else -6.0))
         sounds.append(f"[{inputs}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={gain}dB,afade=t=in:st=0:d=0.8,afade=t=out:st={length - 2.0:.3f}:d=2.0[mu]")
         inputs += 1
-    if voice and music:
-        sounds.append("[vo][mu]amix=inputs=2:duration=first:normalize=0[aout]")
+        cut = f"atrim=duration={length:.3f}[aout]"
+        sounds.append(f"[vo][mu]amix=inputs=2:duration=first:normalize=0,{cut}" if voice else f"[mu]{cut}")
+        filters += sounds
+        sound_map = "[aout]"
     elif voice:
-        sounds.append("[vo]acopy[aout]")
-    elif music:
-        sounds.append("[mu]acopy[aout]")
+        args += ["-i", os.path.join(OUT, voice)]
+        sound_map = f"{inputs}:a"
     else:
         args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-        sounds.append(f"[{inputs}:a]acopy[aout]")
-    filters += sounds
-    args += ["-filter_complex", ";".join(filters), "-map", "[out]", "-map", "[aout]",
+        sound_map = f"{inputs}:a"
+    args += ["-filter_complex", ";".join(filters), "-map", "[out]", "-map", sound_map,
              "-t", f"{length:.3f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "slow", "-crf", "17",
              "-profile:v", "high", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
              os.path.join(OUT, reel["file"] + ".mp4")]

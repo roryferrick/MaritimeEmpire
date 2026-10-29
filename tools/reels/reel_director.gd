@@ -401,12 +401,25 @@ func _cards(reel: String, beats: Array) -> void:
 	shade.color = Color(NAVY, 0.62)
 	shade.size = end.size
 	end.add_child(shade)
-	var mark := TextureRect.new()
-	mark.texture = ImageTexture.create_from_image(Image.load_from_file(ProjectSettings.globalize_path("res://website/assets/logo_wordmark.png")))
-	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	mark.position = Vector2(60, 640)
-	mark.size = Vector2(OUT_W - 120, 540)
+	# The game's name in the title screen's own font (the theme's TitleLabel: Cinzel at weight 700).
+	var title_font := FontVariation.new()
+	title_font.base_font = load("res://fonts/cinzel/Cinzel-Variable.ttf")
+	title_font.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 700}
+	var mark := Label.new()
+	mark.text = "MARITIME
+EMPIRE"
+	mark.add_theme_font_override(&"font", title_font)
+	mark.add_theme_font_size_override(&"font_size", 170)
+	mark.add_theme_color_override(&"font_color", Color.WHITE)
+	mark.add_theme_color_override(&"font_shadow_color", Color(0, 0, 0, 0.55))
+	mark.add_theme_constant_override(&"shadow_offset_x", 0)
+	mark.add_theme_constant_override(&"shadow_offset_y", 10)
+	mark.add_theme_constant_override(&"shadow_outline_size", 6)
+	mark.add_theme_constant_override(&"line_spacing", -10)
+	mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mark.position = Vector2(0, 640)
+	mark.size = Vector2(OUT_W, 540)
 	end.add_child(mark)
 	var soon := Label.new()
 	soon.text = "COMING SOON TO STEAM"
@@ -1939,3 +1952,18 @@ func shot_globe_dive2(seconds: float) -> void:
 	await rec("globe_dive2", seconds, func(t: float) -> void:
 		var k := ease(t / seconds, -2.2)
 		look(lerpf(160.0, float(port.lon), minf(1.0, k * 1.4)), lerpf(15.0, float(port.lat), minf(1.0, k * 1.4)), exp(lerpf(log(low), log(1300.0), k))))
+
+
+## Why a port's marina is or isn't drawn at this view (the dive's end: Ningbo vanishing).
+func _marina_diag(port_id: String) -> void:
+	var index := -1
+	for i in GameData.ports.size():
+		if GameData.ports[i].id == port_id:
+			index = i
+	var near: Rect2 = Rect2(Vector2.ZERO, map.size).grow(map.MARINA_MAX_REACH * map._ship_scale())
+	var item: Variant = map._marina_items.get(port_id)
+	var pivot: Node2D = item.get_parent() if item != null else null
+	print("  marina ", port_id, " pivot ", (pivot.position if pivot != null else Vector2.ZERO), " pivot scale ", (pivot.scale if pivot != null else Vector2.ZERO), " item scale meta ", (item.get_meta(&"scale", 0.0) if item != null else 0.0), " pending ", map._marinas_pending, ": at ", map.port_screen_position(port_id), " size ", map.size, " scale ", map._ship_scale(), " near ", near,
+		" shown ", map._marina_shown(port_id), " kept ", map._kept_marina_ports().has(index), " candidate ", map.marinas_in_view(near).has(index),
+		" near_ports ", map._ports_near_view().has(index), " item ", item != null, " item shown ", (item.get_meta(&"shown", true) if item != null else "-"),
+		" layout radius ", map._port_layout(port_id).radius, " port radius ", map._port_radius(port_id))
