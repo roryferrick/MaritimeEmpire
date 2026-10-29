@@ -12,8 +12,8 @@ const WEEK_S := 7 * 86400
 const PAPER := Color("#f1ead8")
 const INK := Color("#1d1a16")
 const RULE := Color("#5a5247")
-const COLUMN_WIDTH := 300.0
-const SIDE_WIDTH := 260.0
+const COLUMN_WIDTH := 190.0  # (Three columns and the side column share the page.)
+const SIDE_WIDTH := 210.0
 const ITEMS_A_COLUMN := 9
 const FONT_SIZE := 14
 

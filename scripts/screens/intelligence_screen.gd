@@ -21,8 +21,15 @@ const LIST_SIZE := 10
 const SHORT_TRADE_NM := 800.0
 const FONT_SIZE := 14
 const SMALL_FONT := 12
+## The country and company tables' text size (so their columns fit across the page).
+const TABLE_FONT := 13
+const TABLE_GAP := 4
+## The country names' column width (the longest names clipped) and the
+## governments' short names, so the twelve columns fit.
+const COUNTRY_NAME_WIDTH := 112.0
+const SHORT_GOVERNMENTS := {"One-party state": "One-party", "Military rule": "Military"}
 const TABS := [["countries", "Countries"], ["companies", "Companies"], ["markets", "Markets"], ["charts", "Charts"], ["news", "News"], ["events", "Events"]]
-const COUNTRY_COLUMNS := [["name", "Country"], ["population", "People"], ["gdp_usd", "GDP"], ["gdp_per_head", "GDP a head"], ["currency", "Currency"], ["balance", "Trade balance"], ["tariff", "Tariff"], ["government", "Government"], ["stability", "Stability"], ["stance", "Trade"], ["firms", "Firms"], ["plants", "Plants"]]
+const COUNTRY_COLUMNS := [["name", "Country"], ["population", "People"], ["gdp_usd", "GDP"], ["gdp_per_head", "Per head"], ["currency", "Currency"], ["balance", "Balance"], ["tariff", "Tariff"], ["government", "Government"], ["stability", "Stability"], ["stance", "Trade"], ["firms", "Firms"], ["plants", "Plants"]]
 const FIRM_COLUMNS := [["name", "Firm"], ["country", "Based in"], ["home", "Home port"], ["ships", "Ships"], ["at_sea", "At sea"], ["money", "Earned"], ["carried", "Carried"]]
 const PRODUCER_COLUMNS := [["name", "Company"], ["country", "From"], ["trade", "Trade"], ["plants", "Plants"], ["output", "Output a year"]]
 const RANGES := [["year", "A year (weekly)", 0], ["five", "5 years", 60], ["ten", "10 years", 120], ["life", "The whole game", -1]]
@@ -170,12 +177,14 @@ func _build_countries() -> void:
 		return (x > y) if _country_descending else (x < y))
 	var grid := GridContainer.new()
 	grid.columns = COUNTRY_COLUMNS.size()
-	grid.add_theme_constant_override(&"h_separation", 18)
+	grid.add_theme_constant_override(&"h_separation", TABLE_GAP)
 	grid.add_theme_constant_override(&"v_separation", 2)
 	for column: Array in COUNTRY_COLUMNS:
 		var head := Button.new()
 		head.flat = true
 		head.text = column[1] + (" ▼" if column[0] == _country_sort and _country_descending else (" ▲" if column[0] == _country_sort else ""))
+		head.add_theme_font_override(&"font", get_theme_default_font())  # (The body font: narrower than the headings'.)
+		head.tooltip_text = column[1]
 		head.add_theme_font_size_override(&"font_size", FONT_SIZE)
 		head.pressed.connect(func() -> void:
 			if _country_sort == column[0]:
@@ -189,6 +198,10 @@ func _build_countries() -> void:
 		var name := Button.new()
 		name.flat = true
 		name.text = row.name
+		name.tooltip_text = row.name
+		name.clip_text = true
+		name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name.custom_minimum_size.x = COUNTRY_NAME_WIDTH
 		name.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		name.add_theme_font_size_override(&"font_size", FONT_SIZE)
 		name.pressed.connect(func() -> void:
@@ -196,16 +209,17 @@ func _build_countries() -> void:
 			_refresh())
 		grid.add_child(name)
 		grid.add_child(_cell(Fmt.short(row.population)))
-		grid.add_child(_cell("$" + Fmt.short(row.gdp_usd)))
+		grid.add_child(_cell(UiFit.big_money(row.gdp_usd)))
 		grid.add_child(_cell("$" + Fmt.thousands(roundi(row.gdp_per_head))))
 		grid.add_child(_cell("x%s" % Fmt.decimal(row.currency, 2), _trend_variation(row.currency - 1.0)))
-		grid.add_child(_cell(("+" if row.balance >= 0.0 else "-") + "$" + Fmt.short(absf(row.balance)), _trend_variation(row.balance)))
+		grid.add_child(_cell(UiFit.big_money(row.balance), _trend_variation(row.balance)))  # (Green a surplus, red a deficit.)
 		grid.add_child(_cell("%s%%" % Fmt.decimal(row.tariff * 100.0, 1)))
-		grid.add_child(_cell(str(row.government)))
+		grid.add_child(_cell(str(SHORT_GOVERNMENTS.get(row.government, row.government))))
 		grid.add_child(_cell(str(roundi(row.stability)), _trend_variation(row.stability - 50.0)))
 		grid.add_child(_cell(str(row.stance)))
 		grid.add_child(_cell(str(row.firms)))
 		grid.add_child(_cell(str(row.plants)))
+	_shrink_table(grid, SMALL_FONT)  # (Twelve columns: the smaller size.)
 	_body.add_child(grid)
 
 
@@ -438,7 +452,7 @@ func _company_table(columns: Array, rows: Array, cells: Callable) -> void:
 		return x > y)
 	var grid := GridContainer.new()
 	grid.columns = columns.size()
-	grid.add_theme_constant_override(&"h_separation", 18)
+	grid.add_theme_constant_override(&"h_separation", TABLE_GAP)
 	grid.add_theme_constant_override(&"v_separation", 2)
 	for column: Array in columns:
 		var head := Button.new()
@@ -461,7 +475,14 @@ func _company_table(columns: Array, rows: Array, cells: Callable) -> void:
 		grid.add_child(name)
 		for text: String in cells.call(row):
 			grid.add_child(_cell(text))
+	_shrink_table(grid)
 	_body.add_child(grid)
+
+
+## A table's text at TABLE_FONT (or smaller), so its columns fit across the page.
+static func _shrink_table(grid: GridContainer, size := TABLE_FONT) -> void:
+	for cell: Control in grid.get_children():
+		cell.add_theme_font_size_override(&"font_size", size)
 
 
 # --- Markets --------------------------------------------------------------------------
@@ -479,6 +500,8 @@ func _goods_options() -> OptionButton:
 			picker.add_item("%s: %s" % [each.name, Manufacturers.describe(each.id).to_lower()])
 			picker.set_item_metadata(picker.item_count - 1, each.id)
 	picker.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	picker.fit_to_longest_item = false  # (The makers' entries run long: the picker keeps to its width.)
+	picker.custom_minimum_size.x = 400.0
 	return picker
 
 
@@ -516,7 +539,7 @@ func _build_markets() -> void:
 	most_expensive.sort_custom(func(a: String, b: String) -> bool: return sells[a] > sells[b])
 	var lists := GridContainer.new()
 	lists.columns = 2
-	lists.add_theme_constant_override(&"h_separation", 32)
+	lists.add_theme_constant_override(&"h_separation", 24)
 	lists.add_theme_constant_override(&"v_separation", 16)
 	_body.add_child(lists)
 	_add_list(lists, "Cheapest to buy", cheapest.slice(0, LIST_SIZE).map(func(id: String) -> Array: return [[id], Fmt.money(roundi(buys[id]))]))
@@ -559,7 +582,7 @@ func _add_zone_table() -> void:
 	_body.add_child(_dim("Every market's price of %s now, dearest first: x its usual price, the days its stockpile covers, what it holds, uses and makes a day. Click a market for its chart." % str(GameData.commodity(_good).get("name", _good)).to_lower()))
 	var grid := GridContainer.new()
 	grid.columns = 7
-	grid.add_theme_constant_override(&"h_separation", 16)
+	grid.add_theme_constant_override(&"h_separation", 12)  # (Seven columns fit across the page.)
 	grid.add_theme_constant_override(&"v_separation", 2)
 	for head: String in ["Market", "Price", "Cover", "Stock", "Uses a day", "Makes a day", "Last year"]:
 		grid.add_child(_cell(head, &"DimLabel"))

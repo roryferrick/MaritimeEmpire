@@ -39,7 +39,7 @@ const LINE_TITLES := {container = "Container ships", ore = "Ore carriers", break
 ## The tabs' place under the header, and where the list starts below them (px).
 const TABS_TOP := 60.0
 const LIST_TOP := 100.0
-const TAB_FONT_SIZE := 14
+const TAB_FONT_SIZE := 13
 const SORT_NAMES := {Sort.EARNINGS: "Earnings", Sort.NAME: "Name", Sort.STATUS: "Status (problems first)", Sort.PROFIT: "Profit (all time)"}
 ## Sorted by earnings, the tiles re-sort this often (s) while the tab is open,
 ## and each time it opens.
@@ -59,6 +59,8 @@ var _tab_names: Array[String] = []
 var _tab_lines: Array = []
 var _line_heads := {}
 var _group_lines := {}
+## The Fishing Grounds button: on the Seafood tab, and on All once the company fishes.
+var _grounds := Button.new()
 ## Ship -> its tile.
 var _tiles := {}
 ## Ships changed since the tab last caught up (as keys), and whether anything did.
@@ -89,13 +91,12 @@ func _ready() -> void:
 			_needs_rebuild = true)
 	for control: Control in [%SortOption, %FilterOption]:
 		control.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)  # (Cinzel runs wide: a size down to fit the row.)
-	var grounds := Button.new()  # Where the fishing and crabbing boats go (FishingScreen).
-	grounds.text = "Fishing Grounds"
-	grounds.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)
-	grounds.tooltip_text = "Pick fishing grounds on the map and send your fishing and crabbing boats there by model."
-	grounds.pressed.connect(func() -> void: GameRoot.find(self).open_fishing_screen())
-	%Header.add_child(grounds)
-	%Header.move_child(grounds, %CountLabel.get_index())
+	_grounds.text = "Fishing Grounds"  # Where the fishing and crabbing boats go (FishingScreen): see _apply_filter().
+	_grounds.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)
+	_grounds.tooltip_text = "Pick fishing grounds on the map and send your fishing and crabbing boats there by model."
+	_grounds.pressed.connect(func() -> void: GameRoot.find(self).open_fishing_screen())
+	%Header.add_child(_grounds)
+	%Header.move_child(_grounds, %CountLabel.get_index())
 	var uniforms := Button.new()  # What the crews wear (UniformsPage).
 	uniforms.text = "Uniforms"
 	uniforms.add_theme_font_size_override(&"font_size", HEADER_FONT_SIZE)
@@ -311,6 +312,7 @@ func _apply_filter() -> void:
 		_tabs.current_tab = 0
 		return  # (tab_changed runs this again.)
 	%CountLabel.text = "%d of %d ships" % [shown, GameState.fleet().size()]
+	_grounds.visible = lines.has("fishing") or (lines.is_empty() and GameState.company.has_type("seafood"))
 
 
 ## The tabs over the list: All, each company type's (its Shop tab name), Service.
@@ -330,7 +332,7 @@ func _add_tabs() -> void:
 	_tabs.offset_top = TABS_TOP
 	_tabs.offset_bottom = LIST_TOP - 4.0
 	_tabs.clip_tabs = false
-	_tabs.add_theme_font_size_override(&"font_size", TAB_FONT_SIZE)  # (Seven tabs with their stars and counts fit across.)
+	UiFit.compact_tabs(_tabs, TAB_FONT_SIZE)  # (Nine tabs with their stars and counts fit across, beside the activity log.)
 	_tabs.tab_changed.connect(_apply_filter.unbind(1))
 	add_child(_tabs)
 	$Scroll.offset_top = LIST_TOP

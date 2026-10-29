@@ -10,6 +10,10 @@ extends Control
 const ZOOM_BUTTON_SIZE := Vector2(44, 44)
 const ZOOM_BUTTON_MARGIN := 14
 const FIELD_GUIDE_BUTTON := 44.0
+## The page buttons down the top left (px square): the CEO's headshot and ten
+## pages fit above the news ticker.
+const PAGE_BUTTON := 42.0
+const PAGE_BUTTON_GAP := 6
 ## Ship line colors are brightened to at least this luminance so they read on
 ## the dark panel.
 const LINE_MIN_LUMINANCE := 0.5
@@ -413,6 +417,8 @@ func _add_zoom_buttons() -> void:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override(&"separation", 4)
 	column.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, ZOOM_BUTTON_MARGIN)
+	column.offset_top -= TICKER_HEIGHT  # (Above the news ticker.)
+	column.offset_bottom -= TICKER_HEIGHT
 	column.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	column.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	for entry: Array in [["+", "Zoom in (or pinch, or the + key)", MapView.ZOOM_STEP * MapView.ZOOM_STEP], ["−", "Zoom out (or pinch, or the - key)", 1.0 / (MapView.ZOOM_STEP * MapView.ZOOM_STEP)]]:
@@ -500,14 +506,14 @@ func _add_page_buttons() -> void:
 	_page_column.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_page_column.offset_left = 12.0
 	_page_column.offset_top = 12.0
-	_page_column.add_theme_constant_override(&"separation", 8)
+	_page_column.add_theme_constant_override(&"separation", PAGE_BUTTON_GAP)
 	add_child(_page_column)
 	for entry: Array in PAGES:
 		var id: String = entry[0]
 		var button := Button.new()
 		button.tooltip_text = entry[1]
 		button.focus_mode = Control.FOCUS_NONE
-		button.custom_minimum_size = Vector2.ONE * FIELD_GUIDE_BUTTON
+		button.custom_minimum_size = Vector2.ONE * PAGE_BUTTON
 		var icon := PageIcon.new(id)
 		icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 7)
 		button.add_child(icon)
@@ -556,18 +562,25 @@ func _add_ceo_button() -> void:
 const TICKER_HEIGHT := 24.0
 const TICKER_SPEED := 60.0
 const TICKER_SHOWN := 8
-var _ticker := PanelContainer.new()
+const TICKER_COLOR := Color("#0e1f3d")  # (The bars' navy: see tools/make_theme.gd.)
+## A plain Control, not a container: its size is the strip's, whatever the
+## text's width (a container would grow to the text and run off the screen).
+var _ticker := Control.new()
 var _ticker_text := Label.new()
 var _ticker_x := 0.0
 
 
 func _add_ticker() -> void:
-	_ticker.theme_type_variation = &"BarPanel"
 	_ticker.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_ticker.offset_top = -TICKER_HEIGHT
 	_ticker.offset_bottom = 0.0
 	_ticker.clip_contents = true
 	_ticker.mouse_filter = Control.MOUSE_FILTER_STOP
+	var back := ColorRect.new()
+	back.color = TICKER_COLOR
+	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ticker.add_child(back)
 	_ticker.tooltip_text = "The news. Click for the Intelligence page."
 	_ticker.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -577,11 +590,18 @@ func _add_ticker() -> void:
 	_ticker_text.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var paper := Button.new()
 	paper.text = "Gazette"
-	paper.flat = true
 	paper.focus_mode = Control.FOCUS_NONE
 	paper.tooltip_text = "Read this week's Maritime Gazette."
 	paper.add_theme_font_size_override(&"font_size", 13)
-	paper.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	for state: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus"]:  # (The strip's navy behind it, so the headlines slide under it.)
+		var backing := StyleBoxFlat.new()
+		backing.bg_color = TICKER_COLOR.lightened(0.12) if state in [&"hover", &"hover_pressed"] else TICKER_COLOR
+		backing.content_margin_left = 10.0
+		backing.content_margin_right = 10.0
+		paper.add_theme_stylebox_override(state, backing)
+	paper.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+	paper.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	paper.grow_vertical = Control.GROW_DIRECTION_BOTH
 	paper.pressed.connect(func() -> void: GameRoot.find(self).open_gazette())
 	_ticker.add_child(_ticker_text)
 	_ticker.add_child(paper)
@@ -607,7 +627,7 @@ func _step_ticker(delta: float) -> void:
 		_ticker_x = 0.0
 	elif _ticker_x < -width:
 		_ticker_x = _ticker.size.x
-	_ticker_text.position.x = _ticker_x
+	_ticker_text.position = Vector2(_ticker_x, floorf((TICKER_HEIGHT - _ticker_text.size.y) / 2.0))
 
 ## Farms, Makers and Energy show only for the types that have them.
 func _update_page_buttons() -> void:

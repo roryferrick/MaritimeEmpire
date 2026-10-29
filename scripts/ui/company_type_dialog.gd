@@ -35,7 +35,7 @@ func _ready() -> void:
 	panel.theme_type_variation = &"CardPanel"
 	center.add_child(panel)
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override(&"separation", 12)
+	content.add_theme_constant_override(&"separation", 8)
 	panel.add_child(content)
 	var header := HBoxContainer.new()
 	var title := Label.new()
@@ -54,7 +54,8 @@ func _ready() -> void:
 		has.append(Progression.type_name(type_id))
 	_note.theme_type_variation = &"DimLabel"
 	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_note.custom_minimum_size.x = 900
+	_note.custom_minimum_size.x = CompanyTypeCards.ROW_WIDTH
+	_note.add_theme_font_size_override(&"font_size", 14)
 	_note.text = "Your company is in %s. Branch out into another type for %s: all its ships can be bought from then on. It's for good." % [" and ".join(has), Fmt.money(GameState.division_price())]
 	content.add_child(_note)
 	var cards := CompanyTypeCards.new(true, GameState.company.company_types.keys())

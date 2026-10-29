@@ -50,8 +50,12 @@ static func thousands(n: int) -> String:
 	return ("-" if n < 0 else "") + digits + out
 
 
-## 1830000 -> "1.83M", 555000 -> "555k", 7950 -> "7,950"
+## 2.4e12 -> "2.4T", 9.71e9 -> "9.71B", 1830000 -> "1.83M", 555000 -> "555k", 7950 -> "7,950"
 static func short(n: float) -> String:
+	if absf(n) >= 1e12:
+		return String.num(n / 1e12, 2 if absf(n) < 1e13 else 1).trim_suffix(".0") + "T"
+	if absf(n) >= 1e9:
+		return String.num(n / 1e9, 2 if absf(n) < 1e10 else 1).trim_suffix(".0") + "B"
 	if absf(n) >= 1e6:
 		return String.num(n / 1e6, 2 if absf(n) < 1e7 else 1).trim_suffix(".0") + "M"
 	if absf(n) >= 1e5:

@@ -54,6 +54,8 @@ const MIN_TEXT_LUMINANCE := 0.5
 ## padding inside.
 const SECTION_TINT := 0.08
 const SECTION_PADDING := 10
+## The tabs' text size (eight tabs with their stars fit across, beside the activity log).
+const TAB_FONT_SIZE := 14
 
 ## What each ice class lets an Expedition cruiser reach (ship_models.json cruise ice).
 const ICE_TEXT := {polar_light = "The Antarctic stations and icebound Arctic ports in their open season",
@@ -95,6 +97,7 @@ func _ready() -> void:
 	_add_yard_bar()
 	var tabs := TabContainer.new()
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UiFit.compact_tabs(tabs, TAB_FONT_SIZE)  # (Eight tabs with their stars fit across, beside the activity log.)
 	%Items.add_child(tabs)
 	_tabs = tabs
 	var tab_list := []  # [title, rows, company type id ("" for Service), and a coming-soon type's id]

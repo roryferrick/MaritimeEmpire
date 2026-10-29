@@ -93,15 +93,15 @@ func _selected_port() -> String:
 ## The start at the chosen port (Backstories: its story in the note, what it
 ## gives below), or the custom start: a money preset and the port's kind of start.
 func _add_start_box() -> void:
-	%StartNote.max_lines_visible = 9
-	%StartNote.custom_minimum_size.y = 120.0
+	%StartNote.max_lines_visible = 6
+	%StartNote.custom_minimum_size.y = 96.0
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 2)
-	_start_title.add_theme_font_size_override(&"font_size", 16)
+	_start_title.add_theme_font_size_override(&"font_size", 15)
 	box.add_child(_start_title)
 	_start_lines.theme_type_variation = &"DimLabel"
 	_start_lines.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_start_lines.add_theme_font_size_override(&"font_size", 13)
+	_start_lines.add_theme_font_size_override(&"font_size", 12)
 	box.add_child(_start_lines)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 10)
@@ -316,10 +316,11 @@ func _add_type_page() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_type_page.add_child(center)
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override(&"separation", 16)
+	content.add_theme_constant_override(&"separation", 10)
 	center.add_child(content)
 	var title := Label.new()
 	title.theme_type_variation = &"TitleLabel"
+	title.add_theme_font_size_override(&"font_size", 40)  # (A size down from the title size, so the cards fit under it.)
 	title.text = "Choose your company type"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(title)
@@ -327,6 +328,7 @@ func _add_type_page() -> void:
 	note.theme_type_variation = &"DimLabel"
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_font_size_override(&"font_size", 15)
 	note.custom_minimum_size.x = 900
 	note.text = "Your company starts in one trade, and every ship of that trade can be bought from the start. Branch out into another trade whenever you like by opening a division (%s)." % Fmt.money(GameState.division_price())
 	content.add_child(note)

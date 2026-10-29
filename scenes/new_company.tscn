@@ -58,31 +58,34 @@ text = "Found your company"
 [node name="NameLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
+theme_override_font_sizes/font_size = 16
 text = "Company name"
 
 [node name="NameEdit" type="LineEdit" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 placeholder_text = "e.g. Blue Horizon Shipping"
 
 [node name="PortLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
+theme_override_font_sizes/font_size = 14
 text = "Choose your headquarters: click a port on the map. Your company starts there and new ships are delivered there. Green is a good start (shining: excellent), yellow fair, red hard, blue the Great Lakes."
 autowrap_mode = 3
 
 [node name="PortName" type="Label" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 18
 text = "Rome, Italy"
 
 [node name="StartNote" type="Label" parent="Row/Side/Card/Content"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 78)
+custom_minimum_size = Vector2(0, 96)
 layout_mode = 2
 theme_type_variation = &"DimLabel"
+theme_override_font_sizes/font_size = 15
 text = "Great start"
 autowrap_mode = 3
 mouse_filter = 1
@@ -92,6 +95,7 @@ max_lines_visible = 5
 [node name="ColorLabel" type="Label" parent="Row/Side/Card/Content"]
 layout_mode = 2
 theme_type_variation = &"DimLabel"
+theme_override_font_sizes/font_size = 14
 text = "Company color (your name and the rings around your hubs)"
 
 [node name="ColorRow" type="GridContainer" parent="Row/Side/Card/Content"]
@@ -110,6 +114,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"DimLabel"
+theme_override_font_sizes/font_size = 16
 tooltip_text = "The most this company's game can be sped up."
 mouse_filter = 1
 text = "Fastest game speed"
@@ -123,6 +128,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"DimLabel"
+theme_override_font_sizes/font_size = 16
 tooltip_text = "Storms form in their real seasons and seas. From company level 6 they slow ships, wear them, and the strongest close ports while they pass."
 mouse_filter = 1
 text = "Storms"
@@ -164,14 +170,14 @@ theme_override_constants/separation = 8
 
 [node name="BackButton" type="Button" parent="Row/Side/Card/Content/Buttons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Back"
 
 [node name="StartButton" type="Button" parent="Row/Side/Card/Content/Buttons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Start"
