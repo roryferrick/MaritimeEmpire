@@ -148,6 +148,9 @@ var berth_half := -1
 var captains: Array = []
 ## When it last called at its company's home port (calendar time; 0 never): a captain long from home sours (People).
 var last_home_call := 0
+## Pirates (Events): the mile of its leg where it will be boarded (0 none), and when it is held till (calendar; 0 free).
+var pirate_at_nm := 0.0
+var captured_until := 0
 var berth_phase := BERTH_NONE
 var berth_time := 0.0
 var berth_since := 0.0
@@ -649,7 +652,7 @@ func full_repair_cost() -> float:
 func dock_seconds() -> float:
 	if _stats_dirty:
 		_refresh_stats()
-	return float(model().get("dock_s", 0)) * _hub_stop_factor() * _parts_dock  # (Worn deck gear slows the stop: see ShipParts.)
+	return float(model().get("dock_s", 0)) * _hub_stop_factor() * _parts_dock * (GameState.events.port_stop_factor(docked_at, GameState.owner_of(self)) if is_docked() else 1.0)  # (Worn deck gear slows the stop: see ShipParts; a dock strike: see Events.)
 
 
 ## How long the repair phase takes, and then the refuel phase, while docked.
@@ -1130,6 +1133,8 @@ func next_route_index() -> int:
 
 func status_text() -> String:
 	var canal := canal_status_text()
+	if captured_until > 0:
+		return "Held by pirates, release about %s" % Fmt.calendar_short(captured_until)
 	if in_drydock():
 		return "In drydock at %s, back in service %s" % [GameData.port_name(docked_at), Fmt.calendar_short(int(drydock.until))]
 	if not drydock_to.is_empty() and not is_docked():
@@ -1528,6 +1533,8 @@ func to_dict() -> Dictionary:
 		"drydock": drydock,
 		"drydock_to": drydock_to,
 		"last_home_call": last_home_call,
+		"pirate_at_nm": pirate_at_nm,
+		"captured_until": captured_until,
 		"berth_phase": berth_phase,
 		"berth_time": berth_time,
 		"berth_duration": berth_duration,
@@ -1648,6 +1655,8 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.drydock = data.get("drydock", {}) if data.get("drydock") is Dictionary else {}
 	ship.drydock_to = str(data.get("drydock_to", ""))
 	ship.last_home_call = int(data.get("last_home_call", 0))
+	ship.pirate_at_nm = float(data.get("pirate_at_nm", 0.0))
+	ship.captured_until = int(data.get("captured_until", 0))
 	if ship.captains.is_empty():  # Saves from before officers: the same ones every time it loads.
 		ship.captains = Characters.officers_for(ship.model(), ship.id * 7919 + 17)
 	ship.berth_time = float(data.get("berth_time", 0.0))

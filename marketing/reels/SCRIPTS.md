@@ -18,7 +18,7 @@ Rewritten 29 Oct 2026 for the living world (the first script showed levels, the 
 | Time | VO | TEXT | SHOT |
 |---|---|---|---|
 | 0–3 | This is the whole planet. Every port is real. | 300+ REAL PORTS | Globe spinning slowly, zoom starts |
-| 3–7 | Hundreds of shipping firms already work it. You arrive with one small ship. | A LIVING WORLD · ONE SHIP | The other firms' ships through the Singapore Strait → a Scooter leaving Shanghai |
+| 3–7 | Hundreds of shipping firms already work it. You arrive with one small ship. | A LIVING WORLD · ONE SHIP | The globe diving into Shanghai's harbour → a Scooter leaving Shanghai (the other firms' ships through the Singapore Strait once they draw in the director) |
 | 7–11 | Producers put work out to contract. Win it, and your ships carry the cargo. | CONTRACTS PAY THE BILLS | A contract offer card (Accept / Decline / Leave it) → a loaded Feedermax under way |
 | 11–15 | Order ships from real yards. Hire the people who run them. | ORDER SHIPS. HIRE PEOPLE. | The Shop's "Order a Trans Atlantic" popup with a yard's quote → the People page's executives |
 | 15–20 | Ships wear out, break down and get lost at sea, and you pay to fetch them. | THINGS GO WRONG | A lost Scooter → the Mammoth ballasting down and lifting it |

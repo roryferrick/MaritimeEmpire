@@ -547,6 +547,9 @@ func _step_zone(z: int) -> void:
 	var sp := float(p.get("supply_power", 0.25))
 	var floor_share := float(p.get("supply_floor", 0.6))
 	var row := z * g_count
+	var events: Events = _state.events  # (Disasters stop production, epidemics thin demand, famines double the hunger for grain: see Events.)
+	var make_f: float = events.make_factor(z)
+	var use_f: float = events.use_factor(z)
 	var strength := float(currency.get(zones[z].country, {}).get("strength", 1.0))
 	# Needs: the cheapest goods of each need first.
 	for list: Array in _need_goods:
@@ -571,7 +574,9 @@ func _step_zone(z: int) -> void:
 		if _good_need[g] < 0:
 			used[i] = 0.0
 		used[i] += user_base[i] * pow(r, -dp)
-		made[i] = capacity[i] * clampf(floor_share + (1.0 - floor_share) * pow(r, sp), floor_share, 1.1)
+		if use_f != 1.0 or not events.active.is_empty():
+			used[i] *= use_f * events.use_boost(z, goods[g])
+		made[i] = capacity[i] * clampf(floor_share + (1.0 - floor_share) * pow(r, sp), floor_share, 1.1) * make_f
 		stock[i] = maxf(stock[i] + made[i] - used[i], 0.0)
 	_update_zone_prices(z)
 

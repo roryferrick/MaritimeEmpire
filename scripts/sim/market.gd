@@ -135,6 +135,8 @@ func best_cargo(model: Dictionary, from_port: String, to_port: String, of: Compa
 	for commodity_id: String in model.get("cargo", []):
 		if GameData.hold_of(commodity_id) > float(model.get("capacity", 0)):
 			continue  # (Doesn't fit at all: a superyacht on a Boat Barge.)
+		if _state.events.trade_blocked(from_port, commodity_id, of if of != null else _state.company):
+			continue  # (An export ban, or sanctions the company honours: see Events.)
 		var sell: float
 		var buy: float
 		var bonus: float

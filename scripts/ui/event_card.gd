@@ -315,6 +315,22 @@ func show_agreement(firm_index: int, kind: String, group: String) -> void:
 				body = "%s, the %s chief of %s, has had enough of you: it will underbid you on every tender it can, come after your people, and talk you down in %s. You can underbid it back; it sues for peace when the feud costs it enough, or end it from the Ownership page." % [ceo, FirmLife.leaning_name(firm).to_lower(), str(firm.name), str(WorldEconomy.country(str(firm.country)).get("name", firm.country))]})
 
 
+## A world event that touches the company (Events.touched): its choices.
+func show_world_event(event: Dictionary) -> void:
+	var actions := []
+	var id := int(event.id)
+	for choice: Array in GameState.events.choices(GameState.company, event):
+		var choice_id := str(choice[0])
+		if choice_id == "intel":
+			actions.append([str(choice[1]), func() -> void: GameRoot.find(self).open_page("markets")])
+		else:
+			actions.append([str(choice[1]), func() -> void: GameState.answer_event(id, choice_id)])
+	var kickers := {capture = "PIRATES", war = "WAR", strike = "STRIKE", sanctions = "SANCTIONS", disaster = "DISASTER", epidemic = "EPIDEMIC", famine = "FAMINE", piracy = "PIRACY", canal_closure = "CANAL CLOSED", port_shutdown = "PORT CLOSED", tariff_rise = "TARIFFS", trade_deal = "TRADE DEAL", export_ban = "EXPORT BAN", election = "ELECTION", coup = "COUP"}
+	var grim := str(event.kind) in ["capture", "war", "strike", "sanctions", "disaster", "epidemic", "famine", "piracy", "canal_closure", "port_shutdown", "coup", "export_ban", "tariff_rise"]
+	_enqueue({kicker = str(kickers.get(str(event.kind), "WORLD")), title = str(event.title), color = Color(0.95, 0.6, 0.5) if grim else GOLD,
+		body = "%s%s" % [str(event.text), "" if int(event.get("until", 0)) <= 0 else " Till about %s." % Fmt.calendar_short(int(event.until))], actions = actions})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

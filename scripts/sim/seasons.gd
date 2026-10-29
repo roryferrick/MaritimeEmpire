@@ -33,21 +33,25 @@ func _settings() -> Dictionary:
 
 
 func closures() -> Array:
-	return _settings().get("closures", [])
+	var out: Array = _settings().get("closures", []).duplicate()
+	out.append_array(_state.events.closures())  # (Canals and ports shut by events: see Events.)
+	return out
 
 
 func ice_zones() -> Array:
 	return _settings().get("ice_zones", [])
 
 
-## True when closures apply: a save with them.
+## True when closures apply: a save with them, or an event shutting something.
 func active() -> bool:
-	return _state.seasons
+	return _state.seasons or not _state.events.active.is_empty()
 
 
 ## True if a closure or ice zone ({from, to}: [month, day]) is in season at a
 ## calendar (Unix) time.
 static func in_season(item: Dictionary, unix_time: int) -> bool:
+	if item.has("unix_from"):  # (An event's closure: a window of calendar time.)
+		return unix_time >= int(item.unix_from) and unix_time < int(item.unix_to)
 	var today := _month_day(unix_time)
 	if item.get("not_first_year", false) and _md_year == _first_year():
 		return false  # Spared in the game's first calendar year (the Great Lakes ice).
@@ -114,6 +118,9 @@ func leg_blocker(from_port: String, to_port: String, seconds: float) -> Dictiona
 	var per_second: float = _state.calendar_seconds_per_second()
 	if seconds == INF:
 		seconds = 0.0  # Can't make it anyway: the fuel and range checks say so.
+	var war: Dictionary = _state.events.war_blocks(_state.company, from_port, to_port)  # (A war between the two ports' countries: see Events.)
+	if not war.is_empty():
+		return war
 	var arrive := now + int(seconds * per_second)
 	var closure := port_closure(to_port, arrive)
 	# An icebreaker stationed in its ice area lifts it (the ships wait to be led in).

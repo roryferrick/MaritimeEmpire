@@ -23,7 +23,7 @@
 				"caption": "A LIVING WORLD · ONE SHIP",
 				"shots": [
 					{
-						"shot": "busy_sea",
+						"shot": "globe_dive2",
 						"len": 2.2
 					},
 					{
@@ -1432,27 +1432,6 @@
 					{
 						"shot": "preview2",
 						"len": 1
-					}
-				]
-			}
-		]
-	},
-	"Q": {
-		"file": "scratch",
-		"beats": [
-			{
-				"t": [
-					0,
-					2.2
-				],
-				"shots": [
-					{
-						"shot": "busy_sea",
-						"len": 2.2
-					},
-					{
-						"shot": "ghost_follow",
-						"len": 2.2
 					}
 				]
 			}

@@ -89,7 +89,7 @@ const SHIP_SIGNALS: Array[StringName] = [&"cargo_sold", &"cargo_loaded", &"ship_
 const COMMANDS: Array[StringName] = [&"buy_ship", &"buy_all_tugs", &"set_fishing_target", &"set_fishing_base", &"set_fish_landing", &"select_fish_area", &"assign_fish_boats", &"set_fish_area_model", &"set_uniform", &"sell_ship", &"assign_route", &"set_paused", &"set_auto_refuel", &"set_skin",
 	&"set_auto_repair", &"set_auto_recover", &"set_full_loads", &"set_bank_reserve",
 	&"build_hub", &"claim_hidden_gem", &"send_recovery", &"station_icebreaker",
-	&"rename_ship", &"set_prefs", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"build_facility", &"sign_contract", &"decline_offer", &"assign_contract_ship", &"unassign_contract_ship", &"bid_tender", &"answer_contract_event", &"hire_person", &"fire_person", &"promote_officer", &"headhunt", &"set_head_budget", &"choose_successor", &"propose_motion", &"ipo_choose_bank", &"ipo_set_terms", &"ipo_answer", &"set_heir", &"pay_bonus", &"order_drydock", &"cancel_drydock", &"place_order", &"cancel_order", &"buy_used", &"set_firm_plan", &"request_firm_order", &"answer_firm_order", &"license_tech", &"set_rnd", &"sell_research_data", &"set_keep_on_route", &"answer_divert", &"post_job", &"close_posting", &"hire_recruiter", &"drop_recruiter", &"give_raise", &"answer_notice", &"answer_poach", &"answer_merger", &"propose_agreement", &"end_agreement", &"answer_agreement", &"divine_act",
+	&"rename_ship", &"set_prefs", &"choose_company_type", &"set_logo", &"set_cruise_settings", &"refit_cruise", &"buy_terminal", &"take_loan", &"repay_loan", &"build_industry", &"demolish_industry", &"build_facility", &"sign_contract", &"decline_offer", &"assign_contract_ship", &"unassign_contract_ship", &"bid_tender", &"answer_contract_event", &"hire_person", &"fire_person", &"promote_officer", &"headhunt", &"set_head_budget", &"choose_successor", &"propose_motion", &"ipo_choose_bank", &"ipo_set_terms", &"ipo_answer", &"set_heir", &"pay_bonus", &"order_drydock", &"cancel_drydock", &"place_order", &"cancel_order", &"buy_used", &"set_firm_plan", &"request_firm_order", &"answer_firm_order", &"license_tech", &"set_rnd", &"sell_research_data", &"set_keep_on_route", &"answer_divert", &"post_job", &"close_posting", &"hire_recruiter", &"drop_recruiter", &"give_raise", &"answer_notice", &"answer_poach", &"answer_merger", &"propose_agreement", &"end_agreement", &"answer_agreement", &"answer_event", &"divine_act",
 	&"buy_plot", &"sell_plot", &"list_plot", &"buy_listed_plot", &"plant_plot", &"stock_plot", &"clear_plot", &"upgrade_plot", &"build_cold_store", &"sell_farm_item",
 	&"build_factory", &"close_factory", &"sell_factory_stock",
 	&"build_site", &"close_site", &"sell_site_stock", &"list_site", &"buy_listed_site", &"set_local_sale",
@@ -673,6 +673,7 @@ func _collect() -> Dictionary:
 		people = GameState.people.to_dict().duplicate(true),
 		shipyards = GameState.shipyards.to_dict().duplicate(true),
 		technology = GameState.technology.to_dict().duplicate(true),
+		events = GameState.events.to_dict().duplicate(true),
 		energy = GameState.energy.to_dict().duplicate(true),
 		research = GameState.research.to_dict().duplicate(true),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
@@ -694,6 +695,7 @@ func _state_of(world: Dictionary) -> Dictionary:
 		people = world.get("people", {}),
 		shipyards = world.get("shipyards", {}),
 		technology = world.get("technology", {}),
+		events = world.get("events", {}),
 		energy = world.get("energy", {}),
 		research = world.get("research", {}),
 		ports = world.get("port_sizes", {}),
@@ -750,6 +752,10 @@ func _broadcast() -> void:
 	if techs != _sent.get("technology", {}):
 		update.technology = techs
 		_sent.technology = techs.duplicate(true)
+	var happenings := GameState.events.to_dict()
+	if happenings != _sent.get("events", {}):
+		update.events = happenings
+		_sent.events = happenings.duplicate(true)
 	var energy := GameState.energy.to_dict()
 	if energy != _sent.get("energy", {}):
 		update.energy = energy
@@ -891,6 +897,8 @@ func _sync(packed: Array) -> void:
 		GameState.shipyards.from_dict(update.shipyards)
 	if update.has("technology"):
 		GameState.technology.from_dict(update.technology)
+	if update.has("events"):
+		GameState.events.from_dict(update.events)
 	if update.has("energy"):
 		GameState.energy.from_dict(update.energy)
 		GameState.energy_changed.emit()

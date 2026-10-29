@@ -211,11 +211,15 @@ func portrait() -> void:
 	vp.size_2d_override = Vector2i(PORTRAIT_UI_W, roundi(PORTRAIT_UI_W * float(OUT_H) / OUT_W))
 	vp.size_2d_override_stretch = true
 	_chrome(false)
+	if world.get("_ticker") != null:
+		(world.get("_ticker") as CanvasItem).modulate = Color(1, 1, 1, 0)  # (It re-shows itself as news comes in, after _quiet() has run.)
 
 
 ## The game as it's played (landscape, bars and all), cropped in rec().
 func landscape() -> void:
 	_landscape = true
+	if is_instance_valid(game) and world.get("_ticker") != null:
+		(world.get("_ticker") as CanvasItem).modulate = Color.WHITE
 	vp.size = Vector2i(UI_BASE) * LAND_SCALE
 	vp.size_2d_override = Vector2i(UI_BASE)
 	vp.size_2d_override_stretch = true
@@ -1638,6 +1642,8 @@ func shot_end_globe2(seconds: float) -> void:
 
 
 ## The other firms' ships through the Singapore Strait, a slow drift east.
+## NOT USED YET: the ghosts aren't drawn in the director's viewport (not even
+## followed, see shot_ghost_follow); _traffic_diag() is there to dig further.
 func shot_busy_sea(seconds: float) -> void:
 	await use_world()
 	portrait()
@@ -1649,10 +1655,6 @@ func shot_busy_sea(seconds: float) -> void:
 		var about: Dictionary = ghost.get_meta(&"traffic")
 		var at: Vector2 = GameData.port_position(ghost.docked_at) if ghost.is_docked() else (about.lane as GameData.SeaLane).point_at(ghost.traveled_nm)
 		print("    ", ghost.name, " ", ghost.model_id, " docked=", ghost.docked_at, " ", ghost.from_port, "->", ghost.to_port, " nm ", ghost.traveled_nm, "/", about.length, " screen ", map.world_to_screen(at), " leg_lane ", ghost.leg_lane() != null, " look ", map._model_look(ghost.model_id).size())
-	_traffic_diag()
-	await settle(240)
-	print("  ghosts after 240 more frames: ", GameState.traffic.ghosts.size())
-	_traffic_diag()
 	await rec("busy_sea", seconds, func(t: float) -> void:
 		look(lerpf(103.95, 104.05, t / seconds), lerpf(1.18, 1.2, t / seconds), lerpf(380.0, 420.0, t / seconds)))
 
@@ -1916,3 +1918,15 @@ func shot_ghost_follow(seconds: float) -> void:
 	follow(best, 900.0)
 	await settle(20)
 	await rec("ghost_follow", seconds, func(_t: float) -> void: follow(best, 900.0))
+
+
+## From the whole globe down into Shanghai's harbour.
+func shot_globe_dive2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	await settle(30)
+	var low := map._min_zoom()
+	var port := GameData.get_port("SHA")
+	await rec("globe_dive2", seconds, func(t: float) -> void:
+		var k := ease(t / seconds, -2.2)
+		look(lerpf(160.0, float(port.lon), minf(1.0, k * 1.4)), lerpf(15.0, float(port.lat), minf(1.0, k * 1.4)), exp(lerpf(log(low), log(1300.0), k))))

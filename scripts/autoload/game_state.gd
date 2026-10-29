@@ -313,6 +313,8 @@ var shipyards := Shipyards.new(self)
 var technology := Technology.new(self)
 ## The paper firms' lives: growth, bankruptcies, foundings, mergers, their CEOs (see FirmLife).
 var firm_life := FirmLife.new(self)
+## Politics and events: nations, the events in play, their cards (see Events).
+var events := Events.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -447,6 +449,7 @@ func _step(delta: float) -> void:
 	shipyards.step(delta)
 	technology.step(delta)
 	firm_life.step(delta)
+	events.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -808,7 +811,7 @@ func port_fee(port_id: String, margin: float, of: Company = null, type_id := "")
 	var who := of if of != null else company
 	if margin <= 0.0 or who.hub_at(port_id) != null:
 		return 0
-	return roundi(margin * float(GameData.config.get("port_fee", 0.1)) * ratings.factor(who, type_id, "fees") * Research.perk(who, "fees") * People.factor(who, "fees"))
+	return roundi(margin * float(GameData.config.get("port_fee", 0.1)) * ratings.factor(who, type_id, "fees") * Research.perk(who, "fees") * People.factor(who, "fees") * events.fee_factor(port_id))  # (Doubled in a country at war: see Events.)
 
 
 ## A model's crew: [captains, crew], by its tier (game_config crew).
@@ -1510,6 +1513,13 @@ func launch_ship(who: Company, model_id: String, ship_name: String, port_id: Str
 	return ship
 
 
+## The player's answer to an event card (Events.answer()).
+func answer_event(event_id: int, choice: String) -> void:
+	if Net.command(&"answer_event", [event_id, choice]):
+		return
+	events.answer(company, event_id, choice)
+
+
 ## Agreements with a firm (FirmLife): propose an alliance, a pool of a trade group or a rivalry; end one; answer a firm's proposal.
 func propose_agreement(firm_index: int, kind: String, group: String) -> void:
 	if Net.command(&"propose_agreement", [firm_index, kind, group]):
@@ -1863,7 +1873,7 @@ func company_buy_price(port_id: String, commodity_id: String, of: Company = null
 
 func company_sell_price(port_id: String, commodity_id: String, of: Company = null) -> float:
 	var hub := hub_at(port_id, of)
-	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(GameData.family_of(commodity_id), "sell") + hub.effect_of("price", GameData.family_of(commodity_id)) if hub else 0.0)) * divine.price_factor(port_id, true) \
+	return market.sell_price(port_id, commodity_id) * (1.0 + (hub.industry_bonus(GameData.family_of(commodity_id), "sell") + hub.effect_of("price", GameData.family_of(commodity_id)) if hub else 0.0)) * divine.price_factor(port_id, true) * events.tariff_factor(port_id) \
 		* ratings.factor(of if of != null else company, Progression.type_of_commodity(commodity_id), "price") * Research.perk(of if of != null else company, "price") * Traits.factor(of if of != null else company, "price")  # (The type's stars: see Ratings; the research perks: see Research.)
 
 
@@ -2348,6 +2358,18 @@ func _advance_timed(ship: Ship, delta: float) -> void:
 	if ship.in_drydock():
 		_advance_drydock(ship)
 		return
+	if ship.captured_until > 0:  # (Held by pirates: see Events.capture().)
+		if calendar_time() < ship.captured_until:
+			return
+		ship.captured_until = 0
+		ship.maintenance = maxf(ship.maintenance - 0.1, 0.05)
+		if owner_of(ship) == company:
+			ActivityLog.add("%s has been released by the pirates and sails on." % ship.name, ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+		ship_changed.emit(ship)
+	if ship.pirate_at_nm > 0.0 and not ship.is_docked() and ship.traveled_nm >= ship.pirate_at_nm:
+		ship.pirate_at_nm = 0.0
+		events.capture(ship)
+		return
 	# A ship waiting in port for a full load, not due another look: nothing to do.
 	if not ship.load_wait.is_empty() and play_time < ship.load_check_time and _load_wait_holds(ship) and ship.is_docked() \
 			and ship.berth_phase == Ship.BERTH_NONE:
@@ -2677,6 +2699,8 @@ func _season_warnings() -> void:
 	var canals: Dictionary = _player_use.canals
 	var items: Array = seasonal.closures() + seasonal.ice_zones()
 	for item: Dictionary in items:
+		if item.has("unix_from"):
+			continue  # (An event's closure: see Events.)
 		var relevant: bool = canals.has(item.get("canal", "")) or (item.has("circles") and canals.has(item.id)) or item.get("ports", []).any(func(p: String) -> bool: return ports.has(p))
 		if item.has("center"):
 			if not _player_use.zones.has(item.id):
@@ -2704,6 +2728,8 @@ func _season_warnings() -> void:
 		elif was != null:
 			ActivityLog.add("%s %s reopened." % [Seasons.subject(item), Seasons.verb(item, "has", "have")], ActivityLog.Kind.GOOD)
 	for item: Dictionary in seasonal.closures():
+		if item.has("unix_from"):
+			continue  # (An event's closure: its own card and headline. See Events.)
 		# Warned once per season: forgotten once it's open and not closing soon.
 		if not Seasons.in_season(item, now) and not Seasons.in_season(item, ahead):
 			_season_warned.erase(item.id)
@@ -3460,6 +3486,11 @@ func _set_off(ship: Ship, to: String, from_berth := false) -> void:
 		if from_berth and not ship.is_refuel_stop():  # (No trade at a refuel stop.)
 			_load_cargo(ship, bound)
 	ship.hop_to = bound if bound != to else ""  # (Bound beyond this leg: the port it's sailing to is a refuel stop.)
+	ship.pirate_at_nm = 0.0
+	if not ship.is_service():
+		var risk := events.piracy_risk(owner_of(ship), ship.docked_at, to)  # (A leg through pirate waters: see Events.)
+		if risk > 0.0 and randf() < risk:
+			ship.pirate_at_nm = GameData.distance_nm(ship.docked_at, to) * randf_range(0.3, 0.7)
 	_leave_port(ship)
 	ship.from_port = ship.docked_at
 	ship.to_port = to
@@ -4435,6 +4466,7 @@ func _tally_port_trade(who: Company, port: String, commodity: String, units: int
 		return
 	var here: Dictionary = who.port_trade.get_or_add(port, {since = play_time, goods = {}})
 	here.last = play_time  # (Trading at an R&D company's port pleases it: see Technology.)
+	events.note_trade(who, port)  # (Trading under sanctions costs standing with the sanctioner: see Events.)
 	var tally: Array = (here.goods as Dictionary).get_or_add(commodity, [0, 0.0, 0, 0.0])
 	var at := 2 if sold else 0
 	tally[at] = int(tally[at]) + units
@@ -4752,6 +4784,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	shipyards.reset()
 	technology.reset()
 	firm_life.reset()
+	events.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)
@@ -4836,6 +4869,7 @@ func load_world(data: Dictionary, local := -1) -> void:
 	people.from_dict(data.get("people", {}))
 	shipyards.from_dict(data.get("shipyards", {}))
 	technology.from_dict(data.get("technology", {}))
+	events.from_dict(data.get("events", {}))
 	ownership.apply_plans()  # (The ships the controlled firms' orders added: see Ownership.)
 	history.load(save_path(save_slot) + WorldHistory.HISTORY_SUFFIX, world)  # (Joining a game: none; the host's history isn't sent.)
 	var had_port_sizes := port_sizes.from_dict(data.get("port_sizes", {}))
@@ -4969,6 +5003,7 @@ func world_dict() -> Dictionary:
 		"people": people.to_dict(),
 		"shipyards": shipyards.to_dict(),
 		"technology": technology.to_dict(),
+		"events": events.to_dict(),
 		"port_sizes": port_sizes.to_dict(),
 		"ships": ships.map(func(ship: Ship) -> Dictionary:
 			var ship_data := ship.to_dict()

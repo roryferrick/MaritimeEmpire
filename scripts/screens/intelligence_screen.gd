@@ -21,8 +21,8 @@ const LIST_SIZE := 10
 const SHORT_TRADE_NM := 800.0
 const FONT_SIZE := 14
 const SMALL_FONT := 12
-const TABS := [["countries", "Countries"], ["companies", "Companies"], ["markets", "Markets"], ["charts", "Charts"], ["news", "News"]]
-const COUNTRY_COLUMNS := [["name", "Country"], ["population", "People"], ["gdp_usd", "GDP"], ["gdp_per_head", "GDP a head"], ["currency", "Currency"], ["balance", "Trade balance"], ["tariff", "Tariff"], ["firms", "Firms"], ["plants", "Plants"]]
+const TABS := [["countries", "Countries"], ["companies", "Companies"], ["markets", "Markets"], ["charts", "Charts"], ["news", "News"], ["events", "Events"]]
+const COUNTRY_COLUMNS := [["name", "Country"], ["population", "People"], ["gdp_usd", "GDP"], ["gdp_per_head", "GDP a head"], ["currency", "Currency"], ["balance", "Trade balance"], ["tariff", "Tariff"], ["government", "Government"], ["stability", "Stability"], ["stance", "Trade"], ["firms", "Firms"], ["plants", "Plants"]]
 const FIRM_COLUMNS := [["name", "Firm"], ["country", "Based in"], ["home", "Home port"], ["ships", "Ships"], ["at_sea", "At sea"], ["money", "Earned"], ["carried", "Carried"]]
 const PRODUCER_COLUMNS := [["name", "Company"], ["country", "From"], ["trade", "Trade"], ["plants", "Plants"], ["output", "Output a year"]]
 const RANGES := [["year", "A year (weekly)", 0], ["five", "5 years", 60], ["ten", "10 years", 120], ["life", "The whole game", -1]]
@@ -131,6 +131,8 @@ func _refresh() -> void:
 			_build_charts()
 		"news":
 			_build_news()
+		"events":
+			_build_events()
 	MapView._prof("proc.intelligence", t_x)
 
 
@@ -157,7 +159,7 @@ func _build_countries() -> void:
 		var imports := float(entry.get("imports", 0.0))
 		rows.append({id = id, name = str(country.name), population = float(country.get("population", 0)), gdp_usd = float(country.get("gdp_usd", 0)),
 			gdp_per_head = float(country.get("gdp_per_head", 0)), currency = float(entry.get("strength", 1.0)), balance = exports - imports,
-			tariff = float(country.get("tariff", 0.0)), firms = int(firms_by_country.get(id, 0)), plants = int(plants_by_country.get(id, 0))})
+			tariff = GameState.events.tariff_now(id), government = Events.government_name(GameState.events.nation(id)), stability = float(GameState.events.nation(id).stability), stance = Events.stance_name(GameState.events.nation(id)), firms = int(firms_by_country.get(id, 0)), plants = int(plants_by_country.get(id, 0))})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var x: Variant = a[_country_sort]
 		var y: Variant = b[_country_sort]
@@ -199,6 +201,9 @@ func _build_countries() -> void:
 		grid.add_child(_cell("x%s" % Fmt.decimal(row.currency, 2), _trend_variation(row.currency - 1.0)))
 		grid.add_child(_cell(("+" if row.balance >= 0.0 else "-") + "$" + Fmt.short(absf(row.balance)), _trend_variation(row.balance)))
 		grid.add_child(_cell("%s%%" % Fmt.decimal(row.tariff * 100.0, 1)))
+		grid.add_child(_cell(str(row.government)))
+		grid.add_child(_cell(str(roundi(row.stability)), _trend_variation(row.stability - 50.0)))
+		grid.add_child(_cell(str(row.stance)))
 		grid.add_child(_cell(str(row.firms)))
 		grid.add_child(_cell(str(row.plants)))
 	_body.add_child(grid)
@@ -221,6 +226,8 @@ func _country_card(id: String) -> Control:
 	lines.append("Currency x%s of its start · exports $%s, imports $%s over the last three months (%s)" % [Fmt.decimal(float(entry.get("strength", 1.0)), 3), Fmt.short(exports), Fmt.short(imports),
 		"a surplus" if exports >= imports else "a deficit"])
 	box.add_child(_text("\n".join(lines)))
+	var n: Dictionary = GameState.events.nation(id)
+	box.add_child(_dim("%s · stability %d · trade %s · a mood of %s · tariff now %s%%. %s" % [Events.government_name(n), roundi(float(n.stability)), Events.stance_name(n).to_lower(), str(n.mood), Fmt.decimal(GameState.events.tariff_now(id) * 100.0, 1), ", ".join(PackedStringArray(GameState.events.active.filter(func(e: Dictionary) -> bool: return str(e.get("country", "")) == id or id in e.get("countries", [])).map(func(e: Dictionary) -> String: return str(e.title))))]))
 	# Its people by stratum, over its places.
 	var strata := [0.0, 0.0, 0.0]
 	for place: Dictionary in world.places:
@@ -750,6 +757,40 @@ func _build_news() -> void:
 
 
 # --- Bits ------------------------------------------------------------------------------
+
+# --- Events ----------------------------------------------------------------------------------
+
+func _build_events() -> void:
+	var events: Events = GameState.events
+	_body.add_child(_dim("The world's events in play: tariffs and trade deals, sanctions and export bans, strikes and closures, wars and piracy, disasters and epidemics. Those that touch your ships, routes, hubs, contracts or stakes come as cards with choices; the rest are headlines. Each country's government, stability and trade stance are on the Countries tab."))
+	if events.active.is_empty():
+		_body.add_child(_text("Nothing out of the ordinary this month."))
+		return
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override(&"h_separation", 16)
+	grid.add_theme_constant_override(&"v_separation", 3)
+	for head: String in ["Event", "Where", "Till", "You"]:
+		grid.add_child(_cell(head, &"DimLabel"))
+	var mine := events.active.filter(func(e: Dictionary) -> bool: return events.touches(GameState.company, e))
+	for event: Dictionary in events.active:
+		var title := _cell(str(event.title))
+		title.tooltip_text = str(event.get("text", ""))
+		title.mouse_filter = Control.MOUSE_FILTER_PASS
+		grid.add_child(title)
+		var where := str(WorldEconomy.country(str(event.get("country", ""))).get("name", "")) if event.has("country") else ("the %s" % ("Suez Canal" if str(event.get("canal", "")) == "suez" else "Panama Canal") if event.has("canal") else (str(event.get("zone", "")).capitalize() if event.has("zone") else "the world"))
+		if event.has("port"):
+			where = GameData.port_name(str(event.port))
+		if event.has("countries"):
+			where = " and ".join(PackedStringArray((event.countries as Array).map(func(c: String) -> String: return str(WorldEconomy.country(c).get("name", c)))))
+		grid.add_child(_cell(where))
+		grid.add_child(_cell(Fmt.calendar_short(int(event.until))))
+		var choice := str(GameState.company.event_choices.get(str(event.id), ""))
+		grid.add_child(_cell(("touched" + (": %s" % choice if not choice.is_empty() else "")) if event in mine else "", &"GainLabel" if event in mine else &""))
+	_body.add_child(grid)
+	if GameState.company.guards:
+		_body.add_child(_dim("Armed guards ride every ship (%s a ship a month)." % Fmt.money(Events.GUARDS_A_MONTH)))
+
 
 func _card(title_text: String, on_close: Callable) -> VBoxContainer:
 	var card := PanelContainer.new()
