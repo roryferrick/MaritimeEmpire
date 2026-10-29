@@ -14,7 +14,7 @@ Professionally I am drawn to global supply chains and to agriculture. The world 
 
 ## Away from the keyboard
 
-Sport comes first. I played football for ten seasons, from Pop Warner through high school varsity, and baseball from Little League to varsity, with a season of golf and a season of lacrosse along the way. I follow football and baseball closely and I love car racing, which has given me an unreasonable appreciation for pit-stop timing that you may notice in how tugs and port stops work in the game.
+Sport comes first. I played football for ten seasons, from Pop Warner through high school varsity, and baseball from Little League to varsity, with a season of golf and a season of lacrosse along the way. I follow football and baseball closely and I love car racing.
 
 I spent a semester at St Andrews College in Dublin in 2020, and in 2024 I completed a 28-day wilderness leadership expedition with the National Outdoor Leadership School: navigation, mountaineering, first aid and a lot of time learning how a small group gets through hard country together. Summers I have worked at the Stanford golf course, in parking operations for Tesla's Palo Alto workforce, and as a teacher's aid in a fifth-grade classroom.
 
