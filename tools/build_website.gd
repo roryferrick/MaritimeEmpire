@@ -642,7 +642,11 @@ func _write_creator() -> void:
 		lines.remove_at(0)
 	var html := _head("%s - %s" % [title, SITE_NAME], "", "Who makes Maritime Empire: Rory Ferrick, a computer science student who builds the game on his own.")
 	html += "<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n" + _header("", "creator")
-	html += "<main class=\"prose\" id=\"main\">\n<h1>%s</h1>\n%s</main>\n" % [_escape(title), _render(lines)]
+	html += "<main class=\"prose creator\" id=\"main\">
+<h1>%s</h1>
+<figure class=\"creator-photo\"><img src=\"assets/rory.webp\" alt=\"Rory Ferrick\" width=\"720\" height=\"1073\"><figcaption>Rory Ferrick</figcaption></figure>
+%s</main>
+" % [_escape(title), _render(lines)]
 	html += _footer("") + "</body>\n</html>\n"
 	_write(SITE_DIR + "/creator.html", html)
 
