@@ -186,14 +186,17 @@ func _quiet() -> void:
 	GameState.time_speed = _speed
 	if not is_instance_valid(game):
 		return
-	game.event_card.visible = false
+	if not _cards_on:
+		game.event_card.visible = false
 	for node in game.find_children("*", "", true, false):
 		var script: Script = node.get_script()
 		if script == null:
 			continue
 		var path := script.resource_path
-		if path.ends_with("tutorial_card.gd") or path.ends_with("sound_tracker.gd") or path.ends_with("event_card.gd"):
+		if path.ends_with("tutorial_card.gd") or path.ends_with("sound_tracker.gd") or path.ends_with("event_card.gd") and not _cards_on:
 			(node as CanvasItem).visible = false
+	if not _landscape and world.get("_ticker") != null:
+		(world.get("_ticker") as CanvasItem).visible = false  # (The news ticker re-shows itself as news comes in.)
 
 
 # --- Framing -----------------------------------------------------------------
@@ -1517,3 +1520,312 @@ func shot_fast_forward(seconds: float) -> void:
 	await rec("fast_forward", seconds, func(t: float) -> void:
 		look_port("SHA", lerpf(260.0, 300.0, t / seconds)))
 	_speed = 1
+
+
+# --- The living-world intro (2026-10-29) ---------------------------------------
+# The saves from before the living world can't be loaded any more, so the intro
+# is staged in one freshly founded company at Shanghai (use_world()).
+
+## Whether the event card (a contract offer, say) may show on camera.
+var _cards_on := false
+
+## One freshly founded company at Shanghai, the world's traffic on heavy and
+## money to stage with, for every intro shot (founded once; the shots add to it).
+func use_world() -> void:
+	if _save_loaded == "world" and is_instance_valid(game):
+		return
+	await _unload()
+	GameState.multiplayer_save = false
+	GameState.save_slot = SLOT
+	GameState.new_game("Harbour Line", "SHA", "orange", {"storms": "moderate", "seed": 20261029})
+	await _start_game()
+	Settings.traffic = "heavy"
+	GameState.money += 30000000
+	_save_loaded = "world"
+	warm_traffic()
+
+
+## Indexes every firm's voyage at once (the game does 60 a frame, so the other
+## firms' ships take a few hundred frames to show otherwise); then a few
+## frames of settle() put the ghosts in view.
+func warm_traffic() -> void:
+	var traffic: AmbientTraffic = GameState.traffic
+	var firms: ShippingFirms = GameState.firms
+	var records := firms.voyages.size() + firms.returning().size()
+	for n in ceili(records / 60.0) + 2:
+		traffic._index_slice(firms)
+	print("  traffic indexed: ", records, " records")
+
+
+func _snap(file: String) -> void:
+	await RenderingServer.frame_post_draw
+	var dir := ProjectSettings.globalize_path(OUT_ROOT + "preview/")
+	DirAccess.make_dir_recursive_absolute(dir)
+	vp.get_texture().get_image().save_jpg(dir + file, 0.9)
+	print("  preview ", file)
+
+
+## Not a reel shot: screenshots of the new pages, the contract card, the order
+## popup and the traffic round Singapore, to pick crops from.
+func shot_preview2(_seconds: float) -> void:
+	await use_world()
+	landscape()
+	for screen in [GameRoot.Screen.PEOPLE, GameRoot.Screen.CONTRACTS, GameRoot.Screen.OWNERSHIP, GameRoot.Screen.SHOP, GameRoot.Screen.RESEARCH, GameRoot.Screen.FINANCES]:
+		game.show_screen(screen)
+		await settle(20)
+		await _snap("page_%d.jpg" % screen)
+	game.show_screen(GameRoot.Screen.SHOP)
+	await settle(10)
+	game.get_node("%ShopScreen")._on_buy_pressed("model_4")
+	await settle(15)
+	print("  order popup rect: ", popup().get_global_rect() if popup() != null else "none")
+	await _snap("shop_order.jpg")
+	if popup() != null:
+		PopupHost.find(game).close()
+	game.show_screen(GameRoot.Screen.WORLD)
+	look_port("SHA", 40.0)
+	await settle(10)
+	GameState.contracts._refresh_offers()
+	print("  offers: ", GameState.contracts.offers.size())
+	if not GameState.contracts.offers.is_empty():
+		_cards_on = true
+		game.event_card.show_offer(GameState.contracts.offers[0])
+		await settle(10)
+		print("  card rect: ", game.event_card.get_global_rect())
+		await _snap("contract_card.jpg")
+		game.event_card._queue.clear()
+		game.event_card.visible = false
+		_cards_on = false
+	portrait()
+	look_port("SIN", 60.0)
+	await settle(90)
+	await _snap("sin_60.jpg")
+	look_port("SIN", 120.0)
+	await settle(60)
+	await _snap("sin_120.jpg")
+	look(104.0, 1.0, 30.0)
+	await settle(60)
+	await _snap("malacca_30.jpg")
+	look_port("SHA", 60.0)
+	await settle(60)
+	await _snap("sha_60.jpg")
+
+
+# --- Intro A shots, staged in use_world() --------------------------------------
+
+## The People page's executives (the UI's 1280x720), picked from shot_preview2's screenshot.
+const PEOPLE_CROP := Rect2(330, 228, 880, 300)
+
+
+func shot_globe_spin2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	warm_traffic()
+	await settle(40)
+	var low := map._min_zoom()
+	await rec("globe_spin2", seconds, func(t: float) -> void:
+		var k := ease(t / seconds, -1.6)
+		look(lerpf(175.0, 128.0, k), lerpf(8.0, 28.0, k), lerpf(low, low * 3.2, k)))
+
+
+func shot_end_globe2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	await settle(30)
+	var low := map._min_zoom()
+	await rec("end_globe2", seconds, func(t: float) -> void:
+		look(lerpf(-20.0, -34.0, t / seconds), 18.0, low * 1.05))
+
+
+## The other firms' ships through the Singapore Strait, a slow drift east.
+func shot_busy_sea(seconds: float) -> void:
+	await use_world()
+	portrait()
+	warm_traffic()
+	look(103.95, 1.18, 380.0)
+	await settle(60)  # (The traffic scan fills the view.)
+	print("  ghosts in view: ", GameState.traffic.ghosts.size(), " ship scale ", map._ship_scale(), " size ", map.size)
+	for ghost in GameState.traffic.ghosts.slice(0, 6):
+		var about: Dictionary = ghost.get_meta(&"traffic")
+		var at: Vector2 = GameData.port_position(ghost.docked_at) if ghost.is_docked() else (about.lane as GameData.SeaLane).point_at(ghost.traveled_nm)
+		print("    ", ghost.name, " ", ghost.model_id, " docked=", ghost.docked_at, " ", ghost.from_port, "->", ghost.to_port, " nm ", ghost.traveled_nm, "/", about.length, " screen ", map.world_to_screen(at), " leg_lane ", ghost.leg_lane() != null, " look ", map._model_look(ghost.model_id).size())
+	await rec("busy_sea", seconds, func(t: float) -> void:
+		look(lerpf(103.95, 104.05, t / seconds), lerpf(1.18, 1.2, t / seconds), lerpf(380.0, 420.0, t / seconds)))
+
+
+## The company's first ship, a Scooter, pulling out of Shanghai.
+func shot_scooter_leaves2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	var ship := GameState.buy_ship("model_1", "Little Mo", "SHA")
+	if ship == null:
+		push_error("no scooter: " + GameState.buy_error("model_1"))
+		return
+	var route: Array[String] = ["SHA", "NGB"]
+	GameState.assign_route(ship, route)
+	var ok := await warp(900.0, func() -> bool: return ship.berth_phase == Ship.BERTH_OUT, 4)
+	print("  scooter out: ", ok, " phase ", ship.berth_phase, " docked ", ship.docked_at)
+	follow(ship, 3600.0)
+	await settle(10)
+	await rec("scooter_leaves2", seconds)
+
+
+## A producer's contract offer, as the card that pauses the game.
+func shot_contract_card(seconds: float) -> void:
+	await use_world()
+	landscape()
+	game.show_screen(GameRoot.Screen.WORLD)
+	look_port("SHA", 40.0)
+	await settle(10)
+	var contracts: Contracts = GameState.contracts
+	if contracts.offers.is_empty():
+		contracts._refresh_offers()
+	var best: Dictionary = {}
+	for offer: Dictionary in contracts.offers:
+		if str(offer.kind) != "tender" and (best.is_empty() or int(offer.value) > int(best.value)):
+			best = offer
+	if best.is_empty():
+		push_error("no contract offer")
+		return
+	_cards_on = true
+	game.event_card.show_offer(best)
+	await settle(12)
+	var rect := game.event_card.get_global_rect()
+	await rec("contract_card", seconds, Callable(), push(grow(rect, 140.0), grow(rect, 16.0), seconds))
+	game.event_card._queue.clear()
+	game.event_card.visible = false
+	_cards_on = false
+
+
+## A loaded Feedermax under way for Singapore.
+func shot_ship_at_sea2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	var route: Array[String] = ["SHA", "SIN"]
+	var ship := stage_ship("model_3", "SHA", route)
+	var ok := await warp(1500.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 30.0, 8)
+	print("  at sea: ", ok, " cargo ", ship.cargo_qty)
+	follow(ship, 1400.0)
+	await settle(15)
+	await rec("ship_at_sea2", seconds)
+
+
+## Ordering a Trans Atlantic: the yards' quotes.
+func shot_shop_order(seconds: float) -> void:
+	await use_world()
+	landscape()
+	game.show_screen(GameRoot.Screen.SHOP)
+	await settle(15)
+	game.get_node("%ShopScreen")._on_buy_pressed("model_4")
+	await settle(15)
+	var box := popup()
+	await rec("shop_order", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_people_page(seconds: float) -> void:
+	await use_world()
+	landscape()
+	game.show_screen(GameRoot.Screen.PEOPLE)
+	await settle(20)
+	await rec("people_page", seconds, Callable(), push(grow(PEOPLE_CROP, 40.0), PEOPLE_CROP, seconds))
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+## A Mammoth based at Shanghai and a Scooter lost between Shanghai and Ningbo, the Mammoth sent.
+func _stage_loss2() -> void:
+	await use_world()
+	if _lost != null and is_instance_valid(_lost) and _lost.is_lost() and _lost.rescuer != null:
+		return
+	if not GameState.fleet().any(func(s: Ship) -> bool: return s.is_recovery()):
+		stage_ship("model_6", "SHA")
+	var route: Array[String] = ["SHA", "NGB"]
+	var ship := stage_ship("model_1", "SHA", route)
+	ship.auto_recover = false
+	var ok := await warp(1200.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 20.0, 8)
+	print("  loss staged at sea: ", ok, " ", ship.from_port, "->", ship.to_port, " ", ship.traveled_nm)
+	ship.maintenance = 0.0
+	GameState._lose(ship, "maintenance")
+	var why := GameState.send_recovery(ship)
+	print("  recovery: [", why, "] rescuer ", ship.rescuer)
+	_lost = ship
+
+
+func shot_lost_ship2(seconds: float) -> void:
+	await _stage_loss2()
+	portrait()
+	follow(_lost, 2600.0)
+	await settle(15)
+	await rec("lost_ship2", seconds)
+
+
+func shot_recovery_lift2(seconds: float) -> void:
+	await _stage_loss2()
+	portrait()
+	var boat := _lost.rescuer
+	if boat == null:
+		push_error("no rescuer")
+		return
+	var ok := await warp(4000.0, func() -> bool: return boat.job_phase == Ship.JOB_ALIGN or boat.job_phase == Ship.JOB_TOW, 8)
+	print("  lift: ", ok, " phase ", boat.job_phase)
+	follow(_lost, 3600.0)
+	await settle(5)
+	await rec("recovery_lift2", seconds)
+
+
+## A tempest east of Taiwan (a Divine Action's, so there's one to film in January).
+func shot_storm2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	GameState.divine.on = true
+	var storm := GameState.weather.spawn_divine("tempest", Vector2(129.0, 22.0), GameState.company.name)
+	await warp(30.0, Callable(), 8)
+	if storm.is_empty() or not GameState.weather.storms.has(storm):
+		storm = GameState.weather.storms[0] if not GameState.weather.storms.is_empty() else {}
+	if storm.is_empty():
+		push_error("no storm")
+		return
+	storm.erase("sender")  # (On camera a typhoon with a season's name, not a Divine Action's.)
+	storm.name = "Nepartak"
+	look(float(storm.lon), float(storm.lat), 64.0)
+	await settle(10)
+	await rec("storm2", seconds, func(t: float) -> void:
+		look(float(storm.lon), float(storm.lat), lerpf(64.0, 74.0, t / seconds)))
+
+
+## Feeders working up through the Gatún locks.
+func shot_panama_locks2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	if not GameState.company.hubs.any(func(h: Hub) -> bool: return h.port_id == "CLN"):
+		GameState.company.hubs.append(Hub.new("CLN", false))
+	var ships: Array[Ship] = []
+	for i in 5:
+		var route: Array[String] = ["CLN", "BLB"]
+		ships.append(stage_ship("model_2", "CLN", route))
+		await warp(25.0, Callable(), 4)
+	var ok := await warp(400.0, func() -> bool:
+		var in_locks := 0
+		for ship in ships:
+			if GameState.canal_traffic.in_canal(ship):
+				in_locks += 1
+		return in_locks >= 3, 4)
+	print("  locks: ", ok)
+	await rec("panama_locks2", seconds, func(t: float) -> void:
+		look(-79.80, 9.152, lerpf(1300.0, 1450.0, t / seconds)))
+
+
+## A fleet of thirty on routes round the world, then the map pulled back from Shanghai.
+func shot_fleet_zoomout(seconds: float) -> void:
+	await use_world()
+	portrait()
+	var routes := [
+		["SHA", "SIN"], ["NGB", "SZX"], ["SHA", "VVO"], ["SZX", "SIN"], ["SIN", "MUN"], ["MUN", "DXB"], ["DXB", "PIR"],
+		["PIR", "VLC"], ["VLC", "TNG"], ["TNG", "RTM"], ["RTM", "HAM"], ["ANR", "NYC"], ["NYC", "HOU"], ["HOU", "SSZ"],
+		["SSZ", "DUR"], ["DUR", "MUN"], ["SIN", "MEL"], ["MEL", "SYD"], ["SYD", "SHA"], ["SHA", "NYC"],
+		["SIN", "DXB"], ["SHA", "DXB"], ["RTM", "NYC"], ["TNG", "SSZ"], ["SZX", "SYD"], ["NGB", "SIN"], ["HAM", "PIR"],
+		["DXB", "TNG"], ["SIN", "VVO"], ["NYC", "SSZ"]]
+	var staged := 0
+	fo

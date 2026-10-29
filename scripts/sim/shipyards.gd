@@ -222,6 +222,35 @@ func _deliver(company: Company, order: Dictionary) -> void:
 
 # --- The second-hand market -------------------------------------------------------------------
 
+## A firm's ships put up for sale (a bankruptcy: FirmLife), up to `count`, at `factor` of the usual price. Returns how many.
+func list_fleet(firm_index: int, count: int, factor: float, rng: RandomNumberGenerator) -> int:
+	var firms: ShippingFirms = _state.firms
+	var firm: Dictionary = firms.firms[firm_index]
+	var listed := 0
+	for model_id: String in firm.fleet:
+		if listed >= count:
+			break
+		var model := GameData.get_ship_model(model_id)
+		if not is_ordered(model):
+			continue
+		var age := rng.randf_range(float(USED_AGE[0]), float(USED_AGE[1]))
+		var parts := {}
+		var total := 0.0
+		var sum := 0.0
+		for each: Dictionary in ShipParts.for_model(model):
+			var c := clampf(rng.randf_range(float(USED_CONDITION[0]), float(USED_CONDITION[1])) - age * 0.01, 0.1, 1.0)
+			parts[each.id] = c
+			total += float(each.weight)
+			sum += float(each.weight) * c
+		var mean := sum / total if total > 0.0 else 0.7
+		var span: Array = data().get("used_price", [0.4, 0.8])
+		var price := roundi(float(model.get("price", 0)) * lerpf(float(span[0]), float(span[1]), mean) * (1.0 - age / 40.0) * factor)
+		listings.append({id = _next_id, model = model_id, firm = firm_index, port = str(firm.home), name = _state.suggest_ship_name(), age = snappedf(age, 0.1), sea_time = age * 1800.0, parts = parts, maintenance = snappedf(mean, 0.001), price = price, sale = true})
+		_next_id += 1
+		listed += 1
+	changed.emit()
+	return listed
+
 ## A third of the listings replaced each month (all of them at first).
 func _refresh_listings(fill_all: bool) -> void:
 	var rng := RandomNumberGenerator.new()
@@ -237,6 +266,8 @@ func _refresh_listings(fill_all: bool) -> void:
 	while listings.size() < want and tries < 200:
 		tries += 1
 		var firm: Dictionary = firms.firms[rng.randi() % firms.firms.size()]
+		if bool(firm.get("dead", false)):
+			continue
 		var models: Array = (firm.fleet as Dictionary).keys().filter(func(id: String) -> bool: return is_ordered(GameData.get_ship_model(id)))
 		if models.is_empty():
 			continue

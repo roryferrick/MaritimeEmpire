@@ -70,6 +70,9 @@ var firms: Array = []
 var capacity := {}
 ## The capacity as generated, before any ships the controlled firms' orders added (saved: see generate()).
 var _base_capacity := {}
+## What the firms' lives did to the books since the seed (FirmLife), replayed after a load in order:
+## [kind "fleet" {firm, model, n}, "dead" {firm, by}, "found" {name, country, home, size, ceo}, "ceo" {firm, ceo}].
+var journal: Array = []
 var voyages: Array = []
 ## The dispatch's progress through the day: the good it's up to (-1: done) and the day.
 var _good_cursor := -1
@@ -90,6 +93,7 @@ func generate(world: WorldEconomy, new_seed: int, saved_capacity := {}) -> void:
 	seed = new_seed
 	firms.clear()
 	voyages.clear()
+	journal = []
 	var rng := RandomNumberGenerator.new()
 	rng.seed = new_seed + 1
 	_build_models()
@@ -600,11 +604,15 @@ func _firm_for(world: WorldEconomy, from: int, _line: String) -> int:
 	if sums.is_empty():
 		var total := 0.0
 		for firm: Dictionary in firms:
-			total += float(firm.size) * (3.0 if firm.country == country else 1.0)
+			total += (0.0 if bool(firm.get("dead", false)) else float(firm.size)) * (3.0 if firm.country == country else 1.0)
 			sums.append(total)
 		_firm_sums[country] = sums
 	var pick := randf() * sums[-1]
 	var index := mini(sums.bsearch(pick), firms.size() - 1)
+	for attempt in 4:  # (A dead firm sails nothing: see FirmLife.)
+		if not bool(firms[index].get("dead", false)):
+			break
+		index = mini(sums.bsearch(randf() * sums[-1]), firms.size() - 1)
 	for attempt in 3:  # (A firm a player runs keeps to its plan: its focus and its trade groups. See Ownership.plan_of().)
 		var plan: Dictionary = _state.ownership.plan_of(index)
 		if plan.is_empty():
@@ -617,6 +625,93 @@ func _firm_for(world: WorldEconomy, from: int, _line: String) -> int:
 	return index
 var _firm_sums := {}
 
+
+# --- The firms' lives (FirmLife): journaled so a load replays them -----------------------------------
+
+func journal_fleet(firm_index: int, model_id: String, count: int) -> void:
+	journal.append({kind = "fleet", firm = firm_index, model = model_id, n = count})
+	add_fleet(firm_index, model_id, count)
+
+
+## A firm dead: bankrupt (by -1) or absorbed by another; its voyages pass to the buyer or are left to arrive.
+func journal_dead(firm_index: int, by: int) -> void:
+	journal.append({kind = "dead", firm = firm_index, by = by})
+	_apply_dead(firm_index, by)
+
+
+func _apply_dead(firm_index: int, by: int) -> void:
+	var firm: Dictionary = firms[firm_index]
+	firm.dead = true
+	firm.order = {}
+	for model_id: String in firm.fleet.keys():
+		var n := int(firm.fleet[model_id])
+		if n > 0:
+			add_fleet(firm_index, model_id, -n)
+	firm.fleet = {}
+	if by >= 0:
+		for v: Dictionary in voyages:
+			if int(v.firm) == firm_index:
+				v.firm = by
+		for home: Dictionary in _returning:
+			if int(home.firm) == firm_index:
+				home.firm = by
+	_firm_sums = {}
+
+
+## A new firm founded (FirmLife): small, with a starter fleet of its country's kind of ships. Returns its index.
+func journal_found(country: String, rng: RandomNumberGenerator) -> int:
+	var ports := []
+	for port: Dictionary in GameData.ports:
+		if country.is_empty() or (_state.world as WorldEconomy).country_of_port(str(port.id)) == country:
+			ports.append(str(port.id))
+	if ports.is_empty():
+		return -1
+	var home: String = ports[rng.randi() % ports.size()]
+	if country.is_empty():
+		country = (_state.world as WorldEconomy).country_of_port(home)
+	var taken := {}
+	for firm: Dictionary in firms:
+		taken[str(firm.name)] = true
+	var entry := {kind = "found", name = CompanyNames.shipping(country, GameData.port_name(home), rng, taken), country = country, home = home, size = TAIL_SHARE / 20.0, ceo = _ceo(rng), fleet = {}}
+	var lines: Array = _models.keys()
+	var line: String = lines[rng.randi() % lines.size()]
+	var models: Array = _models[line]
+	var model: Dictionary = models[mini(models.size() - 1, 1 + rng.randi() % 2)]  # (A mid-sized ship or two.)
+	entry.fleet[model.id] = 1 + rng.randi() % 2
+	journal.append(entry)
+	return _apply_found(entry)
+
+
+func _apply_found(entry: Dictionary) -> int:
+	var firm := {id = firms.size(), name = str(entry.name), country = str(entry.country), home = str(entry.home), size = float(entry.size), fleet = {}, money = 0.0, carried = 0.0, ceo = entry.ceo, founded = true}
+	firms.append(firm)
+	for model_id: String in entry.fleet:
+		add_fleet(firms.size() - 1, model_id, int(entry.fleet[model_id]))
+	_firm_sums = {}
+	return firms.size() - 1
+
+
+func journal_ceo(firm_index: int, ceo: Dictionary) -> void:
+	journal.append({kind = "ceo", firm = firm_index, ceo = ceo})
+	_apply_ceo(firm_index, ceo)
+
+
+func _apply_ceo(firm_index: int, ceo: Dictionary) -> void:
+	firms[firm_index].ceo = ceo
+	firms[firm_index].erase("leaning")
+
+
+func _replay() -> void:
+	for entry: Dictionary in journal:
+		match str(entry.kind):
+			"fleet":
+				add_fleet(int(entry.firm), str(entry.model), int(entry.n))
+			"dead":
+				_apply_dead(int(entry.firm), int(entry.by))
+			"found":
+				_apply_found(entry)
+			"ceo":
+				_apply_ceo(int(entry.firm), entry.ceo)
 
 ## Ships added to a firm's books (an order delivered: see Ownership), and to the line's capacity.
 func add_fleet(firm_index: int, model_id: String, count: int) -> void:
@@ -653,7 +748,7 @@ func to_dict() -> Dictionary:
 		for good: String in v.goods:
 			goods[good] = roundi(float(v.goods[good]))
 		rows.append([v.firm, v.model, v.ships, goods, v.from, v.to, roundi(float(v.start)), roundi(float(v.arrive)), roundi(float(v.free)), roundi(float(v.cost))])
-	return {seed = seed, dispatch_day = _dispatch_day, voyages = rows, capacity = _base_capacity,
+	return {seed = seed, dispatch_day = _dispatch_day, voyages = rows, capacity = _base_capacity, journal = journal,
 		returning = _returning.map(func(home: Dictionary) -> Array: return [roundi(float(home.free)), home.line, roundi(float(home.hold)), home.from, home.to, home.model, home.ships, home.firm, roundi(float(home.arrive))]),
 		money = firms.map(func(firm: Dictionary) -> Array: return [snappedf(float(firm.money), 1.0), snappedf(float(firm.carried), 1.0)])}
 
@@ -662,6 +757,8 @@ func from_dict(data: Dictionary, world: WorldEconomy) -> void:
 	if data.is_empty():
 		return
 	generate(world, int(data.get("seed", 0)), data.get("capacity", {}) if data.get("capacity") is Dictionary else {})
+	journal = data.get("journal", []) if data.get("journal") is Array else []
+	_replay()  # (The firms' lives since the seed: see FirmLife.)
 	voyages = []
 	for row: Array in data.get("voyages", []):
 		var v := {}

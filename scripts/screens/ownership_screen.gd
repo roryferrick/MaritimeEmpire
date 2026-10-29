@@ -280,7 +280,7 @@ func _add_firms(company: Company, own: Ownership) -> void:
 	var box := _card("The shipping firms")
 	box.add_child(_dim("A firm is worth its fleet at list price plus four years of its earnings so far. A block is %d%% of it, dearer with each block you hold (and dearer still from a firm you poached people from); past %d%% you control it (its ships sail in your colour and you take its earnings each month), and you run it from its card above." % [roundi(Ownership.BLOCK * 100.0), roundi(Ownership.CONTROL * 100.0)]))
 	var firms: ShippingFirms = GameState.firms
-	var order := range(firms.firms.size())
+	var order := range(firms.firms.size()).filter(func(k: int) -> bool: return not FirmLife.is_dead(firms.firms[k]))
 	order.sort_custom(func(a: int, b: int) -> bool:
 		if own.stake_in(company, a) != own.stake_in(company, b):
 			return own.stake_in(company, a) > own.stake_in(company, b)
@@ -294,8 +294,11 @@ func _add_firms(company: Company, own: Ownership) -> void:
 	for i: int in order.slice(0, _firms_shown):
 		var firm: Dictionary = firms.firms[i]
 		var sore := People.soreness(company, i)
-		grid.add_child(_cell(str(firm.name) + (" (sore: you poached from them)" if sore > 0.0 else ""), &"ErrorLabel" if sore > 0.0 else &""))
-		grid.add_child(_cell(str(WorldEconomy.country(str(firm.country)).get("name", firm.country))))
+		var name_cell := _cell(str(firm.name) + (" (sore)" if sore > 0.0 else ""), &"ErrorLabel" if sore > 0.0 else &"")
+		name_cell.tooltip_text = "%s: %s. %s%s" % [str((firm.get("ceo", {}) as Dictionary).get("name", "Its chief")), FirmLife.leaning_name(firm).to_lower(), str(FirmLife.LEANING_TEXT.get(FirmLife.leaning(firm), "")), " A stubborn leadership: it will not sell." if FirmLife.stubborn(firm) else ""] + (" You poached from them." if sore > 0.0 else "")
+		name_cell.mouse_filter = Control.MOUSE_FILTER_PASS
+		grid.add_child(name_cell)
+		grid.add_child(_cell("%s · %s" % [str(WorldEconomy.country(str(firm.country)).get("name", firm.country)), FirmLife.leaning_name(firm)]))
 		grid.add_child(_cell("$" + Fmt.short(own.firm_value(i))))
 		var stake := own.stake_in(company, i)
 		grid.add_child(_cell("%d%%%s" % [roundi(stake * 100.0), " (control)" if stake >= Ownership.CONTROL else ""], &"GainLabel" if stake >= Ownership.CONTROL else &""))

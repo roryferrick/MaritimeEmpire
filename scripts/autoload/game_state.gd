@@ -311,6 +311,8 @@ var ownership := Ownership.new(self)
 var shipyards := Shipyards.new(self)
 ## Technology: the tree, the R&D companies, licences, own R&D (see Technology).
 var technology := Technology.new(self)
+## The paper firms' lives: growth, bankruptcies, foundings, mergers, their CEOs (see FirmLife).
+var firm_life := FirmLife.new(self)
 ## Days the world runs before a new game begins, so ships are already at sea and
 ## the zones' stocks have settled (warm_up_world()).
 const WARM_UP_DAYS := 90
@@ -444,6 +446,7 @@ func _step(delta: float) -> void:
 	ownership.step(delta)
 	shipyards.step(delta)
 	technology.step(delta)
+	firm_life.step(delta)
 	t_s = Time.get_ticks_usec()
 	farms.step(delta)
 	makers.step(delta)
@@ -1506,6 +1509,12 @@ func launch_ship(who: Company, model_id: String, ship_name: String, port_id: Str
 	ship_changed.emit(ship)
 	return ship
 
+
+## The answer to a merger card: the stake in the bought firm sold at the deal's price, or converted (Ownership.convert_stake()).
+func answer_merger(buyer: int, target: int, price: float, sell: bool) -> void:
+	if Net.command(&"answer_merger", [buyer, target, price, sell]):
+		return
+	ownership.convert_stake(company, target, buyer, price, sell)
 
 # --- Hiring: postings, recruiters, raises, notices and poaching (see People) -----------------------
 
@@ -4719,6 +4728,7 @@ func new_game(new_company_name: String, new_home_port: String, new_color := "pur
 	ownership.reset()
 	shipyards.reset()
 	technology.reset()
+	firm_life.reset()
 	world.make_world(int(options.get("seed", randi())))
 	firms.generate(world, world.seed)
 	money_changed.emit(money)

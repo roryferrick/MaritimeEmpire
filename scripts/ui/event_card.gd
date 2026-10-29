@@ -280,6 +280,23 @@ func show_poach(kind: String, key: String, person: Dictionary, firm_index: int, 
 		actions = [["Match it", func() -> void: GameState.answer_poach(kind, key, offer, true)], ["Let them go", func() -> void: GameState.answer_poach(kind, key, offer, false)]]})
 
 
+## A firm went bankrupt: its ships are for sale (FirmLife.bankrupt).
+func show_bankruptcy(firm_index: int, listings: int) -> void:
+	var firm: Dictionary = GameState.firms.firms[firm_index]
+	_enqueue({kicker = "BANKRUPTCY", title = "%s has gone under" % str(firm.name), color = Color(0.95, 0.6, 0.5),
+		body = "The %s firm of %s could not pay its way. %s. The yard will deliver where they lie; the market closes in a month." % [str(WorldEconomy.country(str(firm.country)).get("name", firm.country)), GameData.port_name(str(firm.home)), "%d of its ships are on the second-hand market at half the usual price, yours first" % listings if listings > 0 else "Its few ships were taken by its creditors"],
+		actions = [["Second-hand ships", func() -> void: PopupHost.find(self).open(UsedMarketPopup.new())], ["Later", Callable()]]})
+
+
+## A firm you hold a stake in is being bought (FirmLife.merger_stake).
+func show_merger(buyer: int, target: int, price: float, stake: float) -> void:
+	var b: Dictionary = GameState.firms.firms[buyer]
+	var t: Dictionary = GameState.firms.firms[target]
+	_enqueue({kicker = "A MERGER", title = "%s is buying %s" % [str(b.name), str(t.name)], color = GOLD,
+		body = "%s is paying %s for %s, in which you hold %d%% (worth %s at that price). Sell your stake for the money, or keep it as shares in %s." % [str(b.name), Fmt.money(roundi(price)), str(t.name), roundi(stake * 100.0), Fmt.money(roundi(price * stake)), str(b.name)],
+		actions = [["Sell for %s" % Fmt.money_short(roundi(price * stake)), func() -> void: GameState.answer_merger(buyer, target, price, true)], ["Keep shares in %s" % str(b.name).get_slice(" ", 0), func() -> void: GameState.answer_merger(buyer, target, price, false)]]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

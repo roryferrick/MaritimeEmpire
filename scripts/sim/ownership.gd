@@ -412,6 +412,28 @@ func controller_of(firm_index: int) -> int:
 	return -1
 
 
+## A stake in a firm another bought (FirmLife._merger()): sold at the deal's price, or converted into the buyer at it.
+func convert_stake(company: Company, target: int, buyer: int, price: float, sell := false) -> void:
+	var stake := stake_in(company, target)
+	if stake <= 0.0:
+		return
+	company.stakes.erase(str(target))
+	company.firm_plans.erase(str(target))
+	var worth := roundi(price * stake)
+	if sell:
+		_state._add_money(company, worth)
+		_state._record(null, "shares", -float(worth), company)
+		if company == _state.company:
+			ActivityLog.add("Sold your %d%% of %s to %s for %s." % [roundi(stake * 100.0), str(_state.firms.firms[target].name), str(_state.firms.firms[buyer].name), Fmt.money(worth)], ActivityLog.Kind.GOOD)
+	else:
+		var buyer_value := maxf(firm_value(buyer), 1.0)
+		var converted := clampf(float(worth) / buyer_value, 0.0, 1.0)
+		company.stakes[str(buyer)] = int(company.stakes.get(str(buyer), 0)) + roundi(TOTAL_SHARES * converted)
+		if company == _state.company:
+			ActivityLog.add("Your %d%% of %s became %d%% of %s." % [roundi(stake * 100.0), str(_state.firms.firms[target].name), roundi(stake_in(company, buyer) * 100.0), str(_state.firms.firms[buyer].name)], ActivityLog.Kind.INFO)
+	_state._values_kept.erase(company)
+	changed.emit()
+
 ## A company's stake in a firm (0 to 1).
 func stake_in(company: Company, firm_index: int) -> float:
 	return float(company.stakes.get(str(firm_index), 0)) / TOTAL_SHARES
@@ -424,6 +446,8 @@ func block_cost(company: Company, firm_index: int) -> int:
 
 
 func buy_block_error(company: Company, firm_index: int) -> String:
+	if FirmLife.is_dead(_state.firms.firms[firm_index]):
+		return "Gone"
 	if stake_in(company, firm_index) >= 1.0 - 0.0001:
 		return "You own all of it"
 	var cost := block_cost(company, firm_index)

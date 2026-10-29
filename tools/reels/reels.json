@@ -10,7 +10,7 @@
 				"caption": "300+ REAL PORTS",
 				"shots": [
 					{
-						"shot": "globe_spin",
+						"shot": "globe_spin2",
 						"len": 3
 					}
 				]
@@ -20,11 +20,15 @@
 					3,
 					7
 				],
-				"caption": "$2.5M · ONE SHIP",
+				"caption": "A LIVING WORLD · ONE SHIP",
 				"shots": [
 					{
-						"shot": "scooter_leaves",
-						"len": 4
+						"shot": "busy_sea",
+						"len": 2.2
+					},
+					{
+						"shot": "scooter_leaves2",
+						"len": 1.8
 					}
 				]
 			},
@@ -33,11 +37,15 @@
 					7,
 					11
 				],
-				"caption": "BUY LOW. SAIL. SELL.",
+				"caption": "CONTRACTS PAY THE BILLS",
 				"shots": [
 					{
-						"shot": "market_popup",
-						"len": 4
+						"shot": "contract_card",
+						"len": 2.4
+					},
+					{
+						"shot": "ship_at_sea2",
+						"len": 1.6
 					}
 				]
 			},
@@ -46,11 +54,15 @@
 					11,
 					15
 				],
-				"caption": "FUEL · REPAIRS · WAGES · FEES",
+				"caption": "ORDER SHIPS. HIRE PEOPLE.",
 				"shots": [
 					{
-						"shot": "finances_table",
-						"len": 4
+						"shot": "shop_order",
+						"len": 2
+					},
+					{
+						"shot": "people_page",
+						"len": 2
 					}
 				]
 			},
@@ -62,11 +74,11 @@
 				"caption": "THINGS GO WRONG",
 				"shots": [
 					{
-						"shot": "lost_ship",
+						"shot": "lost_ship2",
 						"len": 1.5
 					},
 					{
-						"shot": "recovery_lift",
+						"shot": "recovery_lift2",
 						"len": 3.5,
 						"speed": 2.0
 					}
@@ -80,11 +92,11 @@
 				"caption": "THE SEA DOESN'T CARE",
 				"shots": [
 					{
-						"shot": "storm",
+						"shot": "storm2",
 						"len": 1.5
 					},
 					{
-						"shot": "panama_locks",
+						"shot": "panama_locks2",
 						"len": 1.5
 					}
 				]
@@ -97,12 +109,8 @@
 				"caption": "ONE SHIP → A FLEET",
 				"shots": [
 					{
-						"shot": "network_zoomout",
-						"len": 2.2
-					},
-					{
-						"shot": "compare_companies",
-						"len": 1.8
+						"shot": "fleet_zoomout",
+						"len": 4
 					}
 				]
 			},
@@ -114,7 +122,7 @@
 				"endcard": true,
 				"shots": [
 					{
-						"shot": "end_globe",
+						"shot": "end_globe2",
 						"len": 3
 					}
 				]
@@ -1407,6 +1415,23 @@
 					{
 						"shot": "end_globe",
 						"len": 3
+					}
+				]
+			}
+		]
+	},
+	"P": {
+		"file": "preview",
+		"beats": [
+			{
+				"t": [
+					0,
+					1
+				],
+				"shots": [
+					{
+						"shot": "preview2",
+						"len": 1
 					}
 				]
 			}

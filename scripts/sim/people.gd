@@ -667,6 +667,10 @@ func _monthly_poaching(company: Company, rng: RandomNumberGenerator) -> void:
 	var entry: Dictionary = targets[rng.randi() % targets.size()]
 	var person: Dictionary = entry.who
 	var firm_index: int = sore[rng.randi() % sore.size()] if not sore.is_empty() and rng.randf() < 0.7 else rng.randi() % firms.firms.size()
+	if FirmLife.is_dead(firms.firms[firm_index]):
+		return
+	if FirmLife.leaning(firms.firms[firm_index]) != "cutthroat" and rng.randf() < 0.5:
+		return  # (Cutthroat firms poach twice as often as the rest.)
 	var glad := (morale_of(person) if str(entry.kind) == "officer" else contentment_of(person)) >= 80.0
 	var salary := int(person.get("salary", 0)) if str(entry.kind) != "officer" else roundi(OFFICER_SALARY * _quality(person))
 	var offer := roundi(salary * POACH_OFFER / 1000.0) * 1000

@@ -466,8 +466,10 @@ func _pick_bidders(offer: Dictionary, rng: RandomNumberGenerator) -> void:
 	var bids := {}
 	for i: int in order.slice(0, count):
 		var firm: Dictionary = firms.firms[i]
+		if FirmLife.is_dead(firm):
+			continue
 		bidders.append(i)
-		bids[str(i)] = snappedf(float(offer.plain) * Traits.ai_margin(firm.get("ceo", {})) * rng.randf_range(float(BID_SPREAD[0]), float(BID_SPREAD[1])) * (1.0 + float(offer.premium) - PREMIUM_LOW) * (1.0 - 0.5 * (People.soreness(player, i) if firm.country == offer.country else 0.0)), 0.01)
+		bids[str(i)] = snappedf(float(offer.plain) * Traits.ai_margin(firm.get("ceo", {})) * (0.95 if FirmLife.leaning(firm) == "cutthroat" else 1.0) * rng.randf_range(float(BID_SPREAD[0]), float(BID_SPREAD[1])) * (1.0 + float(offer.premium) - PREMIUM_LOW) * (1.0 - 0.5 * (People.soreness(player, i) if firm.country == offer.country else 0.0)), 0.01)
 	offer.bidders = bidders
 	offer.bids = bids
 
