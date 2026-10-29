@@ -384,7 +384,11 @@ func _cards(reel: String, beats: Array) -> void:
 		label.add_theme_font_size_override(&"font_size", 66 if label.text.length() <= 18 else 54)
 		label.add_theme_color_override(&"font_color", Color.WHITE)
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.custom_minimum_size.x = minf(900.0, 40.0 * label.text.length() + 60.0)
+		var size := 66 if label.text.length() <= 18 else 54
+		var longest := 0.0  # (No word ever breaks: the card is at least the longest word wide.)
+		for word in label.text.split(" "):
+			longest = maxf(longest, heading.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x)
+		label.custom_minimum_size.x = minf(900.0, maxf(40.0 * label.text.length() + 60.0, longest + 24.0))
 		panel.add_child(label)
 		for n in 4:
 			await RenderingServer.frame_post_draw
@@ -392,8 +396,42 @@ func _cards(reel: String, beats: Array) -> void:
 		image.save_png(dir + "caption_%02d.png" % i)
 		holder.queue_free()
 		await get_tree().process_frame
-	# The end card: the wordmark over a dimmed frame, and "Coming soon to Steam".
+	# The intro slide of a feature reel ("intro": its feature's name): over a
+	# dimmed frame, the game's name, "Feature spotlight" and the feature.
 	card_vp.size = Vector2i(OUT_W, OUT_H)
+	if plan[reel].has("intro"):
+		var slide := Control.new()
+		slide.size = Vector2(OUT_W, OUT_H)
+		card_vp.add_child(slide)
+		var dim := ColorRect.new()
+		dim.color = Color(NAVY, 0.72)
+		dim.size = slide.size
+		slide.add_child(dim)
+		var title_font := FontVariation.new()
+		title_font.base_font = load("res://fonts/cinzel/Cinzel-Variable.ttf")
+		title_font.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 700}
+		var lines := [["MARITIME EMPIRE", 64, Color("#f2c230"), 560.0], ["FEATURE SPOTLIGHT", 46, Color(1, 1, 1, 0.85), 680.0], [str(plan[reel].intro).to_upper(), 112, Color.WHITE, 820.0],
+			["ONE PART OF THE GAME, IN 30 SECONDS", 34, Color(1, 1, 1, 0.7), 1440.0]]  # (Under a three-line feature name.)
+		for line: Array in lines:
+			var text := Label.new()
+			text.text = line[0]
+			text.add_theme_font_override(&"font", title_font)
+			text.add_theme_font_size_override(&"font_size", int(line[1]))
+			text.add_theme_color_override(&"font_color", line[2])
+			text.add_theme_color_override(&"font_shadow_color", Color(0, 0, 0, 0.55))
+			text.add_theme_constant_override(&"shadow_offset_y", 6)
+			text.add_theme_constant_override(&"shadow_outline_size", 4)
+			text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			text.position = Vector2(60, float(line[3]))
+			text.size = Vector2(OUT_W - 120, 400)
+			slide.add_child(text)
+		for n in 4:
+			await RenderingServer.frame_post_draw
+		card_vp.get_texture().get_image().save_png(dir + "introcard.png")
+		slide.queue_free()
+		await get_tree().process_frame
+	# The end card: the wordmark over a dimmed frame, and "Coming soon to Steam".
 	var end := Control.new()
 	end.size = Vector2(OUT_W, OUT_H)
 	card_vp.add_child(end)
@@ -1753,7 +1791,7 @@ func shot_shop_order(seconds: float) -> void:
 
 
 func shot_people_page(seconds: float) -> void:
-	await use_world()
+	await _stage_people()
 	landscape()
 	game.show_screen(GameRoot.Screen.PEOPLE)
 	await settle(20)
@@ -1967,3 +2005,1068 @@ func _marina_diag(port_id: String) -> void:
 		" shown ", map._marina_shown(port_id), " kept ", map._kept_marina_ports().has(index), " candidate ", map.marinas_in_view(near).has(index),
 		" near_ports ", map._ports_near_view().has(index), " item ", item != null, " item shown ", (item.get_meta(&"shown", true) if item != null else "-"),
 		" layout radius ", map._port_layout(port_id).radius, " port radius ", map._port_radius(port_id))
+
+
+## Not a reel shot: every page and the popups that need no staging, for the
+## feature reels' crops (build/preview/f_*.jpg).
+func shot_preview3(_seconds: float) -> void:
+	await use_world()
+	landscape()
+	GameState.contracts._refresh_offers()
+	for screen in [GameRoot.Screen.SHIPS, GameRoot.Screen.MARKETS, GameRoot.Screen.FINANCES, GameRoot.Screen.HUBS, GameRoot.Screen.SHOP, GameRoot.Screen.FARMS, GameRoot.Screen.MAKERS, GameRoot.Screen.ENERGY, GameRoot.Screen.INDUSTRY, GameRoot.Screen.RESEARCH, GameRoot.Screen.CONTRACTS, GameRoot.Screen.PEOPLE, GameRoot.Screen.OWNERSHIP]:
+		game.show_screen(screen)
+		await settle(20)
+		await _snap("f_page_%d.jpg" % screen)
+	game.show_screen(GameRoot.Screen.SHOP)
+	await settle(10)
+	PopupHost.find(game).open(UsedMarketPopup.new())
+	await settle(20)
+	print("  used market rect: ", popup().get_global_rect() if popup() != null else "none")
+	await _snap("f_used_market.jpg")
+	if popup() != null:
+		PopupHost.find(game).close()
+	game.show_screen(GameRoot.Screen.WORLD)
+	await warp(60.0, Callable(), 8)
+	await settle(10)
+	await _snap("f_world_ticker.jpg")
+	game.open_gazette()
+	await settle(20)
+	print("  gazette rect: ", popup().get_global_rect() if popup() != null else "none")
+	await _snap("f_gazette.jpg")
+	if popup() != null:
+		PopupHost.find(game).close()
+	var box := await open_port_popup("SHA", "Market")
+	print("  market popup rect: ", box.get_global_rect() if box != null else "none")
+	await _snap("f_market_popup.jpg")
+	if popup() != null:
+		PopupHost.find(game).close()
+	var ship := stage_ship("model_4", "SHA")
+	await settle(10)
+	var ship_box := await open_ship_popup(ship, 600.0)
+	print("  ship popup rect: ", ship_box.get_global_rect() if ship_box != null else "none")
+	await _snap("f_ship_popup.jpg")
+	for button in game.find_children("*", "Button", true, false):
+		if (button as Button).text.begins_with("Parts") and (button as Control).is_visible_in_tree():
+			(button as Button).pressed.emit()
+			print("  pressed Parts")
+			break
+	await settle(15)
+	await _snap("f_ship_parts.jpg")
+
+
+# --- Feature reels F1-F10 (2026-10-29): helpers ----------------------------------
+
+## A still crop of a page section: from the first label starting with `title`
+## down `height` UI px, the page's width. Falls back to the page area.
+func section_crop(title: String, height: float, root: Node = null, above := 12.0) -> Rect2:
+	var label := find_text(title, root)
+	if label == null:
+		print("  no section ", title)
+		return Rect2(272, 60, 1000, 600)
+	var at := label.get_global_rect().position
+	return Rect2(300.0, at.y - above, 960.0, height).intersection(Rect2(Vector2.ZERO, UI_BASE))
+
+
+## Records a page (a screen of the game) as one still crop.
+func page_shot(name: String, seconds: float, screen: GameRoot.Screen, crop: Rect2, settle_frames := 20) -> void:
+	landscape()
+	game.show_screen(screen)
+	await settle(settle_frames)
+	await rec(name, seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+## A page's scroll (its first ScrollContainer) set, so a lower section is in the frame.
+func page_scroll(to: float, root: Node = null) -> void:
+	for sc in (root if root != null else game).find_children("*", "ScrollContainer", true, false):
+		if (sc as Control).is_visible_in_tree():
+			(sc as ScrollContainer).scroll_vertical = int(to)
+			return
+
+
+## A ship of a model under way on a route, followed close and still: staged,
+## warped till it's `nm` out, then recorded. Those the reels need share this.
+func ship_at_sea_shot(name: String, seconds: float, model: String, route_ids: Array, nm: float, zoom: float) -> void:
+	await use_world()
+	portrait()
+	var route: Array[String] = []
+	for id: String in route_ids:
+		route.append(id)
+	var ship := stage_ship(model, route[0], route)
+	if ship.route.is_empty():
+		push_error(name + ": no route " + GameState.route_error(route, ship))
+	var ok := await warp(3000.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > nm, 8)
+	print("  ", name, " at sea: ", ok, " ", ship.model_id, " ", ship.from_port, "->", ship.to_port, " cargo ", ship.cargo_qty)
+	follow(ship, zoom)
+	await settle(15)
+	await rec(name, seconds)
+
+
+# --- F8: energy, industry, farms, the market -----------------------------------
+
+const PAGE_CROP := Rect2(330, 115, 900, 490)  # (The list and its panel: Energy, Industry, Farms, Research.)
+
+func shot_industry_page(seconds: float) -> void:
+	await use_world()
+	await page_shot("industry_page", seconds, GameRoot.Screen.INDUSTRY, PAGE_CROP)
+
+
+func shot_energy_page(seconds: float) -> void:
+	await use_world()
+	await page_shot("energy_page", seconds, GameRoot.Screen.ENERGY, PAGE_CROP)
+
+
+func shot_farms_page(seconds: float) -> void:
+	await use_world()
+	await page_shot("farms_page", seconds, GameRoot.Screen.FARMS, PAGE_CROP)
+
+
+## The producers' plants along the Chinese coast, the Industry switch on, a slow drift.
+func shot_plants_map(seconds: float) -> void:
+	await use_world()
+	GameState.build_site("rare_earth_mine", "TSN")
+	GameState.build_site("steel_mill", "SHA")
+	map.show_factories = true
+	portrait()
+	look(118.5, 28.0, 22.0)
+	await settle(30)
+	await rec("plants_map", seconds, func(t: float) -> void:
+		look(lerpf(118.5, 119.5, t / seconds), lerpf(28.0, 29.0, t / seconds), lerpf(22.0, 24.0, t / seconds)))
+
+
+## Shanghai's Market tab, scrolled to the prices.
+func shot_market_popup2(seconds: float) -> void:
+	await use_world()
+	landscape()
+	var box := await open_port_popup("SHA", "Market")
+	page_scroll(3000.0, box)
+	await settle(10)
+	var rect := box.get_global_rect().intersection(Rect2(Vector2.ZERO, UI_BASE))
+	var crop := Rect2(rect.position.x - 6.0, 300.0, rect.size.x + 12.0, 400.0)
+	await rec("market_popup2", seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	if popup() != null:
+		PopupHost.find(game).close()
+
+
+# --- F10: the living world -----------------------------------------------------
+
+func _intelligence(tab: String) -> void:
+	landscape()
+	game.show_screen(GameRoot.Screen.MARKETS)
+	await settle(10)
+	var screen: Node = game.get_node_or_null("%IntelligenceScreen")
+	if screen == null:
+		for node in game.find_children("*", "", true, false):
+			if node.get_script() != null and str(node.get_script().resource_path).ends_with("intelligence_screen.gd"):
+				screen = node
+				break
+	if screen != null:
+		screen.show_tab(tab)
+	await settle(20)
+
+
+func shot_intelligence_page(seconds: float) -> void:
+	await use_world()
+	await _intelligence("markets")
+	await rec("intelligence_page", seconds, Callable(), func(_t: float) -> Rect2: return Rect2(320, 190, 640, 400))
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_intelligence_news(seconds: float) -> void:
+	await use_world()
+	await warp(300.0, Callable(), 8)
+	await _intelligence("news")
+	await rec("intelligence_news", seconds, Callable(), func(_t: float) -> Rect2: return Rect2(320, 190, 640, 400))
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_gazette(seconds: float) -> void:
+	await use_world()
+	landscape()
+	game.show_screen(GameRoot.Screen.WORLD)
+	await warp(700.0, Callable(), 8)  # (A week or so: a paper with news in it.)
+	await settle(10)
+	game.open_gazette()
+	await settle(25)
+	await rec("gazette", seconds, Callable(), func(_t: float) -> Rect2: return Rect2(300, 92, 960, 540))
+	for child in world.get_children():  # (The Gazette is a MapPage over the World screen.)
+		if child.get_script() != null and str(child.get_script().resource_path).ends_with("map_page.gd"):
+			child.queue_free()
+	await settle(3)
+
+
+func shot_compare_companies2(seconds: float) -> void:
+	await use_world()
+	landscape()
+	game.show_screen(GameRoot.Screen.FINANCES)
+	await settle(10)
+	for button in game.find_children("*", "Button", true, false):
+		if (button as Button).text.begins_with("Compare") and (button as Control).is_visible_in_tree():
+			(button as Button).pressed.emit()
+			(button as Button).button_pressed = true
+	await settle(20)
+	var heading := find_text("Companies", game.get_node("%FinancesScreen"))
+	var table := Rect2(300, 200, 640, 220) if heading == null else Rect2(heading.get_global_rect().position.x - 14, heading.get_global_rect().position.y - 12, 640.0, 200)
+	await rec("compare_companies2", seconds, Callable(), func(_t: float) -> Rect2: return table)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+# --- F2: the yards -------------------------------------------------------------
+
+func shot_used_market(seconds: float) -> void:
+	await use_world()
+	landscape()
+	game.show_screen(GameRoot.Screen.SHOP)
+	await settle(10)
+	PopupHost.find(game).open(UsedMarketPopup.new())
+	await settle(20)
+	var rect := popup().get_global_rect() if popup() != null else Rect2(272, 64, 760, 483)
+	await rec("used_market", seconds, Callable(), func(_t: float) -> Rect2: return grow(rect, 6.0))
+	if popup() != null:
+		PopupHost.find(game).close()
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+## The Order popup with a dearer, better yard picked.
+func shot_yards_dropdown(seconds: float) -> void:
+	await use_world()
+	landscape()
+	game.show_screen(GameRoot.Screen.SHOP)
+	await settle(15)
+	game.get_node("%ShopScreen")._on_buy_pressed("model_5")
+	await settle(15)
+	var box := popup()
+	for option in box.find_children("*", "OptionButton", true, false):
+		var pick: OptionButton = option
+		if pick.item_count > 2:
+			pick.select(pick.item_count / 2)
+			pick.item_selected.emit(pick.item_count / 2)
+	await settle(10)
+	await rec("yards_dropdown", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+# --- F7: the seven types' ships at sea ---------------------------------------------
+
+func shot_tanker_at_sea(seconds: float) -> void:
+	await ship_at_sea_shot("tanker_at_sea", seconds, "model_9", ["SHA", "DXB"], 500.0, 1400.0)
+
+
+# --- F3: parts ---------------------------------------------------------------------
+
+## A ship popup with its Parts view open: [popup, ship].
+func _parts_popup(ship: Ship) -> Control:
+	var box := await open_ship_popup(ship, 600.0)
+	var toggle: Button = box.get("_parts_button")
+	if toggle != null:
+		toggle.button_pressed = true
+	await settle(15)
+	return box
+
+
+func shot_parts_view(seconds: float) -> void:
+	await use_world()
+	landscape()
+	var ship := stage_ship("model_4", "SHA")
+	await settle(10)
+	var box := await _parts_popup(ship)
+	await rec("parts_view", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+
+
+# --- Feature reels: more helpers ---------------------------------------------------
+
+## The first visible Label or Button whose text contains `part`.
+func find_text_containing(part: String, root: Node = null) -> Control:
+	for node in (root if root != null else game).find_children("*", "", true, false):
+		if (node is Label or node is Button) and (node as CanvasItem).is_visible_in_tree() and str(node.text).contains(part):
+			return node
+	return null
+
+
+## A page section brought into view (the page scrolled so its title sits near
+## the top) and its still crop: `height` UI px from the title down.
+## PAGE_BOTTOM: the page card's bottom edge (the bottom bar starts under it).
+const PAGE_BOTTOM := 644.0
+func section_view(title: String, height: float, contains := false, width := 780.0) -> Rect2:
+	var label := find_text_containing(title) if contains else find_text(title)
+	if label == null:
+		print("  no section ", title)
+		return Rect2(272, 60, 1000, 600)
+	var y := label.get_global_rect().position.y
+	if y + height > 660.0 or y < 100.0:
+		var node: Node = label
+		while node != null and not (node is ScrollContainer):
+			node = node.get_parent()
+		if node != null:
+			(node as ScrollContainer).scroll_vertical += int(y - 120.0)
+		await settle(8)
+		label = find_text_containing(title) if contains else find_text(title)
+		if label != null:
+			y = label.get_global_rect().position.y
+	var top := clampf(y - 12.0, 0.0, PAGE_BOTTOM - 120.0)
+	var crop := Rect2(300.0, top, width, minf(height, PAGE_BOTTOM - top))
+	print("  section ", title, " at y ", y, " crop ", crop)
+	return crop
+
+
+## Shows an event card (the sim's own cards cleared first) and records it still.
+func card_shot(name: String, seconds: float, show: Callable) -> void:
+	landscape()
+	game.show_screen(GameRoot.Screen.WORLD)
+	look_port("SHA", 40.0)
+	await settle(8)
+	game.event_card._queue.clear()
+	game.event_card.visible = false
+	_cards_on = true
+	show.call()
+	await settle(12)
+	var rect := game.event_card.get_global_rect()
+	await rec(name, seconds, Callable(), func(_t: float) -> Rect2: return grow(rect, 16.0))
+	game.event_card._queue.clear()
+	game.event_card.visible = false
+	_cards_on = false
+
+
+func _rng(seed_value: int) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	return rng
+
+
+# --- F1: contracts ---------------------------------------------------------------
+
+## Trusted standing everywhere, so tenders come too; fresh offers.
+func _stage_contract_offers() -> void:
+	var countries: Dictionary = GameState.company.relations.get_or_add("countries", {})
+	for zone in GameState.world.zones:
+		countries[str(zone.country)] = 60.0
+	var contracts: Contracts = GameState.contracts
+	contracts.offers.clear()
+	contracts._refresh_offers()
+	print("  offers: ", contracts.offers.size())
+
+
+func _tender_offer() -> Dictionary:
+	var contracts: Contracts = GameState.contracts
+	for offer: Dictionary in contracts.offers:
+		if str(offer.kind) == "tender":
+			return offer
+	var lanes: Array = contracts._lanes_in_need(GameState.world)
+	for lane: Dictionary in lanes:
+		var offer := contracts._make_offer(GameState.company, lane, true, _rng(7), true)
+		if not offer.is_empty():
+			contracts.offers.append(offer)
+			contracts.offers_changed.emit()
+			return offer
+	return {}
+
+
+func shot_contracts_offers(seconds: float) -> void:
+	await use_world()
+	_stage_contract_offers()
+	_tender_offer()
+	landscape()
+	game.show_screen(GameRoot.Screen.CONTRACTS)
+	await settle(20)
+	var crop := await section_view("Offers", 330)
+	await rec("contracts_offers", seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_tender_card(seconds: float) -> void:
+	await use_world()
+	_stage_contract_offers()
+	var offer := _tender_offer()
+	if offer.is_empty():
+		push_error("no tender")
+		return
+	await card_shot("tender_card", seconds, func() -> void: game.event_card.show_offer(offer))
+
+
+func shot_contracts_standing(seconds: float) -> void:
+	await use_world()
+	_stage_contract_offers()
+	landscape()
+	game.show_screen(GameRoot.Screen.CONTRACTS)
+	await settle(20)
+	var crop := await section_view("Your standing", 240)
+	await rec("contracts_standing", seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+var _contract: Dictionary = {}
+var _contract_ship: Ship = null
+
+
+## A voyage signed and a ship of ours on it, loaded at the producer's port.
+func _stage_contract_ship() -> void:
+	await use_world()
+	if _contract_ship != null and is_instance_valid(_contract_ship) and not _contract.is_empty():
+		return
+	_stage_contract_offers()
+	var contracts: Contracts = GameState.contracts
+	var picked: Dictionary = {}
+	for offer: Dictionary in contracts.offers:
+		if str(offer.kind) == "voyage" and contracts.can_sign(GameState.company, offer).is_empty():
+			picked = offer
+			break
+	if picked.is_empty():
+		for offer: Dictionary in contracts.offers:
+			if str(offer.kind) != "tender" and contracts.can_sign(GameState.company, offer).is_empty():
+				picked = offer
+				break
+	if picked.is_empty():
+		push_error("no signable offer")
+		return
+	GameState.sign_contract(int(picked.id))
+	_contract = contracts.contract_by_id(int(picked.id))
+	print("  signed: ", GameState.contract_summary(_contract), " ", _contract.from, "->", _contract.to)
+	for model in ["model_4", "model_16", "model_3", "model_65", "model_2"]:
+		var ship := stage_ship(model, str(_contract.from))
+		if GameState.contract_ship_error(_contract, ship).is_empty():
+			_contract_ship = ship
+			break
+		GameState.ships.erase(ship)
+	if _contract_ship == null:
+		push_error("no ship carries " + str(_contract.good))
+		return
+	GameState.assign_contract_ship(int(_contract.id), _contract_ship)
+	_contract_ship.cargo_id = str(_contract.good)
+	_contract_ship.cargo_qty = mini(int(_contract.units), int(_contract_ship.model().get("capacity", 100)))
+	_contract_ship.cargo_cost = 0
+	_contract_ship.cargo_from = str(_contract.from)
+	_contract_ship.cargo_contract = int(_contract.id)
+	GameState.ship_changed.emit(_contract_ship)
+	GameState.ships_changed.emit()
+	print("  contract ship ", _contract_ship.model_id, " at ", _contract_ship.docked_at, " cargo ", _contract_ship.cargo_qty, " ", _contract_ship.cargo_id)
+
+
+func shot_contract_loading(seconds: float) -> void:
+	await _stage_contract_ship()
+	if _contract_ship == null:
+		return
+	landscape()
+	var box := await open_ship_popup(_contract_ship, 2000.0)
+	await rec("contract_loading", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+
+
+func shot_contract_log(seconds: float) -> void:
+	await _stage_contract_ship()
+	if _contract_ship == null:
+		return
+	var ship := _contract_ship
+	var to := str(_contract.to)
+	var ok := await warp(6000.0, func() -> bool: return ship.docked_at == to and ship.cargo_qty == 0 or str(_contract.get("status", "")) == "done", 8)
+	print("  delivered: ", ok, " status ", _contract.get("status"), " docked ", ship.docked_at)
+	landscape()
+	game.show_screen(GameRoot.Screen.WORLD)
+	await settle(10)
+	await rec("contract_log", seconds, Callable(), func(_t: float) -> Rect2: return Rect2(0, 44, 272, 240))
+
+
+## The "TENDER WON" card.
+func shot_contract_event_card(seconds: float) -> void:
+	await use_world()
+	_stage_contract_offers()
+	var offer := _tender_offer()
+	if offer.is_empty():
+		push_error("no tender")
+		return
+	offer.my_bid = float(offer.get("asking", 100.0)) * 0.9
+	await card_shot("contract_event_card", seconds, func() -> void: game.event_card.show_tender_result(offer, true, GameState.company.name, float(offer.my_bid)))
+
+
+# --- F2: the yards -----------------------------------------------------------------
+
+var _delivered: Ship = null
+
+
+func _stage_order() -> Dictionary:
+	await use_world()
+	if GameState.company.orders.is_empty():
+		GameState.place_order("model_3", "Jade Current", "jiangnan")
+	return GameState.company.orders[0] if not GameState.company.orders.is_empty() else {}
+
+
+func shot_orders_bar(seconds: float) -> void:
+	var order := await _stage_order()
+	if order.is_empty():
+		push_error("no order")
+		return
+	landscape()
+	game.show_screen(GameRoot.Screen.SHOP)
+	await settle(20)
+	var crop := await section_view("Ships of Feeder size", 90)
+	await rec("orders_bar", seconds, Callable(), func(_t: float) -> Rect2: return Rect2(288.0, crop.position.y + 4.0, 745.0, 72.0))
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func _deliver_order() -> void:
+	var order := await _stage_order()
+	if order.is_empty() or _delivered != null:
+		return
+	var before := GameState.fleet().size()
+	order.late = true
+	_cards_on = true
+	game.event_card._queue.clear()
+	game.event_card.visible = false
+	GameState.shipyards._deliver(GameState.company, order)
+	await settle(5)
+	for ship in GameState.fleet():
+		if ship.name == "Jade Current":
+			_delivered = ship
+	print("  delivered ship: ", _delivered, " fleet ", before, "->", GameState.fleet().size())
+
+
+func shot_delivery_card(seconds: float) -> void:
+	await _deliver_order()
+	landscape()
+	game.show_screen(GameRoot.Screen.WORLD)
+	look_port("SHA", 40.0)
+	await settle(12)
+	var rect := game.event_card.get_global_rect()
+	await rec("delivery_card", seconds, Callable(), func(_t: float) -> Rect2: return grow(rect, 16.0))
+	game.event_card._queue.clear()
+	game.event_card.visible = false
+	_cards_on = false
+
+
+func shot_yard_leaving(seconds: float) -> void:
+	await _deliver_order()
+	game.event_card._queue.clear()
+	game.event_card.visible = false
+	_cards_on = false
+	if _delivered == null:
+		push_error("no delivered ship")
+		return
+	portrait()
+	var ship := _delivered
+	var route: Array[String] = ["SHA", "NGB"]
+	GameState.assign_route(ship, route)
+	var ok := await warp(900.0, func() -> bool: return ship.berth_phase == Ship.BERTH_OUT, 4)
+	print("  yard leaving: ", ok, " ", ship.berth_phase)
+	follow(ship, 3600.0)
+	await settle(10)
+	await rec("yard_leaving", seconds)
+
+
+# --- F3: parts and drydock ---------------------------------------------------------
+
+func _worn_ship(model: String, majors: float, minors: float) -> Ship:
+	var ship := stage_ship(model, "SHA")
+	ship.parts = ShipParts.new_conditions(ship.model(), 1.0)
+	for part: Dictionary in ShipParts.for_model(ship.model()):
+		ship.parts[str(part.id)] = majors if bool(part.get("major", false)) else minors
+	ship.sync_maintenance(ShipParts.mean(ship))
+	ship.invalidate_stats()
+	GameState.ship_changed.emit(ship)
+	return ship
+
+
+func shot_parts_worn(seconds: float) -> void:
+	await use_world()
+	landscape()
+	var ship := _worn_ship("model_4", 0.2, 0.55)
+	await settle(10)
+	var box := await _parts_popup(ship)
+	await rec("parts_worn", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+
+
+## A ship alongside with its minor parts worn, the repairs under way: the popup's bars.
+func shot_pier_repair(seconds: float) -> void:
+	await use_world()
+	landscape()
+	var ship := _worn_ship("model_2", 1.0, 0.45)
+	await settle(10)
+	var box := await open_ship_popup(ship, 2000.0)
+	await rec("pier_repair", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+
+
+func shot_drydock_popup(seconds: float) -> void:
+	await use_world()
+	landscape()
+	var ship := _worn_ship("model_4", 0.2, 0.7)
+	game.show_screen(GameRoot.Screen.WORLD)
+	look_port("SHA", 40.0)
+	await settle(10)
+	PopupHost.find(game).open(DrydockPopup.new(ship))
+	await settle(15)
+	var box := popup()
+	if box != null:
+		var ticks: Dictionary = box.get("_ticks")
+		for id in ["efi", "kappel"]:
+			if ticks.has(id):
+				(ticks[id] as CheckBox).button_pressed = true
+	await settle(10)
+	await rec("drydock_popup", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+
+
+func shot_parts_upgrade(seconds: float) -> void:
+	await use_world()
+	landscape()
+	var ship := stage_ship("model_4", "SHA")
+	ship.parts = ShipParts.new_conditions(ship.model(), 1.0)
+	ship.upgrades = {main_engine = "efi", propeller = "kappel", hull_plating = "coating"}
+	ship.invalidate_stats()
+	await settle(10)
+	var box := await _parts_popup(ship)
+	await rec("parts_upgrade", seconds, Callable(), popup_crop(box))
+	if popup() != null:
+		PopupHost.find(game).close()
+
+
+# --- F4: people --------------------------------------------------------------------
+
+var _people_staged := false
+
+
+func _stage_people() -> void:
+	await use_world()
+	if _people_staged:
+		return
+	_people_staged = true
+	var rng := _rng(42)
+	var company := GameState.company
+	var people: People = GameState.people
+	company.ceo.traits = ["charismatic", "shrewd"]
+	for role in ["cfo", "coo", "cto"]:
+		people.place(company, Characters.random_person(rng, "exec", ""), "exec", role)
+	people.place(company, Characters.random_person(rng, "head", ""), "head", "container|east_asia", 20000000)
+	people.place(company, Characters.random_person(rng, "head", ""), "head", "ore|east_asia", 15000000)
+	for n in 3:
+		stage_ship(["model_4", "model_3", "model_2"][n], "SHA")
+	for k in 6:
+		var a: Dictionary = people._candidate(rng, ["exec", "head", "officer", "exec"][k % 4], false, "")
+		a.to = 0
+		a.employer = -1
+		a.min_tier = ""
+		people.candidates.append(a)
+	var spouse := Characters.random_person(rng, "exec", str(company.ceo.nationality))
+	spouse.age = 44.0
+	var kid := Characters.random_character(rng)
+	kid.age = 24.0
+	kid.nationality = company.ceo.nationality
+	kid.traits = Traits.random_traits(rng, 2)
+	kid.skills = Traits.random_skills(rng)
+	kid.name = "%s %s" % [str(kid.name).get_slice(" ", 0), str(company.ceo.name).get_slice(" ", 1)]
+	var young := Characters.random_character(rng)
+	young.age = 9.0
+	young.nationality = company.ceo.nationality
+	young.name = "%s %s" % [str(young.name).get_slice(" ", 0), str(company.ceo.name).get_slice(" ", 1)]
+	company.family = {spouse = spouse, children = [kid, young], heir = 0}
+	people.changed.emit()
+	GameState.ships_changed.emit()
+
+
+func _people_section(name: String, seconds: float, title: String, height: float) -> void:
+	await _stage_people()
+	landscape()
+	game.show_screen(GameRoot.Screen.PEOPLE)
+	await settle(20)
+	var crop := await section_view(title, height)
+	await rec(name, seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_people_execs(seconds: float) -> void:
+	await _people_section("people_execs", seconds, "Executives", 300)
+
+
+func shot_people_heads(seconds: float) -> void:
+	await _people_section("people_heads", seconds, "Department heads", 280)
+
+
+func shot_people_officers(seconds: float) -> void:
+	await _people_section("people_officers", seconds, "Officers", 280)
+
+
+func shot_people_applications(seconds: float) -> void:
+	await _stage_people()
+	landscape()
+	game.show_screen(GameRoot.Screen.PEOPLE)
+	await settle(20)
+	var crop := await section_view("Applications", 330, false, 960.0)
+	await rec("people_applications", seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_people_family(seconds: float) -> void:
+	await _people_section("people_family", seconds, "The family", 200)
+
+
+# --- F5: ownership ----------------------------------------------------------------
+
+var _listed := false
+
+
+func _stage_listed() -> void:
+	await use_world()
+	if _listed:
+		return
+	_listed = true
+	var rng := _rng(9)
+	var own: Ownership = GameState.ownership
+	var company := GameState.company
+	var sh: Dictionary = own.ensure(company)
+	sh.holders.append({kind = "fund", name = "Tidewater Capital", character = Characters.random_person(rng, "exec", ""), count = 120000, opinion = 35.0})
+	sh.holders.append({kind = "fund", name = "Harbourside Partners", character = Characters.random_person(rng, "exec", ""), count = 80000, opinion = -12.0})
+	sh.holders.append({kind = "public", name = "the public (Hong Kong)", count = 300000, opinion = 0.0})
+	sh.total = 1500000
+	sh.listed = true
+	sh.exchange = "Hong Kong"
+	sh.sentiment = 1.15
+	var history: Array = []
+	var price := 24.0
+	for n in 10:
+		price *= 1.0 + rng.randf_range(-0.04, 0.09)
+		history.append(price)
+	sh.history = history
+	sh.dividend = 0.2
+	sh.last_profit = 4.0e6
+	sh.expected = 4.2e6
+	own.changed.emit()
+
+
+func _ownership_section(name: String, seconds: float, title: String, height: float, contains := false) -> void:
+	await _stage_listed()
+	landscape()
+	game.show_screen(GameRoot.Screen.OWNERSHIP)
+	await settle(20)
+	var crop := await section_view(title, height, contains)
+	await rec(name, seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_own_register(seconds: float) -> void:
+	await _ownership_section("own_register", seconds, "The register and the board", 300)
+
+
+func shot_own_motions(seconds: float) -> void:
+	await _ownership_section("own_motions", seconds, "Motions", 220)
+
+
+func shot_own_price(seconds: float) -> void:
+	await _ownership_section("own_price", seconds, " a share", 330, true)
+
+
+func shot_vote_card(seconds: float) -> void:
+	await _stage_listed()
+	await card_shot("vote_card", seconds, func() -> void: game.event_card.show_vote({text = "paying the holders 20% of each quarter's profit"}, true, 1340000.0, 1500000.0))
+
+
+## The IPO's bank step, on a company not yet listed.
+func shot_own_ipo(seconds: float) -> void:
+	await use_world()
+	var own: Ownership = GameState.ownership
+	var sh: Dictionary = own.ensure(GameState.company)
+	var was_listed: bool = sh.listed
+	var was_ipo: Dictionary = sh.ipo.duplicate()
+	sh.listed = false
+	sh.ipo = {step = "bank"}
+	own.changed.emit()
+	landscape()
+	game.show_screen(GameRoot.Screen.OWNERSHIP)
+	await settle(20)
+	var crop := await section_view("Going public", 240)
+	await rec("own_ipo", seconds, Callable(), func(_t: float) -> Rect2: return crop)
+	game.show_screen(GameRoot.Screen.WORLD)
+	sh.listed = was_listed
+	sh.ipo = was_ipo
+	own.changed.emit()
+
+
+var _firm_index := -1
+
+
+func _stage_controlled_firm() -> void:
+	await _stage_listed()
+	if _firm_index >= 0:
+		return
+	var firms: ShippingFirms = GameState.firms
+	for i in firms.firms.size():
+		var firm: Dictionary = firms.firms[i]
+		if str(firm.home) == "SHA" or str(firm.get("country", "")) == GameState.world.country_of_port("SHA"):
+			_firm_index = i
+			break
+	if _firm_index < 0:
+		_firm_index = 0
+	GameState.company.stakes[str(_firm_index)] = 500000
+	GameState._values_kept.erase(GameState.company)
+	GameState.ownership.ensure_plan(GameState.company, _firm_index)
+	GameState.ownership.changed.emit()
+	print("  controlling firm ", firms.firms[_firm_index].name)
+
+
+func shot_own_firms(seconds: float) -> void:
+	await _stage_controlled_firm()
+	await _ownership_section("own_firms", seconds, "The shipping firms", 330)
+
+
+func shot_own_firm_card(seconds: float) -> void:
+	await _stage_controlled_firm()
+	await _ownership_section("own_firm_card", seconds, "(yours:", 230, true)
+
+
+# --- F6: technology ------------------------------------------------------------------
+
+func _research_view(place: String) -> void:
+	landscape()
+	var rs: Node = game._research_screen
+	rs._view = 4
+	rs._picker.select(4)
+	rs.place = place
+	rs._dirty = true
+	game.show_screen(GameRoot.Screen.RESEARCH)
+	await settle(25)
+
+
+func shot_tech_tree(seconds: float) -> void:
+	await use_world()
+	var company := GameState.company
+	company.rnd_likes["augsburg"] = 80.0
+	company.techs["common_rail"] = {since = GameState.calendar_time(), how = "licence", exclusive_until = 0}
+	GameState.technology._factor_cache.erase(company)
+	GameState.technology.changed.emit()
+	await _research_view("tech:weather_routing")
+	await rec("tech_tree", seconds, Callable(), func(_t: float) -> Rect2: return PAGE_CROP)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_tech_offer_card(seconds: float) -> void:
+	await use_world()
+	GameState.company.rnd_likes["bremen_bridge"] = 80.0
+	await card_shot("tech_offer_card", seconds, func() -> void: game.event_card.show_tech_offer("weather_routing", "early"))
+
+
+func shot_tech_rd(seconds: float) -> void:
+	await use_world()
+	var company := GameState.company
+	company.rnd = {tech = "dual_fuel", budget = 2000000, progress = 0.6 * float(GameState.technology.rnd_cost("dual_fuel"))}
+	company.research_points = 340.0
+	GameState.technology.changed.emit()
+	await _research_view("own")
+	await rec("tech_rd", seconds, Callable(), func(_t: float) -> Rect2: return PAGE_CROP)
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+func shot_tech_developed_card(seconds: float) -> void:
+	await use_world()
+	var company := GameState.company
+	company.rnd = {tech = "air_lubrication", budget = 0, progress = float(GameState.technology.rnd_cost("air_lubrication"))}
+	await card_shot("tech_developed_card", seconds, func() -> void: GameState.technology._monthly_rnd(company))
+
+
+# --- F7: the seven types -------------------------------------------------------------
+
+func _all_divisions() -> void:
+	for id in ["vehicles", "agriculture", "tankers", "seafood", "cruises", "research"]:
+		if not GameState.company.has_type(id):
+			GameState.take_company_type(GameState.company, id)
+
+
+func shot_shop_tabs(seconds: float) -> void:
+	await use_world()
+	_all_divisions()
+	landscape()
+	game.show_screen(GameRoot.Screen.SHOP)
+	await settle(20)
+	await rec("shop_tabs", seconds, Callable(), func(_t: float) -> Rect2: return Rect2(295, 160, 930, 330))
+	game.show_screen(GameRoot.Screen.WORLD)
+
+
+## A crabber working the East China Sea ground (gazami crab, in season in January).
+func shot_fishing_ground2(seconds: float) -> void:
+	await use_world()
+	_all_divisions()
+	portrait()
+	var boat := stage_ship("model_30", "SHA")
+	GameState.set_fishing_target(boat, "gazami_crab", "east_china_sea")
+	var ok := await warp(1500.0, func() -> bool: return boat.is_working_ground(), 8)
+	print("  crabber working: ", ok, " phase ", boat.fish_phase, " wait ", boat.fish_wait)
+	follow(boat, 2400.0)
+	await settle(15)
+	await rec("fishing_ground2", seconds)
+
+
+## A Panamax Liner out of Shanghai for Busan, booked full.
+func shot_cruise_at_sea(seconds: float) -> void:
+	await use_world()
+	_all_divisions()
+	portrait()
+	var ship := stage_ship("model_53", "SHA")
+	GameState.cruises.ensure(ship)
+	var route: Array[String] = ["SHA", "PUS"]
+	GameState.assign_route(ship, route)
+	var cap: Dictionary = GameState.cruises.capacity(ship)
+	ship.cruise.bookings = {}
+	for cabin in cap:
+		ship.cruise.bookings[cabin] = float(cap[cabin])
+	ship.cruise.booking_since = GameState.play_time
+	var ok := await warp(2500.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 60.0, 8)
+	print("  cruise at sea: ", ok, " ", ship.status_text() if ship.has_method("status_text") else "")
+	follow(ship, 1400.0)
+	await settle(15)
+	await rec("cruise_at_sea", seconds)
+
+
+func shot_carrier_at_sea(seconds: float) -> void:
+	_all_divisions()
+	await ship_at_sea_shot("carrier_at_sea", seconds, "model_21", ["SHA", "SIN"], 300.0, 1400.0)
+
+
+## A tropical farm port's fields (Ho Chi Minh City), two plots bought and planted.
+func shot_farm_port(seconds: float) -> void:
+	await use_world()
+	_all_divisions()
+	portrait()
+	for n in 2:
+		var key := "SGN#%d" % n
+		GameState.buy_plot(key)
+		GameState.plant_plot(key, "bananas")
+	look_port("SGN", 420.0)
+	await settle(40)
+	await rec("farm_port", seconds, func(t: float) -> void:
+		var port := GameData.get_port("SGN")
+		look(float(port.lon) + lerpf(-0.02, 0.02, t / seconds), float(port.lat) + 0.01, 420.0))
+
+
+var _research_ship: Ship = null
+
+
+func _stage_expedition() -> void:
+	await use_world()
+	_all_divisions()
+	if _research_ship != null and is_instance_valid(_research_ship):
+		return
+	var ship := stage_ship("model_88", "SHA")
+	for gear in ["sonar", "rov"]:
+		GameState.fit_gear(ship, gear)
+	GameState.send_expedition(ship, Research.end_of("ijn_yamato"))
+	print("  expedition sent: ", ship.research_target if "research_target" in ship else "")
+	var ok := await warp(2500.0, func() -> bool: return ship.research_phase == "work", 8)
+	print("  on station: ", ok, " phase ", ship.research_phase)
+	_research_ship = ship
+
+
+func shot_research_site(seconds: float) -> void:
+	await _stage_expedition()
+	portrait()
+	follow(_research_ship, 2400.0)
+	await settle(15)
+	await rec("research_site", seconds)
+
+
+func shot_discovery_card(seconds: float) -> void:
+	await _stage_expedition()
+	var ship := _research_ship
+	await card_shot("discovery_card", seconds, func() -> void: GameState.research.discover(GameState.company, "ijn_yamato", ship))
+
+
+# --- F8: energy and industry on the map ----------------------------------------------
+
+## An oil rig of ours on the Bohai field, a gas coaster alongside loading.
+func shot_rig_at_sea(seconds: float) -> void:
+	await use_world()
+	_all_divisions()
+	portrait()
+	GameState.money += 60000000
+	print("  rig error: [", GameState.energy.buy_error(GameState.company, "bohai#0"), "]")
+	GameState.buy_rig("bohai#0")
+	GameState.company.energy_sea["bohai"] = {"lpg": 500.0, "oil": 2000.0}
+	var ship := stage_ship("model_71", "TSN")
+	print("  run error: [", GameState.energy.run_error(GameState.company, ship, "bohai", "TSN") if GameState.energy.has_method("run_error") else "?", "]")
+	GameState.set_rig_run(ship, "bohai", "TSN")
+	var ok := await warp(1500.0, func() -> bool: return ship.rig_phase == "load", 8)
+	print("  at the rig: ", ok, " phase ", ship.rig_phase)
+	if ok:
+		follow(ship, 2600.0)
+	else:
+		look(119.5, 38.5, 2000.0)
+	await settle(15)
+	await rec("rig_at_sea", seconds, func(_t: float) -> void:
+		if ok:
+			follow(ship, 2600.0))
+
+
+# --- F9: a ship in a storm, tugs berthing a giant ----------------------------------------
+
+## A Trans Atlantic well out in the East China Sea with a season's typhoon over it.
+func shot_ship_in_storm2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	var route: Array[String] = ["SHA", "SIN"]
+	var ship := stage_ship("model_4", "SHA", route)
+	var ok := await warp(2500.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 220.0, 8)
+	var at := Geo.unproject(ship.world_position())
+	print("  storm ship at sea: ", ok, " ", at)
+	var basins: Array = GameData.config.weather.basins.filter(func(b: Dictionary) -> bool: return str(b.id) == "west_pacific")
+	if basins.is_empty():
+		push_error("no west_pacific basin")
+		return
+	GameState.weather._form(basins[0], 86400.0 / float(GameState.calendar_seconds_per_second()))
+	var storm: Dictionary = GameState.weather.storms[-1]
+	storm.lon = at.x + 0.6
+	storm.lat = at.y - 0.4
+	storm.track = [[storm.lon, storm.lat]]
+	storm.age = float(storm.life) * 0.45
+	print("  storm: ", Weather.title(storm))
+	follow(ship, 300.0)
+	await settle(20)
+	await rec("ship_in_storm2", seconds, func(_t: float) -> void: follow(ship, 300.0))
+
+
+## Two tugs pushing a Dominator onto its pier at Shanghai (a tow in after a breakdown close to home).
+func shot_tug_berthing2(seconds: float) -> void:
+	await use_world()
+	portrait()
+	var route: Array[String] = ["SHA", "PUS"]
+	var big := stage_ship("model_5", "SHA", route)
+	stage_ship("model_25", "SHA")
+	stage_ship("model_25", "SHA")
+	big.auto_recover = false
+	var out := await warp(900.0, func() -> bool: return at_sea(big) and big.traveled_nm > 20.0, 8)
+	big.maintenance = 0.0
+	GameState._lose(big, "broken down")
+	var why := GameState.send_recovery(big)
+	print("  tug tow: out ", out, " send [", why, "] rescuer ", big.rescuer)
+	var lead: Ship = big.rescuer
+	if lead == null:
+		push_error("no tugs sent")
+		return
+	var ok := await warp(1200.0, func() -> bool: return lead.job_phase == Ship.JOB_BERTH and big.berth_phase == Ship.BERTH_IN, 2)
+	print("  berthing: ", ok, " lead ", lead.job_phase, " big ", big.berth_phase)
+	follow(big, 2600.0)
+	await settle(5)
+	await rec("tug_berthing2", seconds, func(_t: float) -> void: follow(big, 2600.0))
+
+
+# --- F10: the Host Game dialog ---------------------------------------------------------
+
+func shot_host_dialog2(seconds: float) -> void:
+	await _unload()
+	vp.gui_embed_subwindows = true
+	MainMenu._booted = true
+	MainMenu.host_settings.name = "Friday night"
+	var menu := await _other_scene("res://scenes/main_menu.tscn")
+	menu._ask_host(func() -> void: pass)
+	await settle(25)
+	var rect := Rect2(390, 200, 500, 320)
+	for window in menu.find_children("*", "ConfirmationDialog", true, false):
+		var dialog := window as ConfirmationDialog
+		rect = Rect2(Vector2(dialog.position), Vector2(dialog.size))
+	print("  host dialog rect ", rect)
+	await rec("host_dialog2", seconds, Callable(), func(_t: float) -> Rect2: return grow(rect, 14.0))
+	menu.queue_free()
+	vp.gui_embed_subwindows = false

@@ -1431,7 +1431,1113 @@
 						"len": 1
 					}
 				]
+			},
+			{
+				"t": [
+					1,
+					2
+				],
+				"shots": [
+					{
+						"shot": "preview3",
+						"len": 1
+					}
+				]
 			}
 		]
+	},
+	"F1": {
+		"file": "feature_01_contracts",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "WORK GOES OUT TO CONTRACT",
+				"shots": [
+					{
+						"shot": "contract_card",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "VOYAGES · VOLUME · TENDERS",
+				"shots": [
+					{
+						"shot": "contracts_offers",
+						"len": 2.5
+					},
+					{
+						"shot": "tender_card",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "STANDING OPENS DOORS",
+				"shots": [
+					{
+						"shot": "contracts_standing",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					23
+				],
+				"caption": "CONTRACT CARGO LOADS FREE. PAID ON DELIVERY.",
+				"shots": [
+					{
+						"shot": "contract_loading",
+						"len": 3.5
+					},
+					{
+						"shot": "contract_log",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					23,
+					30
+				],
+				"caption": "DELIVER, OR PAY THE FEE",
+				"shots": [
+					{
+						"shot": "contract_event_card",
+						"len": 3.5
+					},
+					{
+						"shot": "ship_at_sea2",
+						"len": 3.5
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/voyage_of_discovery.mp3",
+			"gain_db": -4
+		},
+		"intro": "Contracts and tenders"
+	},
+	"F2": {
+		"file": "feature_02_shipyards",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "ORDER FROM 35 REAL YARDS",
+				"shots": [
+					{
+						"shot": "shop_order",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "DEPOSIT NOW. DELIVERED MONTHS LATER.",
+				"shots": [
+					{
+						"shot": "orders_bar",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "EVERY YARD HAS A REPUTATION",
+				"shots": [
+					{
+						"shot": "yards_dropdown",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					23
+				],
+				"caption": "SECOND-HAND, WHERE SHE LIES",
+				"shots": [
+					{
+						"shot": "used_market",
+						"len": 6
+					}
+				]
+			},
+			{
+				"t": [
+					23,
+					30
+				],
+				"caption": "ONTO YOUR BOOKS",
+				"shots": [
+					{
+						"shot": "delivery_card",
+						"len": 3.5
+					},
+					{
+						"shot": "yard_leaving",
+						"len": 3.5
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/the_great_sea.mp3",
+			"gain_db": -4
+		},
+		"intro": "Shipyards and the second-hand market"
+	},
+	"F3": {
+		"file": "feature_03_parts",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "REAL PARTS",
+				"shots": [
+					{
+						"shot": "parts_view",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "EACH PART WEARS ON ITS OWN",
+				"shots": [
+					{
+						"shot": "parts_worn",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "MINOR REPAIRS AT THE PIER. MAJOR REPAIRS IN DRYDOCK.",
+				"shots": [
+					{
+						"shot": "pier_repair",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					23
+				],
+				"caption": "DRYDOCK AT A YARD, OR YOUR OWN",
+				"shots": [
+					{
+						"shot": "drydock_popup",
+						"len": 6
+					}
+				]
+			},
+			{
+				"t": [
+					23,
+					30
+				],
+				"caption": "UPGRADES YOU CAN FEEL",
+				"shots": [
+					{
+						"shot": "parts_upgrade",
+						"len": 3.5
+					},
+					{
+						"shot": "ship_at_sea2",
+						"len": 3.5
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/the_krakens_pursuit.mp3",
+			"gain_db": -5
+		},
+		"intro": "Ship parts and drydock"
+	},
+	"F4": {
+		"file": "feature_04_people",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "A COMPANY IS ITS PEOPLE",
+				"shots": [
+					{
+						"shot": "people_page",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "SKILLS THAT PAY",
+				"shots": [
+					{
+						"shot": "people_execs",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "HEADS RUN THEIR REGIONS",
+				"shots": [
+					{
+						"shot": "people_heads",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					22
+				],
+				"caption": "OFFICERS WITH MORALE",
+				"shots": [
+					{
+						"shot": "people_officers",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					22,
+					27
+				],
+				"caption": "HIRE · POST · HEADHUNT",
+				"shots": [
+					{
+						"shot": "people_applications",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					27,
+					30
+				],
+				"caption": "ONE DAY, AN HEIR",
+				"shots": [
+					{
+						"shot": "people_family",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/exploring_the_ocean.ogg",
+			"gain_db": -4
+		},
+		"intro": "People"
+	},
+	"F5": {
+		"file": "feature_05_ownership",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "WHO OWNS YOUR COMPANY?",
+				"shots": [
+					{
+						"shot": "own_register",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "A BOARD THAT VOTES",
+				"shots": [
+					{
+						"shot": "own_motions",
+						"len": 2.5
+					},
+					{
+						"shot": "vote_card",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "THE IPO",
+				"shots": [
+					{
+						"shot": "own_ipo",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					22
+				],
+				"caption": "A PRICE THAT REMEMBERS",
+				"shots": [
+					{
+						"shot": "own_price",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					22,
+					30
+				],
+				"caption": "BUY INTO YOUR RIVALS",
+				"shots": [
+					{
+						"shot": "own_firms",
+						"len": 4
+					},
+					{
+						"shot": "own_firm_card",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/voyage_of_discovery.mp3",
+			"gain_db": -4
+		},
+		"intro": "Ownership and the board"
+	},
+	"F6": {
+		"file": "feature_06_technology",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "30 TECHNOLOGIES",
+				"shots": [
+					{
+						"shot": "tech_tree",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "LICENCE IT",
+				"shots": [
+					{
+						"shot": "tech_offer_card",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "OR BUILD YOUR OWN",
+				"shots": [
+					{
+						"shot": "tech_rd",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					22
+				],
+				"caption": "FITTED IN DRYDOCK",
+				"shots": [
+					{
+						"shot": "tech_developed_card",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					22,
+					30
+				],
+				"caption": "EXPEDITIONS BANK THE POINTS",
+				"shots": [
+					{
+						"shot": "research_site",
+						"len": 4
+					},
+					{
+						"shot": "discovery_card",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/the_great_sea.mp3",
+			"gain_db": -4
+		},
+		"intro": "Technology and R&D"
+	},
+	"F7": {
+		"file": "feature_07_company_types",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					6
+				],
+				"caption": "SEVEN COMPANY TYPES",
+				"shots": [
+					{
+						"shot": "shop_tabs",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					6,
+					10
+				],
+				"caption": "CARGO & ORE",
+				"shots": [
+					{
+						"shot": "ship_at_sea2",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					10,
+					14
+				],
+				"caption": "TANKERS",
+				"shots": [
+					{
+						"shot": "tanker_at_sea",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					14,
+					18
+				],
+				"caption": "SEAFOOD",
+				"shots": [
+					{
+						"shot": "fishing_ground2",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					18,
+					22
+				],
+				"caption": "CRUISES",
+				"shots": [
+					{
+						"shot": "cruise_at_sea",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					22,
+					26
+				],
+				"caption": "FARMS · VEHICLES",
+				"shots": [
+					{
+						"shot": "farm_port",
+						"len": 2
+					},
+					{
+						"shot": "carrier_at_sea",
+						"len": 2
+					}
+				]
+			},
+			{
+				"t": [
+					26,
+					30
+				],
+				"caption": "RESEARCH",
+				"shots": [
+					{
+						"shot": "research_site",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/the_krakens_pursuit.mp3",
+			"gain_db": -5
+		},
+		"intro": "Seven company types"
+	},
+	"F8": {
+		"file": "feature_08_industry",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "IT ALL COMES FROM SOMEWHERE",
+				"shots": [
+					{
+						"shot": "industry_page",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "40 MINES, PLANTS AND FACTORIES",
+				"shots": [
+					{
+						"shot": "plants_map",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "RIGS · PIPELINES · REFINERIES",
+				"shots": [
+					{
+						"shot": "energy_page",
+						"len": 2.5
+					},
+					{
+						"shot": "rig_at_sea",
+						"len": 2.5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					22
+				],
+				"caption": "FARMS BY THE SEASON",
+				"shots": [
+					{
+						"shot": "farms_page",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					22,
+					30
+				],
+				"caption": "EVERY PORT TRADES EVERYTHING",
+				"shots": [
+					{
+						"shot": "intelligence_page",
+						"len": 8
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/exploring_the_ocean.ogg",
+			"gain_db": -4
+		},
+		"intro": "Energy, industry and farms"
+	},
+	"F9": {
+		"file": "feature_09_storms",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "STORMS BY THE SEASON",
+				"shots": [
+					{
+						"shot": "storm2",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "CAUGHT OUT",
+				"shots": [
+					{
+						"shot": "ship_in_storm2",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "LOST AT SEA",
+				"shots": [
+					{
+						"shot": "lost_ship2",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					23
+				],
+				"caption": "THE MAMMOTH",
+				"shots": [
+					{
+						"shot": "recovery_lift2",
+						"len": 6,
+						"speed": 2.0
+					}
+				]
+			},
+			{
+				"t": [
+					23,
+					30
+				],
+				"caption": "TUGS",
+				"shots": [
+					{
+						"shot": "tug_berthing2",
+						"len": 7
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/voyage_of_discovery.mp3",
+			"gain_db": -4
+		},
+		"intro": "Storms, breakdowns and tugs"
+	},
+	"F10": {
+		"file": "feature_10_living_world",
+		"beats": [
+			{
+				"t": [
+					0,
+					3
+				],
+				"introcard": true,
+				"shots": [
+					{
+						"shot": "globe_spin2",
+						"len": 3
+					}
+				]
+			},
+			{
+				"t": [
+					3,
+					7
+				],
+				"caption": "THE WORLD RUNS WITHOUT YOU",
+				"shots": [
+					{
+						"shot": "fleet_zoomout",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					7,
+					12
+				],
+				"caption": "MARKETS TIGHTEN AND GLUT",
+				"shots": [
+					{
+						"shot": "intelligence_news",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					12,
+					17
+				],
+				"caption": "THE GAZETTE",
+				"shots": [
+					{
+						"shot": "gazette",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					17,
+					22
+				],
+				"caption": "INTELLIGENCE",
+				"shots": [
+					{
+						"shot": "intelligence_page",
+						"len": 5
+					}
+				]
+			},
+			{
+				"t": [
+					22,
+					30
+				],
+				"caption": "RIVALS OR FRIENDS",
+				"shots": [
+					{
+						"shot": "host_dialog2",
+						"len": 4
+					},
+					{
+						"shot": "compare_companies2",
+						"len": 4
+					}
+				]
+			},
+			{
+				"t": [
+					30,
+					33
+				],
+				"endcard": true,
+				"shots": [
+					{
+						"shot": "end_globe2",
+						"len": 3
+					}
+				]
+			}
+		],
+		"music": {
+			"file": "../../audio/music/the_great_sea.mp3",
+			"gain_db": -4
+		},
+		"intro": "A living world, with friends"
 	}
 }

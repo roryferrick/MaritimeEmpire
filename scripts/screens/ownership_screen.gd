@@ -104,7 +104,7 @@ func _add_motions(company: Company, own: Ownership, shares: Dictionary) -> void:
 	var box := _card("Motions")
 	var dividend := HBoxContainer.new()
 	dividend.add_theme_constant_override(&"separation", 8)
-	dividend.add_child(_text("Dividend: pay the holders"))
+	dividend.add_child(_nowrap(_text("Dividend: pay the holders")))
 	var spin := SpinBox.new()
 	spin.min_value = 0
 	spin.max_value = 50
@@ -113,12 +113,12 @@ func _add_motions(company: Company, own: Ownership, shares: Dictionary) -> void:
 	spin.value = roundi(_dividend * 100.0)
 	spin.value_changed.connect(func(v: float) -> void: _dividend = v / 100.0)
 	dividend.add_child(spin)
-	dividend.add_child(_text("of each quarter's profit"))
+	dividend.add_child(_nowrap(_text("of each quarter's profit")))
 	dividend.add_child(_flat_button("Propose", func() -> void: GameState.propose_motion("dividend", {share = _dividend})))
 	box.add_child(dividend)
 	var issue := HBoxContainer.new()
 	issue.add_theme_constant_override(&"separation", 8)
-	issue.add_child(_text("Sell new shares to a fund:"))
+	issue.add_child(_nowrap(_text("Sell new shares to a fund:")))
 	var issue_spin := SpinBox.new()
 	issue_spin.min_value = 5
 	issue_spin.max_value = 40
@@ -127,14 +127,14 @@ func _add_motions(company: Company, own: Ownership, shares: Dictionary) -> void:
 	issue_spin.value = roundi(_issue_share * 100.0)
 	issue_spin.value_changed.connect(func(v: float) -> void: _issue_share = v / 100.0)
 	issue.add_child(issue_spin)
-	issue.add_child(_dim("of the shares, at today's price (about %s in; everyone diluted)" % Fmt.money_short(roundi(own.price(company) * int(shares.total) * _issue_share))))
+	issue.add_child(_nowrap(_dim("of the shares, at today's price (about %s in; everyone diluted)" % Fmt.money_short(roundi(own.price(company) * int(shares.total) * _issue_share)))))
 	issue.add_child(_flat_button("Propose", func() -> void: GameState.propose_motion("issue", {share = _issue_share})))
 	box.add_child(issue)
 	var outside := 1.0 - own.founder_share(company)
 	if outside > 0.001:
 		var back := HBoxContainer.new()
 		back.add_theme_constant_override(&"separation", 8)
-		back.add_child(_text("Buy back 5%% of the shares from the outside holders (about %s)" % Fmt.money_short(roundi(own.price(company) * int(shares.total) * 0.05))))
+		back.add_child(_nowrap(_text("Buy back 5%% of the shares from the outside holders (about %s)" % Fmt.money_short(roundi(own.price(company) * int(shares.total) * 0.05)))))
 		back.add_child(_flat_button("Propose", func() -> void: GameState.propose_motion("buyback", {share = 0.05})))
 		box.add_child(back)
 	_body.add_child(box.get_parent())
@@ -161,7 +161,7 @@ func _add_ipo(company: Company, own: Ownership, shares: Dictionary) -> void:
 				var choose := _flat_button(str(bank.name), func() -> void: GameState.ipo_choose_bank(id))
 				choose.disabled = not can
 				row.add_child(choose)
-				row.add_child(_dim("fee %d%% of what's raised · reach %s · %s" % [roundi(float(bank.fee) * 100.0), "+%d%% demand" % roundi(float(bank.reach) * 100.0) if float(bank.reach) > 0.0 else "none", "takes you" if can else "only companies worth %s or more" % Fmt.money_short(roundi(float(bank.min_value)))]))
+				row.add_child(_nowrap(_dim("fee %d%% of what's raised · reach %s · %s" % [roundi(float(bank.fee) * 100.0), "+%d%% demand" % roundi(float(bank.reach) * 100.0) if float(bank.reach) > 0.0 else "none", "takes you" if can else "only companies worth %s or more" % Fmt.money_short(roundi(float(bank.min_value)))])))
 				box.add_child(row)
 		"terms":
 			var mid := float(state.valuation) / float(shares.total)
@@ -178,7 +178,7 @@ func _add_ipo(company: Company, own: Ownership, shares: Dictionary) -> void:
 			low.prefix = "$"
 			low.value = _ipo_low
 			low.value_changed.connect(func(v: float) -> void: _ipo_low = v)
-			row.add_child(_text("from"))
+			row.add_child(_nowrap(_text("from")))
 			row.add_child(low)
 			var high := SpinBox.new()
 			high.min_value = snappedf(mid, 0.01)
@@ -187,7 +187,7 @@ func _add_ipo(company: Company, own: Ownership, shares: Dictionary) -> void:
 			high.prefix = "$"
 			high.value = _ipo_high
 			high.value_changed.connect(func(v: float) -> void: _ipo_high = v)
-			row.add_child(_text("to"))
+			row.add_child(_nowrap(_text("to")))
 			row.add_child(high)
 			var share := SpinBox.new()
 			share.min_value = roundi(float(Ownership.IPO_SHARE[0]) * 100.0)
@@ -196,9 +196,9 @@ func _add_ipo(company: Company, own: Ownership, shares: Dictionary) -> void:
 			share.suffix = "%"
 			share.value = roundi(_ipo_share * 100.0)
 			share.value_changed.connect(func(v: float) -> void: _ipo_share = v / 100.0)
-			row.add_child(_text("selling"))
+			row.add_child(_nowrap(_text("selling")))
 			row.add_child(share)
-			row.add_child(_dim("of the company (new shares)"))
+			row.add_child(_nowrap(_dim("of the company (new shares)")))
 			box.add_child(row)
 			box.add_child(_dim("A higher range raises more if demand holds, and sinks the listing if it doesn't."))
 			box.add_child(_flat_button("Start the roadshow", func() -> void: GameState.ipo_set_terms(_ipo_low, _ipo_high, _ipo_share)))
@@ -225,14 +225,14 @@ func _add_firm_cards(company: Company, own: Ownership) -> void:
 		box.add_child(_dim("Based in %s. %d ships on the books (about %s hulls), %d at sea now, %d sailings last month. Cash %s; earned %s last month; worth %s." % [GameData.port_name(str(firm.home)), hulls, Fmt.thousands(roundi(hulls * ShippingFirms.CONVOY)), firms.voyages_of(i), int(firm.get("month_voyages", 0)), Fmt.money(roundi(float(firm.money))), Fmt.money(roundi(float(firm.get("last_month_earned", 0.0)))), "$" + Fmt.short(own.firm_value(i))]))
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override(&"separation", 8)
-		row.add_child(_text("Focus"))
+		row.add_child(_nowrap(_text("Focus")))
 		var focus := OptionButton.new()
 		focus.add_item("World-wide")
 		focus.add_item("Home: voyages out of %s only" % str(WorldEconomy.country(str(firm.country)).get("name", firm.country)))
 		focus.select(1 if str(plan.focus) == "home" else 0)
 		focus.item_selected.connect(func(index: int) -> void: GameState.set_firm_plan(i, "focus", "home" if index == 1 else "world"))
 		row.add_child(focus)
-		row.add_child(_text("Dividend"))
+		row.add_child(_nowrap(_text("Dividend")))
 		var dividend := SpinBox.new()
 		dividend.min_value = 0
 		dividend.max_value = 100
@@ -241,7 +241,7 @@ func _add_firm_cards(company: Company, own: Ownership) -> void:
 		dividend.value = roundi(float(plan.dividend) * 100.0)
 		dividend.value_changed.connect(func(v: float) -> void: GameState.set_firm_plan(i, "dividend", v / 100.0))
 		row.add_child(dividend)
-		row.add_child(_dim("of each month's earnings to you; the rest builds its cash"))
+		row.add_child(_nowrap(_dim("of each month's earnings to you; the rest builds its cash")))
 		box.add_child(row)
 		var lines := {}
 		for model_id: String in firm.fleet:
@@ -249,7 +249,7 @@ func _add_firm_cards(company: Company, own: Ownership) -> void:
 		if lines.size() > 1:
 			var groups := HBoxContainer.new()
 			groups.add_theme_constant_override(&"separation", 8)
-			groups.add_child(_text("Trades"))
+			groups.add_child(_nowrap(_text("Trades")))
 			for line: String in lines:
 				var tick := CheckBox.new()
 				tick.text = People.group_name(line)
@@ -268,9 +268,9 @@ func _add_firm_cards(company: Company, own: Ownership) -> void:
 		var order_row := HBoxContainer.new()
 		order_row.add_theme_constant_override(&"separation", 8)
 		if orders.is_empty():
-			order_row.add_child(_dim("No ship on order. It asks you when it has the cash for one."))
+			order_row.add_child(_nowrap(_dim("No ship on order. It asks you when it has the cash for one.")))
 		else:
-			order_row.add_child(_dim("On order: " + ", ".join(PackedStringArray(orders.map(func(o: Dictionary) -> String: return "%s from %s, due %s" % [str(GameData.get_ship_model(str(o.model)).get("name", "")), str(GameState.shipyards.yard(str(o.yard)).get("name", "")), Fmt.calendar_short(int(o.due))])))))
+			order_row.add_child(_nowrap(_dim("On order: " + ", ".join(PackedStringArray(orders.map(func(o: Dictionary) -> String: return "%s from %s, due %s" % [str(GameData.get_ship_model(str(o.model)).get("name", "")), str(GameState.shipyards.yard(str(o.yard)).get("name", "")), Fmt.calendar_short(int(o.due))]))))))
 		order_row.add_child(_flat_button("Order a ship now", func() -> void: GameState.request_firm_order(i)))
 		box.add_child(order_row)
 		_body.add_child(box.get_parent())
@@ -372,6 +372,13 @@ func _text(text: String) -> Label:
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	return label
+
+
+## A label in a row of labels and buttons: no wrapping (an autowrap label in a
+## box with no width of its own wrapped one character a line).
+func _nowrap(label: Label) -> Label:
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	return label
 
 

@@ -120,7 +120,7 @@ func _add_heads(company: Company, people: People) -> void:
 	else:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override(&"separation", 8)
-		row.add_child(_text("New post:"))
+		row.add_child(_nowrap(_text("New post:")))
 		var group_picker := OptionButton.new()
 		for category: String in groups:
 			group_picker.add_item(People.group_name(category))
@@ -143,7 +143,7 @@ func _add_heads(company: Company, people: People) -> void:
 				region_picker.select(i)
 		region_picker.item_selected.connect(func(index: int) -> void: _new_head_region = str(region_picker.get_item_metadata(index)))
 		row.add_child(region_picker)
-		row.add_child(_dim("then Hire a head from the market below, or:"))
+		row.add_child(_nowrap(_dim("then Hire a head from the market below, or:")))
 		row.add_child(_hunt_button(people, company, "head", ""))
 		box.add_child(row)
 	_body.add_child(box.get_parent())
@@ -203,13 +203,13 @@ func _add_market(company: Company, people: People) -> void:
 	for posting: Dictionary in company.postings:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override(&"separation", 8)
-		row.add_child(_text("Posted: %s%s, since %s" % [People.posting_title(posting), "" if float(posting.get("salary", 1.0)) <= 1.0 else " at +%d%%" % roundi((float(posting.salary) - 1.0) * 100.0), Fmt.calendar_short(int(posting.since))]))
+		row.add_child(_nowrap(_text("Posted: %s%s, since %s" % [People.posting_title(posting), "" if float(posting.get("salary", 1.0)) <= 1.0 else " at +%d%%" % roundi((float(posting.salary) - 1.0) * 100.0), Fmt.calendar_short(int(posting.since))])))
 		var id := int(posting.id)
 		row.add_child(_flat_button("Close", func() -> void: GameState.close_posting(id)))
 		box.add_child(row)
 	var post := HBoxContainer.new()
 	post.add_theme_constant_override(&"separation", 8)
-	post.add_child(_text("Post a job:"))
+	post.add_child(_nowrap(_text("Post a job:")))
 	var kind_pick := OptionButton.new()
 	for label: String in ["Executive", "Department head (the pickers above)", "Officers"]:
 		kind_pick.add_item(label)
@@ -435,6 +435,13 @@ func _text(text: String) -> Label:
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	return label
+
+
+## A label in a row of labels and buttons: no wrapping (an autowrap label in a
+## box with no width of its own wrapped one character a line).
+func _nowrap(label: Label) -> Label:
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	return label
 
 

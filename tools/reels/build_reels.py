@@ -74,6 +74,12 @@ def build(reel_id: str, reel: dict) -> None:
                 f"[{last}][c{i}]overlay=x=0:y='{CAPTION_Y}+40*max(0\\,1-(t-{t0})/{POP})':enable='between(t,{t0},{t1})'[v{i}]")
             last = f"v{i}"
             inputs += 1
+        if beat.get("introcard"):  # (A feature reel's opening slide, fading out as the beat ends.)
+            args += ["-loop", "1", "-framerate", str(FPS), "-i", os.path.join(cards, "introcard.png")]
+            filters.append(f"[{inputs}:v]format=rgba,fade=t=out:st={t1 - 0.4}:d=0.4:alpha=1[s{i}]")
+            filters.append(f"[{last}][s{i}]overlay=0:0:enable='between(t,{t0},{t1})'[v{i}]")
+            last = f"v{i}"
+            inputs += 1
         if beat.get("endcard"):
             args += ["-loop", "1", "-framerate", str(FPS), "-i", os.path.join(cards, "endcard.png")]
             filters.append(f"[{inputs}:v]format=rgba,fade=t=in:st={t0}:d=0.4:alpha=1[e{i}]")
@@ -111,7 +117,17 @@ def build(reel_id: str, reel: dict) -> None:
              "-t", f"{length:.3f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "slow", "-crf", "17",
              "-profile:v", "high", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
              os.path.join(OUT, reel["file"] + ".mp4")]
-    subprocess.run(args, check=True)
+    # (ffmpeg has hung for good now and then on this machine, mid-encode and silent:
+    # a bounded run, killed and tried once more.)
+    for attempt in range(3):
+        try:
+            # (Nothing to the console: a console write can block a process on Windows.)
+            subprocess.run(args, check=True, timeout=180, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            break
+        except subprocess.TimeoutExpired:
+            print("ffmpeg hung on", reel["file"], "- trying again" if attempt < 2 else "- giving up", flush=True)
+            if attempt == 2:
+                raise
     print("wrote", reel["file"] + ".mp4", f"({length:.1f} s)")
 
 

@@ -29,3 +29,7 @@ Captions change on the beat times in `reels.json`. After you record a voiceover,
 ## Music
 
 A reel can carry a music track: in `reels.json` give it `"music": {"file": "music/<track>.mp3", "gain_db": -6}` (the file under this folder; `gain_db` is how much quieter than as recorded, about -14 under a voiceover). The build fades it in over 0.8 s, out over the last 2 s, and mixes it under the voiceover. Credit the track where its licence asks (the Instagram caption for CC BY).
+
+## The feature reels
+
+`feature_01_contracts.mp4` to `feature_10_living_world.mp4` (reels F1-F10 in `reels.json`, scripts in [SCRIPTS.md](SCRIPTS.md) under "Feature reels, 30 seconds each") are staged in a fresh company by the director (`use_world()` and the staging helpers after it), the old saves being unloadable now. Each carries one of the four Creative Commons tracks under `audio/music`; the credit line each needs is beside its script, for the post's caption. Record one with `--reel F3`, several with `--reel F1,F2`, one shot of one with `--reel F1 --shot contracts_offers`, and build with `build_reels.py F3`.
