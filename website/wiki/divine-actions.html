@@ -18,7 +18,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
 <a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
-<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><a href="../creator.html">Creator</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
 </header>
 <div class="wiki-layout">
 <aside class="wiki-aside">
@@ -35,6 +35,11 @@
 <li><a href="company-logos.html">Company logos</a></li>
 <li><a href="economy-time.html">Economy &amp; time</a></li>
 <li><a href="trading.html">Trading</a></li>
+<li><a href="contracts.html">Contracts</a></li>
+<li><a href="people.html">People</a></li>
+<li><a href="ownership.html">Ownership</a></li>
+<li><a href="running-the-firms-you-control.html">Running the firms you control</a></li>
+<li><a href="technology.html">Technology</a></li>
 <li><a href="farms.html">Farms</a></li>
 <li><a href="vehicle-makers-and-factories.html">Vehicle makers and factories</a></li>
 <li><a href="cargo-ore-industry.html">Cargo &amp; Ore industry</a></li>
@@ -42,7 +47,7 @@
 <li><a href="research.html">Research</a></li>
 <li><a href="market-regions.html">Market regions</a></li>
 <li><a href="headquarters-and-hubs.html">Headquarters and hubs</a></li>
-<li><a href="company-and-ship-levels-xp.html">Company and ship levels (XP)</a></li>
+<li><a href="progression.html">Progression</a></li>
 <li><a href="achievements.html">Achievements</a></li>
 <li><a class="current" aria-current="page" href="divine-actions.html">Divine Actions</a></li>
 <li><a href="skin-packs-sand-dollars-and-the-shop.html">Skin packs, Sand Dollars and the Shop</a></li>
@@ -61,11 +66,11 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Wiki</a> <span>/</span> <a href="business.html">Business and trading</a></nav>
 <h1>Divine Actions</h1>
 <ul>
-<li>A game mode chosen when a company is founded, unrealistic and unfair by design. Rivals (AI and other players) have the same powers.
+<li>A game mode chosen when a company is founded, unrealistic and unfair by design. Rivals (other players) have the same powers.
 </li>
-<li>Powers, bought from the Divine panel (the bolt button under the trophy on the World map): each row names the power, its price now and what it does, with Unleash (greyed with why: too expensive, on cooldown, Wrath used this year, three storms out). Prices scale with company level (base x (1 + level / 50)), except Wrath, a flat $1,000,000,000. Each has a cooldown in game weeks (a week being 504 s of play). A power with a target closes the panel and has the player click it on the map (a hint at the top says what; Esc cancels): a point at sea, a port, or a rival's ship at sea.
+<li>Powers, bought from the Divine panel (the bolt button under the trophy on the World map): each row names the power, its price now and what it does, with Unleash (greyed with why: too expensive, on cooldown, Wrath used this year, three storms out). Prices scale with company value (base x (1 + value / $500M)), except Wrath, a flat $1,000,000,000. Each has a cooldown in game weeks (a week being 504 s of play). A power with a target closes the panel and has the player click it on the map (a hint at the top says what; Esc cancels): a point at sea, a port, or a rival's ship at sea.
 <ul>
-<li>Storms, three tiers, called down at the point clicked: Squall ($25M base; a gale, 180 nm, 2 days, cooldown 0.2 weeks), Tempest ($200M; a hurricane, typhoon or cyclone by those waters, 300 nm, 7 days, with an eye, closes ports under its core; 0.6 weeks) and Wrath ($1B; the tropical kind, 600 nm, 14 days, power 2: twice any natural storm's strength, so 95% slower and 5x wear at its core at Harsh settings, closing every port it crosses; once a calendar year). A divine storm starts at full strength, holds it most of its life and fades at the end (intensity (1 - (age/life)^4) x power), drifts slowly (5 knots) from where it was called, is named for its tier (&quot;Cyclone Wrath&quot;) with &quot;sent by &lt;company&gt;&quot; under it on the map and a &quot;Sent by&quot; row in its popup, and acts from company level 1 even in a game founded without storms (then at Harsh settings). At most 3 of a company's storms are out at once. The sender's own ships suffer in it like anyone's.
+<li>Storms, three tiers, called down at the point clicked: Squall, Tempest ($200M; a hurricane, typhoon or cyclone by those waters, 300 nm, 7 days, with an eye, closes ports under its core; 0.6 weeks) and Wrath ($1B; the tropical kind, 600 nm, 14 days, power 2: twice any natural storm's strength, so 95% slower and 5x wear at its core at Harsh settings, closing every port it crosses; once a calendar year). A divine storm starts at full strength, holds it most of its life and fades at the end (intensity (1 - (age/life)^4) x power), drifts slowly (5 knots) from where it was called, is named for its tier (&quot;Cyclone Wrath&quot;) with &quot;sent by &lt;company&gt;&quot; under it on the map and a &quot;Sent by&quot; row in its popup, and acts even in a game founded without storms (then at Harsh settings). At most 3 of a company's storms are out at once. The sender's own ships suffer in it like anyone's.
 </li>
 <li>Fair winds ($100M; no target; a week): the company's whole fleet sails 1.5x faster for a week.
 </li>
@@ -79,12 +84,12 @@
 </li>
 <li>The Kraken ($150M; a rival's ship at sea): the ship is lost where it is (&quot;taken by the Kraken&quot;, maintenance 0) for a tug or recovery boat to fetch; its arms rise round the ship for 20 s.
 </li>
-<li>Lightning strike ($120M; a port where a rival has a hub): the hub drops a level; a bolt and flash over the port for 4 s.
+<li>Lightning strike ($120M; a port where a rival has a hub): its last warehouse burns down (with none, its owner pays a $5M repair bill); a bolt and flash over the port for 4 s.
 </li></ul>
 </li>
-<li>Blessings and omens, always on in a Divine game: birds following a ship speed it up 2% a bird (an albatross 4%), up to 50%; whales or dolphins within 50 nm shield a ship from a storm's wear; sharks within 100 nm of a lost ship hurry its rescuers 1.5x; frigatebirds following a ship make off with 2% a bird (up to 10%) of its sale (logged); a port's gulls, cormorants, seabirds and sea ducks (plus a Sea change) bless it, 80 birds for the full blessing: its stops up to 50% faster and its prices up to 20% better each way for ships there; a port's lamps by night turn ships round 20% faster; the first snow (1-7 December, ports north of 50 N) slows stops there 30%; cherry blossom (Japan in April) doubles delivery XP there; and one day a year a comet crosses the sky (drawn above the night at the top of the map, logged) lifting everyone's sale prices 10%.
+<li>Blessings and omens, always on in a Divine game: birds following a ship speed it up 2% a bird (an albatross 4%), up to 50%; whales or dolphins within 50 nm shield a ship from a storm's wear; sharks within 100 nm of a lost ship hurry its rescuers 1.5x; frigatebirds following a ship make off with 2% a bird (up to 10%) of its sale (logged); a port's gulls, cormorants, seabirds and sea ducks (plus a Sea change) bless it, 80 birds for the full blessing: its stops up to 50% faster and its prices up to 20% better each way for ships there; a port's lamps by night turn ships round 20% faster; the first snow (1-7 December, ports north of 50 N) slows stops there 30%; cherry blossom (Japan in April) lifts sale prices there 10%; and one day a year a comet crosses the sky (drawn above the night at the top of the map, logged) lifting everyone's sale prices 10%.
 </li>
-<li>Every act goes in the activity log in the actor's colour (&quot;Northstar Freight called down a Tempest on the waters off Lagos.&quot;; red when it hits this player's ships, port or hub); the panel lists the last 12 acts. AI rivals use the powers too: about once a game week (Easy every 3, Hard every 1) a rival picks on the richest other company and uses the first power it can afford twice over that it has a target for (a storm or the Kraken on one of that company's ships at sea, a plague or deluge on its busiest port, lightning on one of its hubs, fair winds for itself, calm seas where its own ship is in a storm, a great flock on its own busiest port).
+<li>Every act goes in the activity log in the actor's colour (&quot;Northstar Freight called down a Tempest on the waters off Lagos.&quot;; red when it hits this player's ships, port or hub); the panel lists the last 12 acts.
 </li>
 <li>Multiplayer: the host does every act and sends the divine state (effects, cooldowns, ledger) with its updates; players can target each other and the AI. Achievements and company comparison are unchanged.
 </li></ul>
@@ -94,7 +99,7 @@
 </div>
 <footer class="site-footer">
 <p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
-<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../creator.html">Creator</a> &middot; <a href="../privacy.html">Privacy</a></p>
 </footer>
 <script src="search_index.js" defer></script>
 <script src="../assets/wiki.js" defer></script>

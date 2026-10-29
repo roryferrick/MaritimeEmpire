@@ -18,7 +18,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
 <a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
-<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><a href="../creator.html">Creator</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
 </header>
 <div class="wiki-layout">
 <aside class="wiki-aside">
@@ -34,6 +34,8 @@
 <li><a href="ship-models.html">Ship models</a></li>
 <li><a href="cruise-lines.html">Cruise lines</a></li>
 <li><a href="fuel-maintenance-and-port-stops.html">Fuel, maintenance and port stops</a></li>
+<li><a href="ship-parts-and-drydock.html">Ship parts and drydock</a></li>
+<li><a href="shipyards-orders-and-the-second-hand-market.html">Shipyards, orders and the second-hand market</a></li>
 <li><a href="refuel-stops.html">Refuel stops</a></li>
 <li><a href="lost-ships-and-recovery-boats.html">Lost ships and recovery boats</a></li>
 <li><a href="tugs.html">Tugs</a></li>
@@ -58,7 +60,7 @@
 <nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Wiki</a> <span>/</span> <a href="ships.html">Ships and crews</a></nav>
 <h1>Fishing and crabbing</h1>
 <ul>
-<li>Three new ship lines: fishing boats, crabbing boats and seafood carriers. Fishing: the Sport Fisher 24 (tier 1, from level 1 beside the Scooter: a 24 ft centre console, 4 aboard, trolls lines, trips of 3 to 7 days, 48 crates), the Sportfisher 60 (tier 3, level 14: a 60 ft sportfisher with a flybridge and outriggers that also runs nets, 16 aboard, trips of 5 to 21 days, 400 crates) and the Factory Trawler (tier 5, level 48: nets and trawls, 80 aboard, out 20 to 90 days, 40,000 crates). Crabbing, every crab caught in pots: the Crab Skiff 24 (tier 1, level 1: an aluminium skiff with 30 small pots, trips of 2 to 5 days, 30 crates), the Crabber 98 (tier 3, level 16: 150 pots, 18 aboard, 500 crates) and the Bering Sea Crabber (tier 5, level 50: 250 big pots, out 30 to 120 days, 6,000 crates; it can stay out all winter on the king crab like the Deadliest Catch boats). Carriers: the Reefer 300 (tier 3, level 16) and the Polar Reefer (tier 5, level 54), refrigerated ships for the catch. Each boat has its own top-down art, and works only the grounds its gear and size can: small boats inshore, the tier 3 boats inshore and offshore, the tier 5 boats offshore and the deep grounds. Their crews are their own, not their tier's.
+<li>Three new ship lines: fishing boats, crabbing boats and seafood carriers. Fishing: the Sport Fisher 24 (tier 1: a 24 ft centre console, 4 aboard, trolls lines, trips of 3 to 7 days, 48 crates), the Sportfisher 60 (tier 3: a 60 ft sportfisher with a flybridge and outriggers that also runs nets, 16 aboard, trips of 5 to 21 days, 400 crates) and the Factory Trawler (tier 5: nets and trawls, 80 aboard, out 20 to 90 days, 40,000 crates). Crabbing, every crab caught in pots: the Crab Skiff 24 (tier 1: an aluminium skiff with 30 small pots, trips of 2 to 5 days, 30 crates), the Crabber 98 (tier 3: 150 pots, 18 aboard, 500 crates) and the Bering Sea Crabber (tier 5: 250 big pots, out 30 to 120 days, 6,000 crates; it can stay out all winter on the king crab like the Deadliest Catch boats). Carriers: the Reefer 300 (tier 3) and the Polar Reefer (tier 5), refrigerated ships for the catch. Each boat has its own top-down art, and works only the grounds its gear and size can: small boats inshore, the tier 3 boats inshore and offshore, the tier 5 boats offshore and the deep grounds. Their crews are their own, not their tier's.
 </li>
 <li>What's caught: 61 species in 16 families. Every commercially caught crab (24: red, blue, golden and southern king crab; snow, Tanner, red snow and horsehair crab; Dungeness; Atlantic blue crab; Florida stone crab; brown, Jonah, Atlantic and Pacific rock, spider, velvet and spanner crab; gazami, blue swimmer and mud crab; deep-sea red, golden and Tasmanian giant crab) and 37 fish: the game fish already swimming on the map (tuna, billfish, salmon, cod, halibut, mahi, wahoo...) and 13 new ones that swim on the map too, in 32 schools in their real waters. Each species has its gear (troll, net, trawl or pot) and a grade (its price over its family's: a bluefin 3x a tuna). A trophy fish (bluefin, the marlins, sailfish, swordfish, halibut) can be hooked by a small trolling boat, filling its hold on its own (&quot;Reel Deal hooked a giant bluefin tuna&quot;).
 </li>
@@ -76,9 +78,9 @@
 </li>
 <li>Stocks: each ground's species is drawn down by every boat's catch and grows back 1.6x what's missing a year, so a fished-out ground catches less (its catch x stock^0.7) and the best target moves on.
 </li>
-<li>The catch lands at the boat's base as crates of its family at that port's price (its grade in): sold there, or put in the company's cold store there (2026-10-14: only at its HQ or a hub, the only ports with its freezers; anywhere else it sells) for its seafood carriers (Catch in the popup: by default stored where one of the company's carriers calls, else sold). A carrier loading at a port takes the cold store's catch first (the family paying most where it's going, free: the boat's ledger counted it as income, the carrier's as its cost), else buys seafood at the market like any cargo. The seafood families are 16 commodities, cheapest where they're landed (each family's three biggest landing ports are its sources) and most expensive where they're wanted (East Asia pays most for crab and tuna, Europe for cod and whitefish), so carriers make money taking them from Dutch Harbor to Tokyo; every hub can build a family's plant. Landed catch earns XP like a delivery over the miles out and back, and the seafood families have achievement stars in crates.
+<li>The catch lands at the boat's base as crates of its family at that port's price (its grade in): sold there, or put in the company's cold store there (2026-10-14: only at its HQ or a hub, the only ports with its freezers; anywhere else it sells) for its seafood carriers (Catch in the popup: by default stored where one of the company's carriers calls, else sold). A carrier loading at a port takes the cold store's catch first (the family paying most where it's going, free: the boat's ledger counted it as income, the carrier's as its cost), else buys seafood at the market like any cargo. The seafood families are 16 commodities, cheapest where they're landed (each family's three biggest landing ports are its sources) and most expensive where they're wanted (East Asia pays most for crab and tuna, Europe for cod and whitefish), so carriers make money taking them from Dutch Harbor to Tokyo; every hub can build a family's plant. The seafood families have achievement stars in crates.
 </li>
-<li>The field guide has a Catch tab: every crab and fish, family by family, with where and when it's caught, how, what a crate fetches and a fact. AI rivals don't fish (they may run seafood carriers). Deckhand Joe introduces fishing in the tutorial.
+<li>The field guide has a Catch tab: every crab and fish, family by family, with where and when it's caught, how, what a crate fetches and a fact. Deckhand Joe introduces fishing in the tutorial.
 </li></ul>
 <nav class="prev-next"><a class="prev" href="wakes.html"><span>Previous</span>Wakes</a><a class="next" href="choosing-a-fishing-base.html"><span>Next</span>Choosing a fishing base</a></nav>
 </article>
@@ -86,7 +88,7 @@
 </div>
 <footer class="site-footer">
 <p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
-<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../creator.html">Creator</a> &middot; <a href="../privacy.html">Privacy</a></p>
 </footer>
 <script src="search_index.js" defer></script>
 <script src="../assets/wiki.js" defer></script>

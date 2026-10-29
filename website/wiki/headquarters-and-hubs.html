@@ -18,7 +18,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
 <a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
-<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><a href="../creator.html">Creator</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
 </header>
 <div class="wiki-layout">
 <aside class="wiki-aside">
@@ -35,6 +35,11 @@
 <li><a href="company-logos.html">Company logos</a></li>
 <li><a href="economy-time.html">Economy &amp; time</a></li>
 <li><a href="trading.html">Trading</a></li>
+<li><a href="contracts.html">Contracts</a></li>
+<li><a href="people.html">People</a></li>
+<li><a href="ownership.html">Ownership</a></li>
+<li><a href="running-the-firms-you-control.html">Running the firms you control</a></li>
+<li><a href="technology.html">Technology</a></li>
 <li><a href="farms.html">Farms</a></li>
 <li><a href="vehicle-makers-and-factories.html">Vehicle makers and factories</a></li>
 <li><a href="cargo-ore-industry.html">Cargo &amp; Ore industry</a></li>
@@ -42,7 +47,7 @@
 <li><a href="research.html">Research</a></li>
 <li><a href="market-regions.html">Market regions</a></li>
 <li><a class="current" aria-current="page" href="headquarters-and-hubs.html">Headquarters and hubs</a></li>
-<li><a href="company-and-ship-levels-xp.html">Company and ship levels (XP)</a></li>
+<li><a href="progression.html">Progression</a></li>
 <li><a href="achievements.html">Achievements</a></li>
 <li><a href="divine-actions.html">Divine Actions</a></li>
 <li><a href="skin-packs-sand-dollars-and-the-shop.html">Skin packs, Sand Dollars and the Shop</a></li>
@@ -62,30 +67,26 @@
 <h1>Headquarters and hubs</h1>
 <figure class="shot"><img src="../assets/shots/singapore.webp" alt="Singapore and Tanjung Pelepas, side by side on the strait" loading="lazy"><figcaption>Singapore and Tanjung Pelepas, side by side on the strait</figcaption></figure>
 <ul>
-<li>The company starts with its headquarters (HQ) at its home port. It gets one more hub every 15 company levels (15, 30, 45, 60, 75, 90: 7 locations in all). A hub is founded from any port's popup (&quot;Build a hub here&quot;, click again to confirm) and is permanent.
+<li>The company starts with its headquarters (HQ) at its home port. It can found any number of hubs: the first after the HQ costs $5M and each next twice the last, from any port's popup (&quot;Build a hub here ($5,000,000)&quot;, click again to confirm; greyed with the reason when short), and each is permanent. Each hub (not the HQ) pays a monthly upkeep by its port's size, with the crew's wages.
 </li>
-<li>Each HQ/hub levels from 0 to 40 on the XP of every delivery unloaded at its port (the same XP the company gets), and of every full load shipped out of it by a ship that arrived empty (a one-way route out of the hub: the hub gets the XP the load will earn where it's delivered, when it's loaded; the company and ship still get theirs on delivery). Level L to L+1 costs (5 + 0.7 x L) minutes of a quarter of a full fleet's XP at the current company level, so a hub taking about a quarter of the fleet's deliveries maxes out in about 12.5 hours.
+<li>Hubs have no upgrades for now: facilities to buy (berths, cranes, a fuel depot, a repair yard, offices) are planned. A hub launches ships, takes no port fee on its company's trade there, and has plots for warehouses.
 </li>
-<li>Each level is an upgrade point, spent in the port popup on four paths of up to 10 points each. Each point also costs money: $2M for a path's first point, then $500k more for each point already in that path ($2.5M, $3M... $6.5M for the 10th; $42.5M for a full path). The buttons show the price and grey out when you can't afford it; the Finances tab totals it as &quot;Hub upgrades&quot;. They boost every ship docking there: Ship XP +5% per point (ship XP only, not company or hub XP), Fuel &amp; repairs -3% price, Port stops -5% time (unloading, repairs and refueling all speed up), Pay +2% on deliveries unloaded there. The HQ's bonuses are 1.5x a hub's.
-</li>
-<li>Every delivery unloaded at an HQ or hub also earns the company extra XP, free with the hub's level: +10%, plus 10% more for every 10 hub levels (+20% at level 10... +50% at level 40). The HQ's is 1.5x (+15% up to +75%). The hub's own XP and the ship's aren't boosted by it. The Hubs cards and port popup show it, e.g. &quot;Company XP +30% on deliveries here (+40% at level 30)&quot;.
-</li>
-<li>Hub warehouses (2026-10-14): a hub that isn't the HQ has its company's warehouses on the HQ's half of the quay behind its basin, roofed in the company's colour so whose hub it is shows from above, 2 at first and one more every 3 hub levels up to 4, the one nearest the basin its freezer (a white roof with a band of the colour and cooling units), each with its shadow, ridge, roof sheeting and loading doors. The HQ building, the warehouses and the industry are now drawn after the port's town (its ground reached over the quay and hid them all).
+<li>Hub warehouses (2026-10-14): a hub that isn't the HQ has its company's warehouses on the HQ's half of the quay behind its basin, roofed in the company's colour so whose hub it is shows from above, 2 at first and one more for every 300 deliveries unloaded there up to 4, the one nearest the basin its freezer (a white roof with a band of the colour and cooling units), each with its shadow, ridge, roof sheeting and loading doors. The HQ building, the warehouses and the industry are now drawn after the port's town (its ground reached over the quay and hid them all).
 </li></ul>
 <ul>
-<li>On the map, the HQ and hubs have a ring in the company color around their port (heavier for the HQ; gray on the Route Assignment map). A small red dot sits just up and to the right of any HQ or hub with an upgrade you can buy now. The map's Hubs button shows a black dot while a hub has an upgrade you can buy (a point and the money) or a new hub can be founded.
+<li>On the map, the HQ and hubs have a ring in the company color around their port (heavier for the HQ; gray on the Route Assignment map).
 </li>
 <li>New ships launch at the HQ or any hub, chosen when buying; recovery boats are then re-based across the hubs (see Lost ships and recovery boats).
 </li>
-<li>Warehouses: every HQ and hub has room for 3, on the quay behind the marina's basin, on the side across the channel from the HQ building (+y), in a row of equal square plots nearest the basin. One plot opens at each of hub levels 10, 20 and 30. Each is one commodity's, and serves every good of its kind (a maker's cars count as Cars, diesel as Crude oil): a warehouse, or a stockyard for livestock, a cold store for seafood and fresh produce, a terminal for oil and gas; a hub can't have two of the same, but the same one can be built at other hubs. Each costs a flat $15M (Finances &quot;Hub upgrades&quot;) and can be pulled down (confirmed) for half back, freeing the plot. At its port, for its owner's ships only, its commodity costs 5% less to buy and sells for 5% more; no XP bonus since they became warehouses (it was 50%, with 20% off and 20% more). Saves keep their buildings, as warehouses for the same goods. Built from the Hubs page (each card's Warehouses section) or by clicking a plot on the map (a popup with the same section): an open plot shows &quot;Build ($15M)&quot;, which opens a picker of every commodity (ones already there greyed; not the makers' goods, which use their kind's); a built one shows its boosts and &quot;Pull down&quot;. On the map an open, empty plot of this player's own hub is marked out with a dashed line; built ones are a grey warehouse with a band in the good's colour, at any company's hub. In multiplayer they're host commands. Saved with each hub.
+<li>Warehouses: every HQ and hub has room for 3, on the quay behind the marina's basin, on the side across the channel from the HQ building (+y), in a row of equal square plots nearest the basin, all open. Each is one commodity's, and serves every good of its kind (a maker's cars count as Cars, diesel as Crude oil): a warehouse, or a stockyard for livestock, a cold store for seafood and fresh produce, a terminal for oil and gas; a hub can't have two of the same, but the same one can be built at other hubs. Each costs a flat $15M and can be pulled down (confirmed) for half back, freeing the plot. At its port, for its owner's ships only, its commodity costs 5% less to buy and sells for 5% more. Built from the Hubs page (each card's Warehouses section) or by clicking a plot on the map (a popup with the same section): an open plot shows &quot;Build ($15M)&quot;, which opens a picker of every commodity (ones already there greyed; not the makers' goods, which use their kind's); a built one shows its boosts and &quot;Pull down&quot;. On the map an open, empty plot of this player's own hub is marked out with a dashed line; built ones are a grey warehouse with a band in the good's colour, at any company's hub. In multiplayer they're host commands. Saved with each hub.
 </li></ul>
-<nav class="prev-next"><a class="prev" href="market-regions.html"><span>Previous</span>Market regions</a><a class="next" href="company-and-ship-levels-xp.html"><span>Next</span>Company and ship levels (XP)</a></nav>
+<nav class="prev-next"><a class="prev" href="market-regions.html"><span>Previous</span>Market regions</a><a class="next" href="progression.html"><span>Next</span>Progression</a></nav>
 </article>
 </main>
 </div>
 <footer class="site-footer">
 <p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
-<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../creator.html">Creator</a> &middot; <a href="../privacy.html">Privacy</a></p>
 </footer>
 <script src="search_index.js" defer></script>
 <script src="../assets/wiki.js" defer></script>

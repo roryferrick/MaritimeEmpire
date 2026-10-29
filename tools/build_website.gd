@@ -13,6 +13,7 @@ extends SceneTree
 
 const SPEC_PATH := "res://SPEC.md"
 const PRIVACY_PATH := "res://PRIVACY.md"
+const CREATOR_PATH := "res://CREATOR.md"
 const SITE_DIR := "res://website"
 const WIKI_DIR := "res://website/wiki"
 ## The Steam store page, empty until the listing is up (the button then says
@@ -29,9 +30,9 @@ const TOPICS := [
 	["playing", "Playing the game", "Starting a company, the screens and popups, the tutorial and the settings.", "found_company",
 		["Screens", "Tutorial", "Popups", "Activity log", "Look", "Settings page sliders"]],
 	["business", "Business and trading", "Company types, ratings and logos, money, cargo, farms, factories, oil and gas, research and markets: how a shipping company makes (and loses) its fortune.", "types",
-		["Company types", "Company ratings", "Company logos", "Economy & time", "Trading", "Farms", "Vehicle makers and factories", "Cargo & Ore industry", "Oil and gas", "Research", "Market regions", "Headquarters and hubs", "Progression", "Achievements", "Divine Actions", "Skin packs, Sand Dollars and the Shop"]],
+		["Company types", "Company ratings", "Company logos", "Economy & time", "Trading", "Contracts", "People", "Ownership", "Running the firms you control", "Technology", "Farms", "Vehicle makers and factories", "Cargo & Ore industry", "Oil and gas", "Research", "Market regions", "Headquarters and hubs", "Progression", "Achievements", "Divine Actions", "Skin packs, Sand Dollars and the Shop"]],
 	["ships", "Ships and crews", "Every model, the cruise lines, fuel and repairs, tugs, icebreakers, recovery boats and the people on deck.", "fleet",
-		["Ship models", "Cruise lines", "Fuel, maintenance and port stops", "Refuel stops", "Lost ships and recovery boats", "Tugs", "Tugs working a ship in",
+		["Ship models", "Cruise lines", "Fuel, maintenance and port stops", "Ship parts and drydock", "Shipyards, orders and the second-hand market", "Refuel stops", "Lost ships and recovery boats", "Tugs", "Tugs working a ship in",
 			"Icebreakers", "Long-term moorings", "People on deck", "Wakes", "Fishing and crabbing", "Choosing a fishing base"]],
 	["world", "The world", "The globe, its ports and lanes, the great canals, the Arctic and the Great Lakes.", "globe",
 		["World", "World data", "Living world economy", "Panama Canal", "Suez Canal", "Great Lakes", "The Arctic",
@@ -71,6 +72,8 @@ const PAGE_ART := {
 
 var _bullet := RegEx.create_from_string("^(\\s*)[-*] (.*)$")
 var _dated := RegEx.create_from_string("\\s*\\((\\d{4}-\\d{2}-\\d{2})[^)]*\\)\\s*$")
+## A heading whose note has the date further in ("Contracts (M2, 2026-10-22; ...)").
+var _dated_in := RegEx.create_from_string("\\s*\\([^)]*?(\\d{4}-\\d{2}-\\d{2})[^)]*\\)\\s*$")
 var _code := RegEx.create_from_string("`([^`]+)`")
 var _bold := RegEx.create_from_string("\\*\\*([^*]+)\\*\\*")
 var _link := RegEx.create_from_string("\\[([^\\]]+)\\]\\((https?://[^)\\s]+)\\)")
@@ -119,6 +122,7 @@ func _init() -> void:
 	_write(WIKI_DIR + "/index.html", _wiki_shell({}, _wiki_home(spec)))
 	_write(WIKI_DIR + "/search_index.js", "window.WIKI_INDEX = %s;\n" % JSON.stringify(index))
 	_write_privacy()
+	_write_creator()
 	_write_sitemap()
 	print("wiki built: %d topics, %d pages" % [_topics.size(), _pages.size()])
 	quit()
@@ -144,6 +148,10 @@ func _split(text: String) -> Dictionary:
 			var m := _dated.search(title)
 			if m:
 				title = _dated.sub(title, "")
+			else:
+				m = _dated_in.search(title)
+				if m:
+					title = _dated_in.sub(title, "")
 			for note in TITLE_NOTES:
 				title = title.replace(note, "")
 			current = {title = title, dated = m.get_string(1) if m else "", lines = PackedStringArray()}
@@ -553,18 +561,18 @@ func _header(prefix: String, active: String) -> String:
 		else "<span class=\"btn btn-steam is-soon\" title=\"The Steam page isn't up yet\">Coming soon to Steam</span>"
 	return """<header class="site-header">
 <a class="brand" href="%sindex.html"><img src="%sassets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
-<nav class="site-nav"><a%s href="%sindex.html">Home</a><a%s href="%swiki/index.html">Wiki</a>%s</nav>
+<nav class="site-nav"><a%s href="%sindex.html">Home</a><a%s href="%swiki/index.html">Wiki</a><a%s href="%screator.html">Creator</a>%s</nav>
 </header>
 """ % [prefix, prefix, " class=\"active\"" if active == "home" else "", prefix,
-		" class=\"active\"" if active == "wiki" else "", prefix, steam]
+		" class=\"active\"" if active == "wiki" else "", prefix, " class=\"active\"" if active == "creator" else "", prefix, steam]
 
 
 func _footer(prefix: String) -> String:
 	return """<footer class="site-footer">
 <p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
-<p><a href="%swiki/index.html">Wiki</a> &middot; <a href="%sprivacy.html">Privacy</a></p>
+<p><a href="%swiki/index.html">Wiki</a> &middot; <a href="%screator.html">Creator</a> &middot; <a href="%sprivacy.html">Privacy</a></p>
 </footer>
-""" % [prefix, prefix]
+""" % [prefix, prefix, prefix]
 
 
 func _head(title: String, prefix: String, description: String) -> String:
@@ -605,7 +613,7 @@ func _wiki_shell(page: Dictionary, content: String) -> String:
 
 ## sitemap.xml: the landing page, the privacy page and every wiki page.
 func _write_sitemap() -> void:
-	var urls := ["/", "/privacy.html", "/wiki/"]
+	var urls := ["/", "/creator.html", "/privacy.html", "/wiki/"]
 	for page in _pages:
 		urls.append("/wiki/%s" % page.file)
 	var xml := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
@@ -623,6 +631,20 @@ func _write_privacy() -> void:
 	html += "<main class=\"prose\" id=\"main\">\n<h1>Privacy Policy</h1>\n%s</main>\n" % _render(lines)
 	html += _footer("") + "</body>\n</html>\n"
 	_write(SITE_DIR + "/privacy.html", html)
+
+
+## The creator page, from CREATOR.md (the third link in the top bar).
+func _write_creator() -> void:
+	var lines := FileAccess.get_file_as_string(CREATOR_PATH).replace("\r", "").split("\n")
+	var title := "About the creator"
+	if lines.size() > 0 and lines[0].begins_with("# "):
+		title = lines[0].substr(2).strip_edges()
+		lines.remove_at(0)
+	var html := _head("%s - %s" % [title, SITE_NAME], "", "Who makes Maritime Empire: Rory Ferrick, a computer science student who builds the game on his own.")
+	html += "<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n" + _header("", "creator")
+	html += "<main class=\"prose\" id=\"main\">\n<h1>%s</h1>\n%s</main>\n" % [_escape(title), _render(lines)]
+	html += _footer("") + "</body>\n</html>\n"
+	_write(SITE_DIR + "/creator.html", html)
 
 
 func _write(path: String, text: String) -> void:

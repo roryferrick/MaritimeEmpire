@@ -18,7 +18,7 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
 <a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
-<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><a href="../creator.html">Creator</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
 </header>
 <div class="wiki-layout">
 <aside class="wiki-aside">
@@ -56,17 +56,13 @@
 </li>
 <li>Scrolling list grouped by model in the Shop's order (each type's lines, then the service ships, each line smallest first) under a heading per ship line in its color (&quot;Container ships&quot;, &quot;Ore carriers&quot;...; hidden with nothing under it), each group on a faint tint of its ship line's color (the same colors as the Prices menu and Finances) under a picture of the model (bow to the right) and its name in that color, 8 compact tiles wide, one tile per owned ship. Groups with no ships (or none matching the filter) are hidden.
 </li>
-<li>Each tile has its captain's face (a small round picture) beside three lines: the ship name (cut short with &quot;...&quot; if it doesn't fit), then its cargo and level in smaller text (&quot;Coffee · Lv 7&quot;, in green with &quot;+2&quot; while it has upgrade points to spend; recovery boats say &quot;Recovery&quot;). A ship that needs the player for anything but upgrade points says why instead, in red (&quot;Held in port&quot;, &quot;Paused&quot;, &quot;No route&quot;, &quot;Lost at sea&quot;, &quot;Waiting for toll money&quot;). Then &quot;Capt. &quot; and its captain's name. Hovering a tile shows the full name and its status line (e.g. &quot;Docked at Korsakov — not enough fuel for Hong Kong; turn on refuel&quot;).
+<li>Each tile has its captain's face (a small round picture) beside three lines: the ship name (cut short with &quot;...&quot; if it doesn't fit), then its cargo in smaller text (&quot;Coffee&quot;; recovery boats say &quot;Recovery&quot;). A ship that needs the player says why instead, in red (&quot;Held in port&quot;, &quot;Paused&quot;, &quot;No route&quot;, &quot;Lost at sea&quot;, &quot;Waiting for toll money&quot;). Then &quot;Capt. &quot; and its captain's name. Hovering a tile shows the full name and its status line (e.g. &quot;Docked at Korsakov — not enough fuel for Hong Kong; turn on refuel&quot;).
 </li>
 <li>Each tile shows the ship name, a status dot, and thin maintenance / fuel / cargo bars. Green = running (has route, not paused, not held); amber = waiting in port for money for a full load; red = docked (paused at a port, no route, or held in port).
 </li>
 <li>Clicking a tile opens the ship popup.
 </li>
 <li>Sort (within each model, left to right) by earnings, name, status (lost, then at risk, then held, then stopped, then running) or profit all time; show all ships, running, stopped, lost, or recovery boats. A count shows how many are shown. Tiles re-sort when the fleet or the sort changes, not live.
-</li>
-<li>An &quot;Upgrade all (N): $X&quot; button (N unspent points, $X what they'd all cost) buys the fleet's upgrades cheapest first, as far as the money goes without dipping into the bank reserve. Each ship's points go round-robin to its lowest skill path, ties in the order speed, efficiency, durability (so speed 1, efficiency 1, durability 1, speed 2,... up to all 30), which is also its cheapest. Red dot while at least the cheapest is affordable; greyed out (tooltip: the cheapest's price) when there's nothing to buy or it can't be afforded. Each model's header also has its own &quot;Upgrade N: $X&quot; button, left of its Mute, for just that model's ships (hidden while they have none to spend; greyed while the cheapest would dip into the bank reserve).
-</li>
-<li>Mega upgrade: once the company owns all 8 of a model and every one is at level 30, a &quot;Mega upgrade: $1,000,000&quot; button appears to the right of the model's name (red dot when affordable; greyed, with the reason, when not). It costs 80x the model's price and can be bought once per model. Every ship of that model, including later ones, then gets +50% top speed and +50% profit on each profitable trade (on top of other bonuses); recovery boats get +50% top speed and burn 50% less fuel instead (Buffalo $100,000,000, Mammoth $800,000,000). The name then shows a gold &quot;★ Mega: +50% speed and profit&quot; (or &quot;+50% speed, -50% fuel&quot;) badge, and the activity log announces it. Mega upgrades are a line in the Finances totals and are saved.
 </li></ul>
 <nav class="prev-next"><a class="prev" href="screens--1-world-map-screen.html"><span>Previous</span>1. World (map) screen</a><a class="next" href="screens--hubs-page.html"><span>Next</span>Hubs page</a></nav>
 </article>
@@ -74,7 +70,7 @@
 </div>
 <footer class="site-footer">
 <p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
-<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../privacy.html">Privacy</a></p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../creator.html">Creator</a> &middot; <a href="../privacy.html">Privacy</a></p>
 </footer>
 <script src="search_index.js" defer></script>
 <script src="../assets/wiki.js" defer></script>

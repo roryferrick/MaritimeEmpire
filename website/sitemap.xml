@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url><loc>https://maritimeempiregame.com/</loc></url>
+<url><loc>https://maritimeempiregame.com/creator.html</loc></url>
 <url><loc>https://maritimeempiregame.com/privacy.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/playing.html</loc></url>
@@ -28,6 +29,11 @@
 <url><loc>https://maritimeempiregame.com/wiki/company-logos.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/economy-time.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/trading.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/contracts.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/people.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/ownership.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/running-the-firms-you-control.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/technology.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/farms.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/vehicle-makers-and-factories.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/cargo-ore-industry.html</loc></url>
@@ -35,7 +41,7 @@
 <url><loc>https://maritimeempiregame.com/wiki/research.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/market-regions.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/headquarters-and-hubs.html</loc></url>
-<url><loc>https://maritimeempiregame.com/wiki/company-and-ship-levels-xp.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/progression.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/achievements.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/divine-actions.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/skin-packs-sand-dollars-and-the-shop.html</loc></url>
@@ -43,6 +49,8 @@
 <url><loc>https://maritimeempiregame.com/wiki/ship-models.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/cruise-lines.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/fuel-maintenance-and-port-stops.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/ship-parts-and-drydock.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/shipyards-orders-and-the-second-hand-market.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/refuel-stops.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/lost-ships-and-recovery-boats.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/tugs.html</loc></url>
@@ -55,6 +63,8 @@
 <url><loc>https://maritimeempiregame.com/wiki/choosing-a-fishing-base.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/world.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/world.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/world-data.html</loc></url>
+<url><loc>https://maritimeempiregame.com/wiki/living-world-economy.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/panama-canal.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/suez-canal.html</loc></url>
 <url><loc>https://maritimeempiregame.com/wiki/great-lakes.html</loc></url>
