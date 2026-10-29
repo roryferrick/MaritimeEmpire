@@ -2842,7 +2842,7 @@ func _roll_breakdowns(delta: float) -> void:
 		for ship in ships:
 			if ship.is_service() and not ship.is_fishing() or ship.is_docked() or ship.is_lost() or canal_traffic.in_canal(ship) or not ship.weather_wait.is_empty() or ship.escort != null or randf() >= ship.breakdown_chance() * _storm_factors(ship)[1]:
 				continue  # (A fishing boat breaks down like a cargo ship, and is towed in like one.)
-			ship.maintenance = maxf(ship.maintenance - float(settings.get("hit", 0.5)), 0.0)
+			ShipParts.hit(ship, float(settings.get("hit", 0.5)))  # (On the minor parts mostly: a port stop mends them. See ShipParts.)
 			ship.risk_check_time = 0.0  # Check at once whether it can still make port.
 			People.note_breakdown(ship)  # (The captain's morale.)
 			if ship.maintenance > 0.0:
@@ -4170,10 +4170,43 @@ func _send_queued_recoveries() -> void:
 	var free := _free_rescuers()
 	for ship: Ship in waiting:
 		if not _could_fetch(ship, free):
+			if _salvage_due(ship):
+				_salvage(ship)
 			continue
 		if _send_recovery(ship, true).is_empty() and ship.rescuer != null:
 			free = _free_rescuers()
 
+
+## A lost ship no boat of its company's could fetch, SALVAGE_DAYS on: a salvage company tows it to the
+## nearer end of its leg for SALVAGE_SHARE of its list price (at least SALVAGE_MIN). A new company
+## without a tug or recovery boat isn't stuck for good.
+const SALVAGE_DAYS := 5.0
+const SALVAGE_SHARE := 0.08
+const SALVAGE_MIN := 40000
+func _salvage_due(ship: Ship) -> bool:
+	var who := owner_of(ship)
+	for other in ships:
+		if owner_of(other) == who and (other.is_recovery() or other.is_tug()) and not other.is_lost():
+			return false  # (It has boats; they're busy or out of reach: it waits for them.)
+	var lost_s := play_time - float(ship.lost_order) / 1000.0
+	return lost_s >= SALVAGE_DAYS * 86400.0 / maxf(calendar_seconds_per_second(), 1.0)
+
+
+func _salvage(ship: Ship) -> void:
+	var who := owner_of(ship)
+	var fee := maxi(roundi(float(ship.model().get("price", 0)) * SALVAGE_SHARE), SALVAGE_MIN)
+	var length := maxf(GameData.distance_nm(ship.from_port, ship.to_port), 1.0)
+	var port := ship.to_port if ship.traveled_nm >= length * 0.5 or ship.from_port.is_empty() else ship.from_port
+	_add_money(who, -fee)
+	_record(ship, "repair", float(fee), who)
+	ship.rescuer = null
+	ship.lost_reason = ""
+	ship.fuel = maxf(ship.fuel, ship.fuel_tank() * 0.1)
+	canal_traffic.leave(ship)
+	_arrive(ship, port, port == ship.to_port)
+	if who == company:
+		ActivityLog.add("A salvage company towed %s into %s for %s. A tug or recovery boat of your own would have been cheaper." % [ship.name, GameData.port_name(port), Fmt.money(fee)], ActivityLog.Kind.BAD, ActivityLog.ship_color(ship))
+	ship_changed.emit(ship)
 
 ## Who could set out on a recovery now (see tug_plan() and recovery_plan()):
 ## {boats: company -> its free recovery boats, tugs: [company, port] -> the

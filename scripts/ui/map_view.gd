@@ -4683,6 +4683,10 @@ func _update_marinas() -> void:
 					item.set_meta(&"layout", layout)
 					item.set_meta(&"key", key)
 					item.set_meta(&"scale", scale)
+					# Its own rect for the engine's culling: left to the drawing's,
+					# the item was culled as soon as the port's own point left the
+					# screen, and the whole marina vanished with its piers still on.
+					_set_marina_cull_rect(item, scale)
 					item.queue_redraw()
 					pivot.scale = Vector2.ONE
 			elif rescale:
@@ -4693,6 +4697,14 @@ func _update_marinas() -> void:
 	for port_id: String in _marina_items:
 		if not shown.has(port_id):
 			_show_marina_item(_marina_items[port_id], false)
+
+## A marina item's rect for the engine's canvas culling: as far round the port
+## as a marina reaches (MARINA_MAX_REACH dock units, the quay's corners and
+## the town behind), in the item's px at the scale it's drawn at, so the item
+## is drawn while any of it is on screen.
+func _set_marina_cull_rect(item: CanvasItem, scale: float) -> void:
+	var reach := MARINA_MAX_REACH * scale
+	RenderingServer.canvas_item_set_custom_rect(item.get_canvas_item(), true, Rect2(-reach, -reach, reach * 2.0, reach * 2.0))
 
 ## The marinas kept drawn however far off screen they are (see
 ## _update_marinas()): those of the ports nearest the middle of the view with
@@ -12931,6 +12943,7 @@ func _show_marina_lights(port_id: String, layout: Dictionary, night: float, glow
 			_lights_layer.visibility_changed.connect(_lights_visibility_changed)
 	var town := _town(port_id, layout)
 	var key := [port_id, roundi(log(scale) / log(MARINA_LIGHTS_ZOOM_STEP)), _dock_flips.get(port_id, 1.0), layout.radius, layout.depth, town.is_empty(), _hq_look(port_id)]  # (The HQ's and industry's lights change with them.)
+	_set_marina_cull_rect(item, 1.0)  # (Drawn in dock units, the pivot scaling it: see _record_marina_lights().)
 	var recorded := item.has_meta(&"key")
 	if not recorded or item.get_meta(&"key") != key:
 		if _marina_light_records >= 1:

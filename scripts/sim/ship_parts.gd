@@ -112,6 +112,34 @@ static func flush(ship: Ship) -> void:
 	ship.invalidate_stats()
 
 
+## A breakdown's hit (GameState): it falls on the minor parts (a pump, a turbo, the wiring: what a
+## port stop puts right) and only a tenth on the major ones, so one breakdown doesn't wreck the
+## engine and start a spiral of breakdowns no port can mend.
+static func hit(ship: Ship, amount: float) -> void:
+	flush(ship)
+	var list := for_model(ship.model())
+	if list.is_empty() or ship.parts.is_empty():
+		ship.maintenance = maxf(ship.maintenance - amount, 0.0)
+		flush(ship)
+		return
+	var total_weight := 0.0
+	var minor_weight := 0.0
+	var major_weight := 0.0
+	for each: Dictionary in list:
+		total_weight += float(each.weight)
+		if bool(each.get("major", false)):
+			major_weight += float(each.weight)
+		else:
+			minor_weight += float(each.weight)
+	var to_minor := amount * total_weight * (0.9 if major_weight > 0.0 else 1.0)
+	var to_major := amount * total_weight - to_minor
+	for each: Dictionary in list:
+		var c := float(ship.parts.get(each.id, 1.0))
+		var share := (to_major / maxf(major_weight, 0.0001)) if bool(each.get("major", false)) else (to_minor / maxf(minor_weight, 0.0001))
+		ship.parts[each.id] = clampf(c - share, 0.0, 1.0)
+	ship.sync_maintenance(mean(ship))
+	ship.invalidate_stats()
+
 ## The weighted mean condition of a ship's parts.
 static func mean(ship: Ship) -> float:
 	var list := for_model(ship.model())
