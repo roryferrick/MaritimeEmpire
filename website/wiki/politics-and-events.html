@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Politics and events - Maritime Empire Wiki</title>
+<meta name="description" content="Politics and events, on the Maritime Empire wiki.">
+<link rel="icon" href="../assets/icon_32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="../assets/icon_180.png">
+<link rel="stylesheet" href="../style.css">
+<meta property="og:title" content="Politics and events - Maritime Empire Wiki">
+<meta property="og:description" content="Politics and events, on the Maritime Empire wiki.">
+<meta property="og:image" content="https://maritimeempiregame.com/assets/shots/rome.webp">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body class="wiki">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+<a class="brand" href="../index.html"><img src="../assets/icon_64.png" alt="" width="32" height="32">Maritime Empire</a>
+<nav class="site-nav"><a href="../index.html">Home</a><a class="active" href="../wiki/index.html">Wiki</a><a href="../creator.html">Creator</a><span class="btn btn-steam is-soon" title="The Steam page isn't up yet">Coming soon to Steam</span></nav>
+</header>
+<div class="wiki-layout">
+<aside class="wiki-aside">
+<div class="search"><input id="search" type="search" placeholder="Search the wiki" autocomplete="off" aria-label="Search the wiki"><div id="results" class="results" hidden></div></div>
+<button class="side-toggle" id="side-toggle" aria-controls="sidebar" aria-expanded="false">All topics</button>
+<nav class="sidebar" id="sidebar">
+<a class="side-home" href="index.html">Wiki home</a>
+<ul class="tree">
+<li class="t"><a href="playing.html">Playing the game</a></li>
+<li class="t"><a href="business.html">Business and trading</a></li>
+<li class="t"><a href="ships.html">Ships and crews</a></li>
+<li class="t"><a href="world.html">The world</a></li>
+<li class="t"><a href="sea-and-sky.html">Sea and sky</a></li>
+<li class="t open"><a href="rivals.html">Rivals, nations and multiplayer</a>
+<ul>
+<li><a href="ai-rivals.html">AI rivals</a></li>
+<li><a href="living-firms.html">Living firms</a></li>
+<li><a class="current" aria-current="page" href="politics-and-events.html">Politics and events</a></li>
+<li><a href="multiplayer.html">Multiplayer</a></li>
+</ul>
+</li>
+<li class="t"><a href="about.html">About the game</a></li>
+</ul>
+</nav>
+</aside>
+<main class="wiki-main" id="main">
+<article class="wiki-page">
+<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Wiki</a> <span>/</span> <a href="rivals.html">Rivals, nations and multiplayer</a></nav>
+<h1>Politics and events</h1>
+<p class="dated">Added or changed on 29 October 2026</p>
+<ul>
+<li>Nations: every country has a government (democracy, one-party state, monarchy, military rule: the well-known ones as they are, the rest by income and the seed), a stability 0-100, a trade stance (open, neutral, protectionist) and a yearly budget mood. Democracies hold elections every three to five years (a new stance and mood); the rest risk a coup by their instability. A country's tariff now is its base plus its stance (open -2 points, protectionist +3) plus any tariff rise on it: selling into a country pays less by the rise over its base. All on the Countries tab and the country card.
+</li>
+<li>Dock strikes (stops three times as long for a week or three, unless the company pays the union), Suez or Panama closures and port shutdowns for days (closures the ships wait on, as in winter); wars between neighbouring countries (the lanes between them shut unless the company runs the blockade, and port fees in both doubled) and piracy surges in the Gulf of Aden, the Malacca Strait and the Gulf of Guinea (a leg through them risks capture: 2-3% normally, 12% in a surge, 30% of that with armed guards on every ship at $20,000 a ship a month; a captured ship is held 60 days or released two days after a ransom of a tenth of its price, and comes out worn); earthquakes and floods (a port's plants stop for months and the port shuts a fortnight), epidemics (a region's demand down 30%), famines (a country's hunger for grain doubled). Every event is a Gazette headline; one that touches the company (its ports, countries, canals, lanes or stakes) pauses the game with a card and choices (pay, honour, run, guards, ransom, relief for +10 standing, or noted); in multiplayer the host does not pause. The Events tab lists what is in play and what the player chose.
+</li></ul>
+<ul>
+<li>Price history:M,.5M or M and nothing else.
+</li>
+<li>Traits and skills: one system for every character (a character dictionary's traits and skills). Sixteen traits (Shrewd, Thrifty, Engineer, Ex-Navy, Gambler, Cautious, Charismatic, Old Salt, Bookkeeper, Reckless, Well-connected, Naive, Lavish, Abrasive, Landlubber, Scholar), each adding to or taking from the five skills and, on a CEO, working for the whole company, with opposites that can't be held together and a story line each. The player's CEO gets theirs from the start (and random skills); every paper shipping firm's CEO gets one to three at random from the seed, shown on its Intelligence card (ai.margin is for their dispatch behaviour, to come). Captains and officers get theirs in M3.
+</li>
+<li>Price history: every zone's price of every good as a ratio to its base, sampled at the end of the world's day once a calendar week for the last 52 weeks (a ring of 52 x zones x goods float32s) and once a calendar month for the whole game, with each country's currency strength by the month. A joined player has none.
+</li>
+<li>News: headlines of three kinds, the newest 400 saved with the game: market moves found at each weekly sample (a good crossing 1.5x or 0.6x of its usual price in a zone, or moving 25% in a week; the 8 biggest a week, markets under k a day of use left out), company doings (the biggest sailing of each dispatch: &quot;Loire Armement sends 3 Open-Hatch Giants with 120k tons of iron from Dampier to Shanghai&quot;) and the month's figures (currencies that moved 2% or more and why, the month's sailings and busiest ports). The news ticker along the bottom of the map slides the latest eight by; a click opens the News tab. The warm-up's news is cleared when the game begins.
+</li>
+<li>Saves hold the world's seed, day, stock, people and currencies and the firms' voyages and money (about 1 MB); the rest is made again from the seed. Not yet: multiplayer sync of the world to joined players, the faster calendar, AI plants and traffic on the map, the Intelligence screen, price tooltips and news. Multiplayer (checked 2026-10-29 with a LAN client): the join snapshot is the save dictionary, so every new system arrives whole; afterwards Net sends the contracts, people, shipyards and technology dictionaries when they change and each company's changed keys (shares, stakes, family, orders, firm plans, techs, R&amp;D, likings) every full round; every new action is a host command (Net.COMMANDS). A company founded by a joining player gets its standing, register and family like a new game's.
+</li></ul>
+<nav class="prev-next"><a class="prev" href="living-firms.html"><span>Previous</span>Living firms</a><a class="next" href="multiplayer.html"><span>Next</span>Multiplayer</a></nav>
+</article>
+</main>
+</div>
+<footer class="site-footer">
+<p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
+<p><a href="../wiki/index.html">Wiki</a> &middot; <a href="../creator.html">Creator</a> &middot; <a href="../privacy.html">Privacy</a></p>
+</footer>
+<script src="search_index.js" defer></script>
+<script src="../assets/wiki.js" defer></script>
+</body>
+</html>

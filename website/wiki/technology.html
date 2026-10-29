@@ -56,7 +56,7 @@
 <li class="t"><a href="ships.html">Ships and crews</a></li>
 <li class="t"><a href="world.html">The world</a></li>
 <li class="t"><a href="sea-and-sky.html">Sea and sky</a></li>
-<li class="t"><a href="rivals.html">Rivals and multiplayer</a></li>
+<li class="t"><a href="rivals.html">Rivals, nations and multiplayer</a></li>
 <li class="t"><a href="about.html">About the game</a></li>
 </ul>
 </nav>
@@ -72,17 +72,6 @@
 <li>The R&amp;D companies: 20 (engine makers, classification societies, propeller works, cargo systems, bridge electronics, green shipping) at real ports, each publishing its branch's techs in their years (2016 to 2028, a date in the year from the seed). A published tech is licensed for a fee: the tier's share of the company's fleet at list price (0.4/0.8/1.5%), at least the tier's floor ($250k/$500k/$1M); a company an R&amp;D company likes pays 30% less and is offered the tech a year early. Publication and early offers come as cards (License it / Research page / Later).
 </li>
 <li>Own R&amp;D: one tech at a time, progressed each month by a budget ($20,000 a point, times the CTO's Engineering factor and 1.5x with a Technology centre at a hub: a new hub facility, $30M) and a quarter of the banked research points from the research ships; at the tier's cost (400/1,000/2,500 points) the tech is held. Finished before the world publishes it, it is held exclusively for two years: royalties a month by tier ($40k/$90k/$200k) and the world's publication waits. Selling survey data: 100 research points to an R&amp;D company for $600k and liking.
-</li></ul>
-<ul>
-<li>Price history:M,.5M or M and nothing else.
-</li>
-<li>Traits and skills: one system for every character (a character dictionary's traits and skills). Sixteen traits (Shrewd, Thrifty, Engineer, Ex-Navy, Gambler, Cautious, Charismatic, Old Salt, Bookkeeper, Reckless, Well-connected, Naive, Lavish, Abrasive, Landlubber, Scholar), each adding to or taking from the five skills and, on a CEO, working for the whole company, with opposites that can't be held together and a story line each. The player's CEO gets theirs from the start (and random skills); every paper shipping firm's CEO gets one to three at random from the seed, shown on its Intelligence card (ai.margin is for their dispatch behaviour, to come). Captains and officers get theirs in M3.
-</li>
-<li>Price history: every zone's price of every good as a ratio to its base, sampled at the end of the world's day once a calendar week for the last 52 weeks (a ring of 52 x zones x goods float32s) and once a calendar month for the whole game, with each country's currency strength by the month. A joined player has none.
-</li>
-<li>News: headlines of three kinds, the newest 400 saved with the game: market moves found at each weekly sample (a good crossing 1.5x or 0.6x of its usual price in a zone, or moving 25% in a week; the 8 biggest a week, markets under k a day of use left out), company doings (the biggest sailing of each dispatch: &quot;Loire Armement sends 3 Open-Hatch Giants with 120k tons of iron from Dampier to Shanghai&quot;) and the month's figures (currencies that moved 2% or more and why, the month's sailings and busiest ports). The news ticker along the bottom of the map slides the latest eight by; a click opens the News tab. The warm-up's news is cleared when the game begins.
-</li>
-<li>Saves hold the world's seed, day, stock, people and currencies and the firms' voyages and money (about 1 MB); the rest is made again from the seed. Not yet: multiplayer sync of the world to joined players, the faster calendar, AI plants and traffic on the map, the Intelligence screen, price tooltips and news. Multiplayer (checked 2026-10-29 with a LAN client): the join snapshot is the save dictionary, so every new system arrives whole; afterwards Net sends the contracts, people, shipyards and technology dictionaries when they change and each company's changed keys (shares, stakes, family, orders, firm plans, techs, R&amp;D, likings) every full round; every new action is a host command (Net.COMMANDS). A company founded by a joining player gets its standing, register and family like a new game's.
 </li></ul>
 <nav class="prev-next"><a class="prev" href="running-the-firms-you-control.html"><span>Previous</span>Running the firms you control</a><a class="next" href="farms.html"><span>Next</span>Farms</a></nav>
 </article>

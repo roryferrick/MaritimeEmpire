@@ -39,8 +39,8 @@ const TOPICS := [
 			"Wonders of the world"]],
 	["sea-and-sky", "Sea and sky", "Weather and storms, currents, seasons, and the animals and birds that share the sea.", "shanghai",
 		["Weather", "Rough seas", "Seasonal closures", "Ocean currents", "Sea animals", "Wildlife", "Birds", "Sound"]],
-	["rivals", "Rivals and multiplayer", "Playing with friends over Steam or a local network.", "routes",
-		["AI rivals", "Multiplayer"]],
+	["rivals", "Rivals, nations and multiplayer", "The shipping firms with lives of their own, the nations and their events, and playing with friends over Steam or a local network.", "routes",
+		["AI rivals", "Living firms", "Politics and events", "Multiplayer"]],
 	["about", "About the game", "What's not in the beta yet, and copyright.", "",
 		["Explicitly NOT in beta", "Copyright"]],
 ]
