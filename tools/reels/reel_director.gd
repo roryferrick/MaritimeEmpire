@@ -1649,6 +1649,10 @@ func shot_busy_sea(seconds: float) -> void:
 		var about: Dictionary = ghost.get_meta(&"traffic")
 		var at: Vector2 = GameData.port_position(ghost.docked_at) if ghost.is_docked() else (about.lane as GameData.SeaLane).point_at(ghost.traveled_nm)
 		print("    ", ghost.name, " ", ghost.model_id, " docked=", ghost.docked_at, " ", ghost.from_port, "->", ghost.to_port, " nm ", ghost.traveled_nm, "/", about.length, " screen ", map.world_to_screen(at), " leg_lane ", ghost.leg_lane() != null, " look ", map._model_look(ghost.model_id).size())
+	_traffic_diag()
+	await settle(240)
+	print("  ghosts after 240 more frames: ", GameState.traffic.ghosts.size())
+	_traffic_diag()
 	await rec("busy_sea", seconds, func(t: float) -> void:
 		look(lerpf(103.95, 104.05, t / seconds), lerpf(1.18, 1.2, t / seconds), lerpf(380.0, 420.0, t / seconds)))
 
@@ -1828,4 +1832,87 @@ func shot_fleet_zoomout(seconds: float) -> void:
 		["SIN", "DXB"], ["SHA", "DXB"], ["RTM", "NYC"], ["TNG", "SSZ"], ["SZX", "SYD"], ["NGB", "SIN"], ["HAM", "PIR"],
 		["DXB", "TNG"], ["SIN", "VVO"], ["NYC", "SSZ"]]
 	var staged := 0
-	fo
+	for pair: Array in routes:
+		var route: Array[String] = []
+		for id: String in pair:
+			route.append(id)
+		var model := "model_3" if GameData.distance_nm(route[0], route[1]) < 1100.0 else "model_4"
+		var ship := stage_ship(model, route[0], route)
+		if ship.route.is_empty():
+			print("  no route ", pair, ": ", GameState.route_error(route, ship))
+			continue
+		staged += 1
+		await warp(20.0, Callable(), 8)
+	print("  fleet staged: ", staged)
+	await warp(600.0, Callable(), 8)
+	warm_traffic()
+	look(121.5, 30.5, 90.0)
+	await settle(40)
+	await rec("fleet_zoomout", seconds, func(t: float) -> void:
+		var k := ease(t / seconds, -1.8)
+		look(lerpf(121.5, 112.0, k), lerpf(30.5, 22.0, k), exp(lerpf(log(90.0), log(7.0), k))))
+
+
+## Why the strait is empty: the records under the view, in their window, in view.
+func _traffic_diag() -> void:
+	var tr: AmbientTraffic = GameState.traffic
+	var bounds: Rect2 = map._view_bounds()
+	var x0 := clampi(floori((bounds.position.x + 180.0) / AmbientTraffic.CELL) - 2, 0, AmbientTraffic.COLS - 1)
+	var x1 := clampi(floori((bounds.end.x + 180.0) / AmbientTraffic.CELL) + 2, 0, AmbientTraffic.COLS - 1)
+	var y0 := clampi(floori((bounds.position.y + 180.0) / AmbientTraffic.CELL) - 2, 0, AmbientTraffic.COLS - 1)
+	var y1 := clampi(floori((bounds.end.y + 180.0) / AmbientTraffic.CELL) + 2, 0, AmbientTraffic.COLS - 1)
+	var total := 0
+	var windowed := 0
+	var ported := 0
+	var seen := 0
+	var keyed := 0
+	var now: float = GameState.play_time
+	for cy in range(y0, y1 + 1):
+		for cx in range(x0, x1 + 1):
+			for record: Dictionary in tr._cells.get(cy * AmbientTraffic.COLS + cx, []):
+				total += 1
+				var home := bool(record.get("ghost_home", false))
+				var window := tr._window(record, home)
+				if now < float(window[0]) or now > float(window[1]):
+					continue
+				windowed += 1
+				if tr._keys.has(record.ghost_key):
+					keyed += 1
+				var ports := tr._ports(record, record.ghost_key)
+				if ports.is_empty():
+					continue
+				ported += 1
+				var lane: GameData.SeaLane = ports[2]
+				var mile: float = (now - float(window[0])) / (float(window[1]) - float(window[0])) * float(ports[3])
+				if tr.view_test.call(lane.point_at(mile)):
+					seen += 1
+				elif windowed <= 5:
+					print("    sample: ", record.get("from", "?"), "->", record.get("to", "?"), " at ", lane.point_at(mile), " screen ", map.world_to_screen(lane.point_at(mile)), " cell ", record.get("ghost_cell"), " lane ends ", lane.point_at(0.0), " ", lane.point_at(float(ports[3])))
+	print("  diag: SIN projected ", Geo.project(Vector2(103.9, 1.15)), " screen ", map.world_to_screen(Geo.project(Vector2(103.9, 1.15))), " margin ", (map.SHIP_CULL_MARGIN + map.PORT_MAX_REACH) * map._ship_scale())
+	print("  diag: bounds ", bounds, " cells ", x0, "-", x1, " x ", y0, "-", y1, " records ", total, " in window ", windowed, " keyed ", keyed, " with lane ", ported, " in view ", seen,
+		" | cells indexed ", tr._cells.size(), " round_due ", tr._round_due, " view_cell ", tr._view_cell, " cap ", tr.cap(), " play ", now)
+
+
+## Fallback for the strait: one of the other firms' ships under way, followed close.
+func shot_ghost_follow(seconds: float) -> void:
+	await use_world()
+	portrait()
+	warm_traffic()
+	look(120.0, 20.0, map._min_zoom())
+	await settle(60)
+	var best: Ship = null
+	for ghost in GameState.traffic.ghosts:
+		if ghost.is_docked() or ghost.from_port.is_empty():
+			continue
+		var about: Dictionary = ghost.get_meta(&"traffic")
+		if ghost.traveled_nm < 50.0 or ghost.traveled_nm > float(about.length) - 50.0:
+			continue
+		if best == null or float(ghost.model().get("map_size", [0])[0]) > float(best.model().get("map_size", [0])[0]):
+			best = ghost
+	if best == null:
+		push_error("no ghost at sea")
+		return
+	print("  following ", best.name, " ", best.from_port, "->", best.to_port)
+	follow(best, 900.0)
+	await settle(20)
+	await rec("ghost_follow", seconds, func(_t: float) -> void: follow(best, 900.0))

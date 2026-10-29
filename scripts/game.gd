@@ -148,6 +148,9 @@ func _ready() -> void:
 	GameState.shipyards.delivered.connect(func(company: Company, ship: Ship, order: Dictionary) -> void:
 		if company == GameState.company:
 			event_card.show_delivery(ship, order))
+	GameState.firm_life.agreement_proposed.connect(func(company: Company, firm_index: int, kind: String, group: String) -> void:
+		if company == GameState.company:
+			event_card.show_agreement(firm_index, kind, group))
 	GameState.firm_life.bankrupt.connect(func(firm_index: int, listings: int) -> void: event_card.show_bankruptcy(firm_index, listings))
 	GameState.firm_life.merger_stake.connect(func(company: Company, buyer: int, target: int, price: float, stake: float) -> void:
 		if company == GameState.company:

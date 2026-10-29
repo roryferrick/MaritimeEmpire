@@ -279,6 +279,7 @@ func _add_firm_cards(company: Company, own: Ownership) -> void:
 func _add_firms(company: Company, own: Ownership) -> void:
 	var box := _card("The shipping firms")
 	box.add_child(_dim("A firm is worth its fleet at list price plus four years of its earnings so far. A block is %d%% of it, dearer with each block you hold (and dearer still from a firm you poached people from); past %d%% you control it (its ships sail in your colour and you take its earnings each month), and you run it from its card above." % [roundi(Ownership.BLOCK * 100.0), roundi(Ownership.CONTROL * 100.0)]))
+	box.add_child(_dim("Terms: an alliance (no bidding against each other, no poaching, their country thinks better of you; leaving it costs standing everywhere), a pool of one trade group (each month you take your capacity's share of their earnings in it and pay them theirs of yours), or a feud (both underbid, they poach, your standing in their country slips; peace when they tire of it). Firms weigh your standing with them, their chief's leaning and your stake."))
 	var firms: ShippingFirms = GameState.firms
 	var order := range(firms.firms.size()).filter(func(k: int) -> bool: return not FirmLife.is_dead(firms.firms[k]))
 	order.sort_custom(func(a: int, b: int) -> bool:
@@ -286,10 +287,10 @@ func _add_firms(company: Company, own: Ownership) -> void:
 			return own.stake_in(company, a) > own.stake_in(company, b)
 		return own.firm_value(a) > own.firm_value(b))
 	var grid := GridContainer.new()
-	grid.columns = 5
+	grid.columns = 6
 	grid.add_theme_constant_override(&"h_separation", 16)
 	grid.add_theme_constant_override(&"v_separation", 2)
-	for head: String in ["Firm", "Based in", "Worth", "Your stake", ""]:
+	for head: String in ["Firm", "Based in", "Worth", "Your stake", "", "Terms"]:
 		grid.add_child(_cell(head, &"DimLabel"))
 	for i: int in order.slice(0, _firms_shown):
 		var firm: Dictionary = firms.firms[i]
@@ -310,12 +311,45 @@ func _add_firms(company: Company, own: Ownership) -> void:
 		buy.tooltip_text = error
 		buy.pressed.connect(func() -> void: GameState.propose_motion("buy_block", {firm = i}))
 		grid.add_child(buy)
+		grid.add_child(_deal_menu(company, i))
 	box.add_child(grid)
 	if firms.firms.size() > _firms_shown:
 		box.add_child(_flat_button("Show more firms", func() -> void:
 			_firms_shown += 15
 			_refresh()))
 	_body.add_child(box.get_parent())
+
+
+## The terms with a firm: what stands, and a menu to propose an alliance, a pool of a trade group, a feud, or end it.
+func _deal_menu(company: Company, i: int) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 6)
+	var kind := FirmLife.agreement_kind(company, i)
+	var entry := FirmLife.agreement(company, i)
+	var word: String = {alliance = "ally", pool = "pool: %s" % People.group_name(str(entry.get("group", ""))).to_lower(), rivalry = "feud"}.get(kind, "")
+	row.add_child(_cell(word, &"GainLabel" if kind == "alliance" or kind == "pool" else (&"ErrorLabel" if kind == "rivalry" else &"")))
+	var menu := MenuButton.new()
+	menu.text = "Deal"
+	menu.add_theme_font_size_override(&"font_size", FONT_SIZE)
+	var popup := menu.get_popup()
+	var actions := []
+	if kind != "alliance" and kind != "rivalry":
+		popup.add_item("Propose an alliance")
+		actions.append(func() -> void: GameState.propose_agreement(i, "alliance", ""))
+	if kind != "rivalry" and kind != "pool":
+		for group: String in People.groups_of(company):
+			if FirmLife.firm_group_capacity(GameState.firms.firms[i], group) > 0.0:
+				popup.add_item("Pool %s" % People.group_name(group).to_lower())
+				actions.append(func() -> void: GameState.propose_agreement(i, "pool", group))
+	if kind != "rivalry":
+		popup.add_item("Declare a feud")
+		actions.append(func() -> void: GameState.propose_agreement(i, "rivalry", ""))
+	if not kind.is_empty():
+		popup.add_item({alliance = "Leave the alliance (standing everywhere suffers)", pool = "End the pool", rivalry = "Make peace"}[kind])
+		actions.append(func() -> void: GameState.end_agreement(i))
+	popup.index_pressed.connect(func(index: int) -> void: (actions[index] as Callable).call())
+	row.add_child(menu)
+	return row
 
 
 # --- Bits --------------------------------------------------------------------------------------

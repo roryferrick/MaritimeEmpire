@@ -1510,6 +1510,29 @@ func launch_ship(who: Company, model_id: String, ship_name: String, port_id: Str
 	return ship
 
 
+## Agreements with a firm (FirmLife): propose an alliance, a pool of a trade group or a rivalry; end one; answer a firm's proposal.
+func propose_agreement(firm_index: int, kind: String, group: String) -> void:
+	if Net.command(&"propose_agreement", [firm_index, kind, group]):
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var error := firm_life.propose(company, firm_index, kind, group, rng)
+	if not error.is_empty() and error != "Declined":
+		ActivityLog.add("%s: %s." % [str(firms.firms[firm_index].name) if firm_index >= 0 and firm_index < firms.firms.size() else "That firm", error], ActivityLog.Kind.INFO)
+
+
+func end_agreement(firm_index: int) -> void:
+	if Net.command(&"end_agreement", [firm_index]):
+		return
+	firm_life.end_agreement(company, firm_index)
+
+
+func answer_agreement(firm_index: int, kind: String, accept: bool) -> void:
+	if Net.command(&"answer_agreement", [firm_index, kind, accept]):
+		return
+	firm_life.answer(company, firm_index, kind, accept)
+
+
 ## The answer to a merger card: the stake in the bought firm sold at the deal's price, or converted (Ownership.convert_stake()).
 func answer_merger(buyer: int, target: int, price: float, sell: bool) -> void:
 	if Net.command(&"answer_merger", [buyer, target, price, sell]):

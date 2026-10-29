@@ -1436,5 +1436,26 @@
 				]
 			}
 		]
+	},
+	"Q": {
+		"file": "scratch",
+		"beats": [
+			{
+				"t": [
+					0,
+					2.2
+				],
+				"shots": [
+					{
+						"shot": "busy_sea",
+						"len": 2.2
+					},
+					{
+						"shot": "ghost_follow",
+						"len": 2.2
+					}
+				]
+			}
+		]
 	}
 }

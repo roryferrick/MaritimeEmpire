@@ -297,6 +297,24 @@ func show_merger(buyer: int, target: int, price: float, stake: float) -> void:
 		actions = [["Sell for %s" % Fmt.money_short(roundi(price * stake)), func() -> void: GameState.answer_merger(buyer, target, price, true)], ["Keep shares in %s" % str(b.name).get_slice(" ", 0), func() -> void: GameState.answer_merger(buyer, target, price, false)]]})
 
 
+## A firm proposes an alliance or peace, or declares a feud (FirmLife.agreement_proposed).
+func show_agreement(firm_index: int, kind: String, group: String) -> void:
+	var firm: Dictionary = GameState.firms.firms[firm_index]
+	var ceo := str((firm.get("ceo", {}) as Dictionary).get("name", "its chief"))
+	match kind:
+		"alliance":
+			_enqueue({kicker = "AN ALLIANCE OFFERED", title = "%s proposes an alliance" % str(firm.name), color = GOLD,
+				body = "%s of %s (%s) proposes an alliance: neither bids against the other on tenders, neither poaches the other's people, and %s will think %d points better of you. Walk away from it later and every producer in the world marks you down." % [ceo, str(firm.name), FirmLife.leaning_name(firm).to_lower(), str(WorldEconomy.country(str(firm.country)).get("name", firm.country)), roundi(FirmLife.ALLY_STANDING)],
+				actions = [["Accept", func() -> void: GameState.answer_agreement(firm_index, "alliance", true)], ["Decline", func() -> void: GameState.answer_agreement(firm_index, "alliance", false)]]})
+		"peace":
+			_enqueue({kicker = "AN OLIVE BRANCH", title = "%s wants peace" % str(firm.name), color = GOLD,
+				body = "The feud has cost %s dear and %s asks to end it: no more underbidding, no more poaching, your standing in %s left alone." % [str(firm.name), ceo, str(WorldEconomy.country(str(firm.country)).get("name", firm.country))],
+				actions = [["Make peace", func() -> void: GameState.answer_agreement(firm_index, "peace", true)], ["Keep fighting", func() -> void: GameState.answer_agreement(firm_index, "peace", false)]]})
+		_:
+			_enqueue({kicker = "A FEUD", title = "%s declares war on you" % str(firm.name), color = Color(0.95, 0.6, 0.5),
+				body = "%s, the %s chief of %s, has had enough of you: it will underbid you on every tender it can, come after your people, and talk you down in %s. You can underbid it back; it sues for peace when the feud costs it enough, or end it from the Ownership page." % [ceo, FirmLife.leaning_name(firm).to_lower(), str(firm.name), str(WorldEconomy.country(str(firm.country)).get("name", firm.country))]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

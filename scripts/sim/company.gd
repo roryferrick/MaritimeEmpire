@@ -76,6 +76,8 @@ var rnd_offers := {}
 var postings := []
 var recruiters := 0
 var loss_quarters := 0
+## Agreements with the paper firms (FirmLife: firm index -> {kind "alliance"/"pool"/"rivalry", since, group}).
+var agreements := {}
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
 ## What its people wear, line by line, where it's changed the defaults
@@ -216,6 +218,7 @@ func to_dict() -> Dictionary:
 		"postings": postings,
 		"recruiters": recruiters,
 		"loss_quarters": loss_quarters,
+		"agreements": agreements,
 		"ceo": ceo,
 		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
@@ -293,6 +296,7 @@ static func from_dict(data: Dictionary) -> Company:
 	company.postings = data.get("postings", []) if data.get("postings") is Array else []
 	company.recruiters = int(data.get("recruiters", 0))
 	company.loss_quarters = int(data.get("loss_quarters", 0))
+	company.agreements = data.get("agreements", {}) if data.get("agreements") is Dictionary else {}
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.

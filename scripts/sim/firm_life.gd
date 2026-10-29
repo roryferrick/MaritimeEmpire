@@ -21,6 +21,8 @@ signal changed
 signal bankrupt(firm_index: int, listings: int)
 ## A merger where the player holds a stake in the target: sell at the price (for the stake) or convert into the buyer.
 signal merger_stake(company: Company, buyer: int, target: int, price: float, stake: float)
+## A firm proposes an agreement to the player (kind "alliance", "pool" with a group, "peace"), or declares a rivalry: a card.
+signal agreement_proposed(company: Company, firm_index: int, kind: String, group: String)
 
 const LEANINGS := {expansionist = "Expansionist", cautious = "Cautious", cutthroat = "Cutthroat", loyal = "Loyal"}
 const LEANING_TEXT := {expansionist = "orders ships early and grows fast, and overreaches", cautious = "hoards cash and rides out the slumps", cutthroat = "underbids on tenders, poaches, and holds a grudge", loyal = "keeps its word and warms fast to friends"}
@@ -38,6 +40,18 @@ const STUBBORN_SHARE := 0.3
 const STUBBORN_PRICE := 5.0
 const SUCCESSION_YEARLY := 0.04
 const HISTORY := 12
+## Agreements between a company and a firm (Company.agreements: firm index -> {kind, since, group}): an
+## alliance (they never bid against you on tenders nor poach you, standing with their country +ALLY_STANDING;
+## breaking it costs BREAK_STANDING everywhere), a pool of one trade group (each month you get your capacity's
+## share of their earnings in it and pay them theirs of yours), and a rivalry (both underbid by RIVAL_BID, they
+## poach twice as often, your standing with their country slips RIVAL_STANDING a month, their cash RIVAL_COST).
+const ALLY_STANDING := 10.0
+const BREAK_STANDING := 10.0
+const RIVAL_BID := 0.9
+const RIVAL_STANDING := 1.0
+const RIVAL_COST := 0.005
+const PEACE_MONTHS := 12
+const PROPOSAL_CHANCE := 1.0 / 18.0  # A month: a firm comes to the player with something.
 
 var _state: Node  # GameState
 var _month := -1
@@ -128,7 +142,212 @@ func step(_delta: float) -> void:
 			_succession(firms, i, rng)
 	if rng.randf() < MERGER_CHANCE:
 		_merger(firms, rng)
+	for company: Company in _state.all_companies():
+		_monthly_agreements(company, firms, rng)
 	changed.emit()
+
+
+# --- Agreements -------------------------------------------------------------------------------------
+
+static func agreement(company: Company, firm_index: int) -> Dictionary:
+	return company.agreements.get(str(firm_index), {})
+
+
+static func agreement_kind(company: Company, firm_index: int) -> String:
+	return str(agreement(company, firm_index).get("kind", ""))
+
+
+static func allied_country(company: Company, country: String) -> bool:
+	var firms: ShippingFirms = GameState.firms
+	for key: String in company.agreements:
+		if str(company.agreements[key].kind) == "alliance" and int(key) < firms.firms.size() and str(firms.firms[int(key)].country) == country:
+			return true
+	return false
+
+
+## A company's capacity in a trade group (its ships of that category), and a firm's (its books, times the convoy).
+static func company_group_capacity(company: Company, group: String) -> float:
+	var total := 0.0
+	for ship: Ship in GameState.fleet(company):
+		if str(ship.model().get("category", "")) == group:
+			total += float(ship.capacity())
+	return total
+
+
+static func firm_group_capacity(firm: Dictionary, group: String) -> float:
+	var total := 0.0
+	for model_id: String in firm.fleet:
+		var model := GameData.get_ship_model(model_id)
+		if str(model.get("category", "")) == group:
+			total += float(model.get("capacity", 0)) * int(firm.fleet[model_id]) * ShippingFirms.CONVOY
+	return total
+
+
+static func firm_capacity(firm: Dictionary) -> float:
+	var total := 0.0
+	for model_id: String in firm.fleet:
+		total += float(GameData.get_ship_model(model_id).get("capacity", 0)) * int(firm.fleet[model_id]) * ShippingFirms.CONVOY
+	return total
+
+
+## Why a firm would not take an agreement, or "" (the player's proposal: GameState.propose_agreement()).
+func propose_error(company: Company, firm_index: int, kind: String, group: String) -> String:
+	var firms: ShippingFirms = _state.firms
+	if firm_index < 0 or firm_index >= firms.firms.size() or is_dead(firms.firms[firm_index]):
+		return "No such firm"
+	var firm: Dictionary = firms.firms[firm_index]
+	var current := agreement_kind(company, firm_index)
+	if not kind in ["alliance", "pool", "rivalry"]:
+		return "No such agreement"
+	if current == kind:
+		return "Already so"
+	if kind == "pool":
+		if current == "rivalry":
+			return "Not with a rival"
+		if firm_group_capacity(firm, group) <= 0.0 or company_group_capacity(company, group) <= 0.0:
+			return "Both must sail %s" % People.group_name(group).to_lower()
+	if kind == "alliance" and current == "rivalry":
+		return "End the rivalry first"
+	return ""
+
+
+## The player proposes: a rivalry is declared; an alliance or pool the firm weighs (standing, leaning, soreness).
+func propose(company: Company, firm_index: int, kind: String, group: String, rng: RandomNumberGenerator) -> String:
+	var error := propose_error(company, firm_index, kind, group)
+	if not error.is_empty():
+		return error
+	var firms: ShippingFirms = _state.firms
+	var firm: Dictionary = firms.firms[firm_index]
+	var standing := float((company.relations.get("firms", {}) as Dictionary).get(str(firm_index), 0.0))
+	if kind == "rivalry":
+		var was := agreement_kind(company, firm_index)
+		if was == "alliance":
+			_break_alliance(company, firm_index, "turned on")
+		_pact(company, firm_index, {kind = "rivalry", since = _state.calendar_time(), group = ""})
+		if _state.news != null:
+			_state.news.add("company", "%s declares a feud with %s" % [company.name, str(firm.name)], {firm = firm_index})
+		return ""
+	var lean := leaning(firm)
+	var odds := 0.35 + standing / 100.0 + (0.35 if lean == "loyal" else 0.0) - (0.3 if lean == "cutthroat" else 0.0) + (0.2 if _state.ownership.stake_in(company, firm_index) >= 0.05 else 0.0)
+	if kind == "pool" and agreement_kind(company, firm_index) == "alliance":
+		odds += 0.3
+	if rng.randf() >= clampf(odds, 0.05, 0.95):
+		var grudges: Dictionary = company.relations.get_or_add("firms", {})
+		grudges[str(firm_index)] = float(grudges.get(str(firm_index), 0.0)) + 2.0  # (Flattered, a little.)
+		if company == _state.company:
+			ActivityLog.add("%s declined your %s." % [str(firm.name), "alliance" if kind == "alliance" else "pooling offer"], ActivityLog.Kind.INFO)
+		return "Declined"
+	_pact(company, firm_index, {kind = kind, since = _state.calendar_time(), group = group if kind == "pool" else ""})
+	if company == _state.company:
+		ActivityLog.add("%s agreed: %s." % [str(firm.name), "an alliance" if kind == "alliance" else "pooling %s" % People.group_name(group).to_lower()], ActivityLog.Kind.GOOD)
+	if _state.news != null:
+		_state.news.add("company", "%s and %s %s" % [company.name, str(firm.name), "form an alliance" if kind == "alliance" else "pool their %s" % People.group_name(group).to_lower()], {firm = firm_index})
+	return ""
+
+
+func _pact(company: Company, firm_index: int, entry: Dictionary) -> void:
+	company.agreements[str(firm_index)] = entry
+	changed.emit()
+
+
+## Ending an agreement: an alliance broken costs standing everywhere; a rivalry ended is peace.
+func end_agreement(company: Company, firm_index: int) -> void:
+	var kind := agreement_kind(company, firm_index)
+	if kind.is_empty():
+		return
+	if kind == "alliance":
+		_break_alliance(company, firm_index, "walked away from")
+	company.agreements.erase(str(firm_index))
+	if company == _state.company:
+		ActivityLog.add("%s with %s is over." % ["The alliance" if kind == "alliance" else ("The pool" if kind == "pool" else "The feud"), str(_state.firms.firms[firm_index].name)], ActivityLog.Kind.INFO)
+	changed.emit()
+
+
+func _break_alliance(company: Company, firm_index: int, how: String) -> void:
+	var contracts: Contracts = _state.contracts
+	for country: String in company.relations.get("countries", {}).keys():
+		contracts.change_standing(company, -1, -BREAK_STANDING, country, 1.0)
+	var grudges: Dictionary = company.relations.get_or_add("firms", {})
+	grudges[str(firm_index)] = float(grudges.get(str(firm_index), 0.0)) - 30.0
+	if _state.news != null:
+		_state.news.add("company", "%s %s its ally %s; producers take note" % [company.name, how, str(_state.firms.firms[firm_index].name)], {firm = firm_index})
+
+
+## The firms' side of agreements each month: pools settle, rivalries cost, and now and then a firm comes to the player.
+func _monthly_agreements(company: Company, firms: ShippingFirms, rng: RandomNumberGenerator) -> void:
+	var contracts: Contracts = _state.contracts
+	for key: String in company.agreements.keys():
+		var i := int(key)
+		if i >= firms.firms.size() or is_dead(firms.firms[i]):
+			company.agreements.erase(key)
+			continue
+		var firm: Dictionary = firms.firms[i]
+		var entry: Dictionary = company.agreements[key]
+		match str(entry.kind):
+			"pool":
+				var group := str(entry.group)
+				var mine := company_group_capacity(company, group)
+				var theirs := firm_group_capacity(firm, group)
+				if mine <= 0.0 or theirs <= 0.0:
+					continue
+				var their_earned := maxf(float(firm.get("last_month_earned", 0.0)), 0.0) * theirs / maxf(firm_capacity(firm), 1.0)
+				var my_earned := maxf(float(company.totals.get("income", 0.0)) - float(entry.get("income_mark", company.totals.get("income", 0.0))), 0.0) * mine / maxf(mine + _other_capacity(company, group), 1.0)
+				entry.income_mark = float(company.totals.get("income", 0.0))
+				var to_me := roundi(their_earned * mine / (mine + theirs))
+				var to_them := roundi(my_earned * theirs / (mine + theirs))
+				var net := to_me - to_them
+				_state._add_money(company, net)
+				_state._record(null, "pooling", -float(net), company)
+				firm.money = float(firm.money) - net
+				if company == _state.company and net != 0:
+					ActivityLog.add("The %s pool with %s: %s%s this month." % [People.group_name(group).to_lower(), str(firm.name), "+" if net > 0 else "-", Fmt.money(absi(net))], ActivityLog.Kind.GOOD if net > 0 else ActivityLog.Kind.INFO)
+			"rivalry":
+				contracts.change_standing(company, -1, -RIVAL_STANDING, str(firm.country), 1.0)
+				firm.money = float(firm.money) - absf(float(firm.money)) * RIVAL_COST
+				if company == _state.company and _state.calendar_time() - int(entry.since) > PEACE_MONTHS * 2629800 and _falling(firm, 6) and rng.randf() < 0.3 and _state.calendar_time() - int(entry.get("peace_asked", 0)) > 6 * 2629800:
+					entry.peace_asked = _state.calendar_time()
+					agreement_proposed.emit(company, i, "peace", "")
+	if company != _state.company or rng.randf() >= PROPOSAL_CHANCE:
+		return
+	# A firm comes to the player: a loyal one that likes them for an alliance, a cutthroat one sore at them for a feud.
+	var live: Array = range(firms.firms.size()).filter(func(k: int) -> bool: return not is_dead(firms.firms[k]) and agreement_kind(company, k).is_empty())
+	if live.is_empty():
+		return
+	var i: int = live[rng.randi() % live.size()]
+	var firm: Dictionary = firms.firms[i]
+	var standing := float((company.relations.get("firms", {}) as Dictionary).get(str(i), 0.0))
+	if leaning(firm) == "cutthroat" and standing < -10.0:
+		_pact(company, i, {kind = "rivalry", since = _state.calendar_time(), group = ""})
+		agreement_proposed.emit(company, i, "rivalry", "")
+		if _state.news != null:
+			_state.news.add("company", "%s declares a feud with %s" % [str(firm.name), company.name], {firm = i})
+	elif leaning(firm) == "loyal" and (standing >= 10.0 or _state.ownership.stake_in(company, i) >= 0.05):
+		agreement_proposed.emit(company, i, "alliance", "")
+
+
+## The company's capacity in every other group (the share of its income a group earns, roughly).
+static func _other_capacity(company: Company, group: String) -> float:
+	var total := 0.0
+	for ship: Ship in GameState.fleet(company):
+		if str(ship.model().get("category", "")) != group:
+			total += float(ship.capacity())
+	return total
+
+
+## The player's answer to a firm's proposal (GameState.answer_agreement()).
+func answer(company: Company, firm_index: int, kind: String, accept: bool) -> void:
+	if not accept:
+		return
+	match kind:
+		"alliance":
+			_pact(company, firm_index, {kind = "alliance", since = _state.calendar_time(), group = ""})
+			if company == _state.company:
+				ActivityLog.add("Allied with %s." % str(_state.firms.firms[firm_index].name), ActivityLog.Kind.GOOD)
+		"peace":
+			company.agreements.erase(str(firm_index))
+			if company == _state.company:
+				ActivityLog.add("Peace with %s." % str(_state.firms.firms[firm_index].name), ActivityLog.Kind.GOOD)
+			changed.emit()
 
 
 ## The last HISTORY months of cash, for trends.

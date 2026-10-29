@@ -420,7 +420,9 @@ func hire(company: Company, candidate: Dictionary, kind: String, key: String, bu
 		var firms: ShippingFirms = _state.firms
 		var firm: Dictionary = firms.firms[int(candidate.employer)]
 		var grudges: Dictionary = company.relations.get_or_add("firms", {})
-		grudges[str(candidate.employer)] = float(grudges.get(str(candidate.employer), 0.0)) - GRUDGE  # (The firm remembers: it underbids you on tenders at home and charges more for its blocks, till it heals.)
+		grudges[str(candidate.employer)] = float(grudges.get(str(candidate.employer), 0.0)) - GRUDGE
+		if FirmLife.agreement_kind(company, int(candidate.employer)) == "alliance":  # (Poaching from an ally breaks it.)
+			_state.firm_life.end_agreement(company, int(candidate.employer))  # (The firm remembers: it underbids you on tenders at home and charges more for its blocks, till it heals.)
 		if _state.news != null:
 			_state.news.add("company", "%s poaches %s from %s" % [company.name, str(person.name), str(firm.name)], {firm = int(candidate.employer)})
 	candidates.erase(candidate)
@@ -671,6 +673,14 @@ func _monthly_poaching(company: Company, rng: RandomNumberGenerator) -> void:
 		return
 	if FirmLife.leaning(firms.firms[firm_index]) != "cutthroat" and rng.randf() < 0.5:
 		return  # (Cutthroat firms poach twice as often as the rest.)
+	var pact := FirmLife.agreement_kind(company, firm_index)
+	if pact == "alliance":
+		return  # (An ally keeps its hands off your people.)
+	if pact != "rivalry" and rng.randf() < 0.5:
+		for key: String in company.agreements:  # (A rival poaches twice as often: it gets the turn instead.)
+			if str(company.agreements[key].kind) == "rivalry" and not FirmLife.is_dead(firms.firms[int(key)]):
+				firm_index = int(key)
+				break
 	var glad := (morale_of(person) if str(entry.kind) == "officer" else contentment_of(person)) >= 80.0
 	var salary := int(person.get("salary", 0)) if str(entry.kind) != "officer" else roundi(OFFICER_SALARY * _quality(person))
 	var offer := roundi(salary * POACH_OFFER / 1000.0) * 1000

@@ -120,7 +120,7 @@ func clear() -> void:
 
 ## A company's standing with a country (-100..100).
 static func country_standing(company: Company, country: String) -> float:
-	return clampf(float((company.relations.get("countries", {}) as Dictionary).get(country, 0.0)), -100.0, 100.0)
+	return clampf(float((company.relations.get("countries", {}) as Dictionary).get(country, 0.0)) + (FirmLife.ALLY_STANDING if FirmLife.allied_country(company, country) else 0.0), -100.0, 100.0)  # (An ally's home country thinks better of you: see FirmLife.)
 
 
 ## A company's standing with a producer: its country's plus the producer's own memory.
@@ -498,7 +498,10 @@ func _close_tender(offer: Dictionary) -> void:
 	var winning_rate := 0.0
 	for key: String in offer.bids:
 		var firm_index := int(key)
-		var score := float(offer.bids[key]) / (1.0 + ai_standing(offer, firm_index) / STANDING_WEIGHT)
+		if float(offer.my_bid) > 0.0 and FirmLife.agreement_kind(company, firm_index) == "alliance":
+			continue  # (An ally never bids against you: see FirmLife.)
+		var rival_cut := FirmLife.RIVAL_BID if FirmLife.agreement_kind(company, firm_index) == "rivalry" else 1.0
+		var score := float(offer.bids[key]) * rival_cut / (1.0 + ai_standing(offer, firm_index) / STANDING_WEIGHT)
 		if score < best_score:
 			best_score = score
 			winner = firm_index
