@@ -252,6 +252,15 @@ static func _perk_text(perk: Dictionary) -> String:
 	return "%s%d%% %s%s" % ["+" if value > 1.0 else "-", roundi(absf(value - 1.0) * 100.0), words.get(str(perk.get("stat", "")), str(perk.get("stat", ""))), "" if categories.is_empty() else " for " + ", ".join(PackedStringArray(categories.map(func(c: String) -> String: return People.group_name(c).to_lower())))]
 
 
+## A department head would take a routed ship for a contract that pays better (People.divert_wanted).
+func show_divert(offer: Dictionary, ship: Ship, head_key: String, pay_day: float, route_day: float) -> void:
+	var head: Dictionary = GameState.company.heads.get(head_key, {})
+	var id := int(offer.id)
+	_enqueue({kicker = "YOUR HEAD PROPOSES", title = "Take %s off its route?" % ship.name, color = GOLD,
+		body = "%s (%s) would take %s for %s, %s to %s (%s in all), and put %s on it. The contract pays about %s a day; the ship's route has made about %s a day lately. It goes back to its route (%s) when the contract is done. Tick Keep on route on a ship's card to leave it alone." % [str(head.get("name", "Your head")), People.head_title(head_key), GameState.contract_summary(offer), GameState.contracts.party_name(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)), Fmt.money(int(offer.value)), ship.name, Fmt.money(roundi(pay_day)), Fmt.money(roundi(route_day)), GameData.route_text(ship.route)],
+		actions = [["Take the contract", func() -> void: GameState.answer_divert(id, ship, head_key, true)], ["Keep it on its route", func() -> void: GameState.answer_divert(id, ship, head_key, false)]]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

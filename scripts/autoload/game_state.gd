@@ -1391,6 +1391,29 @@ func choose_successor(kind: String, key: String) -> void:
 	people.succeed(company, kind, key)
 	ActivityLog.add("%s is chief executive now." % str(company.ceo.get("name", "")), ActivityLog.Kind.GOOD)
 
+## A ship a department head may never take off its route for a contract (People).
+func set_keep_on_route(ship: Ship, on: bool) -> void:
+	if ship == null or owner_of(ship) != company:
+		return
+	if Net.command(&"set_keep_on_route", [ship, on]):
+		return
+	ship.keep_on_route = on
+	ship_changed.emit(ship)
+
+
+## The answer to a head's card: take a routed ship off its route for the contract, or not (People.approve_divert()).
+func answer_divert(offer_id: int, ship: Ship, head_key: String, approve: bool) -> void:
+	if Net.command(&"answer_divert", [offer_id, ship, head_key, approve]):
+		return
+	var offer := contracts.offer_by_id(offer_id)
+	if offer.is_empty():
+		return
+	if approve:
+		people.approve_divert(company, offer, ship, head_key)
+	else:
+		offer.divert_asked = true  # (Not asked again for this one.)
+
+
 # --- Technology (see Technology) -----------------------------------------------------------------
 
 func license_tech(tech_id: String) -> void:

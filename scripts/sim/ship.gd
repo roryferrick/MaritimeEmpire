@@ -236,6 +236,9 @@ var lost_reason := ""
 var auto_recover := true
 ## Wait in port until it can buy a full hold before leaving (cargo ships).
 var full_loads := true
+## Never taken off its route by a department head for a contract (People.run_heads()); and the route to go back to when it was.
+var keep_on_route := false
+var route_before: Array[String] = []
 ## Its skin (Cosmetics): "" as the Shop (the pack worn there), "base" the ship
 ## as it is, or "pack/skin" (see GameState.set_skin(), SkinPicker).
 var skin := ""
@@ -1578,6 +1581,8 @@ func to_dict() -> Dictionary:
 		"carry_reversed": carry_reversed,
 		"auto_recover": auto_recover,
 		"full_loads": full_loads,
+		"keep_on_route": keep_on_route,
+		"route_before": route_before,
 		"skin": skin,
 		"lost_order": lost_order,
 		"sea_time": sea_time,
@@ -1706,6 +1711,8 @@ static func from_dict(data: Dictionary) -> Ship:
 	ship.carry_reversed = bool(data.get("carry_reversed", false))
 	ship.auto_recover = bool(data.get("auto_recover", true))
 	ship.full_loads = bool(data.get("full_loads", true))
+	ship.keep_on_route = bool(data.get("full_loads_keep", data.get("keep_on_route", false)))
+	ship.route_before.assign(data.get("route_before", []))
 	ship.skin = str(data.get("skin", ""))
 	ship.lost_order = int(data.get("lost_order", 0))
 	ship.sea_time = float(data.get("sea_time", 0.0))

@@ -39,8 +39,8 @@ const RECURRING_SHARE := 0.4
 const OFFER_DAYS := 8
 const EXPIRE_DAYS := [14, 28]
 const QUARTER_DAYS := 91.3125
-const PREMIUM_LOW := 1.3
-const PREMIUM_HIGH := 2.0
+const PREMIUM_LOW := 1.1
+const PREMIUM_HIGH := 1.65
 ## Plain freight: HANDLING of the base price plus the base price per FREIGHT_NM sailed (dearer than the paper firms' own freight: a contract pays like a good spot trade), and never under GAP_FLOOR of the spot gap between the two ports at signing.
 const HANDLING := 0.1
 const FREIGHT_NM := 8000.0
@@ -895,6 +895,17 @@ func charter_voyage(company: Company, home: String, room: int) -> Array:
 	return [0, 0]
 
 func _finish(contract: Dictionary, company: Company, done: bool) -> void:
+	for ship_id: int in contract.ships:  # (A ship a head took off its route goes back to it: see People.approve_divert().)
+		var ship: Ship = _state.ship_by_id(ship_id)
+		if ship != null and not ship.route_before.is_empty():
+			var back: Array[String] = []
+			back.assign(ship.route_before)
+			ship.route_before.clear()
+			ship.contract_id = 0
+			if _state.route_error(back, ship).is_empty():
+				_state.assign_route(ship, back)
+			if company == _state.company:
+				ActivityLog.add("%s is back on its route: %s." % [ship.name, GameData.route_text(back)], ActivityLog.Kind.INFO)
 	contract.status = "done" if done else "failed"
 	change_standing(company, int(contract.producer), REP_DONE if done else REP_FAILED, str(contract.country))
 	for ship: Ship in _state.fleet(company):

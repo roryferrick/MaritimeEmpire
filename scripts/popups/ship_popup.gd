@@ -21,6 +21,7 @@ var _cargo_label := Label.new()
 ## The Crew button, and the page it swaps the bars for: every officer (the
 ## captain and mates) with their picture, and the crew.
 var _crew_button := Button.new()
+var _keep_toggle := CheckButton.new()
 var _parts_button := Button.new()
 var _parts_box := VBoxContainer.new()
 var _crew_box := VBoxContainer.new()
@@ -93,6 +94,10 @@ func _ready() -> void:
 	%RefuelToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_refuel(ship, on))
 	%RescueToggle.toggled.connect(func(on: bool) -> void: GameState.set_auto_recover(ship, on))
 	%FullToggle.toggled.connect(func(on: bool) -> void: GameState.set_full_loads(ship, on))
+	_keep_toggle.text = "Keep on route"
+	_keep_toggle.tooltip_text = "A department head may take a ship off its route for a contract that pays better (a card asks you). Ticked, this ship is never proposed."
+	_keep_toggle.toggled.connect(func(on: bool) -> void: GameState.set_keep_on_route(ship, on))
+	%Toggles.add_child(_keep_toggle)
 	%SellButton.pressed.connect(_on_sell_pressed)
 	_skin_button.text = "Skin"
 	_skin_button.tooltip_text = "Dress this ship in a skin you own, or the base ship."
@@ -373,6 +378,8 @@ func _refresh() -> void:
 	%RefuelToggle.set_pressed_no_signal(ship.auto_refuel)
 	%RescueToggle.set_pressed_no_signal(ship.auto_recover)
 	%FullToggle.set_pressed_no_signal(ship.full_loads)
+	_keep_toggle.set_pressed_no_signal(ship.keep_on_route)
+	_keep_toggle.visible = not ship.is_service() and not ship.is_research()
 	%RescueToggle.visible = not ship.is_service()
 	%FullToggle.visible = not ship.is_service() and not ship.is_research()
 	%AssignButton.visible = not ship.is_service() and not ship.is_research()

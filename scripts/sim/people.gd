@@ -22,6 +22,8 @@ signal person_left(company: Company, role: String, name: String, why: String)
 signal succession_needed(company: Company, why: String)
 ## A captain has resigned over low morale (a new officer has the ship).
 signal captain_resigned(company: Company, ship: Ship, name: String)
+## A head would take a routed ship off its route for a contract that pays better a day (a card: GameState.answer_divert()).
+signal divert_wanted(company: Company, offer: Dictionary, ship: Ship, head_key: String, pay_day: float, route_day: float)
 
 ## The executive roles: id -> {name, skills (what the role draws on), effects
 ## {key: weight}: what a point of the role's skills over the base does}.
@@ -69,6 +71,9 @@ const MORALE_BREAKDOWNS := 0.3  # Breakdown odds at the worst morale.
 ## Grudges: a poach costs GRUDGE of standing with the firm (Company.relations.firms), healing GRUDGE_HEAL a month.
 const GRUDGE := 20.0
 const GRUDGE_HEAL := 1.0
+## A head proposes taking a routed ship for a contract at most once in DIVERT_GAP_DAYS.
+const DIVERT_GAP_DAYS := 7
+var _divert_last := {}
 
 var _state: Node  # GameState
 ## The job market: [{id, character, kind ("officer", "head", "exec"), role (an exec role for an exec, "" else), ask (a year), employer (a firm index, -1), min_tier}].
@@ -676,6 +681,8 @@ func run_heads(company: Company) -> void:
 				continue
 			var ship := _idle_ship_for(company, offer)
 			if ship == null:
+				if company == _state.company and not bool(offer.get("divert_asked", false)):
+					_propose_divert(company, offer, key)
 				continue
 			var skills := Traits.skills_of(head)
 			offer.rate = snappedf(float(offer.rate) * (1.0 + PER_POINT * (float(skills.get("negotiation", Traits.BASE_SKILL)) - Traits.BASE_SKILL)), 0.01)
@@ -689,6 +696,68 @@ func run_heads(company: Company) -> void:
 			budget -= int(contract.value)
 			if company == _state.company:
 				ActivityLog.add("%s (%s) took %s for %s and put %s on it." % [str(head.name), head_title(key), _state.contract_summary(contract), contracts.party_name(contract), ship.name], ActivityLog.Kind.GOOD)
+
+
+## No ship idle: a routed ship the contract would pay better than its route has lately is put to the player (the card pauses the game).
+func _propose_divert(company: Company, offer: Dictionary, head_key: String) -> void:
+	var now: int = _state.calendar_time()
+	if now - int(_divert_last.get(company, -DIVERT_GAP_DAYS * 86400)) < DIVERT_GAP_DAYS * 86400:
+		return  # (One proposal a week at most: the cards would pile up.)
+	var recent: Dictionary = _state.recent_finances(company, _state.ship_window_seconds()).ships
+	var best: Ship = null
+	var best_gain := 0.0
+	var best_pay := 0.0
+	var best_route := 0.0
+	for ship: Ship in _state.fleet(company):
+		if ship.is_service() or ship.contract_id > 0 or ship.keep_on_route or ship.is_lost() or not ship.has_route() or ship.paused:
+			continue
+		if not str(offer.good) in ship.model().get("cargo", []) or not ship.can_sail(str(offer.from), str(offer.to)):
+			continue
+		var here := ship.docked_at if ship.is_docked() else ship.to_port
+		if here != str(offer.from) and not ship.can_sail(here, str(offer.from)):
+			continue
+		var pay_day := _pay_a_day(offer, ship)
+		var route_day := float(recent.get(ship.name, 0.0)) / float(_state.SHIP_EARNINGS_DAYS)
+		if pay_day > route_day and pay_day - route_day > best_gain:
+			best = ship
+			best_gain = pay_day - route_day
+			best_pay = pay_day
+			best_route = route_day
+	if best == null:
+		return
+	offer.divert_asked = true
+	_divert_last[company] = now
+	divert_wanted.emit(company, offer, best, head_key, best_pay, best_route)
+
+
+## What a contract pays a day for a ship: its value over the round trips the ship needs for the units (loading time ignored).
+func _pay_a_day(offer: Dictionary, ship: Ship) -> float:
+	var room := maxf(floorf(float(ship.capacity()) / GameData.hold_of(str(offer.good))), 1.0)
+	var trips := ceilf(float(offer.units) / room)
+	var leg_days := float(offer.nm) / maxf(ship.top_speed(), 0.1) * float(_state.days_per_second())
+	var days := maxf(trips * 2.0 * leg_days, 1.0)
+	return float(offer.value) / days
+
+
+## The player's answer: the head signs, the ship's route is kept to go back to, and it sails the contract's lane.
+func approve_divert(company: Company, offer: Dictionary, ship: Ship, head_key: String) -> void:
+	var contracts: Contracts = _state.contracts
+	if not contracts.can_sign(company, offer).is_empty() or ship == null:
+		return
+	var head: Dictionary = company.heads.get(head_key, {})
+	if not head.is_empty():
+		var skills := Traits.skills_of(head)
+		offer.rate = snappedf(float(offer.rate) * (1.0 + PER_POINT * (float(skills.get("negotiation", Traits.BASE_SKILL)) - Traits.BASE_SKILL)), 0.01)
+		offer.value = roundi(float(offer.rate) * int(offer.units) * maxi(int(offer.get("quarters", 0)), 1))
+	var contract := contracts.sign_offer(company, offer)
+	contract.taken_by = head_key
+	ship.route_before = ship.route.duplicate()
+	contracts.assign_ship(contract, ship)
+	var route: Array[String] = [str(contract.from), str(contract.to)]
+	if _state.route_error(route, ship).is_empty():
+		_state.assign_route(ship, route)
+	if company == _state.company:
+		ActivityLog.add("%s took %s for %s and took %s off its route for it; it goes back after." % [str(head.get("name", "A head")), _state.contract_summary(contract), contracts.party_name(contract), ship.name], ActivityLog.Kind.GOOD)
 
 
 func _taken_value(company: Company, key: String) -> int:
