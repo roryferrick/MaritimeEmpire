@@ -873,6 +873,8 @@ func _check_payday() -> void:
 		if salaries > 0:
 			_add_money(who, -salaries)
 			_record(null, "salaries", salaries, who)
+			if in_debt(who):
+				people.note_unpaid(who)  # (Paid on credit: they notice. See People.)
 			if who == company:
 				ActivityLog.add("Paid %s in salaries to your executives and heads." % Fmt.money(salaries), ActivityLog.Kind.INFO)
 	farms.pay_wages()  # (The farm workers', at the same time.)
@@ -1503,6 +1505,54 @@ func launch_ship(who: Company, model_id: String, ship_name: String, port_id: Str
 	ships_changed.emit()
 	ship_changed.emit(ship)
 	return ship
+
+
+# --- Hiring: postings, recruiters, raises, notices and poaching (see People) -----------------------
+
+func post_job(kind: String, role: String, salary: float) -> void:
+	if Net.command(&"post_job", [kind, role, salary]):
+		return
+	var error := people.post_job(company, kind, role, salary)
+	if error.is_empty():
+		ActivityLog.add("Posted a job: %s%s." % [People.posting_title(company.postings[-1]), "" if salary <= 1.0 else " at %d%% over the going rate" % roundi((salary - 1.0) * 100.0)], ActivityLog.Kind.INFO)
+
+
+func close_posting(id: int) -> void:
+	if Net.command(&"close_posting", [id]):
+		return
+	people.close_posting(company, id)
+
+
+func hire_recruiter() -> void:
+	if Net.command(&"hire_recruiter", []):
+		return
+	var error := people.hire_recruiter(company)
+	if not error.is_empty():
+		ActivityLog.add(error + ".", ActivityLog.Kind.INFO)
+
+
+func drop_recruiter() -> void:
+	if Net.command(&"drop_recruiter", []):
+		return
+	people.drop_recruiter(company)
+
+
+func give_raise(kind: String, key: String) -> void:
+	if Net.command(&"give_raise", [kind, key]):
+		return
+	people.give_raise(company, kind, key)
+
+
+func answer_notice(kind: String, key: String, raise: bool) -> void:
+	if Net.command(&"answer_notice", [kind, key, raise]):
+		return
+	people.answer_notice(company, kind, key, raise)
+
+
+func answer_poach(kind: String, key: String, offer: int, match_it: bool) -> void:
+	if Net.command(&"answer_poach", [kind, key, offer, match_it]):
+		return
+	people.answer_poach(company, kind, key, offer, match_it)
 
 
 # --- Drydock (see ShipParts) --------------------------------------------------------------------

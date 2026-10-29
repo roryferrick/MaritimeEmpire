@@ -261,6 +261,25 @@ func show_divert(offer: Dictionary, ship: Ship, head_key: String, pay_day: float
 		actions = [["Take the contract", func() -> void: GameState.answer_divert(id, ship, head_key, true)], ["Keep it on its route", func() -> void: GameState.answer_divert(id, ship, head_key, false)]]})
 
 
+## An executive or head hands in notice (People.notice_given).
+func show_notice(kind: String, key: String, person: Dictionary) -> void:
+	var post := str(People.ROLES.get(key, {}).get("name", key)) if kind == "exec" else People.head_title(key)
+	var raised := roundi(int(person.get("salary", 0)) * (1.0 + People.RAISE) / 1000.0) * 1000
+	_enqueue({kicker = "NOTICE", title = "%s wants to leave" % str(person.get("name", "")), color = Color(0.95, 0.6, 0.5),
+		body = "Your %s is %s: unpaid pay periods, being passed over, losing quarters and years without a raise all tell. A raise of %d%% (to %s a year) would keep them; otherwise they go at once." % [post.to_lower(), People.contentment_word(person), roundi(People.RAISE * 100.0), Fmt.money(raised)],
+		actions = [["Give the raise", func() -> void: GameState.answer_notice(kind, key, true)], ["Let them go", func() -> void: GameState.answer_notice(kind, key, false)]]})
+
+
+## A paper firm is trying to lure someone (People.poach_offer).
+func show_poach(kind: String, key: String, person: Dictionary, firm_index: int, offer: int) -> void:
+	var firm: Dictionary = GameState.firms.firms[firm_index]
+	var sore := People.soreness(GameState.company, firm_index) > 0.0
+	var post := str(People.ROLES.get(key, {}).get("name", key)) if kind == "exec" else (People.head_title(key) if kind == "head" else "captain")
+	_enqueue({kicker = "AN OFFER FROM A RIVAL", title = "%s wants %s" % [str(firm.name), str(person.get("name", ""))], color = GOLD,
+		body = "%s has offered your %s %s a year%s. %s" % [str(firm.name), post.to_lower(), Fmt.money(offer), " (paying you back for poaching from them)" if sore else "", "Match it and they stay at that salary." if kind != "officer" else "Match it with a %s bonus and they stay; otherwise a new officer takes the ship." % Fmt.money(People.BONUS_PAY * 2)],
+		actions = [["Match it", func() -> void: GameState.answer_poach(kind, key, offer, true)], ["Let them go", func() -> void: GameState.answer_poach(kind, key, offer, false)]]})
+
+
 func _enqueue(card: Dictionary) -> void:
 	_queue.append(card)
 	if not visible:

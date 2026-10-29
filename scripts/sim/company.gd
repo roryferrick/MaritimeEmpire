@@ -72,6 +72,10 @@ var techs := {}
 var rnd := {}
 var rnd_likes := {}
 var rnd_offers := {}
+## Hiring: the job postings out ({id, kind, role, salary (a share of the going rate), since}), recruiters on retainer, and the losing quarters in a row (People).
+var postings := []
+var recruiters := 0
+var loss_quarters := 0
 ## The CEO (Characters: {name, look}), made on the New Company screen.
 var ceo := {}
 ## What its people wear, line by line, where it's changed the defaults
@@ -209,6 +213,9 @@ func to_dict() -> Dictionary:
 		"rnd": rnd,
 		"rnd_likes": rnd_likes,
 		"rnd_offers": rnd_offers,
+		"postings": postings,
+		"recruiters": recruiters,
+		"loss_quarters": loss_quarters,
 		"ceo": ceo,
 		"uniforms": uniforms,
 		"hubs": hubs.map(func(hub: Hub) -> Dictionary: return hub.to_dict()),
@@ -283,6 +290,9 @@ static func from_dict(data: Dictionary) -> Company:
 	company.rnd = data.get("rnd", {}) if data.get("rnd") is Dictionary else {}
 	company.rnd_likes = data.get("rnd_likes", {}) if data.get("rnd_likes") is Dictionary else {}
 	company.rnd_offers = data.get("rnd_offers", {}) if data.get("rnd_offers") is Dictionary else {}
+	company.postings = data.get("postings", []) if data.get("postings") is Array else []
+	company.recruiters = int(data.get("recruiters", 0))
+	company.loss_quarters = int(data.get("loss_quarters", 0))
 	company.ceo = data.get("ceo", {})
 	company.uniforms = data.get("uniforms", {}) if data.get("uniforms") is Dictionary else {}
 	if company.ceo.is_empty():  # Saves from before CEOs: made up, the same each load.

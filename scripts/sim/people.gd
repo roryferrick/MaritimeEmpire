@@ -22,6 +22,10 @@ signal person_left(company: Company, role: String, name: String, why: String)
 signal succession_needed(company: Company, why: String)
 ## A captain has resigned over low morale (a new officer has the ship).
 signal captain_resigned(company: Company, ship: Ship, name: String)
+## An executive or head has handed in notice (a card: GameState.answer_notice()).
+signal notice_given(company: Company, kind: String, key: String, person: Dictionary)
+## A paper firm is trying to lure one of the company's people (a card: GameState.answer_poach()).
+signal poach_offer(company: Company, kind: String, key: String, person: Dictionary, firm_index: int, offer: int)
 ## A head would take a routed ship off its route for a contract that pays better a day (a card: GameState.answer_divert()).
 signal divert_wanted(company: Company, offer: Dictionary, ship: Ship, head_key: String, pay_day: float, route_day: float)
 
@@ -74,6 +78,27 @@ const GRUDGE_HEAL := 1.0
 ## A head proposes taking a routed ship for a contract at most once in DIVERT_GAP_DAYS.
 const DIVERT_GAP_DAYS := 7
 var _divert_last := {}
+## Hiring runs on applications (DESIGN M3 gaps, 2026-10-29): UNSOLICITED_A_MONTH arrive on their own, a job
+## posting (Company.postings) draws POSTING_A_MONTH of its kind, each kept APPLICATION_DAYS; up to RECRUITERS_MAX
+## recruiters at RECRUITER_FEE a month add RECRUITER_VOLUME each to the flow and RECRUITER_SKILL to applicants'
+## skills, and screen out the weakest unsolicited ones. Offering over the going salary draws better people.
+const UNSOLICITED_A_MONTH := 2
+const POSTING_A_MONTH := 3
+const APPLICATION_DAYS := 60
+const RECRUITER_FEE := 25000
+const RECRUITERS_MAX := 3
+const RECRUITER_VOLUME := 0.5
+const RECRUITER_SKILL := 1
+const SALARY_OFFERS := [1.0, 1.25, 1.5]
+## Executives' and heads' contentment (0-100, from CONTENT_BASE): unpaid salaries, an outsider hired over
+## them, two losing quarters and a year without a raise pull it down; raises, profits and promotion lift it.
+## Under CONTENT_NOTICE they hand in notice (a card: a raise of RAISE keeps them). Paper firms try to lure
+## someone about POACH_YEARLY times a year (twice as often when a firm you poached from is sore) at POACH_OFFER x salary.
+const CONTENT_BASE := 60.0
+const CONTENT_NOTICE := 20.0
+const RAISE := 0.15
+const POACH_YEARLY := 1.0
+const POACH_OFFER := 1.3
 
 var _state: Node  # GameState
 ## The job market: [{id, character, kind ("officer", "head", "exec"), role (an exec role for an exec, "" else), ask (a year), employer (a firm index, -1), min_tier}].
@@ -211,26 +236,108 @@ func step(_delta: float) -> void:
 		_age_everyone()
 
 
-## Fills the market (a third replaced each month).
-func _refresh_market(fill_all: bool) -> void:
+## The month's applications: the old ones expire, a few unsolicited ones arrive for each company, and each
+## job posting draws its own (candidates; `to` the company index, `posting` the posting id or 0).
+func _refresh_market(_fill_all: bool) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("%d|%d" % [(_state.world as WorldEconomy).seed, _month])
-	if not fill_all:
-		var drop := roundi(candidates.size() * REFRESH_SHARE)
-		for i in drop:
-			if not candidates.is_empty():
-				candidates.remove_at(rng.randi() % candidates.size())
-	while candidates.size() < MARKET_SIZE:
-		candidates.append(_candidate(rng, ["officer", "officer", "head", "exec"][rng.randi() % 4]))
+	var now: int = _state.calendar_time()
+	candidates = candidates.filter(func(c: Dictionary) -> bool: return now - int(c.get("arrived", now)) < APPLICATION_DAYS * 86400)
+	var companies: Array = _state.all_companies()
+	for i in companies.size():
+		var company: Company = companies[i]
+		var recruiters := int(company.recruiters)
+		if recruiters > 0:
+			var fee := recruiters * RECRUITER_FEE
+			_state._add_money(company, -fee)
+			_state._record(null, "salaries", fee, company)
+		var volume := 1.0 + RECRUITER_VOLUME * recruiters
+		var count := roundi(UNSOLICITED_A_MONTH * volume * rng.randf_range(0.6, 1.4))
+		for k in count:
+			var application := _candidate(rng, ["officer", "officer", "head", "exec"][rng.randi() % 4], false, "", recruiters * RECRUITER_SKILL)
+			if recruiters > 0 and _quality(application.character) < 0.9:
+				continue  # (Screened out.)
+			application.to = i
+			candidates.append(application)
+		for posting: Dictionary in company.postings:
+			var extra := roundi((float(posting.get("salary", 1.0)) - 1.0) * 6.0)  # (Offering +50% draws people 3 points better.)
+			var drawn := roundi(POSTING_A_MONTH * volume * rng.randf_range(0.7, 1.3))
+			for k in drawn:
+				var application := _candidate(rng, str(posting.kind), false, str(posting.get("role", "")), recruiters * RECRUITER_SKILL + extra)
+				application.to = i
+				application.posting = int(posting.id)
+				application.ask = roundi(float(application.ask) * float(posting.get("salary", 1.0)) / 1000.0) * 1000
+				candidates.append(application)
+	changed.emit()
+
+
+## The applications a company can see: its own and the unaddressed.
+func applications_for(company: Company) -> Array:
+	var index: int = _state.all_companies().find(company)
+	return candidates.filter(func(c: Dictionary) -> bool: return int(c.get("to", -1)) in [-1, index])
+
+
+## Posts a job: kind "exec" (role), "head" (key "group|region") or "officer" (a ship category), at a share of the going salary (SALARY_OFFERS).
+func post_job(company: Company, kind: String, role: String, salary: float) -> String:
+	if not kind in ["exec", "head", "officer"]:
+		return "No such kind"
+	if kind == "exec" and not ROLES.has(role):
+		return "No such role"
+	for posting: Dictionary in company.postings:
+		if str(posting.kind) == kind and str(posting.role) == role:
+			return "Posted already"
+	company.postings.append({id = _next_id, kind = kind, role = role, salary = clampf(salary, 1.0, 2.0), since = _state.calendar_time()})
+	_next_id += 1
+	changed.emit()
+	return ""
+
+
+func close_posting(company: Company, id: int) -> void:
+	for posting: Dictionary in company.postings:
+		if int(posting.id) == id:
+			company.postings.erase(posting)
+			changed.emit()
+			return
+
+
+static func posting_title(posting: Dictionary) -> String:
+	match str(posting.kind):
+		"exec":
+			return str(ROLES.get(str(posting.role), {}).get("name", posting.role))
+		"head":
+			return head_title(str(posting.role))
+	return "Officers for %s" % group_name(str(posting.role)).to_lower()
+
+
+func hire_recruiter(company: Company) -> String:
+	if int(company.recruiters) >= RECRUITERS_MAX:
+		return "Three is the most"
+	if company.money < RECRUITER_FEE or _state.in_debt(company):
+		return "A recruiter costs %s a month" % Fmt.money(RECRUITER_FEE)
+	company.recruiters = int(company.recruiters) + 1
+	changed.emit()
+	return ""
+
+
+func drop_recruiter(company: Company) -> void:
+	company.recruiters = maxi(int(company.recruiters) - 1, 0)
 	changed.emit()
 
 
 ## A candidate of a kind: a character of working age with role-leaning skills and a salary ask by quality.
-func _candidate(rng: RandomNumberGenerator, kind: String, strong := false, role := "") -> Dictionary:
+func _candidate(rng: RandomNumberGenerator, kind: String, strong := false, role := "", skill_bonus := 0) -> Dictionary:
 	var person := Characters.random_person(rng, kind, "")
+	if kind != "officer" and skill_bonus != 0:  # (Recruiters and a generous offer draw better people.)
+		for skill: String in Traits.SKILLS:
+			person.skills[skill] = maxi(int(person.skills.get(skill, Traits.BASE_SKILL)) + skill_bonus, 1)
+	elif skill_bonus != 0:
+		person.skills.seamanship = maxi(int(person.skills.get("seamanship", Traits.BASE_SKILL)) + skill_bonus, 1)
+		person.skills.engineering = maxi(int(person.skills.get("engineering", Traits.BASE_SKILL)) + skill_bonus, 1)
 	if role.is_empty() and kind == "exec":
 		role = ROLE_ORDER[rng.randi() % ROLE_ORDER.size()]
-	if not role.is_empty():
+	if kind == "officer":
+		role = ""  # (An officer posting's line: any ship takes them.)
+	if not role.is_empty() and kind == "exec" and ROLES.has(role):  # (A head's "role" is its post key; an officer's a ship line.)
 		for skill: String in ROLES[role].skills:
 			person.skills[skill] = int(person.skills.get(skill, Traits.BASE_SKILL)) + 2 + (3 if strong else 0)
 	elif kind == "officer":
@@ -245,7 +352,7 @@ func _candidate(rng: RandomNumberGenerator, kind: String, strong := false, role 
 	var quality := _quality(person)
 	var base := OFFICER_SALARY if kind == "officer" else (HEAD_SALARY if kind == "head" else EXEC_SALARY)
 	var ask := roundi(base * quality * (1.0 + POACH_PREMIUM if employer >= 0 else 1.0) / 1000.0) * 1000
-	var out := {id = _next_id, character = person, kind = kind, role = role, ask = ask, employer = employer, min_tier = "known" if quality > 1.3 and rng.randf() < 0.5 else ""}
+	var out := {id = _next_id, character = person, kind = kind, role = role, ask = ask, employer = employer, min_tier = "known" if quality > 1.3 and rng.randf() < 0.5 else "", to = -1, posting = 0, arrived = _state.calendar_time()}
 	_next_id += 1
 	return out
 
@@ -300,6 +407,12 @@ func hire(company: Company, candidate: Dictionary, kind: String, key: String, bu
 	var placed := place(company, person, kind, key, budget)
 	if not placed.is_empty():
 		return placed
+	if kind == "exec":  # (An outsider over the heads' heads: see contentment.)
+		for head_key: String in company.heads:
+			_content(company.heads[head_key], -10.0)
+	for posting: Dictionary in company.postings.duplicate():  # (The posting it answered is filled.)
+		if int(posting.id) == int(candidate.get("posting", 0)):
+			company.postings.erase(posting)
 	var cost := hiring_cost(company, candidate)
 	if cost > 0:
 		_state._add_money(company, -cost)
@@ -434,6 +547,8 @@ func _age_everyone() -> void:
 			if age >= float(person.retire_at):
 				_leaves(company, entry, "retired")
 		_monthly_family(company, rng)
+		_monthly_contentment(company, rng)
+		_monthly_poaching(company, rng)
 		_monthly_morale(company, rng)
 		_heal_grudges(company)
 	changed.emit()
@@ -453,6 +568,150 @@ func _leaves(company: Company, entry: Dictionary, why: String) -> void:
 		ActivityLog.add("%s, %s, has %s." % [name, str(entry.role), "died suddenly" if why == "died" else "retired"], ActivityLog.Kind.BAD if why == "died" else ActivityLog.Kind.INFO)
 	person_left.emit(company, str(entry.role), name, why)
 
+
+# --- Contentment, notice and poaching ---------------------------------------------------------------
+
+static func contentment_of(person: Dictionary) -> float:
+	return clampf(float(person.get("contentment", CONTENT_BASE)), 0.0, 100.0)
+
+
+static func contentment_word(person: Dictionary) -> String:
+	var c := contentment_of(person)
+	return "glad" if c >= 75.0 else ("content" if c >= 45.0 else ("restless" if c >= CONTENT_NOTICE else "leaving"))
+
+
+static func _content(person: Dictionary, amount: float) -> void:
+	person.contentment = clampf(contentment_of(person) + amount, 0.0, 100.0)
+
+
+## Payday with the company in debt: the salaries went unpaid in spirit (GameState._check_payday()).
+func note_unpaid(company: Company) -> void:
+	for entry: Dictionary in employees(company):
+		if str(entry.kind) in ["exec", "head"]:
+			_content(entry.who, -15.0)
+
+
+## A quarter closed (Ownership): two losing quarters running grate; a profit pleases a little.
+func note_quarter(company: Company, profit: float) -> void:
+	company.loss_quarters = int(company.loss_quarters) + 1 if profit < 0.0 else 0
+	for entry: Dictionary in employees(company):
+		if str(entry.kind) in ["exec", "head"]:
+			_content(entry.who, -10.0 if int(company.loss_quarters) >= 2 else (3.0 if profit > 0.0 else 0.0))
+
+
+## Each month contentment drifts to its base; a year without a raise costs; under CONTENT_NOTICE they give notice.
+func _monthly_contentment(company: Company, _rng: RandomNumberGenerator) -> void:
+	var now: int = _state.calendar_time()
+	for entry: Dictionary in employees(company):
+		if not str(entry.kind) in ["exec", "head"]:
+			continue
+		var person: Dictionary = entry.who
+		var c := contentment_of(person)
+		c += signf(CONTENT_BASE - c) * minf(absf(CONTENT_BASE - c), 1.0)
+		if not person.has("raised_at"):
+			person.raised_at = int(person.get("hired", now))
+		if now - int(person.raised_at) > 365 * 86400:
+			person.raised_at = now  # (Counted once a year.)
+			c -= 5.0
+		person.contentment = clampf(c, 0.0, 100.0)
+		if c < CONTENT_NOTICE and not bool(person.get("notice_pending", false)) and company == _state.company:
+			person.notice_pending = true
+			notice_given.emit(company, str(entry.kind), str(entry.key), person)
+
+
+## A raise: RAISE more salary, and they feel it.
+func give_raise(company: Company, kind: String, key: String) -> String:
+	var person: Dictionary = company.executives.get(key, {}) if kind == "exec" else company.heads.get(key, {})
+	if person.is_empty():
+		return "No one in that post"
+	person.salary = roundi(int(person.get("salary", 0)) * (1.0 + RAISE) / 1000.0) * 1000
+	person.raised_at = _state.calendar_time()
+	person.erase("notice_pending")
+	_content(person, 15.0)
+	if company == _state.company:
+		ActivityLog.add("%s gets a raise to %s a year." % [str(person.get("name", "")), Fmt.money(int(person.salary))], ActivityLog.Kind.INFO)
+	changed.emit()
+	return ""
+
+
+## The answer to a notice: a raise keeps them, else they go.
+func answer_notice(company: Company, kind: String, key: String, raise: bool) -> void:
+	var person: Dictionary = company.executives.get(key, {}) if kind == "exec" else company.heads.get(key, {})
+	if person.is_empty():
+		return
+	if raise:
+		give_raise(company, kind, key)
+		return
+	var name := str(person.get("name", ""))
+	dismiss(company, kind, key)
+	if company == _state.company:
+		ActivityLog.add("%s has left the company." % name, ActivityLog.Kind.BAD)
+	person_left.emit(company, str(ROLES.get(key, {}).get("name", key)) if kind == "exec" else head_title(key), name, "resigned")
+
+
+## About POACH_YEARLY times a year a firm (a sore one by choice) makes someone an offer; the glad may refuse outright.
+func _monthly_poaching(company: Company, rng: RandomNumberGenerator) -> void:
+	if company != _state.company:
+		return
+	var firms: ShippingFirms = _state.firms
+	var sore := []
+	for key: String in company.relations.get("firms", {}):
+		if soreness(company, int(key)) > 0.0:
+			sore.append(int(key))
+	var chance := POACH_YEARLY / 12.0 * (2.0 if not sore.is_empty() else 1.0)
+	if rng.randf() >= chance:
+		return
+	var targets: Array = employees(company).filter(func(e: Dictionary) -> bool: return str(e.kind) in ["exec", "head"] or (str(e.kind) == "officer" and str(e.key).ends_with("|0")))
+	if targets.is_empty():
+		return
+	var entry: Dictionary = targets[rng.randi() % targets.size()]
+	var person: Dictionary = entry.who
+	var firm_index: int = sore[rng.randi() % sore.size()] if not sore.is_empty() and rng.randf() < 0.7 else rng.randi() % firms.firms.size()
+	var glad := (morale_of(person) if str(entry.kind) == "officer" else contentment_of(person)) >= 80.0
+	var salary := int(person.get("salary", 0)) if str(entry.kind) != "officer" else roundi(OFFICER_SALARY * _quality(person))
+	var offer := roundi(salary * POACH_OFFER / 1000.0) * 1000
+	if glad and rng.randf() < 0.5:
+		ActivityLog.add("%s tried to lure %s away with %s a year; they weren't tempted." % [str(firms.firms[firm_index].name), str(person.get("name", "")), Fmt.money(offer)], ActivityLog.Kind.INFO)
+		return
+	poach_offer.emit(company, str(entry.kind), str(entry.key), person, firm_index, offer)
+
+
+## The answer to a firm's offer: matched (the salary, or a bonus and heart for a captain) or let go.
+func answer_poach(company: Company, kind: String, key: String, offer: int, match_it: bool) -> void:
+	var person := {}
+	var ship: Ship = null
+	match kind:
+		"exec":
+			person = company.executives.get(key, {})
+		"head":
+			person = company.heads.get(key, {})
+		"officer":
+			var parts := key.split("|")
+			ship = _state.ship_by_id(int(parts[0])) if parts.size() == 2 else null
+			if ship != null and not ship.captains.is_empty():
+				person = ship.captains[0]
+	if person.is_empty():
+		return
+	var name := str(person.get("name", ""))
+	if match_it:
+		if kind == "officer":
+			if ship != null:
+				_state._add_money(company, -BONUS_PAY * 2)
+				_state._record(ship, "salaries", BONUS_PAY * 2, company)
+				person.morale = clampf(morale_of(person) + 20.0, 0.0, 100.0)
+				ship.invalidate_stats()
+		else:
+			person.salary = offer
+			person.raised_at = _state.calendar_time()
+			_content(person, 10.0)
+		if company == _state.company:
+			ActivityLog.add("%s stays%s." % [name, "" if kind == "officer" else " at %s a year" % Fmt.money(offer)], ActivityLog.Kind.GOOD)
+		changed.emit()
+		return
+	dismiss(company, kind, key)
+	if company == _state.company:
+		ActivityLog.add("%s has gone to another firm." % name, ActivityLog.Kind.BAD)
+	person_left.emit(company, kind, name, "poached")
 
 # --- Family -----------------------------------------------------------------------------------
 

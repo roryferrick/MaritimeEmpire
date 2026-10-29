@@ -148,6 +148,12 @@ func _ready() -> void:
 	GameState.shipyards.delivered.connect(func(company: Company, ship: Ship, order: Dictionary) -> void:
 		if company == GameState.company:
 			event_card.show_delivery(ship, order))
+	GameState.people.notice_given.connect(func(company: Company, kind: String, key: String, person: Dictionary) -> void:
+		if company == GameState.company:
+			event_card.show_notice(kind, key, person))
+	GameState.people.poach_offer.connect(func(company: Company, kind: String, key: String, person: Dictionary, firm_index: int, offer: int) -> void:
+		if company == GameState.company:
+			event_card.show_poach(kind, key, person, firm_index, offer))
 	GameState.people.divert_wanted.connect(func(company: Company, offer: Dictionary, ship: Ship, head_key: String, pay_day: float, route_day: float) -> void:
 		if company == GameState.company:
 			event_card.show_divert(offer, ship, head_key, pay_day, route_day))

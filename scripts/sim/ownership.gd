@@ -350,6 +350,7 @@ func _ai_stakes(company: Company) -> void:
 func _close_quarter(company: Company, now: int) -> void:
 	var shares := ensure(company)
 	var profit := _profit_since(company, shares.snapshot)
+	_state.people.note_quarter(company, profit)  # (The executives' contentment: see People.)
 	shares.snapshot = company.totals.duplicate()
 	shares.quarter_end = now + int(QUARTER_DAYS * 86400.0)
 	var paid := 0

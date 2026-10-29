@@ -16,6 +16,10 @@ var _hiring := {}  # The candidate being placed (id), and the picked post.
 var _new_head_group := ""
 var _new_head_region := ""
 var _head_budget := 20000000
+var _post_kind := 0
+var _post_role := ""
+var _post_line := ""
+var _post_offer := 0
 
 
 func _ready() -> void:
@@ -191,15 +195,69 @@ func _add_family(company: Company, people: People) -> void:
 # --- The market ------------------------------------------------------------------------------
 
 func _add_market(company: Company, people: People) -> void:
-	var box := _card("Job market (%d)" % people.candidates.size())
-	box.add_child(_dim("A third of the market turns over each month. Hire puts the person in a post: an executive's role, a head's post (the New post pickers above) or a ship's command. Someone at another firm costs a signing bonus and the firm remembers."))
+	var applications := people.applications_for(company)
+	var box := _card("Applications (%d)" % applications.size())
+	box.add_child(_dim("People apply on their own (a few a month) and to the jobs you post; an application stays %d days. Offering over the going rate draws better people. Recruiters on retainer (%s a month each, up to %d) add half again to the flow, a skill point to applicants, and screen out the weakest. Hire puts the person in a post: an executive's role, a head's post (the New post pickers above) or a ship's command. Someone at another firm costs a signing bonus and the firm remembers." % [People.APPLICATION_DAYS, Fmt.money(People.RECRUITER_FEE), People.RECRUITERS_MAX])
+	box.add_child(_dim("★ applied to one of your postings.")))
+	# Postings out, and a new one.
+	for posting: Dictionary in company.postings:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override(&"separation", 8)
+		row.add_child(_text("Posted: %s%s, since %s" % [People.posting_title(posting), "" if float(posting.get("salary", 1.0)) <= 1.0 else " at +%d%%" % roundi((float(posting.salary) - 1.0) * 100.0), Fmt.calendar_short(int(posting.since))]))
+		var id := int(posting.id)
+		row.add_child(_flat_button("Close", func() -> void: GameState.close_posting(id)))
+		box.add_child(row)
+	var post := HBoxContainer.new()
+	post.add_theme_constant_override(&"separation", 8)
+	post.add_child(_text("Post a job:"))
+	var kind_pick := OptionButton.new()
+	for label: String in ["Executive", "Department head (the pickers above)", "Officers"]:
+		kind_pick.add_item(label)
+	kind_pick.select(_post_kind)
+	kind_pick.item_selected.connect(func(i: int) -> void:
+		_post_kind = i
+		_refresh())
+	post.add_child(kind_pick)
+	if _post_kind == 0:
+		var role := OptionButton.new()
+		for r: String in People.ROLE_ORDER:
+			role.add_item(str(People.ROLES[r].short))
+		role.select(maxi(People.ROLE_ORDER.find(_post_role), 0))
+		role.item_selected.connect(func(i: int) -> void: _post_role = People.ROLE_ORDER[i])
+		post.add_child(role)
+	elif _post_kind == 2:
+		var line := OptionButton.new()
+		var groups := People.groups_of(company)
+		for g: String in groups:
+			line.add_item(People.group_name(g))
+		line.select(maxi(groups.find(_post_line), 0))
+		line.item_selected.connect(func(i: int) -> void: _post_line = groups[i])
+		post.add_child(line)
+	var offer := OptionButton.new()
+	for s: float in People.SALARY_OFFERS:
+		offer.add_item("the going rate" if s <= 1.0 else "+%d%% salary" % roundi((s - 1.0) * 100.0))
+	offer.select(_post_offer)
+	offer.item_selected.connect(func(i: int) -> void: _post_offer = i)
+	post.add_child(offer)
+	post.add_child(_flat_button("Post", func() -> void:
+		var groups := People.groups_of(company)
+		var role_key: String = [_post_role if not _post_role.is_empty() else People.ROLE_ORDER[0], "%s|%s" % [_new_head_group, _new_head_region], _post_line if not _post_line.is_empty() else (groups[0] if not groups.is_empty() else "container")][_post_kind]
+		GameState.post_job(["exec", "head", "officer"][_post_kind], role_key, float(People.SALARY_OFFERS[_post_offer]))))
+	box.add_child(post)
+	var recruit := HBoxContainer.new()
+	recruit.add_theme_constant_override(&"separation", 8)
+	recruit.add_child(_text("Recruiters on retainer: %d of %d" % [int(company.recruiters), People.RECRUITERS_MAX]))
+	recruit.add_child(_flat_button("Hire a recruiter", func() -> void: GameState.hire_recruiter()))
+	if int(company.recruiters) > 0:
+		recruit.add_child(_flat_button("Let one go", func() -> void: GameState.drop_recruiter()))
+	box.add_child(recruit)
 	var grid := GridContainer.new()
 	grid.columns = 7
 	grid.add_theme_constant_override(&"h_separation", 14)
 	grid.add_theme_constant_override(&"v_separation", 3)
 	for head: String in ["Name", "Age", "From", "For", "Skills", "Traits", "Asks a year"]:
 		grid.add_child(_cell(head, &"DimLabel"))
-	for candidate: Dictionary in people.candidates:
+	for candidate: Dictionary in applications:
 		var person: Dictionary = candidate.character
 		grid.add_child(_cell(str(person.get("name", ""))))
 		grid.add_child(_cell(str(roundi(float(person.get("age", 40))))))
@@ -208,9 +266,13 @@ func _add_market(company: Company, people: People) -> void:
 			from += ", at %s" % str((GameState.firms as ShippingFirms).firms[int(candidate.employer)].name)
 		grid.add_child(_cell(from))
 		var kind := str(candidate.kind)
-		grid.add_child(_cell(str(People.ROLES[candidate.role].short) if kind == "exec" and People.ROLES.has(candidate.role) else kind.capitalize()))
+		grid.add_child(_cell((str(People.ROLES[candidate.role].short) if kind == "exec" and People.ROLES.has(candidate.role) else kind.capitalize()) + ("★" if int(candidate.get("posting", 0)) > 0 else "")))
 		grid.add_child(_cell(_skills_text(person)))
-		grid.add_child(_cell(Traits.names_of(person) if not Traits.names_of(person).is_empty() else "—"))
+		var trait_names := Traits.names_of(person)
+		var trait_cell := _cell(trait_names.substr(0, 22) + ("…" if trait_names.length() > 22 else "") if not trait_names.is_empty() else "—")
+		trait_cell.tooltip_text = trait_names
+		trait_cell.mouse_filter = Control.MOUSE_FILTER_PASS
+		grid.add_child(trait_cell)
 		var ask := HBoxContainer.new()
 		ask.add_theme_constant_override(&"separation", 6)
 		ask.add_child(_cell(Fmt.money(int(candidate.ask))))
@@ -304,6 +366,8 @@ func _person_row(person: Dictionary, post: String, kind: String, key: String, co
 		detail += " · %s a year" % Fmt.money(int(person.salary))
 	if person.get("notice", false):
 		detail += " · retiring soon"
+	if kind in ["exec", "head"]:
+		detail += " · %s (%d)" % [People.contentment_word(person), roundi(People.contentment_of(person))]
 	if kind == "officer" and key.ends_with("|0"):
 		detail += " · %s (morale %d)" % [People.morale_word(person), roundi(People.morale_of(person))]
 	text.add_child(_dim(detail))
@@ -327,6 +391,14 @@ func _person_row(person: Dictionary, post: String, kind: String, key: String, co
 		var parts := key.split("|")
 		promote.get_popup().index_pressed.connect(func(index: int) -> void: GameState.promote_officer(GameState.ship_by_id(int(parts[0])), int(parts[1]), People.ROLE_ORDER[index]))
 		row.add_child(promote)
+	if kind in ["exec", "head"]:
+		var raise := Button.new()
+		raise.text = "Raise"
+		raise.flat = true
+		raise.add_theme_font_size_override(&"font_size", FONT_SIZE)
+		raise.tooltip_text = "A raise of %d%%: contentment up, and a year's grace." % roundi(People.RAISE * 100.0)
+		raise.pressed.connect(func() -> void: GameState.give_raise(kind, key))
+		row.add_child(raise)
 	if not kind.is_empty():
 		var dismiss := Button.new()
 		dismiss.text = "Replace" if kind == "officer" else "Dismiss"
