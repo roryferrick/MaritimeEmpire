@@ -6,8 +6,9 @@
 For each reel in tools/reels/reels.json: the beats' shots cut in order (each
 shot's frames from its "from" second, every "speed"th frame, for "len"
 seconds), each beat's caption popping in near the top, the end card over the
-last beat, and the reel's "audio" (the voiceover) or else a silent track
-(Instagram is happier with one). Writes
+last beat, and the reel's "audio" (the voiceover) and/or "music" ({"file",
+"gain_db"}: faded out at the end, held under the voiceover), else a silent
+track (Instagram is happier with one). Writes
 marketing/reels/<file>.mp4 (1080x1920, 30 fps, H.264).
 """
 import json
@@ -79,11 +80,32 @@ def build(reel_id: str, reel: dict) -> None:
             last = f"v{i}"
             inputs += 1
     filters.append(f"[{last}]format=yuv420p[out]")
-    if reel.get("audio"):  # The voiceover (a path under marketing/reels), once recorded.
-        args += ["-i", os.path.join(OUT, reel["audio"])]
+    # The sound: the voiceover ("audio", a path under marketing/reels) and/or the
+    # music ("music": {"file", "gain_db"}, a path under marketing/reels, faded out
+    # over the last two seconds and held under the voiceover), else silence.
+    voice = reel.get("audio")
+    music = reel.get("music")
+    sounds = []
+    if voice:
+        args += ["-i", os.path.join(OUT, voice)]
+        sounds.append(f"[{inputs}:a]aformat=sample_rates=48000:channel_layouts=stereo[vo]")
+        inputs += 1
+    if music:
+        args += ["-i", os.path.join(OUT, music["file"])]
+        gain = float(music.get("gain_db", -14.0 if voice else -6.0))
+        sounds.append(f"[{inputs}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={gain}dB,afade=t=in:st=0:d=0.8,afade=t=out:st={length - 2.0:.3f}:d=2.0[mu]")
+        inputs += 1
+    if voice and music:
+        sounds.append("[vo][mu]amix=inputs=2:duration=first:normalize=0[aout]")
+    elif voice:
+        sounds.append("[vo]acopy[aout]")
+    elif music:
+        sounds.append("[mu]acopy[aout]")
     else:
         args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-    args += ["-filter_complex", ";".join(filters), "-map", "[out]", "-map", f"{inputs}:a",
+        sounds.append(f"[{inputs}:a]acopy[aout]")
+    filters += sounds
+    args += ["-filter_complex", ";".join(filters), "-map", "[out]", "-map", "[aout]",
              "-t", f"{length:.3f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "slow", "-crf", "17",
              "-profile:v", "high", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
              os.path.join(OUT, reel["file"] + ".mp4")]

@@ -25,3 +25,7 @@ python tools/reels/build_reels.py A B 1 2
 ## Timing to your voiceover
 
 Captions change on the beat times in `reels.json`. After you record a voiceover, give me the audio file or the times you hit each line. I'll move the beats and shot lengths to match. Then I'll re-record any shot that needs to run longer and rebuild the reel with your audio on it. Shots are recorded 0.4 s longer than they're used, so small shifts don't need a re-record.
+
+## Music
+
+A reel can carry a music track: in `reels.json` give it `"music": {"file": "music/<track>.mp3", "gain_db": -6}` (the file under this folder; `gain_db` is how much quieter than as recorded, about -14 under a voiceover). The build fades it in over 0.8 s, out over the last 2 s, and mixes it under the voiceover. Credit the track where its licence asks (the Instagram caption for CC BY).

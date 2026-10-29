@@ -197,6 +197,9 @@ func _quiet() -> void:
 			(node as CanvasItem).visible = false
 	if not _landscape and world.get("_ticker") != null:
 		(world.get("_ticker") as CanvasItem).visible = false  # (The news ticker re-shows itself as news comes in.)
+	if is_instance_valid(map):
+		map._night_shown = false  # (No quay lamps or town glows on camera, whatever the clock says at the port.)
+	BirdLife.shared()._ships_frame = -1  # (The birds take the ships' places fresh each frame; on the wall clock they'd jump between slow frames.)
 
 
 # --- Framing -----------------------------------------------------------------
@@ -292,6 +295,7 @@ func rec(name: String, seconds: float, per_frame := Callable(), crop := Callable
 	for old in DirAccess.get_files_at(dir):
 		DirAccess.remove_absolute(dir + old)
 	var frames := ceili(seconds * FPS)
+	var tasks: Array[int] = []
 	for i in frames:
 		var t := float(i) / FPS
 		if per_frame.is_valid():
@@ -304,7 +308,10 @@ func rec(name: String, seconds: float, per_frame := Callable(), crop := Callable
 			image = _compose(image, rect)
 		elif image.get_format() != Image.FORMAT_RGB8:
 			image.convert(Image.FORMAT_RGB8)
-		image.save_jpg(dir + "%04d.jpg" % i, 0.93)
+		var path := dir + "%04d.jpg" % i
+		tasks.append(WorkerThreadPool.add_task(func() -> void: image.save_jpg(path, 0.93)))
+	for task in tasks:
+		WorkerThreadPool.wait_for_task_completion(task)
 	print("  recorded ", name, ": ", frames, " frames")
 
 
@@ -1697,19 +1704,20 @@ func shot_contract_card(seconds: float) -> void:
 	game.event_card.show_offer(best)
 	await settle(12)
 	var rect := game.event_card.get_global_rect()
-	await rec("contract_card", seconds, Callable(), push(grow(rect, 140.0), grow(rect, 16.0), seconds))
+	await rec("contract_card", seconds, Callable(), func(_t: float) -> Rect2: return grow(rect, 16.0))
 	game.event_card._queue.clear()
 	game.event_card.visible = false
 	_cards_on = false
 
 
-## A loaded Feedermax under way for Singapore.
+## A loaded Trans Atlantic under way for Singapore, well out to sea (past the
+## harbour curves, where heading and track agree).
 func shot_ship_at_sea2(seconds: float) -> void:
 	await use_world()
 	portrait()
 	var route: Array[String] = ["SHA", "SIN"]
-	var ship := stage_ship("model_3", "SHA", route)
-	var ok := await warp(1500.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 30.0, 8)
+	var ship := stage_ship("model_4", "SHA", route)
+	var ok := await warp(2500.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 500.0, 8)
 	print("  at sea: ", ok, " cargo ", ship.cargo_qty)
 	follow(ship, 1400.0)
 	await settle(15)
@@ -1736,21 +1744,22 @@ func shot_people_page(seconds: float) -> void:
 	landscape()
 	game.show_screen(GameRoot.Screen.PEOPLE)
 	await settle(20)
-	await rec("people_page", seconds, Callable(), push(grow(PEOPLE_CROP, 40.0), PEOPLE_CROP, seconds))
+	await rec("people_page", seconds, Callable(), func(_t: float) -> Rect2: return PEOPLE_CROP)
 	game.show_screen(GameRoot.Screen.WORLD)
 
 
-## A Mammoth based at Shanghai and a Scooter lost between Shanghai and Ningbo, the Mammoth sent.
+## A Mammoth based at Qingdao and a Scooter lost between Qingdao and Dalian (a lane
+## none of the other staged ships use, so nothing passes by on camera), the Mammoth sent.
 func _stage_loss2() -> void:
 	await use_world()
 	if _lost != null and is_instance_valid(_lost) and _lost.is_lost() and _lost.rescuer != null:
 		return
 	if not GameState.fleet().any(func(s: Ship) -> bool: return s.is_recovery()):
-		stage_ship("model_6", "SHA")
-	var route: Array[String] = ["SHA", "NGB"]
-	var ship := stage_ship("model_1", "SHA", route)
+		stage_ship("model_6", "TAO")
+	var route: Array[String] = ["TAO", "DLC"]
+	var ship := stage_ship("model_1", "TAO", route)
 	ship.auto_recover = false
-	var ok := await warp(1200.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 20.0, 8)
+	var ok := await warp(1200.0, func() -> bool: return at_sea(ship) and ship.traveled_nm > 120.0, 8)
 	print("  loss staged at sea: ", ok, " ", ship.from_port, "->", ship.to_port, " ", ship.traveled_nm)
 	ship.maintenance = 0.0
 	GameState._lose(ship, "maintenance")
