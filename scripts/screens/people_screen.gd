@@ -197,8 +197,8 @@ func _add_family(company: Company, people: People) -> void:
 func _add_market(company: Company, people: People) -> void:
 	var applications := people.applications_for(company)
 	var box := _card("Applications (%d)" % applications.size())
-	box.add_child(_dim("People apply on their own (a few a month) and to the jobs you post; an application stays %d days. Offering over the going rate draws better people. Recruiters on retainer (%s a month each, up to %d) add half again to the flow, a skill point to applicants, and screen out the weakest. Hire puts the person in a post: an executive's role, a head's post (the New post pickers above) or a ship's command. Someone at another firm costs a signing bonus and the firm remembers." % [People.APPLICATION_DAYS, Fmt.money(People.RECRUITER_FEE), People.RECRUITERS_MAX])
-	box.add_child(_dim("★ applied to one of your postings.")))
+	box.add_child(_dim("People apply on their own (a few a month) and to the jobs you post; an application stays %d days. Offering over the going rate draws better people. Recruiters on retainer (%s a month each, up to %d) add half again to the flow, a skill point to applicants, and screen out the weakest. Hire puts the person in a post: an executive's role, a head's post (the New post pickers above) or a ship's command. Someone at another firm costs a signing bonus and the firm remembers." % [People.APPLICATION_DAYS, Fmt.money(People.RECRUITER_FEE), People.RECRUITERS_MAX]))
+	box.add_child(_dim("★ applied to one of your postings."))
 	# Postings out, and a new one.
 	for posting: Dictionary in company.postings:
 		var row := HBoxContainer.new()
