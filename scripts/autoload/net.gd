@@ -671,6 +671,8 @@ func _collect() -> Dictionary:
 		industry = GameState.industry.to_dict().duplicate(true),
 		contracts = GameState.contracts.to_dict().duplicate(true),
 		people = GameState.people.to_dict().duplicate(true),
+		shipyards = GameState.shipyards.to_dict().duplicate(true),
+		technology = GameState.technology.to_dict().duplicate(true),
 		energy = GameState.energy.to_dict().duplicate(true),
 		research = GameState.research.to_dict().duplicate(true),
 		companies = all.map(func(each: Company) -> Dictionary: return each.to_dict().duplicate(true)),
@@ -690,6 +692,8 @@ func _state_of(world: Dictionary) -> Dictionary:
 		industry = world.get("industry", {}),
 		contracts = world.get("contracts", {}),
 		people = world.get("people", {}),
+		shipyards = world.get("shipyards", {}),
+		technology = world.get("technology", {}),
 		energy = world.get("energy", {}),
 		research = world.get("research", {}),
 		ports = world.get("port_sizes", {}),
@@ -738,6 +742,14 @@ func _broadcast() -> void:
 	if staff != _sent.get("people", {}):
 		update.people = staff
 		_sent.people = staff.duplicate(true)
+	var yards := GameState.shipyards.to_dict()
+	if yards != _sent.get("shipyards", {}):
+		update.shipyards = yards
+		_sent.shipyards = yards.duplicate(true)
+	var techs := GameState.technology.to_dict()
+	if techs != _sent.get("technology", {}):
+		update.technology = techs
+		_sent.technology = techs.duplicate(true)
 	var energy := GameState.energy.to_dict()
 	if energy != _sent.get("energy", {}):
 		update.energy = energy
@@ -875,6 +887,10 @@ func _sync(packed: Array) -> void:
 		GameState.contracts.from_dict(update.contracts)
 	if update.has("people"):
 		GameState.people.from_dict(update.people)
+	if update.has("shipyards"):
+		GameState.shipyards.from_dict(update.shipyards)
+	if update.has("technology"):
+		GameState.technology.from_dict(update.technology)
 	if update.has("energy"):
 		GameState.energy.from_dict(update.energy)
 		GameState.energy_changed.emit()

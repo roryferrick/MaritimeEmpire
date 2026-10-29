@@ -4471,6 +4471,11 @@ func found_company(new_name: String, new_color: String, new_home_port: String, n
 	if companies.is_empty():
 		companies.assign([company])
 	companies.append(founded)
+	contracts.start_standing(founded)  # (As a new game's company: standing at home, its register, a family. See new_game().)
+	ownership.ensure(founded)
+	var rng_family := RandomNumberGenerator.new()
+	rng_family.randomize()
+	people.start_family(founded, rng_family)
 	save_game()
 	return companies.size() - 1
 
