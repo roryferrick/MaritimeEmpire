@@ -1,7 +1,7 @@
 {
 	"_comment": "Ship parts (scripts/sim/ship_parts.gd ShipParts; DESIGN_LIVING_WORLD.md M4). A model's parts are every entry whose from_tier is at or under its tier and whose categories (if any) include its category: about 5 on a tier-1 boat, 10 at tier 2, 20 at tier 3, 30 at tier 4 and 45-50 on the giants. Each part has a condition 0 to 1 on the ship (Ship.parts); the ship's maintenance figure is the weighted mean (weight). Wear spreads over the parts by rate x weight (a hull fouls steadily, electrics fail in jumps). group: hull (fouling and plating: fuel), propulsion (propeller, shaft, rudder: speed), engine and electrics (breakdowns), deck (cargo gear, winches: port time), systems (the rest: a little of everything). major parts are only put right in drydock (at a shipyard port or a hub with the Drydock facility); the others are fixed during ordinary port stops. upgrade: one per part, bought in drydock for cost (a share of the ship's list price), with effects as factors on fuel, speed, breakdowns and dock (port time); better ones come with technology (M5).",
 	"groups": {"hull": "Hull", "propulsion": "Propulsion", "engine": "Engine", "electrics": "Electrics", "deck": "Deck gear", "systems": "Systems"},
-	"effects": {"fuel": 0.15, "speed": 0.10, "breakdowns": 0.50, "dock": 0.20},
+	"effects": {"fuel": 0.15, "speed": 0.10, "breakdowns": 0.30, "dock": 0.20},
 	"drydock_days": [3, 5, 8, 14, 21],
 	"yard_fee": 0.02,
 	"own_dock_factor": 0.7,

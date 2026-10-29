@@ -14,6 +14,8 @@ extends RefCounted
 ## drydock (upgrade_cost()). GameState runs the drydock (order_drydock()).
 
 const PATH := "res://data/ship_parts.json"
+const MAJOR_RATE := 0.5
+const MAJOR_WEIGHT := 0.5
 
 static var _data := {}
 static var _by_model := {}  # model id -> Array of part dictionaries
@@ -25,6 +27,9 @@ static func data() -> Dictionary:
 		var file := FileAccess.open(PATH, FileAccess.READ)
 		_data = JSON.parse_string(file.get_as_text()) if file != null else {parts = []}
 		for part: Dictionary in _data.get("parts", []):
+			if bool(part.get("major", false)):  # (The big parts wear slowly and weigh less in the maintenance figure: a year at sea leaves them a quarter worn, not half; the parts' own factors carry their effect.)
+				part.rate = float(part.rate) * MAJOR_RATE
+				part.weight = float(part.weight) * MAJOR_WEIGHT
 			_by_id[part.id] = part
 	return _data
 
