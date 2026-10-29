@@ -90,6 +90,7 @@ static func notices() -> String:
 	out.append("[b]World data[/b]\nCountry figures from the World Bank's World Development Indicators (CC BY 4.0, data.worldbank.org). Crop and livestock production from FAO, FAOSTAT (CC BY 4.0, fao.org/faostat).")
 	out.append("[b]GodotSteam[/b]\n" + _plain(GODOTSTEAM_LICENSE))
 	out.append("[b]Fonts[/b]\n" + _font_notices())
+	out.append("[b]Music[/b]\n" + _music_notices())
 	out.append("[b]Sounds[/b]\n" + _sound_notices())
 	out.append("[b]Steamworks SDK[/b]\nSteamworks SDK © Valve Corporation, used under the Steamworks SDK Access Agreement. Steam and the Steam logo are trademarks of Valve Corporation.")
 	out.append("[b]Godot Engine[/b]\nThis game uses Godot Engine, available under the following license:\n\n" + _plain(Engine.get_license_text()))
@@ -111,21 +112,47 @@ static func notices() -> String:
 	return "\n\n".join(out)
 
 
-## The sounds' credits (audio/CREDITS.md: each recording from Wikimedia
+## The soundtrack's credits (audio/CREDITS.md's Music table: each track, its
+## author and its licence, as CC BY asks), one line each.
+static func _music_notices() -> String:
+	var out := PackedStringArray(["The soundtrack, used under Creative Commons Attribution licences:"])
+	for cells in _credit_rows("## Music"):
+		out.append("\"%s\" by %s, %s, %s" % [_plain(cells[2]), _plain(cells[3]), _plain(cells[4]), _plain(cells[5])])
+	return "\n".join(out)
+
+
+## The sounds' credits (audio/CREDITS.md's Sounds table: each recording from Wikimedia
 ## Commons, its author and its licence, as CC BY and CC BY-SA ask), one line
 ## each: the sound it is in the game, the original, by whom, under what licence, where from.
 static func _sound_notices() -> String:
-	var path := "res://audio/CREDITS.md"
-	if not FileAccess.file_exists(path):
-		return ""
 	var out := PackedStringArray(["Recordings from Wikimedia Commons, used under their licences (renamed, not otherwise changed):"])
+	for cells in _credit_rows("## Sounds"):
+		out.append("%s: \"%s\" by %s, %s, %s" % [_plain(cells[1]), _plain(cells[2]), _plain(cells[3]), _plain(cells[4]), _plain(cells[5])])
+	return "\n".join(out)
+
+
+## The rows of the table under a heading of audio/CREDITS.md (cells stripped;
+## the header and the rule left out), up to the next heading.
+static func _credit_rows(heading: String) -> Array:
+	var path := "res://audio/CREDITS.md"
+	var rows := []
+	if not FileAccess.file_exists(path):
+		return rows
+	var inside := false
 	for line in FileAccess.get_file_as_string(path).split("\n"):
+		if line.begins_with("## "):
+			inside = line.strip_edges() == heading
+			continue
+		if not inside:
+			continue
 		var cells := line.split("|")
 		if cells.size() < 7 or cells[1].strip_edges() == "Game file" or cells[1].strip_edges().begins_with("---"):
 			continue
-		out.append("%s: \"%s\" by %s, %s, %s" % [_plain(cells[1].strip_edges()), _plain(cells[2].strip_edges()), _plain(cells[3].strip_edges()),
-			_plain(cells[4].strip_edges()), _plain(cells[5].strip_edges())])
-	return "\n".join(out)
+		var stripped := PackedStringArray()
+		for cell in cells:
+			stripped.append(cell.strip_edges())
+		rows.append(stripped)
+	return rows
 
 
 ## The bundled fonts (fonts/: the look in ui/theme.tres), each with its licence in full

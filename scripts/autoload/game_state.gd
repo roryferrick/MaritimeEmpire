@@ -3286,6 +3286,14 @@ func _try_depart(ship: Ship, delta: float, to: String) -> void:
 			var seconds := ship.leg_seconds(ship.docked_at, to, 0.0, GameData.distance_nm(ship.docked_at, to), maxf(ship.maintenance, 0.01))
 			ship.season_blocker = seasonal.leg_blocker(ship.docked_at, to, seconds)
 		if not ship.season_blocker.is_empty():
+			if bool(ship.season_blocker.get("war", false)) and ship.route.size() >= 3 and not ship.is_refuel_stop():  # (Keeping clear of a war: the next port on the route instead of waiting it out. See Events.)
+				ship.route_index = ship.next_route_index()
+				ship.season_check_time = 0.0
+				ship.hop_to = ""
+				if owner_of(ship) == company and not ship.has_meta(&"war_skip"):
+					ship.set_meta(&"war_skip", true)
+					ActivityLog.add("%s skips %s: %s." % [ship.name, GameData.port_name(to), str(ship.season_blocker.why)], ActivityLog.Kind.INFO, ActivityLog.ship_color(ship))
+				return
 			ship.weather_wait = Seasons.wait_text(ship.season_blocker)
 			return
 	ship.weather_wait = ""

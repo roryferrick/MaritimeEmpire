@@ -144,7 +144,7 @@ func _audio_tab() -> Control:
 	var note := Label.new()
 	note.theme_type_variation = &"DimLabel"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Master goes up to 200%: 100% is everything at its own level. Sea and weather: the waves, wind and rain. Wildlife: the birds' and animals' calls. Ship horns: ships setting off and the fog signal. All of it gets quieter the further out you zoom."
+	note.text = "Master goes up to 200%: 100% is everything at its own level. Music: the soundtrack, four tracks in turn from the moment the game opens. Sea and weather: the waves, wind and rain. Wildlife: the birds' and animals' calls. Ship horns: ships setting off and the fog signal. All but the music gets quieter the further out you zoom."
 	box.add_child(note)
 	return box
 

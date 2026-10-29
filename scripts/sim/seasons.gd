@@ -259,4 +259,6 @@ static func verb(closure: Dictionary, singular: String, plural: String) -> Strin
 ## "Waiting for the St. Lawrence Seaway to reopen on 22 Mar (its winter
 ## shutdown)".
 static func wait_text(closure: Dictionary) -> String:
+	if closure.has("unix_to"):  # (An event's closure: see Events.)
+		return "waiting for %s to reopen about %s (%s)" % [closure.name, Fmt.calendar_short(int(closure.unix_to)), closure.why]
 	return "waiting for %s to reopen on %s (%s)" % [closure.name, date_text(closure.to), closure.why]

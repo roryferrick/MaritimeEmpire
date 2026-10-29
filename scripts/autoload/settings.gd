@@ -5,8 +5,8 @@ extends Node
 ## (not in a save): how ships look from afar, day and night, the birds, and
 ## the sound's volumes. The
 ## sound plays through its own audio buses, made here, so each has a volume:
-## the sea and the weather (Ambience's loops), the animals' calls, and the
-## ships' horns, all under Master.
+## the music (Music's soundtrack), the sea and the weather (Ambience's loops),
+## the animals' calls, and the ships' horns, all under Master.
 
 ## How ships far off are drawn (MapView): as now (a small dot once too small to
 ## make out), as a bigger dot, or grown so their art always shows (as they
@@ -15,7 +15,7 @@ const SHIP_LOOKS := ["dot", "big_dot", "grow"]
 const SHIP_LOOK_NAMES := {dot = "Small dots (default)", big_dot = "Bigger dots", grow = "Ships grow as you zoom out"}
 ## The volumes (0 to 1; Master to MASTER_MOST, louder than everything's own
 ## level), by bus: [bus, name on the page].
-const VOLUMES := [["Master", "Master"], ["Sea", "Sea and weather"], ["Wildlife", "Wildlife"], ["Ships", "Ship horns"]]
+const VOLUMES := [["Master", "Master"], ["Music", "Music"], ["Sea", "Sea and weather"], ["Wildlife", "Wildlife"], ["Ships", "Ship horns"]]
 const MASTER_MOST := 2.0
 
 ## The most a bus's volume goes to (1, or MASTER_MOST for Master).

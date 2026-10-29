@@ -253,6 +253,8 @@ func _refresh_market(_fill_all: bool) -> void:
 			_state._record(null, "salaries", fee, company)
 		var volume := 1.0 + RECRUITER_VOLUME * recruiters
 		var count := roundi(UNSOLICITED_A_MONTH * volume * rng.randf_range(0.6, 1.4))
+		if _fill_all:
+			count = 6  # (A new company's first inbox: a few who heard of it.)
 		for k in count:
 			var application := _candidate(rng, ["officer", "officer", "head", "exec"][rng.randi() % 4], false, "", recruiters * RECRUITER_SKILL)
 			if recruiters > 0 and _quality(application.character) < 0.9:

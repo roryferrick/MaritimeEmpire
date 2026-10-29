@@ -33,8 +33,10 @@ const KNOWN_GOVERNMENTS := {SAU = "monarchy", ARE = "monarchy", QAT = "monarchy"
 	CHN = "one_party", VNM = "one_party", LAO = "one_party", CUB = "one_party", PRK = "one_party", ERI = "one_party", RUS = "one_party", IRN = "one_party", TKM = "one_party", UZB = "one_party", BLR = "one_party", VEN = "one_party", SYR = "one_party", AZE = "one_party", TJK = "one_party", EGY = "one_party",
 	MMR = "junta", SDN = "junta", MLI = "junta", BFA = "junta", GIN = "junta", NER = "junta", TCD = "junta",
 	USA = "democracy", GBR = "democracy", DEU = "democracy", FRA = "democracy", JPN = "democracy", IND = "democracy", BRA = "democracy", KOR = "democracy", NLD = "democracy", AUS = "democracy", CAN = "democracy", ITA = "democracy", ESP = "democracy", MEX = "democracy", IDN = "democracy", TUR = "democracy", ZAF = "democracy", NGA = "democracy", ARG = "democracy", NOR = "democracy", SWE = "democracy", DNK = "democracy", FIN = "democracy", POL = "democracy", GRC = "democracy", PRT = "democracy", BEL = "democracy", CHL = "democracy", PHL = "democracy", THA = "democracy", MYS = "democracy", SGP = "democracy", NZL = "democracy", ISR = "democracy", PAK = "democracy", BGD = "democracy", LKA = "democracy", KEN = "democracy", GHA = "democracy", PER = "democracy", COL = "democracy", ECU = "democracy", URY = "democracy", IRL = "democracy", ISL = "democracy"}
-const WORLD_A_MONTH := 5.0  # Events a month, world-wide.
-const PLAYER_BIAS := 0.35  # The share aimed where the player trades (about one touching card a month).
+const WORLD_A_MONTH := 4.0  # Events a month, world-wide.
+const PLAYER_BIAS := 0.2  # The share aimed where the player trades (about one touching card a month).
+## At most this many of a kind in play at once (long events pile up otherwise).
+const CAPS := {war = 2, sanctions = 3, tariff_rise = 4, trade_deal = 4, export_ban = 2, piracy = 2, epidemic = 2, famine = 2, disaster = 3, strike = 3, canal_closure = 1, port_shutdown = 2}
 const DAY := 86400
 const PIRACY_ZONES := [
 	{id = "aden", name = "the Gulf of Aden", circles = [[46.0, 12.5, 420.0], [52.0, 13.5, 300.0]], base = 0.03},
@@ -232,7 +234,7 @@ func _throw(rng: RandomNumberGenerator) -> void:
 			_add({kind = "port_shutdown", port = port_id, country = country, months = 0, days = rng.randi_range(3, 10), title = "%s shut" % port_name,
 				text = "%s is closed to shipping%s." % [port_name, " by storm damage" if rng.randf() < 0.5 else " under quarantine"]}, rng)
 	elif roll < 0.72:  # Wars and piracy.
-		if rng.randf() < 0.4:
+		if rng.randf() < 0.75:  # (Wars are the rare ones: about one a year world-wide.)
 			var zone: Dictionary = PIRACY_ZONES[rng.randi() % PIRACY_ZONES.size()]
 			_add({kind = "piracy", zone = str(zone.id), months = rng.randi_range(3, 9), title = "Piracy surges in %s" % str(zone.name),
 				text = "Attacks in %s have multiplied: a ship through it risks capture for ransom. Armed guards cut the risk." % str(zone.name)}, rng)
@@ -258,6 +260,11 @@ func _throw(rng: RandomNumberGenerator) -> void:
 
 
 func _add(event: Dictionary, _rng: RandomNumberGenerator) -> void:
+	var kind := str(event.kind)
+	if active.filter(func(e: Dictionary) -> bool: return str(e.kind) == kind).size() >= int(CAPS.get(kind, 99)):
+		return
+	if event.has("port") and active.any(func(e: Dictionary) -> bool: return str(e.get("port", "")) == str(event.port)):
+		return  # (One thing at a time at a port.)
 	var now: int = _state.calendar_time()
 	event.id = _next_id
 	_next_id += 1
@@ -387,7 +394,7 @@ func war_blocks(company: Company, from: String, to: String) -> Dictionary:
 		if str(event.kind) == "war" and a in event.countries and b in event.countries:
 			if company != null and str(company.event_choices.get(str(event.id), "")) == "run":
 				return {}
-			return {id = "event_%d" % int(event.id), name = "the lanes between %s and %s" % [str(WorldEconomy.country(a).get("name", a)), str(WorldEconomy.country(b).get("name", b))], why = "the war"}
+			return {id = "event_%d" % int(event.id), name = "the lanes between %s and %s" % [str(WorldEconomy.country(a).get("name", a)), str(WorldEconomy.country(b).get("name", b))], why = "the war", war = true, unix_to = int(event.until)}
 	return {}
 
 
