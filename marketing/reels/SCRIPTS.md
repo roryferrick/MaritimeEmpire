@@ -314,7 +314,8 @@ File `feature_07_company_types.mp4`. Music: kraken. Credit: Music: The Kraken's 
 | 7–11 | Tankers. | TANKERS | A tanker under way |
 | 11–15 | Seafood: boats on the grounds, cold stores at home. | SEAFOOD | A fishing boat working a ground |
 | 15–19 | Cruises, ocean and expedition. | CRUISES | A cruise ship under way |
-| 19–23 | Farms and the car makers' carriers. | FARMS · VEHICLES | A farm port's fields, then a car carrier |
+| 19–21 | Agriculture. | AGRICULTURE | A farm port's fields |
+| 21–23 | Vehicles. | VEHICLES | A car carrier under way |
 | 23–27 | And research boats that find what no one else has. | RESEARCH | A research boat on a site |
 | 27–30 | Maritime Empire. Coming soon to Steam. | END CARD | End card |
 

@@ -1443,6 +1443,18 @@
 						"len": 1
 					}
 				]
+			},
+			{
+				"t": [
+					2,
+					3
+				],
+				"shots": [
+					{
+						"shot": "preview4",
+						"len": 1
+					}
+				]
 			}
 		]
 	},
@@ -2181,14 +2193,23 @@
 			{
 				"t": [
 					22,
-					26
+					24
 				],
-				"caption": "FARMS · VEHICLES",
+				"caption": "AGRICULTURE",
 				"shots": [
 					{
 						"shot": "farm_port",
 						"len": 2
-					},
+					}
+				]
+			},
+			{
+				"t": [
+					24,
+					26
+				],
+				"caption": "VEHICLES",
+				"shots": [
 					{
 						"shot": "carrier_at_sea",
 						"len": 2

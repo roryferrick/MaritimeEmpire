@@ -16,6 +16,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
+UiRows="*res://scripts/autoload/ui_rows.gd"
 GameData="*res://scripts/autoload/game_data.gd"
 GameState="*res://scripts/autoload/game_state.gd"
 Net="*res://scripts/autoload/net.gd"

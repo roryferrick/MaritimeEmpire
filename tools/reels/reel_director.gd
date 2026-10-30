@@ -3070,3 +3070,42 @@ func shot_host_dialog2(seconds: float) -> void:
 	await rec("host_dialog2", seconds, Callable(), func(_t: float) -> Rect2: return grow(rect, 14.0))
 	menu.queue_free()
 	vp.gui_embed_subwindows = false
+
+
+## Not a reel shot: the rows the user saw collapse (the drydock popup, the
+## People page's heads and job row, the Ownership page's bank step, the
+## Contracts page), after the UiRows fix.
+func shot_preview4(_seconds: float) -> void:
+	await _stage_people()
+	landscape()
+	var ship := _worn_ship("model_4", 0.2, 0.7)
+	game.show_screen(GameRoot.Screen.WORLD)
+	look_port("SHA", 40.0)
+	await settle(10)
+	PopupHost.find(game).open(DrydockPopup.new(ship))
+	await settle(20)
+	await _snap("r_drydock.jpg")
+	if popup() != null:
+		PopupHost.find(game).close()
+	game.show_screen(GameRoot.Screen.PEOPLE)
+	await settle(20)
+	await section_view("Department heads", 280)
+	await _snap("r_people_heads.jpg")
+	await section_view("Applications", 330)
+	await _snap("r_people_applications.jpg")
+	await _stage_listed()
+	var sh: Dictionary = GameState.ownership.ensure(GameState.company)
+	sh.listed = false
+	sh.ipo = {step = "bank"}
+	GameState.ownership.changed.emit()
+	game.show_screen(GameRoot.Screen.OWNERSHIP)
+	await settle(20)
+	await section_view("Going public", 240)
+	await _snap("r_own_ipo.jpg")
+	await section_view("Motions", 220)
+	await _snap("r_own_motions.jpg")
+	_stage_contract_offers()
+	game.show_screen(GameRoot.Screen.CONTRACTS)
+	await settle(20)
+	await _snap("r_contracts.jpg")
+	game.show_screen(GameRoot.Screen.WORLD)
