@@ -571,6 +571,7 @@ func _footer(prefix: String) -> String:
 	return """<footer class="site-footer">
 <p>&copy; 2026 Rory Ferrick. All rights reserved. Maritime Empire is in development.</p>
 <p><a href="%swiki/index.html">Wiki</a> &middot; <a href="%screator.html">Creator</a> &middot; <a href="%sprivacy.html">Privacy</a></p>
+<p class="social">Follow the voyage: <a href="https://www.instagram.com/maritimeempire/" rel="noopener">Instagram</a> &middot; <a href="https://www.tiktok.com/@maritimeempire" rel="noopener">TikTok</a></p>
 </footer>
 """ % [prefix, prefix, prefix]
 
