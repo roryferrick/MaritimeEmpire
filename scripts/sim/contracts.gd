@@ -29,6 +29,8 @@ signal offer_arrived(offer: Dictionary)
 signal tender_closed(offer: Dictionary, won: bool, winner: String, rate: float)
 ## Something happened on one of the player's contracts that wants an answer (the card): kind "raise", "pause", "at_risk" or "short_quarter", info by kind.
 signal contract_event(contract: Dictionary, kind: String, info: Dictionary)
+## Contracts of the player's no ship of theirs can carry (stuck_reason()), told once each (the card).
+signal contracts_stuck(stuck: Array)
 
 const TIERS := ["unknown", "known", "trusted", "renowned"]
 const TIER_NAMES := {unknown = "Unknown", known = "Known", trusted = "Trusted", renowned = "Renowned"}
@@ -93,7 +95,7 @@ const BID_SPREAD := [0.9, 1.15]
 const STANDING_WEIGHT := 400.0
 const TENDER_HOLDS := 2.5
 const RENOWNED_VALUE := 50000000.0
-## An offer's lane is at most this share of the longest leg its ship can sail on a tank (see _longest_leg()).
+## An offer's lane is at most this share of the range of the ship that fits it (see fitting_ship()).
 const LEG_MARGIN := 0.9
 
 var _state: Node  # GameState
@@ -115,6 +117,7 @@ func clear() -> void:
 	offers.clear()
 	contracts.clear()
 	_reach_checked = false
+	_starters.clear()
 	_next_id = 1
 	_offer_day = -1
 	_month = -1
@@ -207,9 +210,10 @@ func step(_delta: float) -> void:
 	if world.zones.is_empty():
 		return
 	var day := world.day
-	if not _reach_checked:  # (Once a game: offers from before the one-leg rule, or beyond a sold ship.)
+	if not _reach_checked:  # (Once a game: offers from before the fitting-ship rule, or beyond a sold ship; and contracts no ship can carry.)
 		_reach_checked = true
 		_drop_unreachable()
+		_tell_stuck()
 	if _offer_day < 0 or day - _offer_day >= OFFER_DAYS:
 		_offer_day = day
 		_refresh_offers()
@@ -248,6 +252,7 @@ func _refresh_offers() -> void:
 	if company == null:
 		return
 	_drop_unreachable()
+	_tell_stuck()
 	var world: WorldEconomy = _state.world
 	var tier := best_tier(company)
 	var quota := int(OFFERS_BY_TIER.get(tier, 5))
@@ -411,8 +416,8 @@ func _make_offer(company: Company, lane: Dictionary, recurring: bool, rng: Rando
 	var hold := _biggest_hold(company, str(lane.line), good)
 	if hold <= 0.0:
 		return {}
-	if float(lane.nm) > _longest_leg(company, good) * LEG_MARGIN:
-		return {}  # (Beyond one leg for the company's ships, or the line's tier-one ship: see _longest_leg().)
+	if fitting_ship(company, good, str(lane.from), str(lane.to), float(lane.nm)) == null:
+		return {}  # (No ship of the company's carries the good, makes the lane on a tank and can get to the load port: see fitting_ship().)
 	var base := float(GameData.commodity(good).get("base", 1.0))
 	var premium := lerpf(PREMIUM_LOW, PREMIUM_HIGH, float(lane.urgency))
 	var rate := base * (HANDLING + float(lane.nm) / FREIGHT_NM) * premium
@@ -541,40 +546,96 @@ func _close_tender(offer: Dictionary) -> void:
 	offers_changed.emit()
 
 
-## The longest leg (nm) a ship of the company carrying the good can sail on a tank, else the line's smallest model's.
-## The longest leg (nm) a ship of the company carrying the good can sail on a
-## tank; with no ship of the good's line yet, the line's tier-one ship's (0 if
-## it doesn't carry the good, or if the company has ships of the line that
-## don't): an offer's lane must fit it (with a tenth in hand), so every offer
-## can be carried by a ship the company has or starts with (see _make_offer(),
-## _drop_unreachable()).
-func _longest_leg(company: Company, good: String) -> float:
-	var best := 0.0
-	var line := WorldEconomy.line_of(good)
-	var has_line := false
+## The ship of the company's that fits a lane and is nearest its load port:
+## it carries the good, can sail the lane on one tank (LEG_MARGIN: a tenth of
+## its range in hand) and can get to the load port from where it is,
+## refuelling on the way (GameState.refuel_path_nm()). Ships on another
+## contract count (the player may move one over); service boats and ships
+## lost at sea don't. With no ship at all (a company just founded) the line's
+## tier-one ship at the home port stands in (`stand_in`), so the first offers
+## fit the ship it will buy. null when none fits: an offer never comes
+## without a ship to carry it (2026-11-02; before, a lane the tier-one ship
+## could sail was offered wherever it lay, so a fleet at Lome got Black Sea
+## contracts no ship of its own could get to).
+func fitting_ship(company: Company, good: String, from: String, to: String, nm: float, stand_in := true) -> Ship:
+	var best: Ship = null
+	var best_nm := INF
+	var any := false
 	for ship: Ship in _state.fleet(company):
-		if good in ship.model().get("cargo", []):
-			best = maxf(best, ship.range_nm())
-		has_line = has_line or str(ship.model().get("category", "")) == line
-	if best > 0.0:
-		return best
-	if has_line:
-		return 0.0  # (Ships of the line, but none carries the good: no offer till one does.)
-	for model: Dictionary in GameData.ship_models:  # (The line's tier-one ship, if it carries the good.)
+		if ship.is_service() or ship.is_lost():
+			continue
+		any = true
+		if not _lane_fits(ship, good, from, to, nm):
+			continue
+		var there: float = _state.refuel_path_nm(ship, ship.reference_port(), from)
+		if there < best_nm:
+			best = ship
+			best_nm = there
+	if best == null and stand_in and not any:
+		var starter := _starter_ship(company, good)
+		if starter != null and _lane_fits(starter, good, from, to, nm) and _state.refuel_path_nm(starter, company.home_port, from) < INF:
+			best = starter
+	return best
+
+
+## Whether a ship carries a good and can sail a lane on one tank with a tenth of its range in hand.
+func _lane_fits(ship: Ship, good: String, from: String, to: String, nm: float) -> bool:
+	return good in ship.model().get("cargo", []) and nm <= ship.range_nm() * LEG_MARGIN and ship.can_sail(from, to)
+
+
+## Stand-ins for a company with no ship yet: the tier-one ship that carries the good, at its home port (kept per model and port).
+var _starters := {}
+
+
+func _starter_ship(company: Company, good: String) -> Ship:
+	for model: Dictionary in GameData.ship_models:
 		if int(model.get("tier", 1)) == 1 and good in model.get("cargo", []) and not model.get("coming_soon", false):
-			return float(model.get("range_nm", 0))
-	return 0.0
+			var key := "%s|%s" % [str(model.id), company.home_port]
+			if not _starters.has(key):
+				var ship := Ship.new("", str(model.id), company.home_port)
+				ship.company = company
+				_starters[key] = ship
+			return _starters[key]
+	return null
 
 
-## Whether an offer's lane is one leg for the company (see _longest_leg()); supply deals and charters have no lane.
+## The ship of the company's that fits an offer or contract (fitting_ship()), or null; supply deals and charters have no lane.
+func offer_ship(company: Company, offer: Dictionary, stand_in := true) -> Ship:
+	if str(offer.kind) in ["supply", "charter"]:
+		return null
+	return fitting_ship(company, str(offer.good), str(offer.from), str(offer.to), float(offer.nm), stand_in)
+
+
+## Whether the company has a ship for an offer (fitting_ship()); supply deals and charters have no lane.
 func _reachable(company: Company, offer: Dictionary) -> bool:
 	if str(offer.kind) in ["supply", "charter"]:
 		return true
-	return float(offer.nm) <= _longest_leg(company, str(offer.good)) * LEG_MARGIN
+	return offer_ship(company, offer) != null
 
 
-## Drops the open offers the company can no longer carry in one leg (a ship
-## sold; offers made before this rule): at load and each refresh.
+## Which ship of the player's an offer fits and what getting it to the load
+## port takes, for the offer card and the Contracts page: "Your Gale at Lome
+## can do this: refuels at Dakar and Casablanca on the way, about 18 days to
+## Istanbul", "Your Gale is at Istanbul already"; "" for supply deals and charters.
+func fit_text(company: Company, offer: Dictionary) -> String:
+	if str(offer.kind) in ["supply", "charter"]:
+		return ""
+	var ship := offer_ship(company, offer)
+	if ship == null:
+		return "No ship of yours fits this now."
+	var from := str(offer.from)
+	if ship.name.is_empty():  # (The stand-in: no ship yet.)
+		return "A %s bought at %s could do this." % [str(ship.model().get("name", "")), GameData.port_name(company.home_port)]
+	if ship.reference_port() == from:
+		return "Your %s is at %s already." % [ship.name, GameData.port_name(from)]
+	var way: Dictionary = _state.positioning(ship, from)
+	var stops: Array = way.stops
+	return "Your %s at %s can do this: %s%s to %s." % [ship.name, GameData.port_name(ship.reference_port()),
+		(GameState.refuel_text(stops) + " on the way, ") if not stops.is_empty() else "", GameState.days_text(float(way.days)), GameData.port_name(from)]
+
+
+## Drops the open offers the company has no ship for any more (a ship sold or
+## lost; offers from before the rule): at load and each refresh.
 func _drop_unreachable() -> void:
 	var company: Company = _state.company
 	if company == null:
@@ -583,6 +644,74 @@ func _drop_unreachable() -> void:
 	if kept.size() != offers.size():
 		offers = kept
 		offers_changed.emit()
+
+
+# --- Contracts no ship can carry ---------------------------------------------------------
+
+## Why no ship of the company's can carry a contract, or "" while one can: none
+## carries the good, none that does can make the lane on a tank, or none can
+## get to the load port even refuelling on the way (a ship sold or lost, or a
+## contract from before offers were kept to ships the company has). Such a
+## contract may be released without the fee (release()); the player is told
+## by a card (contracts_stuck) and on the Contracts page (2026-11-02).
+func stuck_reason(company: Company, contract: Dictionary) -> String:
+	if str(contract.kind) in ["supply", "charter"] or str(contract.status) != "active":
+		return ""
+	var good := str(contract.good)
+	var from := str(contract.from)
+	var to := str(contract.to)
+	var carries := false
+	var sails := false
+	for ship: Ship in _state.fleet(company):
+		if ship.is_service() or ship.is_lost() or not good in ship.model().get("cargo", []):
+			continue
+		carries = true
+		if not ship.can_sail(from, to):
+			continue
+		sails = true
+		if _state.can_get_to(ship, ship.reference_port(), from):
+			return ""
+	var name := _good_word(good)
+	if not carries:
+		return "no ship of yours carries %s" % name
+	if not sails:
+		return "no ship of yours that carries %s can make %s to %s on a tank" % [name, GameData.port_name(from), GameData.port_name(to)]
+	return "no ship of yours that carries %s can get to %s, even refuelling on the way" % [name, GameData.port_name(from)]
+
+
+## The company's active contracts no ship of its own can carry (stuck_reason()).
+func stuck_contracts(company: Company) -> Array:
+	var mine: int = _state.all_companies().find(company)
+	return contracts.filter(func(contract: Dictionary) -> bool: return int(contract.company) == mine and not stuck_reason(company, contract).is_empty())
+
+
+## Tells the player of each contract no ship of theirs can carry, once while
+## it stays so (contract.stuck_told; a card, GameRoot): at load and each offer refresh.
+func _tell_stuck() -> void:
+	var company: Company = _state.company
+	if company == null:
+		return
+	var mine: int = _state.all_companies().find(company)
+	var fresh := []
+	for contract: Dictionary in contracts:
+		if int(contract.company) != mine or str(contract.status) != "active":
+			continue
+		if stuck_reason(company, contract).is_empty():
+			contract.stuck_told = false
+		elif not bool(contract.get("stuck_told", false)):
+			contract.stuck_told = true
+			fresh.append(contract)
+	if not fresh.is_empty():
+		contracts_stuck.emit(fresh)
+
+
+## Lets a company out of a contract no ship of its own can carry
+## (stuck_reason()): no fee and no standing lost; its ships are freed
+## (GameState.release_contract()).
+func release(contract: Dictionary, company: Company) -> void:
+	_free_ships(contract, company)
+	contract.status = "released"
+	contracts_changed.emit()
 
 ## The hold (units of the good) of the company's biggest ship that carries the good, else the line's smallest model's.
 func _biggest_hold(company: Company, line: String, good: String) -> float:
@@ -934,8 +1063,9 @@ func charter_voyage(company: Company, home: String, room: int) -> Array:
 		return [berths, roundi(berths * float(contract.rate))]
 	return [0, 0]
 
-func _finish(contract: Dictionary, company: Company, done: bool) -> void:
-	for ship_id: int in contract.ships:  # (A ship a head took off its route goes back to it: see People.approve_divert().)
+## A contract's ships freed: one a head took off its route goes back to it (see People.approve_divert()).
+func _free_ships(contract: Dictionary, company: Company) -> void:
+	for ship_id: int in contract.ships:
 		var ship: Ship = _state.ship_by_id(ship_id)
 		if ship != null and not ship.route_before.is_empty():
 			var back: Array[String] = []
@@ -946,11 +1076,15 @@ func _finish(contract: Dictionary, company: Company, done: bool) -> void:
 				_state.assign_route(ship, back)
 			if company == _state.company:
 				ActivityLog.add("%s is back on its route: %s." % [ship.name, GameData.route_text(back)], ActivityLog.Kind.INFO)
-	contract.status = "done" if done else "failed"
-	change_standing(company, int(contract.producer), REP_DONE if done else REP_FAILED, str(contract.country))
 	for ship: Ship in _state.fleet(company):
 		if ship.contract_id == int(contract.id):
 			ship.contract_id = 0
+
+
+func _finish(contract: Dictionary, company: Company, done: bool) -> void:
+	_free_ships(contract, company)
+	contract.status = "done" if done else "failed"
+	change_standing(company, int(contract.producer), REP_DONE if done else REP_FAILED, str(contract.country))
 	if company == _state.company:
 		if done:
 			ActivityLog.add("Contract done: %s for %s, %s to %s. They think better of us." % [_good_word(str(contract.good)), producer_name(int(contract.producer)), GameData.port_name(str(contract.from)), GameData.port_name(str(contract.to))], ActivityLog.Kind.GOOD)
@@ -974,6 +1108,8 @@ func progress_text(contract: Dictionary) -> String:
 			return "Done"
 		"failed":
 			return "Failed"
+		"released":
+			return "Released"
 	if str(contract.kind) in ["recurring", "supply"]:
 		return "Quarter %d of %d: %s of %s %s · %d days left" % [int(contract.quarter) + 1, int(contract.quarters), Fmt.thousands(int(contract.quarter_delivered)), Fmt.thousands(int(contract.get("quarter_units", contract.units))), units,
 			maxi(roundi((int(contract.quarter_end) - now) / 86400.0), 0)]

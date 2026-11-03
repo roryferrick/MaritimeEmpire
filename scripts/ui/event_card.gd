@@ -92,8 +92,11 @@ Worth %s in all%s. %s" % [contracts.producer_name(int(offer.producer)), GameStat
 		Fmt.thousands(roundi(float(offer.nm))), Fmt.money(int(offer.value)), " over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "",
 		"The offer stands till %s." % Fmt.calendar_short(int(offer.expires))]
 	var error := contracts.can_sign(GameState.company, offer)
+	var fit := contracts.fit_text(GameState.company, offer)  # (Which ship of yours fits it, and its way to the load port.)
 	if str(offer.kind) != "tender":
 		body += " Accepted, it goes under Your contracts on the Contracts page, where a ship of yours is assigned to it (a department head with a budget does that for you); a quarter left unserved costs a fee."
+		if not fit.is_empty():
+			body += "\n\n" + fit
 		if not error.is_empty():
 			body += "
 
@@ -104,6 +107,8 @@ You can't take this one yet: %s." % error
 			names.append(str((GameState.firms as ShippingFirms).firms[index].name))
 		body = "%s puts out to tender: %s, %s to %s (%s nm).\n\nAsking %s a unit (%s in all). Bidding: %s. Bids are sealed and close %s; the producer takes the lowest, weighing its standing with each bidder." % [contracts.producer_name(int(offer.producer)), GameState.contract_summary(offer), GameData.port_name(str(offer.from)), GameData.port_name(str(offer.to)),
 			Fmt.thousands(roundi(float(offer.nm))), Fmt.money(roundi(float(offer.asking))), Fmt.money(int(offer.value)), ", ".join(names), Fmt.calendar_short(int(offer.closes))]
+		if not fit.is_empty():
+			body += "\n\n" + fit
 		_enqueue({kicker = "TENDER", title = "%s: %s" % [str(GameData.commodity(str(offer.good)).get("name", offer.good)), GameData.port_name(str(offer.from))], body = body, color = GOLD,
 			actions = [["Bid", func() -> void: GameRoot.find(self).show_contracts()], ["Ignore", Callable()]]})
 		return
@@ -117,6 +122,17 @@ You can't take this one yet: %s." % error
 		actions.push_front(["Contracts page", func() -> void: GameRoot.find(self).show_contracts()])
 	_enqueue({kicker = "CONTRACT OFFER", title = "%s from %s" % [Contracts.KINDS.get(str(offer.kind), "Offer"), GameData.port_name(str(offer.from))], body = body, color = GOLD, actions = actions})
 
+
+
+## Contracts no ship of the player's can carry (Contracts.contracts_stuck), told once each: release them without the fee, or buy a ship that can.
+func show_stuck(stuck: Array) -> void:
+	var contracts: Contracts = GameState.contracts
+	var lines := PackedStringArray()
+	for contract: Dictionary in stuck:
+		lines.append("%s for %s, %s to %s: %s." % [GameState.contract_summary(contract), contracts.party_name(contract), GameData.port_name(str(contract.from)), GameData.port_name(str(contract.to)), contracts.stuck_reason(GameState.company, contract)])
+	var body := "%s\n\nA quarter left unserved still costs its fee, so release %s on the Contracts page (no fee, and your standing is untouched), or buy a ship that can carry it." % ["\n".join(lines), "it" if stuck.size() == 1 else "them"]
+	_enqueue({kicker = "CONTRACTS", title = "No ship of yours can carry %s" % ("this contract" if stuck.size() == 1 else "%d contracts" % stuck.size()), body = body, color = Color(0.95, 0.6, 0.5),
+		actions = [["Contracts page", func() -> void: GameRoot.find(self).show_contracts(true)], ["Later", Callable()]]})
 
 
 ## A tender the player bid on has closed (Contracts.tender_closed).

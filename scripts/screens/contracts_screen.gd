@@ -118,6 +118,11 @@ func _add_offers(contracts: Contracts, company: Company) -> void:
 		row.add_child(_dim("Worth %s%s · premium x%s over plain freight · stands till %s · needs %s standing (you're %s with them, %d)" % [Fmt.money(int(offer.value)),
 			" over %d quarters" % int(offer.quarters) if int(offer.get("quarters", 0)) > 0 else "", Fmt.decimal(float(offer.premium), 2), Fmt.calendar_short(int(offer.expires)),
 			Contracts.tier_name(str(offer.min_tier)), Contracts.tier_name(standing), roundi(contracts.opinion(company, int(offer.producer), str(offer.country)))]))
+		var fit := contracts.fit_text(company, offer)  # (Which ship of yours fits it, and its way to the load port.)
+		if not fit.is_empty():
+			var fit_label := _text(fit)
+			fit_label.theme_type_variation = &"GainLabel" if contracts.offer_ship(company, offer) != null else &"ErrorLabel"
+			row.add_child(fit_label)
 		if str(offer.kind) == "tender":
 			var names := PackedStringArray()
 			for index: int in offer.get("bidders", []):
@@ -236,6 +241,21 @@ func _contract_row(contracts: Contracts, contract: Dictionary) -> Control:
 		_refresh())
 	ships.add_child(assign)
 	row.add_child(ships)
+	var stuck := contracts.stuck_reason(GameState.company, contract)
+	if not stuck.is_empty():  # (No ship of yours can carry it: release it without the fee, or buy one that can.)
+		var warn := _text("No ship of yours can carry this: %s. Release it (no fee, and your standing is untouched), or buy a ship that can." % stuck)
+		warn.theme_type_variation = &"ErrorLabel"
+		row.add_child(warn)
+		var release_row := HBoxContainer.new()
+		var release := Button.new()
+		release.text = "Release"
+		release.add_theme_font_size_override(&"font_size", FONT_SIZE)
+		release.tooltip_text = "Lets you out of this contract: no fee, no standing lost. Its ships are freed."
+		release.pressed.connect(func() -> void:
+			GameState.release_contract(id)
+			_refresh())
+		release_row.add_child(release)
+		row.add_child(release_row)
 	if _picking == id:
 		row.add_child(_ship_picker(contract))
 	return row
@@ -253,11 +273,12 @@ func _ship_picker(contract: Dictionary) -> Control:
 		any = true
 		var button := Button.new()
 		var on_other := ship.contract_id > 0
-		button.text = "%s (%s%s)" % [ship.name, ship.model().get("name", ""), ", on another contract" if on_other else ""]
-		button.add_theme_font_size_override(&"font_size", FONT_SIZE)
 		var error := GameState.contract_ship_error(contract, ship)
+		button.text = "%s (%s%s)%s" % [ship.name, ship.model().get("name", ""), ", on another contract" if on_other else "", _way_text(ship, str(contract.from)) if error.is_empty() else ""]
+		button.add_theme_font_size_override(&"font_size", FONT_SIZE)
 		button.disabled = not error.is_empty()
-		button.tooltip_text = error if not error.is_empty() else ship.status_text()
+		var way := GameState.positioning_text(ship, str(contract.from)) if error.is_empty() else ""
+		button.tooltip_text = error if not error.is_empty() else ("%s\nIt %s." % [ship.status_text(), way] if not way.is_empty() else ship.status_text())
 		button.pressed.connect(func() -> void:
 			GameState.assign_contract_ship(int(contract.id), ship)
 			_picking = -1
@@ -266,6 +287,20 @@ func _ship_picker(contract: Dictionary) -> Control:
 	if not any:
 		flow.add_child(_nowrap(_dim("No ship of yours carries %s. The Shop has them." % str(GameData.commodity(good).get("name", good)).to_lower())))
 	return flow
+
+
+## A ship's way to a contract's load port, short, for its picker button: " · at Istanbul", " · ~2 days to Istanbul", " · 3 refuel stops, ~18 days to Istanbul".
+func _way_text(ship: Ship, to: String) -> String:
+	if ship.reference_port() == to:
+		return " · at %s" % GameData.port_name(to)
+	var way := GameState.positioning(ship, to)
+	if not way.ok:
+		return ""
+	var stops: Array = way.stops
+	var days := "~%d day%s" % [maxi(roundi(float(way.days)), 1), "" if roundi(float(way.days)) <= 1 else "s"]
+	if stops.is_empty():
+		return " · %s to %s" % [days, GameData.port_name(to)]
+	return " · %d refuel stop%s, %s to %s" % [stops.size(), "" if stops.size() == 1 else "s", days, GameData.port_name(to)]
 
 
 # --- Standing ----------------------------------------------------------------------------

@@ -1817,6 +1817,9 @@ func assign_contract_ship(contract_id: int, ship: Ship) -> void:
 	var route: Array[String] = [str(contract.from), str(contract.to)]
 	if route_error(route, ship).is_empty():
 		assign_route(ship, route)
+		var way := positioning_text(ship, str(contract.from))  # (Beyond one tank: its refuel stops on the way, told.)
+		if not way.is_empty():
+			ActivityLog.add("%s %s." % [ship.name, way], ActivityLog.Kind.INFO)
 	ship_changed.emit(ship)
 
 
@@ -1827,6 +1830,18 @@ func unassign_contract_ship(ship: Ship) -> void:
 		return
 	contracts.unassign_ship(ship)
 	ship_changed.emit(ship)
+
+
+## Lets the company out of a contract no ship of its own can carry
+## (Contracts.stuck_reason()): no fee, no standing lost, its ships freed.
+func release_contract(contract_id: int) -> void:
+	var contract := contracts.contract_by_id(contract_id)
+	if contract.is_empty() or int(contract.company) != all_companies().find(company) or contracts.stuck_reason(company, contract).is_empty():
+		return
+	if Net.command(&"release_contract", [contract_id]):
+		return
+	contracts.release(contract, company)
+	ActivityLog.add("Released from the %s contract for %s, %s to %s: no ship of ours could carry it. No fee, and our standing is untouched." % [Contracts._good_word(str(contract.good)), contracts.party_name(contract), GameData.port_name(str(contract.from)), GameData.port_name(str(contract.to))], ActivityLog.Kind.INFO)
 
 
 ## "40,000 t of iron ore a quarter for 4 quarters at $3.20 a t" or "12,000 t of wheat at $2.10 a t".
@@ -2196,6 +2211,86 @@ static func refuel_text(stops: Array) -> String:
 	if names.size() == 1:
 		return "refuels at %s" % names[0]
 	return "refuels at %s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[-1]]
+
+
+## Getting a ship to a port from where it is: {ok: whether it can get there
+## at all, stops: the refuel stops on the way, nm: sea miles, days: calendar
+## days (sailing and locks through its stops, each stop's port time, and a
+## ship at sea first finishing its leg)}. For the contract offers and ship
+## picker, the log and the popups (2026-11-02).
+func positioning(ship: Ship, to: String) -> Dictionary:
+	var out := {ok = true, stops = [] as Array[String], nm = 0.0, days = 0.0}
+	var calendar_s := 0.0
+	if not ship.is_docked() and not ship.is_lost():
+		calendar_s += maxf(float(ship.arrival_time() - calendar_time()), 0.0)
+	var at := ship.reference_port()
+	if at == to:
+		out.days = calendar_s / 86400.0
+		return out
+	if not can_get_to(ship, at, to):
+		out.ok = false
+		return out
+	var path := refuel_path(ship, at, to)
+	var here := at
+	for port: String in path:
+		var nm := GameData.distance_nm(here, port)
+		out.nm += nm
+		var play_s := ship.leg_seconds(here, port, 0.0, nm, 1.0) + GameData.canal_lock_seconds(here, port)
+		if port != to:
+			play_s += ship.dock_seconds()
+		calendar_s += play_s * calendar_seconds_per_second()
+		here = port
+	var stops: Array[String] = []
+	stops.assign(path)
+	stops.pop_back()
+	out.stops = stops
+	out.days = calendar_s / 86400.0
+	return out
+
+
+## "about 18 days", "about a day", "under a day".
+static func days_text(days: float) -> String:
+	if days < 0.75:
+		return "under a day"
+	if days < 1.5:
+		return "about a day"
+	return "about %d days" % roundi(days)
+
+
+## What a ship's way to a port comes to, for the log and the popups: "sails
+## to Istanbul first: refuels at Dakar and Casablanca on the way (2 refuel
+## stops, about 18 days)" or "sails to Istanbul first, about 2 days"; ""
+## when it's there, or can't get there at all.
+func positioning_text(ship: Ship, to: String) -> String:
+	if ship.reference_port() == to:
+		return ""
+	var way := positioning(ship, to)
+	if not way.ok:
+		return ""
+	var stops: Array = way.stops
+	if stops.is_empty():
+		return "sails to %s first, %s" % [GameData.port_name(to), days_text(float(way.days))]
+	return "sails to %s first: %s on the way (%d refuel stop%s, %s)" % [GameData.port_name(to), refuel_text(stops), stops.size(), "" if stops.size() == 1 else "s", days_text(float(way.days))]
+
+
+## The rest of a ship's way to where it's bound beyond this leg, for its
+## status: " via Casablanca and Valletta (about 14 days)" or " (about 3
+## days)"; "" when it isn't bound beyond this leg.
+func onward_text(ship: Ship) -> String:
+	if ship.hop_to.is_empty():
+		return ""
+	var way := positioning(ship, ship.hop_to)
+	if not way.ok:
+		return ""
+	var names := PackedStringArray()
+	for port: String in way.stops:
+		names.append(GameData.port_name(port))
+	var via := ""
+	if names.size() == 1:
+		via = " via %s" % names[0]
+	elif names.size() > 1:
+		via = " via %s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[-1]]
+	return "%s (%s)" % [via, days_text(float(way.days))]
 
 
 ## A port's size as shown: "Medium 29".

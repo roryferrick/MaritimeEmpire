@@ -133,6 +133,7 @@ func _ready() -> void:
 	GameState.contracts.offer_arrived.connect(func(offer: Dictionary) -> void: event_card.show_offer(offer))  # (An important offer: the card, pausing.)
 	GameState.contracts.tender_closed.connect(func(offer: Dictionary, won: bool, winner: String, rate: float) -> void: event_card.show_tender_result(offer, won, winner, rate))
 	GameState.contracts.contract_event.connect(func(contract: Dictionary, kind: String, info: Dictionary) -> void: event_card.show_contract_event(contract, kind, info))
+	GameState.contracts.contracts_stuck.connect(func(stuck: Array) -> void: event_card.show_stuck(stuck))  # (Contracts no ship of the player's can carry: told once each.)
 	GameState.people.succession_needed.connect(func(company: Company, why: String) -> void:
 		if company == GameState.company:
 			event_card.show_succession(company, why))

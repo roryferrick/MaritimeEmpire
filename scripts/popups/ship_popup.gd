@@ -397,6 +397,10 @@ func _refresh() -> void:
 					stops.append(port)
 		if not stops.is_empty():
 			%RouteLabel.text += " — %s on the way" % GameState.refuel_text(stops)
+		if not ship.route.has(ship.reference_port()):  # (Not on its route yet: getting to its first port, refuel stops and all.)
+			var way := GameState.positioning_text(ship, ship.route[ship.next_route_index()])
+			if not way.is_empty():
+				%RouteLabel.text += " — %s" % way
 	else:
 		%RouteLabel.text = "No route assigned."
 	%PendingLabel.visible = not ship.pending_route.is_empty()

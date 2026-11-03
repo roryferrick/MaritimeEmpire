@@ -1186,7 +1186,7 @@ func status_text() -> String:
 			BERTH_OUT:
 				return "Pulling out of %s%s" % [port, " for %s" % GameData.port_name(depart_to) if not depart_to.is_empty() else " to anchor"]
 		if is_refuel_stop():
-			var onward := "Refuelling at %s on the way to %s" % [port, GameData.port_name(hop_to)]
+			var onward := "Refuelling at %s on the way to %s%s" % [port, GameData.port_name(hop_to), GameState.onward_text(self)]  # (The stops still to come and the days: see GameState.onward_text().)
 			if not is_docking() and is_held():
 				onward += " — %s" % hold_reason
 			return onward
@@ -1213,7 +1213,7 @@ func status_text() -> String:
 		return "Stopping at %s" % destination
 	var text := "En route to %s — %d%% · arrives %s" % [destination, int(leg_progress() * 100.0), Fmt.calendar_short(arrival_time())]
 	if not hop_to.is_empty() and hop_to != to_port:
-		text = "En route to %s to refuel, then on to %s — %d%% · arrives %s" % [destination, GameData.port_name(hop_to), int(leg_progress() * 100.0), Fmt.calendar_short(arrival_time())]
+		text = "En route to %s to refuel, then on to %s%s — %d%% · arrives %s" % [destination, GameData.port_name(hop_to), GameState.onward_text(self), int(leg_progress() * 100.0), Fmt.calendar_short(arrival_time())]
 	return text + " — won't make it!" if at_risk else text
 
 

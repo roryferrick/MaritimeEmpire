@@ -970,7 +970,8 @@ func run_heads(company: Company) -> void:
 				_state.assign_route(ship, route)
 			budget -= int(contract.value)
 			if company == _state.company:
-				ActivityLog.add("%s (%s) took %s for %s and put %s on it." % [str(head.name), head_title(key), _state.contract_summary(contract), contracts.party_name(contract), ship.name], ActivityLog.Kind.GOOD)
+				var way: String = _state.positioning_text(ship, str(contract.from))  # (Beyond one tank: its refuel stops on the way, told.)
+				ActivityLog.add("%s (%s) took %s for %s and put %s on it%s." % [str(head.name), head_title(key), _state.contract_summary(contract), contracts.party_name(contract), ship.name, ("; it " + way) if not way.is_empty() else ""], ActivityLog.Kind.GOOD)
 
 
 ## No ship idle: a routed ship the contract would pay better than its route has lately is put to the player (the card pauses the game).
@@ -1051,7 +1052,7 @@ static func _carried_by(good: String, category: String) -> bool:
 	return false
 
 
-## An idle ship of the company's that carries the offer's good and can reach its load port and make the leg.
+## An idle ship of the company's that carries the offer's good, makes the leg on a tank and can get to its load port (refuelling on the way if it must).
 func _idle_ship_for(company: Company, offer: Dictionary) -> Ship:
 	for ship: Ship in _state.fleet(company):
 		if ship.is_service() or ship.contract_id > 0 or not ship.is_docked() or ship.is_lost():
@@ -1061,8 +1062,6 @@ func _idle_ship_for(company: Company, offer: Dictionary) -> Ship:
 		if not str(offer.good) in ship.model().get("cargo", []):
 			continue
 		if not ship.can_sail(str(offer.from), str(offer.to)):
-			continue
-		if ship.docked_at != str(offer.from) and not ship.can_sail(ship.docked_at, str(offer.from)):
 			continue
 		if not _state.route_error([str(offer.from), str(offer.to)] as Array[String], ship).is_empty():
 			continue  # (The same check as the player's picker: a ship put on a contract is always routed.)
